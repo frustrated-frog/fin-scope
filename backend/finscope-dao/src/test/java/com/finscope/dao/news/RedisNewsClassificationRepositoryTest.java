@@ -56,6 +56,19 @@ class RedisNewsClassificationRepositoryTest {
     }
 
     @Test
+    void reclaimsAbandonedPendingButDoesNotRetryUnclassifiedRules() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
+        assertTrue(repository.claim("CLS:1", now, now.minusMinutes(5)));
+        assertTrue(repository.claim("CLS:1", now.plusMinutes(6), now.plusMinutes(1)));
+        NewsItemClassification result = new NewsItemClassification();
+        result.setItemId("CLS:1");
+        result.setStatus("UNCLASSIFIED");
+        result.setModelName("RULE_V1");
+        repository.markRuleResult(result, now.plusMinutes(6));
+        assertFalse(repository.claim("CLS:1", now.plusMinutes(12), now.plusMinutes(7)));
+    }
+
+    @Test
     void classifiesAndReviewsWithoutDatabaseState() {
         LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
 

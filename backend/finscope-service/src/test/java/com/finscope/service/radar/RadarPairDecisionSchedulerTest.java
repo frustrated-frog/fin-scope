@@ -20,7 +20,7 @@ class RadarPairDecisionSchedulerTest {
         RadarPairDecisionRepository repository=mock(RadarPairDecisionRepository.class);
         CapturingExecutor executor=new CapturingExecutor();
         when(agent.decide(any(),any())).thenReturn(RadarEventMatchAgent.Decision.agent(true,0.9,"同一事件"));
-        RadarPairDecisionScheduler scheduler=new RadarPairDecisionScheduler(agent,repository,executor);
+        RadarPairDecisionScheduler scheduler=createRadarPairDecisionScheduler(agent,repository,executor);
 
         scheduler.schedule(signal(1L),signal(2L),"left-fingerprint","right-fingerprint");
 
@@ -34,7 +34,7 @@ class RadarPairDecisionSchedulerTest {
     @Test
     void duplicatePairIsOnlyQueuedOnceWhileInFlight() {
         CapturingExecutor executor=new CapturingExecutor();
-        RadarPairDecisionScheduler scheduler=new RadarPairDecisionScheduler(
+        RadarPairDecisionScheduler scheduler=createRadarPairDecisionScheduler(
                 mock(RadarEventMatchAgent.class),mock(RadarPairDecisionRepository.class),executor);
 
         scheduler.schedule(signal(1L),signal(2L),"left","right");
@@ -48,5 +48,18 @@ class RadarPairDecisionSchedulerTest {
         private Runnable pending; private int submissions;
         public void execute(Runnable command){submissions++;pending=command;}
         void runPending(){Runnable task=pending;pending=null;task.run();}
+    }
+
+    private static RadarPairDecisionScheduler createRadarPairDecisionScheduler(RadarEventMatchAgent agent,
+                                      RadarPairDecisionRepository repository,
+                                      Executor executor) {
+        RadarPairDecisionScheduler value = new RadarPairDecisionScheduler();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "repository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
     }
 }

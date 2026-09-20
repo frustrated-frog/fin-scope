@@ -44,8 +44,14 @@ class NewsClassificationCoordinatorTest {
             context.registerBean(EphemeralContentCacheProperties.class,
                     () -> new EphemeralContentCacheProperties());
             context.registerBean("newsClassificationExecutor", Executor.class, () -> Runnable::run);
+            context.registerBean(NewsWorkbenchCapabilities.class, () -> mock(NewsWorkbenchCapabilities.class));
+            context.registerBean(NewsRuleClassifier.class, NewsRuleClassifier::new);
+            context.registerBean(com.finscope.service.cache.ViewRevisionService.class,
+                    () -> mock(com.finscope.service.cache.ViewRevisionService.class));
             context.register(NewsClassificationCoordinator.class);
 
+            context.registerBean(com.finscope.rpc.llm.LlmChatClient.class,
+                    () -> mock(com.finscope.rpc.llm.LlmChatClient.class));
             context.refresh();
 
             assertNotNull(context.getBean(NewsClassificationCoordinator.class));
@@ -67,7 +73,7 @@ class NewsClassificationCoordinatorTest {
         decisions.put("CLS:1", new NewsClassificationAgent.Decision("CLS:1", "COMPANY", 0.88, "公司事件"));
         when(agent.classify(any(), any())).thenReturn(decisions);
         Executor direct = Runnable::run;
-        NewsClassificationCoordinator coordinator = new NewsClassificationCoordinator(repository, categories,
+        NewsClassificationCoordinator coordinator = createNewsClassificationCoordinator(repository, categories,
                 agent, runs, direct, fixedClock());
 
         int scheduled = coordinator.schedule(Arrays.asList(first, duplicate));
@@ -90,7 +96,7 @@ class NewsClassificationCoordinatorTest {
         when(repository.claim(anyString(), any(LocalDateTime.class), any(LocalDateTime.class))).thenReturn(true);
         when(categories.findEnabled()).thenReturn(Collections.singletonList(category()));
         when(agent.classify(any(), any())).thenThrow(new RuntimeException("模型超时"));
-        NewsClassificationCoordinator coordinator = new NewsClassificationCoordinator(repository, categories,
+        NewsClassificationCoordinator coordinator = createNewsClassificationCoordinator(repository, categories,
                 agent, runs, Runnable::run, fixedClock());
 
         coordinator.schedule(Collections.singletonList(candidate("CLS:1")));
@@ -98,6 +104,38 @@ class NewsClassificationCoordinatorTest {
         verify(repository).markFailed(eq("CLS:1"), eq("模型超时"), anyString(), any(LocalDateTime.class));
         verify(runs).record(eq("news-classification"), eq("FAILED"), anyString(), eq(null),
                 eq("模型超时"), any(Long.class));
+    }
+
+    @Test
+    void disabledModelUsesRulesWithoutAgentCallsOrFailureRuns() throws Exception {
+        NewsClassificationRepository repository = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        NewsClassificationAgent agent = mock(NewsClassificationAgent.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        when(repository.claim(anyString(), any(), any())).thenReturn(true);
+        when(categories.findEnabled()).thenReturn(Collections.singletonList(category()));
+        NewsClassificationCoordinator coordinator = createNewsClassificationCoordinator(repository, categories,
+                agent, runs, Runnable::run, fixedClock());
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "capabilities", mock(NewsWorkbenchCapabilities.class));
+
+        coordinator.schedule(Collections.singletonList(candidate("CLS:1")));
+
+        verify(repository).markRuleResult(org.mockito.ArgumentMatchers.argThat(value ->
+                "COMPANY".equals(value.getCategoryCode())), any());
+        verify(agent, never()).classify(any(), any());
+        org.mockito.Mockito.verifyNoInteractions(runs);
+    }
+
+    @Test
+    void rejectedBatchReleasesClaimsForRetry() {
+        NewsClassificationRepository repository = mock(NewsClassificationRepository.class);
+        when(repository.claim(anyString(), any(), any())).thenReturn(true);
+        Executor rejected = task -> { throw new java.util.concurrent.RejectedExecutionException(); };
+        NewsClassificationCoordinator coordinator = createNewsClassificationCoordinator(repository,
+                mock(NewsCategoryRepository.class), mock(NewsClassificationAgent.class),
+                mock(AgentRunRepository.class), rejected, fixedClock());
+        coordinator.schedule(Collections.singletonList(candidate("CLS:1")));
+        verify(repository).markFailed(eq("CLS:1"), eq("分类任务提交失败"), anyString(), any());
     }
 
     private static NewsClassificationCandidate candidate(String id) {
@@ -111,5 +149,45 @@ class NewsClassificationCoordinatorTest {
 
     private static Clock fixedClock() {
         return Clock.fixed(Instant.parse("2026-07-31T02:00:00Z"), ZoneId.of("Asia/Shanghai"));
+    }
+
+    private static NewsClassificationCoordinator createNewsClassificationCoordinator(NewsClassificationRepository repository,
+                                         NewsCategoryRepository categories,
+                                         NewsClassificationAgent agent,
+                                         AgentRunRepository runs,
+                                         Executor executor) {
+        NewsClassificationCoordinator value = new NewsClassificationCoordinator();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "repository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "categories", categories);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "rules", new NewsRuleClassifier());
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "revisions", mock(com.finscope.service.cache.ViewRevisionService.class));
+        return value;
+    }
+
+    private static NewsClassificationCoordinator createNewsClassificationCoordinator(NewsClassificationRepository repository,
+                                  NewsCategoryRepository categories,
+                                  NewsClassificationAgent agent,
+                                  AgentRunRepository runs,
+                                  Executor executor,
+                                  Clock clock) {
+        NewsClassificationCoordinator value = new NewsClassificationCoordinator();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "repository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "categories", categories);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "rules", new NewsRuleClassifier());
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "revisions", mock(com.finscope.service.cache.ViewRevisionService.class));
+        return value;
     }
 }

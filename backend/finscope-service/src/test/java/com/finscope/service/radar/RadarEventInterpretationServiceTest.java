@@ -45,7 +45,7 @@ class RadarEventInterpretationServiceTest {
         radar = mock(RadarRepository.class); evidence = mock(RadarEvidenceRepository.class);
         agent = mock(RadarEventInterpretationAgent.class); executor = new CapturingExecutor();
         revisions = mock(ViewRevisionService.class);
-        service = new RadarEventInterpretationService(interpretations, radar, evidence, agent, executor, revisions);
+        service = createRadarEventInterpretationService(interpretations, radar, evidence, agent, executor, revisions);
         event = new RadarEvent(); event.setId(10L); event.setCanonicalTitle("宁德时代发布新一代电池");
         event.setSummary("新品正式发布");
         signal = new RadarSignal(); signal.setId(1L); signal.setContentHash("signal-hash");
@@ -53,6 +53,15 @@ class RadarEventInterpretationServiceTest {
         when(radar.findEvent(10L)).thenReturn(Optional.of(event));
         when(radar.findSignalsByEventId(10L)).thenReturn(Collections.singletonList(signal));
         when(evidence.findByEventId(10L)).thenReturn(Collections.emptyList());
+    }
+
+    @Test
+    void disabledModelDoesNotCreateOrSubmitInterpretationJobs() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "capabilities",
+                mock(com.finscope.service.news.NewsWorkbenchCapabilities.class));
+        assertEquals("UNAVAILABLE", service.request(10L).getStatus());
+        verify(interpretations, org.mockito.Mockito.never()).saveQueued(any(), any());
+        verify(agent, org.mockito.Mockito.never()).interpret(any(), any(), any());
     }
 
     @Test
@@ -173,5 +182,41 @@ class RadarEventInterpretationServiceTest {
         private final List<Runnable> tasks = new ArrayList<Runnable>();
         @Override public void execute(Runnable command) { tasks.add(command); }
         void runNext() { tasks.remove(0).run(); }
+    }
+
+    private static RadarEventInterpretationService createRadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
+                                           RadarRepository radar,
+                                           RadarEvidenceRepository evidence,
+                                           RadarEventInterpretationAgent agent,
+                                           Executor executor,
+                                           ViewRevisionService viewRevisions) {
+        RadarEventInterpretationService value = new RadarEventInterpretationService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "interpretations", interpretations);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "radar", radar);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "evidence", evidence);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "viewRevisions", viewRevisions);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
+    }
+
+    private static RadarEventInterpretationService createRadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
+                                           RadarRepository radar,
+                                           RadarEvidenceRepository evidence,
+                                           RadarEventInterpretationAgent agent,
+                                           Executor executor) {
+        RadarEventInterpretationService value = new RadarEventInterpretationService();
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "interpretations", interpretations);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "radar", radar);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "evidence", evidence);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        return value;
     }
 }
