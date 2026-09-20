@@ -20,6 +20,7 @@ class ReactionStockResolverTest {
     private InstrumentRepository instruments;
     private QuoteService quotes;
     private LlmChatClient llm;
+    private com.finscope.rpc.investmentobservation.ReactionStockNameLookup names;
 
     @BeforeEach
     void setup() {
@@ -27,6 +28,8 @@ class ReactionStockResolverTest {
         instruments = mock(InstrumentRepository.class);
         quotes = mock(QuoteService.class);
         llm = mock(LlmChatClient.class);
+        names = mock(com.finscope.rpc.investmentobservation.ReactionStockNameLookup.class);
+        ReflectionTestUtils.setField(resolver, "names", names);
         ReflectionTestUtils.setField(resolver, "instruments", instruments);
         ReflectionTestUtils.setField(resolver, "quotes", quotes);
         ReflectionTestUtils.setField(resolver, "llm", llm);
@@ -44,6 +47,16 @@ class ReactionStockResolverTest {
         stock.setMarket("SH");
         when(instruments.findAll()).thenReturn(List.of(stock));
         assertEquals("600519.SH", resolver.resolve("贵州茅台发布年度业绩").get(0).getCode());
+        verifyNoInteractions(llm, quotes);
+    }
+
+    @Test
+    void explicitTitleCompanyIsResolvedEvenWhenModelIsUnavailable() {
+        var match = new com.finscope.domain.investmentobservation.ReactionStockMatch();
+        match.setCode("300476");
+        match.setName("胜宏科技");
+        when(names.search("胜宏科技")).thenReturn(List.of(match));
+        assertEquals("300476.SZ", resolver.resolve("胜宏科技：在手订单饱满").get(0).getCode());
         verifyNoInteractions(llm, quotes);
     }
 

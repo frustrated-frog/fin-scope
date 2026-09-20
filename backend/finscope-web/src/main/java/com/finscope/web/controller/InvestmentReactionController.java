@@ -38,7 +38,7 @@ public class InvestmentReactionController {
 
     @PostMapping("/sync")
     public ApiResponse<ReactionDiscoveryStatus> sync() {
-        scheduler.refreshAfterClose();
+        scheduler.requestRefresh(true);
         return ApiResponses.success(scheduler.status());
     }
 

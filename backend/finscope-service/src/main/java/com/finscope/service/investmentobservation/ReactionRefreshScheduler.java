@@ -25,11 +25,15 @@ public class ReactionRefreshScheduler {
 
     @Scheduled(fixedDelay = 300000, initialDelay = 5000)
     public void refreshAfterClose() {
+        requestRefresh(false);
+    }
+
+    public void requestRefresh(boolean retryUnresolved) {
         if (!pending.compareAndSet(false, true)) {
             return;
         }
         try {
-            executor.execute(this::refreshBatch);
+            executor.execute(() -> refreshBatch(retryUnresolved));
         } catch (RuntimeException ex) {
             pending.set(false);
             log.warn("reaction refresh dispatch rejected; next schedule will retry", ex);
@@ -47,10 +51,10 @@ public class ReactionRefreshScheduler {
         return result;
     }
 
-    private void refreshBatch() {
+    private void refreshBatch(boolean retryUnresolved) {
         try {
             try {
-                lastStatus = discovery.discover();
+                lastStatus = retryUnresolved ? discovery.discover(true) : discovery.discover();
             } catch (RuntimeException ex) {
                 var failed = new ReactionDiscoveryStatus();
                 failed.setLastCompletedAt(lastStatus.getLastCompletedAt());

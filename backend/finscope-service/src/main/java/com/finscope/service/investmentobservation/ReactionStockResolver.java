@@ -26,6 +26,8 @@ public class ReactionStockResolver {
     @Resource
     private QuoteService quotes;
     @Resource
+    private com.finscope.rpc.investmentobservation.ReactionStockNameLookup names;
+    @Resource
     private LlmChatClient llm;
     @Resource
     private ObjectMapper json;
@@ -41,6 +43,10 @@ public class ReactionStockResolver {
                 add(matches, code, instrument.getName());
             }
         }
+        if (!matches.isEmpty()) {
+            return matches;
+        }
+        lookupTitleSubject(title, matches);
         if (!matches.isEmpty()) {
             return matches;
         }
@@ -79,6 +85,23 @@ public class ReactionStockResolver {
             log.warn("reaction stock extraction unavailable exceptionType={}", ex.getClass().getSimpleName());
         }
         return matches;
+    }
+
+    private void lookupTitleSubject(String title, List<ReactionStockMatch> matches) {
+        String plain = title.replaceFirst("^【[^】]*】", "").trim();
+        var subject = Pattern.compile("^([\\p{IsHan}A-Za-z*]{3,10}?)(?:[：:]|发布|披露|签署|签订|中标|预计|获|上半年|前三季度|一季度|净利润|业绩)").matcher(plain);
+        if (!subject.find()) {
+            return;
+        }
+        try {
+            for (ReactionStockMatch match : names.search(subject.group(1))) {
+                if (mentioned(title, match.getName())) {
+                    add(matches, match.getCode(), match.getName());
+                }
+            }
+        } catch (RuntimeException ex) {
+            log.warn("reaction company name lookup unavailable exceptionType={}", ex.getClass().getSimpleName());
+        }
     }
 
     private void verify(List<ReactionStockMatch> matches, String title, String code) {

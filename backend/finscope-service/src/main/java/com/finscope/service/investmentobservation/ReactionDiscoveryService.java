@@ -37,10 +37,14 @@ public class ReactionDiscoveryService {
 
     /** 先持久化全部候选，再有界补全；行情或模型故障不丢失新闻快照。 */
     public ReactionDiscoveryStatus discover() {
+        return discover(false);
+    }
+
+    public ReactionDiscoveryStatus discover(boolean retryUnresolved) {
         LocalDateTime now = LocalDateTime.now(clock);
         ReactionDiscoveryStatus result = new ReactionDiscoveryStatus();
         boolean sourcesAvailable = captureSources(now, result);
-        for (ReactionSample draft : repository.findUnresolved(now.minusHours(6), 10)) {
+        for (ReactionSample draft : repository.findUnresolved(retryUnresolved ? now.plusSeconds(1) : now.minusHours(6), 10)) {
             try {
                 result.setResolved(result.getResolved() + enrich(draft, now));
             } catch (RuntimeException ex) {
