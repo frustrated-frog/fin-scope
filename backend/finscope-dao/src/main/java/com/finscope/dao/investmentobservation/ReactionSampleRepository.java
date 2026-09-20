@@ -144,6 +144,12 @@ public class ReactionSampleRepository {
                 mapper, identity);
     }
 
+    public List<ReactionSample> findByOrigin(String origin, String key) {
+        return jdbcTemplate.query("SELECT s.* FROM investment_reaction_sample s "
+                + "JOIN investment_reaction_source o ON o.event_key=s.source_identity "
+                + "WHERE o.origin_type=? AND o.origin_key=? ORDER BY s.id LIMIT 100", mapper, origin, key);
+    }
+
     public Optional<ReactionSample> findUnresolvedOrigin(String origin, String key) {
         return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' "
                         + "AND json_extract(snapshot_json,'$.sourceOriginType')=? "

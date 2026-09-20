@@ -42,3 +42,24 @@ test('continues refreshing when Redis reports a reset revision over a live SSE c
   expect(onChanged).toHaveBeenCalledTimes(3);
   expect(onChanged).toHaveBeenLastCalledWith('radar');
 });
+
+test('applies hidden revisions once when the page becomes visible', async () => {
+  vi.stubGlobal('EventSource', FakeEventSource);
+  vi.mocked(api).mockResolvedValue([{ scope: 'radar', revision: 7 }]);
+  const visibility = vi.spyOn(document, 'visibilityState', 'get');
+  visibility.mockReturnValue('hidden');
+  const onChanged = vi.fn();
+  const view = render(<RevisionProbe onChanged={onChanged} />);
+  await act(async () => {
+    FakeEventSource.latest?.emit('snapshot-ready', { scope: 'radar', revision: 6 });
+    FakeEventSource.latest?.emit('snapshot-ready', { scope: 'radar', revision: 7 });
+  });
+  expect(onChanged).not.toHaveBeenCalled();
+  visibility.mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  view.unmount();
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  visibility.mockRestore();
+});

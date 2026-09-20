@@ -61,6 +61,27 @@ class ResearchRadarServiceTest {
     }
 
     @Test
+    void filtersBeforeLimitingAndCountsTheEntireWindow() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "workspace", workspace);
+        java.util.List<RadarEvent> events = new java.util.ArrayList<>();
+        Map<Long, RadarEventWorkspace.Summary> summaries = new LinkedHashMap<>();
+        for (long id = 1; id <= 60; id++) {
+            events.add(rankedEvent(id));
+            RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary();
+            summary.setDisposition(id <= 55 ? "IGNORED" : "LATER");
+            summaries.put(id, summary);
+        }
+        when(repository.findWorkspaceEvents("ALL", false)).thenReturn(events);
+        when(workspace.summaries(any())).thenReturn(summaries);
+        ResearchRadarView view = service.loadStored("ALL", false, 2, "LATER");
+        assertEquals(56L, view.getEvents().get(0).getId());
+        assertEquals(2, view.getEvents().size());
+        assertEquals(55, view.getStateCounts().get("IGNORED"));
+        assertEquals(5, view.getStateCounts().get("LATER"));
+    }
+
+    @Test
     void refreshesSignalsClustersAndBuildsBeginnerFriendlyCards() {
         NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", NOW.minusMinutes(30));
         NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", NOW.minusMinutes(20));
@@ -93,7 +114,7 @@ class ResearchRadarServiceTest {
         saved.setSummary("最近一次成功结果"); saved.setPriorityScore(60); saved.setSourceCount(2); saved.setSignalCount(2);
         saved.setScoreExplanation("多个来源确认；近期新信息");
         saved.setWatchlistExplanation("未发现与当前自选标的的直接关系"); saved.setLastSeenAt(NOW.minusMinutes(5));
-        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
+        when(repository.findWorkspaceEvents("ALL", false)).thenReturn(Collections.singletonList(saved));
 
         ResearchRadarView view = service.load("ALL", false, 20);
 
@@ -112,7 +133,7 @@ class ResearchRadarServiceTest {
         when(news.load("ALL", 100)).thenThrow(new IllegalStateException("upstream unavailable"));
         RadarEvent saved = new RadarEvent(); saved.setId(9L); saved.setCanonicalTitle("已有事件");
         saved.setPriorityScore(60); saved.setLastSeenAt(NOW.minusMinutes(5));
-        when(repository.findRanked("ALL", false, 50)).thenReturn(Collections.singletonList(saved));
+        when(repository.findWorkspaceEvents("ALL", false)).thenReturn(Collections.singletonList(saved));
         RadarEventWorkspace.Summary summary = new RadarEventWorkspace.Summary(); summary.setEventId(9L);
         summary.setFollowed(true); summary.setOpenObservationCount(2);
         Map<Long, RadarEventWorkspace.Summary> values = new LinkedHashMap<Long, RadarEventWorkspace.Summary>();
@@ -162,7 +183,7 @@ class ResearchRadarServiceTest {
         RadarEvent first = rankedEvent(1L);
         ranked.add(first); ranked.add(first);
         for (long id = 2; id <= 20; id++) ranked.add(rankedEvent(id));
-        when(repository.findRanked("ALL", false, 50)).thenReturn(ranked);
+        when(repository.findWorkspaceEvents("ALL", false)).thenReturn(ranked);
 
         ResearchRadarView view = service.loadStored("ALL", false, 20, "ALL");
 

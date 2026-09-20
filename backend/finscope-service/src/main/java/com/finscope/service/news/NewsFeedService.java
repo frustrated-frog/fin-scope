@@ -111,8 +111,10 @@ public class NewsFeedService {
             items.add(enriched);
             sources.add(enriched.getSourceName());
         }
-        return new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size(),
+        NewsFeedSnapshot snapshot = new NewsFeedSnapshot(items, result.getWarnings(), LocalDateTime.now(clock), sources.size(),
                 categoryCounts, unclassifiedCount);
+        snapshot.setSourceHealth(result.getSourceHealth());
+        return snapshot;
     }
 
     public List<NewsCategory> categories() {
@@ -141,7 +143,7 @@ public class NewsFeedService {
                 classification == null ? null : classification.getEffectiveCategoryCode(),
                 classification == null ? null : categoryNames.get(classification.getEffectiveCategoryCode()),
                 classification == null ? null : classification.getCategoryCode(),
-                classification == null ? null : classification.getConfidence(),
+                classification == null || NewsRuleClassifier.VERSION.equals(classification.getModelName()) ? null : classification.getConfidence(),
                 classification == null ? null : classification.getReason(),
                 classification == null ? null : classification.getReviewStatus(),
                 classification != null && classification.isManuallyReviewed(),

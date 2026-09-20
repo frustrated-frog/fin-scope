@@ -12,7 +12,6 @@ import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.service.news.NewsFeedItem;
-import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
 import lombok.Data;
 import org.springframework.stereotype.Service;
@@ -28,7 +27,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -40,7 +38,7 @@ public class RadarHotspotProductionPipeline {
     private static final int SNAPSHOT_KEEP_DAYS = 7;
 
     @Resource
-    private NewsFeedService news;
+    private com.finscope.service.news.NewsWindowService news;
     @Resource
     private RadarRepository repository;
     @Resource
@@ -63,20 +61,21 @@ public class RadarHotspotProductionPipeline {
     private RadarHotspotPersistenceService persistence;
     @Resource
     private RadarEventSnapshotRepository snapshots;
+    @Resource
+    private RadarRankHistoryService rankHistory;
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
-        String category = normalizeCategory(requestedCategory);
         RadarRefreshRun run = runs.startRun("radar-" + UUID.randomUUID(), triggerType, now);
         try {
             runs.startStep(run.getId(), "FETCH", now);
-            NewsFeedSnapshot snapshot = news.load(category, 100);
+            NewsFeedSnapshot snapshot = news.productionSnapshot();
             runs.completeStep(run.getId(), "FETCH", "SUCCESS", 0, snapshot.getItems().size(),
                     "warnings=" + snapshot.getWarnings().size(), now);
 
             runs.startStep(run.getId(), "NORMALIZE", now);
             List<RadarSignal> captured = captureSignals(snapshot.getItems(), now);
             repository.expireSignals(now.minusHours(SIGNAL_WINDOW_HOURS), now);
-            List<RadarSignal> active = repository.findActiveSignals(now.minusHours(SIGNAL_WINDOW_HOURS), 500);
+            List<RadarSignal> active = repository.findActiveSignals(now.minusHours(SIGNAL_WINDOW_HOURS), Math.max(500, snapshot.getItems().size()));
             runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", now);
 
             runs.startStep(run.getId(), "AGGREGATE", now);
@@ -94,6 +93,7 @@ public class RadarHotspotProductionPipeline {
             runs.startStep(run.getId(), "PERSIST", now);
             List<RadarEvent> savedEvents = persist(ranked, now);
             classifyDashboardEvents();
+            rankHistory.record(savedEvents, now);
             Set<String> activeEventKeys = new HashSet<String>();
             for (RadarEvent event : savedEvents) {
                 activeEventKeys.add(event.getEventKey());
@@ -118,17 +118,12 @@ public class RadarHotspotProductionPipeline {
         ordered.sort(Comparator.comparing(NewsFeedItem::getPublishedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(NewsFeedItem::getId,
                 Comparator.nullsLast(Comparator.naturalOrder())));
-        Map<String, Integer> ranks = new LinkedHashMap<>();
         List<RadarSignal> captured = new ArrayList<>();
         for (NewsFeedItem item : ordered) {
-            String provider = firstNonBlank(item.getProviderCode(), item.getSourceName()).toUpperCase(Locale.ROOT);
-            int rank = nextRank(ranks, provider);
-            RadarSignal signal = toSignal(item, rank);
-            Optional<RadarSignal> previous = repository.findSignalByItemId(item.getId());
-            previous.ifPresent(radarSignal -> signal.setPreviousSourceRank(radarSignal.getSourceRank()));
-            captured.add(repository.capture(signal, now));
+            RadarSignal signal = toSignal(item);
+            captured.add(signal);
         }
-        return captured;
+        return repository.captureBatch(captured, now);
     }
 
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,
@@ -278,7 +273,7 @@ public class RadarHotspotProductionPipeline {
         return snapshots.findLatestBefore(stored.get().getId(), now).orElse(null);
     }
 
-    private RadarSignal toSignal(NewsFeedItem item, int rank) {
+    private RadarSignal toSignal(NewsFeedItem item) {
         return RadarSignal.builder()
                 .itemId(item.getId())
                 .providerCode(item.getProviderCode())
@@ -289,18 +284,13 @@ public class RadarHotspotProductionPipeline {
                 .content(item.getContent())
                 .url(item.getUrl())
                 .publishedAt(item.getPublishedAt())
-                .sourceRank(rank)
+                .sourceRank(null)
                 .sourceWeight(sourceWeight(item.getSourceTier()))
                 .contentHash(hash(item.getTitle() + "\n" + item.getContent() + "\n" + item.getUrl()))
                 .status(RadarSignalStatus.ACTIVE.code())
                 .build();
     }
 
-    private int nextRank(Map<String, Integer> ranks, String provider) {
-        int next = ranks.containsKey(provider) ? ranks.get(provider) + 1 : 1;
-        ranks.put(provider, next);
-        return next;
-    }
 
     private double sourceWeight(String tier) {
         return RadarSourceQuality.resolve(tier).getHotnessWeight();
@@ -317,9 +307,7 @@ public class RadarHotspotProductionPipeline {
         return warnings == null ? "" : String.join("；", warnings);
     }
 
-    private String normalizeCategory(String value) {
-        return value == null || value.trim().isEmpty() ? "ALL" : value.trim().toUpperCase(Locale.ROOT);
-    }
+
 
     private String firstNonBlank(String first, String second) {
         return first == null || first.trim().isEmpty() ? (second == null ? "" : second.trim()) : first.trim();

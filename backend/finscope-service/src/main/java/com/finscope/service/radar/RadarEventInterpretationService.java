@@ -1,7 +1,8 @@
 package com.finscope.service.radar;
 
+import com.finscope.service.news.NewsWorkbenchCapabilities;
+
 import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
@@ -30,35 +31,28 @@ import com.finscope.common.exception.BizErrorCode;
 
 @Service
 public class RadarEventInterpretationService {
-    private final RadarEventInterpretationRepository interpretations;
-    private final RadarRepository radar;
-    private final RadarEvidenceRepository evidence;
-    private final RadarEventInterpretationAgent agent;
-    private final Executor executor;
-    private final ViewRevisionService viewRevisions;
-    private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
-
     @Autowired
-    public RadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
-                                           RadarRepository radar,
-                                           RadarEvidenceRepository evidence,
-                                           RadarEventInterpretationAgent agent,
-                                           @Qualifier("radarInterpretationExecutor") Executor executor,
-                                           ViewRevisionService viewRevisions) {
-        this.interpretations = interpretations; this.radar = radar; this.evidence = evidence;
-        this.agent = agent; this.executor = executor; this.viewRevisions = viewRevisions;
-    }
-
-    public RadarEventInterpretationService(RadarEventInterpretationRepository interpretations,
-                                           RadarRepository radar,
-                                           RadarEvidenceRepository evidence,
-                                           RadarEventInterpretationAgent agent,
-                                           Executor executor) {
-        this(interpretations, radar, evidence, agent, executor, null);
-    }
+    private NewsWorkbenchCapabilities capabilities;
+    @Autowired
+    private RadarEventInterpretationRepository interpretations;
+    @Autowired
+    private RadarRepository radar;
+    @Autowired
+    private RadarEvidenceRepository evidence;
+    @Autowired
+    private RadarEventInterpretationAgent agent;
+    @Autowired
+    @Qualifier("radarInterpretationExecutor")
+    private Executor executor;
+    @Autowired
+    private ViewRevisionService viewRevisions;
+    private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public RadarEventInterpretation request(Long eventId) {
         RadarEvent event = findEvent(eventId);
+        if (!capabilities.isModelEnabled()) {
+            return unavailable(eventId);
+        }
         List<RadarSignal> signals = radar.findSignalsByEventId(eventId);
         List<RadarEvidence> evidenceItems = evidence.findByEventId(eventId);
         String fingerprint = fingerprint(event, signals, evidenceItems);
@@ -84,6 +78,15 @@ public class RadarEventInterpretationService {
         return queued;
     }
 
+    private RadarEventInterpretation unavailable(Long eventId) {
+        RadarEventInterpretation value = new RadarEventInterpretation();
+        value.setEventId(eventId);
+        value.setStatus("UNAVAILABLE");
+        value.setFailureCode("MODEL_DISABLED");
+        value.setFailureMessage("模型解读未启用，可继续阅读报道与事件脉络");
+        return value;
+    }
+
     private boolean retryable(RadarEventInterpretation value) {
         return "FAILED".equals(value.getStatus()) || "UNAVAILABLE".equals(value.getStatus());
     }
@@ -97,6 +100,9 @@ public class RadarEventInterpretationService {
     public Optional<RadarEventInterpretation> current(RadarEvent event, List<RadarSignal> signals,
                                                        List<RadarEvidence> evidenceItems) {
         if (event == null || event.getId() == null) return Optional.empty();
+        if (!capabilities.isModelEnabled()) {
+            return Optional.of(unavailable(event.getId()));
+        }
         String fingerprint = fingerprint(event, signals, evidenceItems);
         Optional<RadarEventInterpretation> matching = interpretations.findByEventFingerprint(event.getId(), fingerprint);
         if (matching.isPresent()) return matching;
@@ -106,6 +112,9 @@ public class RadarEventInterpretationService {
     }
 
     public Map<Long, RadarEventInterpretation> latestByEventIds(List<Long> eventIds) {
+        if (!capabilities.isModelEnabled()) {
+            return Collections.emptyMap();
+        }
         return interpretations.findLatestByEventIds(eventIds);
     }
 

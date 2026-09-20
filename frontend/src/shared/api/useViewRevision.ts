@@ -15,7 +15,23 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
   useEffect(() => {
     const activeScopes = new Set(scopesKey.split(',').filter(Boolean));
     const known = new Map<string, number>();
+    const pending = new Set<string>();
     let stopped = false;
+    const notify = (scope: string) => {
+      if (document.visibilityState === 'hidden') {
+        pending.add(scope);
+        return;
+      }
+      callback.current(scope);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      pending.forEach((scope) => callback.current(scope));
+      pending.clear();
+      void reconcile();
+    };
     let fallbackTimer: number | undefined;
     let stream: EventSource | undefined;
 
@@ -29,7 +45,7 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
           const previous = known.get(scope);
           known.set(scope, value.revision);
           // Redis 不可用或重启时服务端会返回 0 或较小版本；此时定时直读页面接口，确保 SQLite 主链路仍可刷新。
-          if (value.revision === 0 || (previous !== undefined && value.revision !== previous)) callback.current(scope);
+          if (value.revision === 0 || (previous !== undefined && value.revision !== previous)) notify(scope);
         });
       } catch {
         // 对账失败不干扰当前快照；下一轮重试即可。
@@ -41,6 +57,7 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
       fallbackTimer = window.setInterval(() => { void reconcile(); }, FALLBACK_RECONCILE_MS);
     };
 
+    document.addEventListener('visibilitychange', onVisible);
     if (typeof EventSource === 'undefined') {
       startFallback();
     } else {
@@ -53,10 +70,10 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
           const previous = known.get(scope);
           known.set(scope, value.revision);
           if (previous === undefined || value.revision > previous) {
-            callback.current(scope);
+            notify(scope);
           } else if (value.revision === 0 || value.revision < previous) {
             // Redis 重启/不可用时 SSE 仍可能存活但版本回退；切入定时直读的 SQLite 兜底。
-            callback.current(scope);
+            notify(scope);
             startFallback();
           }
         } catch {
@@ -68,6 +85,7 @@ export function useViewRevision(scopes: string[], onChanged: (scope: string) => 
 
     return () => {
       stopped = true;
+      document.removeEventListener('visibilitychange', onVisible);
       stream?.close();
       if (fallbackTimer !== undefined) window.clearInterval(fallbackTimer);
     };

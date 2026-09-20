@@ -1,5 +1,7 @@
 package com.finscope.dao.news;
 
+import com.finscope.common.enums.news.NewsClassificationStatus;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -37,7 +39,7 @@ public class NewsClassificationRepository {
             write(pending(itemId, now, now), now);
             return true;
         }
-        if (!"FAILED".equals(existing.getStatus()) || existing.getUpdatedAt() == null
+        if ((!NewsClassificationStatus.FAILED.name().equals(existing.getStatus()) && !NewsClassificationStatus.PENDING.name().equals(existing.getStatus())) || existing.getUpdatedAt() == null
                 || existing.getUpdatedAt().isAfter(retryBefore)) {
             return false;
         }
@@ -51,7 +53,7 @@ public class NewsClassificationRepository {
         if (existing == null) {
             return;
         }
-        existing.setStatus("CLASSIFIED");
+        existing.setStatus(NewsClassificationStatus.CLASSIFIED.name());
         existing.setCategoryCode(categoryCode);
         existing.setConfidence(confidence);
         existing.setReason(reason);
@@ -64,12 +66,28 @@ public class NewsClassificationRepository {
         write(existing, now);
     }
 
+    public synchronized void markRuleResult(NewsItemClassification result, LocalDateTime now) {
+        NewsItemClassification existing = read(result.getItemId());
+        if (existing == null || existing.isManuallyReviewed()) {
+            return;
+        }
+        existing.setStatus(result.getStatus());
+        existing.setCategoryCode(result.getCategoryCode());
+        existing.setConfidence(0);
+        existing.setReason(result.getReason());
+        existing.setModelName(result.getModelName());
+        existing.setReviewStatus(NewsClassificationStatus.UNCLASSIFIED.name().equals(result.getStatus()) ? null : "PENDING_REVIEW");
+        existing.setErrorMessage(null);
+        existing.setUpdatedAt(now);
+        write(existing, now);
+    }
+
     public synchronized void markFailed(String itemId, String errorMessage, String modelName, LocalDateTime now) {
         NewsItemClassification existing = read(itemId);
         if (existing == null) {
             return;
         }
-        existing.setStatus("FAILED");
+        existing.setStatus(NewsClassificationStatus.FAILED.name());
         existing.setCategoryCode(null);
         existing.setConfidence(0);
         existing.setReason(null);
@@ -81,7 +99,7 @@ public class NewsClassificationRepository {
 
     public synchronized boolean review(String itemId, String categoryCode, String reason, LocalDateTime now) {
         NewsItemClassification existing = read(itemId);
-        if (existing == null || !"CLASSIFIED".equals(existing.getStatus())) {
+        if (existing == null || !NewsClassificationStatus.CLASSIFIED.name().equals(existing.getStatus())) {
             return false;
         }
         existing.setManualCategoryCode(categoryCode);
@@ -110,7 +128,7 @@ public class NewsClassificationRepository {
     private NewsItemClassification pending(String itemId, LocalDateTime createdAt, LocalDateTime updatedAt) {
         NewsItemClassification value = new NewsItemClassification();
         value.setItemId(itemId);
-        value.setStatus("PENDING");
+        value.setStatus(NewsClassificationStatus.PENDING.name());
         value.setCreatedAt(createdAt);
         value.setUpdatedAt(updatedAt);
         return value;

@@ -18,6 +18,16 @@ class RadarHotspotScoreServiceTest {
     private final LocalDateTime now = LocalDateTime.of(2026, 8, 5, 10, 0);
 
     @Test
+    void backfilledSourcesDoNotBecomeAPublicationBurst() {
+        RadarEventSnapshot previous = new RadarEventSnapshot();
+        previous.setSnapshotAt(now.minusMinutes(30));
+        previous.setIndependentSourceCount(1);
+        var result = service.score(List.of(signal("CLS", 1, .95, now.minusHours(12)),
+                signal("THS", 1, .8, now.minusHours(12))), now, previous);
+        assertEquals(0, result.getVelocityScore());
+    }
+
+    @Test
     void rewardsFreshTopRankedMultiSourceSignals() {
         RadarSignal first = signal("CLS", 1, 0.95D, now.minusMinutes(20));
         RadarSignal second = signal("THS", 2, 0.80D, now.minusMinutes(35));

@@ -1,5 +1,7 @@
 package com.finscope.service.radar;
 
+import com.finscope.service.news.NewsWorkbenchCapabilities;
+
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarSignal;
@@ -16,35 +18,26 @@ import java.util.concurrent.Executor;
 
 @Service
 public class RadarEventEnhancementScheduler {
-    private final RadarCanonicalTitleAgent radarCanonicalTitleAgent;
-    private final RadarEvidenceOrchestrator evidence;
-    private final RadarRepository repository;
-    private final RadarSnapshotProjectionService snapshots;
-    private final Executor executor;
+    @Autowired
+    private NewsWorkbenchCapabilities capabilities;
+    @Autowired
+    private RadarCanonicalTitleAgent radarCanonicalTitleAgent;
+    @Autowired
+    private RadarEvidenceOrchestrator evidence;
+    @Autowired
+    private RadarRepository repository;
+    @Autowired
+    private RadarSnapshotProjectionService snapshots;
+    @Autowired
+    @Qualifier("radarAgentExecutor")
+    private Executor executor;
 
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
-    @Autowired
-    public RadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
-                                          RadarEvidenceOrchestrator evidence,
-                                          RadarRepository repository,
-                                          RadarSnapshotProjectionService snapshots,
-                                          @Qualifier("radarAgentExecutor") Executor executor) {
-        this.radarCanonicalTitleAgent = radarCanonicalTitleAgent;
-        this.evidence = evidence;
-        this.repository = repository;
-        this.snapshots = snapshots;
-        this.executor = executor;
-    }
-
-    RadarEventEnhancementScheduler(RadarCanonicalTitleAgent radarCanonicalTitleAgent,
-                                   RadarEvidenceOrchestrator evidence,
-                                   RadarRepository repository,
-                                   Executor executor) {
-        this(radarCanonicalTitleAgent, evidence, repository, null, executor);
-    }
-
     public void schedule(RadarEvent event, List<RadarSignal> signals, LocalDateTime now, boolean includeEvidence) {
+        if (!capabilities.isModelEnabled()) {
+            return;
+        }
         if (event == null || event.getId() == null) {
             return;
         }

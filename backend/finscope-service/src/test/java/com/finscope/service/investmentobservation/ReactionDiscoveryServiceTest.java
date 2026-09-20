@@ -10,8 +10,7 @@ import com.finscope.domain.investmentobservation.ReactionSample;
 import com.finscope.domain.investmentobservation.ReactionStockMatch;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.service.research.material.ResearchMaterialGateway;
-import com.finscope.service.research.material.ResearchMaterialGatewayResult;
+import com.finscope.service.news.NewsWindowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,7 +32,7 @@ class ReactionDiscoveryServiceTest {
     Path temp;
     private ReactionSampleRepository repository;
     private ReactionDiscoveryService service;
-    private ResearchMaterialGateway materials;
+    private NewsWindowService materials;
     private ReactionStockResolver resolver;
     private RadarRepository radar;
     private final LocalDateTime now = LocalDateTime.parse("2026-09-20T10:00:00");
@@ -51,7 +50,7 @@ class ReactionDiscoveryServiceTest {
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbc);
         ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().registerModule(new JavaTimeModule()));
         service = new ReactionDiscoveryService();
-        materials = mock(ResearchMaterialGateway.class);
+        materials = mock(NewsWindowService.class);
         resolver = mock(ReactionStockResolver.class);
         radar = mock(RadarRepository.class);
         ReflectionTestUtils.setField(service, "repository", repository);
@@ -66,7 +65,7 @@ class ReactionDiscoveryServiceTest {
     @Test
     void newsAutomaticallyBecomesStockSamplesWithoutMajorEventOrManualConfirmation() {
         ResearchMaterial news = news("示例公司签订重大合同");
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(news), List.of()));
+        supplyNews(List.of(news));
         RadarSignal duplicate = new RadarSignal();
         duplicate.setTitle(news.getTitle());
         duplicate.setPublishedAt(news.getPublishedAt());
@@ -91,7 +90,7 @@ class ReactionDiscoveryServiceTest {
 
     @Test
     void unresolvedNewsSurvivesCacheExpiryAndRetriesWithoutUserInput() {
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(news("示例公司业绩增长")), List.of()));
+        supplyNews(List.of(news("示例公司业绩增长")));
         when(resolver.resolve(anyString())).thenReturn(List.of());
         service.discover();
         ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
@@ -99,7 +98,7 @@ class ReactionDiscoveryServiceTest {
         assertNotNull(draft.getDiscoveryIssue());
         service.discover();
         verify(resolver, times(1)).resolve(anyString());
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(), List.of()));
+        supplyNews(List.of());
         when(resolver.resolve(anyString())).thenReturn(List.of(match("600519.SH", "示例公司")));
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.plusHours(7).atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
         assertEquals(1, service.discover().getResolved());
@@ -112,7 +111,7 @@ class ReactionDiscoveryServiceTest {
         missing.setPublishedAt(null);
         ResearchMaterial future = news("未来公司合同");
         future.setPublishedAt(now.plusDays(1));
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(missing, future, news("市场午间概览")), List.of()));
+        supplyNews(List.of(missing, future, news("市场午间概览")));
         service.discover();
         assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
         assertEquals(ReactionSampleState.DRAFT, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
@@ -121,7 +120,7 @@ class ReactionDiscoveryServiceTest {
 
     @Test
     void archivedDuringEnrichmentCannotBeResurrected() {
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(news("示例公司重大合同")), List.of()));
+        supplyNews(List.of(news("示例公司重大合同")));
         when(resolver.resolve(anyString())).thenAnswer(call -> {
             ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
             repository.changeState(draft.getId(), draft.getRevision(), ReactionSampleState.ARCHIVED);
@@ -136,7 +135,7 @@ class ReactionDiscoveryServiceTest {
     void fillingPublicationTimeDoesNotChangeIdentityAfterPromotionOrArchival() {
         ResearchMaterial item = news("示例公司签订重大合同");
         item.setPublishedAt(null);
-        when(materials.readNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(List.of(item), List.of()));
+        supplyNews(List.of(item));
         service.discover();
         String identity = repository.recent(Long.MAX_VALUE, 100).get(0).getSourceIdentity();
         item.setPublishedAt(now.minusHours(1));
@@ -206,4 +205,21 @@ class ReactionDiscoveryServiceTest {
         match.setName(name);
         return match;
     }
+    private void supplyNews(List<ResearchMaterial> values) {
+        doAnswer(invocation -> {
+            java.util.function.Consumer<List<com.finscope.domain.news.NewsReport>> consumer = invocation.getArgument(0);
+            consumer.accept(values.stream().map(value -> {
+                var report = new com.finscope.domain.news.NewsReport();
+                report.setId(value.getProviderCode() + ":" + value.getExternalId());
+                report.setTitle(value.getTitle());
+                report.setContent(value.getContent());
+                report.setUrl(value.getUrl());
+                report.setPublishedAt(value.getPublishedAt());
+                report.setFirstSeenAt(now);
+                return report;
+            }).toList());
+            return null;
+        }).when(materials).scan(any());
+    }
+
 }

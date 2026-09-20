@@ -112,7 +112,8 @@ beforeEach(() => {
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     if (path === '/api/research-radar/followed?limit=20') return Promise.resolve({ ...snapshot, events: [] });
     if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
     if (path === '/api/research-radar/events/10/state') return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
@@ -127,78 +128,13 @@ async function openRadar() {
   expect(screen.getByRole('heading', { name: '高优先级事件' })).toBeInTheDocument();
 }
 
-test('keeps the original realtime wire as the default and offers radar as a secondary view', async () => {
+test('opens the complete news window by default and keeps radar as a secondary view', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-
-  expect(await screen.findByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '要闻精华' })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100');
-
+  expect(await screen.findByRole('heading', { name: '市场正在发生' })).toBeInTheDocument();
+  expect(await screen.findByText('找到 2 条 · 按发布时间排序')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith(expect.stringContaining('/api/news/window?'));
   await openRadar();
   expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL');
-});
-
-test('shows category quality counts and explainable agent decisions', async () => {
-  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-
-  expect(await screen.findByRole('button', { name: '公司动态 2' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '待确认 1' })).toBeInTheDocument();
-  expect(screen.getByText('待分类 1')).toBeInTheDocument();
-  expect(screen.getAllByText('65%').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('公司发布新产品').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('待确认').length).toBeGreaterThan(0);
-});
-
-test('uses the existing realtime view when switching to pending review', async () => {
-  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-  await screen.findByRole('button', { name: '待确认 1' });
-
-  fireEvent.click(screen.getByRole('button', { name: '待确认 1' }));
-
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=PENDING_REVIEW&limit=100'));
-  expect(screen.getByRole('heading', { name: '实时快讯' })).toBeInTheDocument();
-});
-
-test('corrects a classification and reloads the current realtime category', async () => {
-  vi.mocked(api).mockImplementation((path) => {
-    if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path === '/api/news/classifications/review') return Promise.resolve({
-      itemId: 'CLS:1', agentCategoryCode: 'COMPANY', effectiveCategoryCode: 'INDUSTRY',
-      agentConfidence: 0.65, agentReason: '公司发布新产品', reviewStatus: 'CORRECTED'
-    });
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
-    return Promise.resolve(snapshot);
-  });
-  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-  const reviewButtons = await screen.findAllByRole('button', { name: '确认或修正分类' });
-
-  await userEvent.click(reviewButtons[0]);
-  await userEvent.selectOptions(screen.getAllByLabelText('调整分类')[0], 'INDUSTRY');
-  await userEvent.type(screen.getAllByLabelText('复核备注')[0], '产业链影响');
-  await userEvent.click(screen.getAllByRole('button', { name: '保存分类' })[0]);
-
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news/classifications/review', {
-    method: 'POST',
-    body: JSON.stringify({ itemId: 'CLS:1', categoryCode: 'INDUSTRY', reason: '产业链影响' })
-  }));
-  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/news?category=ALL&limit=100'));
-});
-
-test('keeps the news visible when classification review fails', async () => {
-  const addToast = vi.fn();
-  vi.mocked(api).mockImplementation((path) => {
-    if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path === '/api/news/classifications/review') return Promise.reject(new Error('复核保存失败'));
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
-    return Promise.resolve(snapshot);
-  });
-  render(<NewsView setMessage={vi.fn()} addToast={addToast} onResearch={vi.fn()} />);
-  await userEvent.click((await screen.findAllByRole('button', { name: '确认或修正分类' }))[0]);
-
-  await userEvent.click(screen.getAllByRole('button', { name: '保存分类' })[0]);
-
-  await waitFor(() => expect(addToast).toHaveBeenCalledWith('复核保存失败', 'error'));
-  expect(screen.getAllByText('宁德时代发布新一代电池').length).toBeGreaterThan(0);
 });
 
 test('shows high-priority cards without a duplicated latest-changes panel', async () => {
@@ -231,7 +167,8 @@ test('keeps the twenty-item radar context stable while showing the independent f
   };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     if (path === '/api/research-radar/followed?limit=20') {
       return Promise.resolve({ ...snapshot, events: [followedEvent, anotherFollowedEvent, followedEvent] });
     }
@@ -260,7 +197,7 @@ test('loads original signals only when the user opens the interpretation drawer'
   await openRadar();
   await screen.findByRole('heading', { name: event.title });
 
-  await userEvent.click(screen.getByRole('button', { name: '查看解读' }));
+  await userEvent.click(screen.getByRole('button', { name: '查看详情' }));
 
   expect(await screen.findByRole('dialog', { name: event.title })).toBeInTheDocument();
   expect(screen.getByText('3 个独立来源共同报道')).toBeInTheDocument();
@@ -291,7 +228,7 @@ test('records a radar event with an in-app toast instead of a native alert', asy
 test('shows external evidence and a sanitized agent trace without prompts', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
-  await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
 
   expect(await screen.findByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: '证据' }));
@@ -303,7 +240,7 @@ test('shows external evidence and a sanitized agent trace without prompts', asyn
 
 test('keeps tracking details behind explicit dossier tabs', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
-  await openRadar(); await userEvent.click(await screen.findByRole('button', { name: '查看解读' }));
+  await openRadar(); await userEvent.click(await screen.findByRole('button', { name: '查看详情' }));
   await userEvent.click(await screen.findByRole('button', { name: '事件脉络' }));
   expect(await screen.findByText('新增来源消息')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '证据' }));
@@ -336,7 +273,8 @@ test('keeps research priority as the primary score and exposes hotspot score as 
   const rankedEvent = { ...event, hotspotScore: 95, hotspotExplanation: '多源确认且来源排名靠前' };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     return Promise.resolve({ ...snapshot, events: [rankedEvent] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -356,7 +294,8 @@ test('shows the month and day with the radar event time', async () => {
 test('supports watchlist-only filtering and degraded snapshots', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     return Promise.resolve({ ...snapshot, warnings: ['实时资讯暂不可用，已展示最近一次结果'] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -372,7 +311,8 @@ test('supports watchlist-only filtering and degraded snapshots', async () => {
 test('describes a busy radar refresh without blaming realtime sources', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     return Promise.resolve({ ...snapshot, warnings: ['雷达正在刷新，已展示最近一次结果'] });
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -398,7 +338,8 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
   const updated = { ...snapshot, events: [updatedEvent, ...snapshot.events] };
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     calls += 1; return Promise.resolve(calls === 1 ? snapshot : updated);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
@@ -417,7 +358,8 @@ test('opens immediately and generates a missing interpretation in the background
   let detailCalls = 0;
   vi.mocked(api).mockImplementation((path, options) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path.startsWith('/api/news?')) return Promise.resolve(newsSnapshot);
+    if (path === '/api/news/window/filters') return Promise.resolve([]);
+    if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     if (path === '/api/research-radar/events/10/interpretation' && options?.method === 'POST') {
       return Promise.resolve({ eventId: 10, status: 'QUEUED', stale: false });
     }
@@ -430,11 +372,26 @@ test('opens immediately and generates a missing interpretation in the background
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
 
-  fireEvent.click(screen.getByRole('button', { name: '查看解读' }));
+  fireEvent.click(screen.getByRole('button', { name: '查看详情' }));
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
   expect(screen.getByRole('dialog', { name: event.title })).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', { method: 'POST' });
   await act(async () => { vi.advanceTimersByTime(1_500); await Promise.resolve(); await Promise.resolve(); });
   expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
+});
+
+test('does not request or poll interpretation when the model is disabled', async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path === '/api/research-radar/events/10') return Promise.resolve({ ...detail,
+      interpretation: { eventId: 10, status: 'UNAVAILABLE', stale: false, failureCode: 'MODEL_DISABLED' }
+    });
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
+  expect(await screen.findByRole('heading', { name: '证据与来源' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '解读' }));
+  expect(screen.getByText('模型解读未启用，可继续查看证据与来源、事件脉络。')).toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', expect.anything());
 });

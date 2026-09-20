@@ -23,24 +23,40 @@ public class RadarRepository {
     private RedisRadarCacheStore store;
 
     public RadarSignal capture(RadarSignal signal, LocalDateTime now) {
+        return store.update(state -> capture(state, signal, now));
+    }
+
+    /** 一次抓取只读写一次完整缓存，避免逐条网络传输及全量 JSON 编解码。 */
+    public List<RadarSignal> captureBatch(List<RadarSignal> signals, LocalDateTime now) {
+        if (signals == null || signals.isEmpty()) {
+            return Collections.emptyList();
+        }
         return store.update(state -> {
-            Long id = state.getSignalIdsByItemId().get(signal.getItemId());
-            RadarSignal existing = id == null ? null : state.getSignals().get(id);
-            if (id == null) {
-                id = store.stableId("signal", signal.getItemId());
+            List<RadarSignal> captured = new ArrayList<>();
+            for (RadarSignal signal : signals) {
+                captured.add(capture(state, signal, now));
             }
-            signal.setId(id);
-            signal.setFirstSeenAt(existing == null || existing.getFirstSeenAt() == null
-                    ? now : existing.getFirstSeenAt());
-            signal.setLastSeenAt(now);
-            signal.setStatus(RadarSignalStatus.ACTIVE.code());
-            if (signal.getPreviousSourceRank() == null && existing != null) {
-                signal.setPreviousSourceRank(existing.getSourceRank());
-            }
-            state.getSignals().put(id, signal);
-            state.getSignalIdsByItemId().put(signal.getItemId(), id);
-            return signal;
+            return captured;
         });
+    }
+
+    private RadarSignal capture(RadarCacheState state, RadarSignal signal, LocalDateTime now) {
+        Long id = state.getSignalIdsByItemId().get(signal.getItemId());
+        RadarSignal existing = id == null ? null : state.getSignals().get(id);
+        if (id == null) {
+            id = store.stableId("signal", signal.getItemId());
+        }
+        signal.setId(id);
+        signal.setFirstSeenAt(existing == null || existing.getFirstSeenAt() == null
+                ? now : existing.getFirstSeenAt());
+        signal.setLastSeenAt(now);
+        signal.setStatus(RadarSignalStatus.ACTIVE.code());
+        if (signal.getPreviousSourceRank() == null && existing != null) {
+            signal.setPreviousSourceRank(existing.getSourceRank());
+        }
+        state.getSignals().put(id, signal);
+        state.getSignalIdsByItemId().put(signal.getItemId(), id);
+        return signal;
     }
 
     public List<RadarSignal> findActiveSignals(LocalDateTime since, int limit) {
@@ -169,6 +185,12 @@ public class RadarRepository {
     }
 
     public List<RadarEvent> findRanked(String category, boolean watchlistOnly, int limit) {
+        return findWorkspaceEvents(category, watchlistOnly).stream()
+                .limit(normalizeLimit(limit)).collect(Collectors.toList());
+    }
+
+    /** 当前 TTL 窗口已经完整加载在缓存状态中；由上层先筛选用户状态再截断。 */
+    public List<RadarEvent> findWorkspaceEvents(String category, boolean watchlistOnly) {
         return activeEvents().stream()
                 .filter(value -> blank(category) || "ALL".equalsIgnoreCase(category)
                         || category.trim().equalsIgnoreCase(value.getCategoryCode()))
@@ -177,7 +199,6 @@ public class RadarRepository {
                         .thenComparing(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed())
                         .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(RadarEvent::getId, Comparator.reverseOrder()))
-                .limit(normalizeLimit(limit))
                 .collect(Collectors.toList());
     }
 

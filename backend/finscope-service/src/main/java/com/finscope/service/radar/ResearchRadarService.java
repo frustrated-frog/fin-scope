@@ -216,24 +216,31 @@ public class ResearchRadarService {
         String category = normalizeCategory(requestedCategory);
         String state = normalizeState(requestedState);
         int limit = Math.max(1, Math.min(requestedLimit, 50));
-        List<RadarEvent> ranked = repository.findRanked(category, watchlistOnly, 50);
+        List<RadarEvent> ranked = repository.findWorkspaceEvents(category, watchlistOnly);
         Map<Long, ResearchRadarView.EventCard> index = cardIndex(ranked);
-        NewsFeedSnapshot cached = lastNewsSnapshot;
-        LocalDateTime refreshedAt = cached == null ? LocalDateTime.now(clock) : cached.getRefreshedAt();
+        ResearchRadarView.ProductionStatus status = productionStatus();
+        List<ResearchRadarView.EventCard> allCards = new ArrayList<>(index.values());
+        return new ResearchRadarView(RadarEventCardQuery.filter(allCards, state, limit), Collections.emptyList(),
+                Collections.emptyList(), status.getCompletedAt(), status).withStateCounts(RadarEventCardQuery.counts(allCards));
+    }
+
+    public ResearchRadarView.ProductionStatus productionStatus() {
+        LocalDateTime refreshedAt = null;
         ResearchRadarView.ProductionStatus status = ResearchRadarView.ProductionStatus.of(false, "EMPTY", refreshedAt, 0, 0, 0, null);
         if (backgroundRefresh != null) {
             java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestRun();
             if (latestRun.isPresent()) {
                 com.finscope.domain.radar.RadarRefreshRun run = latestRun.get();
-                if (run.getCompletedAt() != null) refreshedAt = run.getCompletedAt();
+                if (run.getCompletedAt() != null) {
+                    refreshedAt = run.getCompletedAt();
+                }
                 status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), run.getStatus(), refreshedAt,
                         run.getSourceCount(), run.getSignalCount(), run.getEventCount(), productionMessage(run));
             } else {
                 status = ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), "EMPTY", refreshedAt, 0, 0, 0, null);
             }
         }
-        return new ResearchRadarView(filteredCards(ranked, index, state, limit), Collections.<NewsFeedItem>emptyList(),
-                Collections.<String>emptyList(), refreshedAt, status);
+        return status;
     }
 
     /**
@@ -289,7 +296,7 @@ public class ResearchRadarService {
 
     private ResearchRadarView fallback(String category, boolean watchlistOnly, int limit, String state, LocalDateTime now, String warning) {
         NewsFeedSnapshot cached = lastNewsSnapshot;
-        List<RadarEvent> ranked = repository.findRanked(category, watchlistOnly, 50);
+        List<RadarEvent> ranked = repository.findWorkspaceEvents(category, watchlistOnly);
         Map<Long, ResearchRadarView.EventCard> cardIndex = cardIndex(ranked);
         return new ResearchRadarView(filteredCards(ranked, cardIndex, state, limit), Collections.<NewsFeedItem>emptyList(),
                 Collections.singletonList(warning), cached == null ? now : cached.getRefreshedAt());
@@ -297,21 +304,29 @@ public class ResearchRadarService {
 
     private Map<Long, ResearchRadarView.EventCard> cardIndex(List<RadarEvent> events) {
         Map<Long, RadarEvent> unique = new LinkedHashMap<Long, RadarEvent>();
-        for (RadarEvent event : events) if (event.getId() != null) unique.put(event.getId(), event);
+        for (RadarEvent event : events) {
+            if (event.getId() != null) {
+                unique.put(event.getId(), event);
+            }
+        }
         List<Long> ids = new ArrayList<Long>(unique.keySet());
         Map<Long, RadarEventInterpretation> latest = interpretations == null ? Collections.<Long, RadarEventInterpretation>emptyMap()
                 : interpretations.latestByEventIds(ids);
         Map<Long, RadarEventWorkspace.Summary> summaries = Collections.emptyMap();
-        if (workspace != null) try {
-            summaries = workspace.summaries(ids);
-            for (RadarEvent event : unique.values()) workspace.reconcileRead(event, summaries.get(event.getId()));
-            workspace.createChangeNotifications(new ArrayList<RadarEvent>(unique.values()), summaries);
-        } catch (RuntimeException ignored) {
-            summaries = Collections.emptyMap();
+        if (workspace != null) {
+            try {
+                summaries = workspace.summaries(ids);
+                for (RadarEvent event : unique.values()) {
+                    workspace.reconcileRead(event, summaries.get(event.getId()));
+                }
+            } catch (RuntimeException ignored) {
+                summaries = Collections.emptyMap();
+            }
         }
         Map<Long, ResearchRadarView.EventCard> result = new LinkedHashMap<Long, ResearchRadarView.EventCard>();
-        for (RadarEvent event : unique.values())
+        for (RadarEvent event : unique.values()) {
             result.put(event.getId(), new ResearchRadarView.EventCard(event, latest.get(event.getId()), summaries.get(event.getId())));
+        }
         return result;
     }
 
@@ -333,11 +348,7 @@ public class ResearchRadarService {
     }
 
     private boolean matchesState(ResearchRadarView.EventCard card, String state) {
-        if ("UNREAD".equals(state)) return !card.isRead() && !"IGNORED".equals(card.getDisposition());
-        if ("FOLLOWED".equals(state)) return card.isFollowed() && !"IGNORED".equals(card.getDisposition());
-        if ("LATER".equals(state)) return "LATER".equals(card.getDisposition());
-        if ("IGNORED".equals(state)) return "IGNORED".equals(card.getDisposition());
-        return !"IGNORED".equals(card.getDisposition());
+        return RadarEventCardQuery.matches(card, state);
     }
 
     private boolean matches(String category, RadarEvent event) {

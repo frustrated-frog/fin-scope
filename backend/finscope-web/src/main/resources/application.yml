@@ -141,3 +141,6 @@ finscope:
       topic: finscope.industry-chain.structure-completion.requested
       group-id: finscope-industry-chain-completion
       ack-timeout-ms: 2000
+
+# 资讯与雷达默认使用规则处理；仅显式启用时调用模型或证据搜索。
+finscope.news-workbench.model-enabled: false

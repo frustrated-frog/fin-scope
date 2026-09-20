@@ -57,6 +57,37 @@ class RedisRadarCacheStoreTest {
     }
 
     @Test
+    void readsCommittedSnapshotWhileWriterIsStillMutating() throws Exception {
+        when(valueOperations.get(RedisRadarCacheStore.STATE_KEY)).thenReturn("{}");
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Future<?> writer = executor.submit(() -> store.update(state -> {
+                state.getEventIdsByKey().put("pending", 42L);
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("等待读取验证超时");
+                    }
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(error);
+                }
+                return null;
+            }));
+            assertTrue(entered.await(2, TimeUnit.SECONDS));
+            RadarCacheState snapshot = executor.submit(() -> store.read()).get(2, TimeUnit.SECONDS);
+            assertFalse(snapshot.getEventIdsByKey().containsKey("pending"));
+            release.countDown();
+            writer.get(2, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void writesRadarStateWithConfiguredThirtySixHourTtlAndStableIds() {
         when(valueOperations.get(RedisRadarCacheStore.STATE_KEY)).thenReturn(null);
 
