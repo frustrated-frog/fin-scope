@@ -14,3 +14,14 @@
 .next-session-history td, .next-session-history th { padding: 12px 8px; border-bottom: 1px solid rgba(150, 180, 190, .12); white-space: nowrap; }
 
 .next-session-joint { border-top: 1px solid rgba(74, 180, 200, .25); padding-top: 12px; margin-top: 12px; }
+
+.next-validation { margin: 18px 0; padding: 18px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; }
+.next-validation h4 { margin: 0 0 10px; font-size: 16px; }
+.next-validation h5 { margin: 0; font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
+.next-validation p, .next-validation dt, .next-validation summary { color: var(--muted); }
+.next-validation-version { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.next-validation-version dl { gap: 16px 28px; }
+.next-validation-version dd { font-variant-numeric: tabular-nums; }
+.next-validation summary { cursor: pointer; }
+.next-validation summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+@media (max-width: 600px) { .next-validation { padding: 12px; } .next-validation-version dl { display: grid; grid-template-columns: 1fr; } }
