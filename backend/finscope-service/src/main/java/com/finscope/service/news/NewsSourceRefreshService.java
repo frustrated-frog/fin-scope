@@ -20,22 +20,18 @@ public class NewsSourceRefreshService {
     private static final Logger log = LoggerFactory.getLogger(NewsSourceRefreshService.class);
     private static final ResearchMaterialRequest REQUEST = new ResearchMaterialRequest("000001", "", 50);
 
-    private final ResearchMaterialGateway gateway;
-    private final RadarHotspotRefreshService radarRefresh;
-    private final ViewRevisionService viewRevisions;
-    private final Executor executor;
-    private final AtomicBoolean running = new AtomicBoolean(false);
-
     @Autowired
-    public NewsSourceRefreshService(ResearchMaterialGateway gateway,
-                                    RadarHotspotRefreshService radarRefresh,
-                                    ViewRevisionService viewRevisions,
-                                    @Qualifier("newsRefreshExecutor") Executor executor) {
-        this.gateway = gateway;
-        this.radarRefresh = radarRefresh;
-        this.viewRevisions = viewRevisions;
-        this.executor = executor;
-    }
+    private ResearchMaterialGateway gateway;
+    @Autowired
+    private RadarHotspotRefreshService radarRefresh;
+    @Autowired
+    private ViewRevisionService viewRevisions;
+    @Autowired
+    @Qualifier("newsRefreshExecutor")
+    private Executor executor;
+    @Autowired
+    private NewsWindowService window;
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     public boolean requestRefresh() {
         if (!running.compareAndSet(false, true)) {
@@ -60,6 +56,7 @@ public class NewsSourceRefreshService {
 
     public ResearchMaterialGatewayResult refreshNow() {
         ResearchMaterialGatewayResult result = gateway.refreshNewsFlashSources(REQUEST);
+        window.capture(result.getMaterials());
         viewRevisions.invalidate("news");
         radarRefresh.requestScheduledRefresh();
         return result;

@@ -8,8 +8,7 @@ import com.finscope.domain.majorevent.MajorEvent;
 import com.finscope.domain.majorevent.MajorEventCreateCommand;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.service.news.NewsFeedItem;
-import com.finscope.service.news.NewsFeedService;
-import com.finscope.service.news.NewsFeedSnapshot;
+import com.finscope.service.news.NewsWindowService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -30,7 +29,7 @@ class MajorEventServiceTest {
         MajorEventRepository events = mock(MajorEventRepository.class);
         ArticleRepository articles = mock(ArticleRepository.class);
         RadarRepository radar = mock(RadarRepository.class);
-        MajorEventService service = service(events, articles, radar, mock(NewsFeedService.class));
+        MajorEventService service = service(events, articles, radar, mock(NewsWindowService.class));
         Article article = new Article();
         article.setId(3L);
         article.setTitle("央行降准");
@@ -57,14 +56,13 @@ class MajorEventServiceTest {
     }
 
     @Test
-    void createsNewsSnapshotOnlyFromTheCurrentCacheItem() {
+    void createsNewsSnapshotByWindowItemIdWithoutTopHundredLimit() {
         MajorEventRepository events = mock(MajorEventRepository.class);
-        NewsFeedService news = mock(NewsFeedService.class);
+        NewsWindowService news = mock(NewsWindowService.class);
         NewsFeedItem item = new NewsFeedItem("CLS:1", "FLASH", "缓存中的标题", "缓存中的正文",
                 "https://example.com/news", LocalDateTime.of(2026, 8, 4, 10, 0),
                 "CLS", "财联社", "T1", "MACRO", "宏观", null, null);
-        when(news.load("ALL", 100)).thenReturn(new NewsFeedSnapshot(Collections.singletonList(item),
-                Collections.emptyList(), LocalDateTime.now(), 1));
+        when(news.find("CLS:1")).thenReturn(Optional.of(item));
         when(events.findByOrigin("NEWS_ITEM", "CLS:1")).thenReturn(Optional.empty());
         when(events.save(any(MajorEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
         MajorEventService service = service(events, mock(ArticleRepository.class), mock(RadarRepository.class), news);
@@ -90,7 +88,7 @@ class MajorEventServiceTest {
         when(radar.findEventByKey("central-bank-rate-cut")).thenReturn(Optional.of(source));
         when(events.findByOrigin("RADAR_EVENT", "central-bank-rate-cut")).thenReturn(Optional.empty());
         when(events.save(any(MajorEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        MajorEventService service = service(events, mock(ArticleRepository.class), radar, mock(NewsFeedService.class));
+        MajorEventService service = service(events, mock(ArticleRepository.class), radar, mock(NewsWindowService.class));
         MajorEventCreateCommand command = new MajorEventCreateCommand();
         command.setOriginType("RADAR_EVENT");
         command.setOriginKey("central-bank-rate-cut");
@@ -102,7 +100,7 @@ class MajorEventServiceTest {
     }
 
     private MajorEventService service(MajorEventRepository events, ArticleRepository articles,
-                                      RadarRepository radar, NewsFeedService news) {
+                                      RadarRepository radar, NewsWindowService news) {
         MajorEventService service = new MajorEventService();
         ReflectionTestUtils.setField(service, "events", events);
         ReflectionTestUtils.setField(service, "articles", articles);

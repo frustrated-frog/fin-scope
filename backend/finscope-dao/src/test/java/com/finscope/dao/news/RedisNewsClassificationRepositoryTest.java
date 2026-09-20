@@ -43,6 +43,11 @@ class RedisNewsClassificationRepositoryTest {
     void setUp() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString())).thenAnswer(invocation -> values.get(invocation.getArgument(0)));
+        org.mockito.Mockito.lenient().when(valueOperations.multiGet(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenAnswer(invocation -> {
+                    java.util.Collection<String> keys = invocation.getArgument(0);
+                    return keys.stream().map(values::get).collect(java.util.stream.Collectors.toList());
+                });
         doAnswer(invocation -> {
             values.put(invocation.getArgument(0), invocation.getArgument(1));
             return null;
@@ -53,6 +58,19 @@ class RedisNewsClassificationRepositoryTest {
         ReflectionTestUtils.setField(repository, "redisTemplate", redisTemplate);
         ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().findAndRegisterModules());
         ReflectionTestUtils.setField(repository, "properties", properties);
+    }
+
+    @Test
+    void batchReadsClassificationWithMissingKeysAndBoundedNetworkCalls() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 21, 10, 0);
+        repository.claim("CLS:0", now, now.minusMinutes(5));
+        java.util.List<String> ids = java.util.stream.IntStream.range(0, 1001)
+                .mapToObj(index -> "CLS:" + index).collect(java.util.stream.Collectors.toList());
+        Map<String, NewsItemClassification> results = repository.findByItemIds(ids);
+        assertEquals(1, results.size());
+        assertEquals("PENDING", results.get("CLS:0").getStatus());
+        verify(valueOperations, org.mockito.Mockito.times(3)).multiGet(org.mockito.ArgumentMatchers.anyCollection());
+        verify(valueOperations, org.mockito.Mockito.times(1)).get(anyString());
     }
 
     @Test

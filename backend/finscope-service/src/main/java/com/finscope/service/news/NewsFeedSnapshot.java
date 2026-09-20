@@ -13,6 +13,20 @@ public final class NewsFeedSnapshot {
     @lombok.Getter
     @lombok.Setter
     private List<NewsSourceHealth> sourceHealth = Collections.emptyList();
+    @lombok.Getter @lombok.Setter
+    private int page;
+    @lombok.Getter @lombok.Setter
+    private int pageSize;
+    @lombok.Getter @lombok.Setter
+    private int totalCount;
+    @lombok.Getter @lombok.Setter
+    private int totalPages;
+    @lombok.Getter @lombok.Setter
+    private int windowHours;
+    @lombok.Getter @lombok.Setter
+    private LocalDateTime asOf;
+    @lombok.Getter @lombok.Setter
+    private List<String> sourceOptions = Collections.emptyList();
     private final List<NewsFeedItem> items;
     private final List<String> warnings;
     private final LocalDateTime refreshedAt;

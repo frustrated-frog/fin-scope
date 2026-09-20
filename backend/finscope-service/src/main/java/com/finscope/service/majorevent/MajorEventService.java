@@ -11,7 +11,7 @@ import com.finscope.domain.majorevent.MajorEvent;
 import com.finscope.domain.majorevent.MajorEventCreateCommand;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.service.news.NewsFeedItem;
-import com.finscope.service.news.NewsFeedService;
+import com.finscope.service.news.NewsWindowService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -29,7 +29,7 @@ public class MajorEventService {
     @Resource
     private RadarRepository radar;
     @Resource
-    private NewsFeedService news;
+    private NewsWindowService news;
 
     public MajorEvent create(MajorEventCreateCommand command) {
         validateOrigin(command);
@@ -98,9 +98,7 @@ public class MajorEventService {
     }
 
     private MajorEvent liveNewsSnapshot(MajorEventCreateCommand command) {
-        NewsFeedItem item = news.load("ALL", 100).getItems().stream()
-                .filter(value -> command.getOriginKey().equals(value.getId()))
-                .findFirst()
+        NewsFeedItem item = news.find(command.getOriginKey())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "新闻不存在或缓存已过期：" + command.getOriginKey()));
         MajorEvent event = base(command);

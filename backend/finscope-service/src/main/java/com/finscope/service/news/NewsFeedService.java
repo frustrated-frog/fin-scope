@@ -121,14 +121,14 @@ public class NewsFeedService {
         return categories == null ? Collections.emptyList() : categories.findEnabled();
     }
 
-    private boolean matches(String requestedCategory, NewsItemClassification classification) {
+    boolean matches(String requestedCategory, NewsItemClassification classification) {
         if ("ALL".equals(requestedCategory)) return true;
         if (classification == null || !"CLASSIFIED".equals(classification.getStatus())) return false;
         if ("PENDING_REVIEW".equals(requestedCategory)) return classification.isPendingReview();
         return requestedCategory.equals(classification.getEffectiveCategoryCode());
     }
 
-    private NewsFeedItem map(ResearchMaterial value) {
+    NewsFeedItem map(ResearchMaterial value) {
         String provider = value.getProviderCode();
         String kind = provider != null && provider.endsWith("_DIGEST") ? "ARTICLE" : "FLASH";
         String id = (provider == null ? "NEWS" : provider) + ":" + value.getExternalId();
@@ -136,7 +136,7 @@ public class NewsFeedService {
                 value.getPublishedAt(), provider, sourceName(value.getProviderFamily()), value.getSourceTier());
     }
 
-    private NewsFeedItem enrich(NewsFeedItem item, NewsItemClassification classification,
+    NewsFeedItem enrich(NewsFeedItem item, NewsItemClassification classification,
                                 Map<String, String> categoryNames) {
         return new NewsFeedItem(item.getId(), item.getKind(), item.getTitle(), item.getContent(), item.getUrl(),
                 item.getPublishedAt(), item.getProviderCode(), item.getSourceName(), item.getSourceTier(),
