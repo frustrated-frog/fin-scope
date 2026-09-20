@@ -170,9 +170,13 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         }
     }
 
-    function openNotificationEvent(eventId: number) {
-        const item = snapshotRef.current?.events.find((value) => value.id === eventId);
-        if (item) openEvent(item);
+    async function openNotificationEvent(eventId: number) {
+        const detail = await api<RadarEventDetail>(`/api/research-radar/events/${eventId}`);
+        if (!mounted.current) {
+            return false;
+        }
+        openEvent(detail.event);
+        return true;
     }
 
     useViewRevision(['radar'], () => {
