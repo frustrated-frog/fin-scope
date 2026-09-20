@@ -23,24 +23,40 @@ public class RadarRepository {
     private RedisRadarCacheStore store;
 
     public RadarSignal capture(RadarSignal signal, LocalDateTime now) {
+        return store.update(state -> capture(state, signal, now));
+    }
+
+    /** 一次抓取只读写一次完整缓存，避免逐条网络传输及全量 JSON 编解码。 */
+    public List<RadarSignal> captureBatch(List<RadarSignal> signals, LocalDateTime now) {
+        if (signals == null || signals.isEmpty()) {
+            return Collections.emptyList();
+        }
         return store.update(state -> {
-            Long id = state.getSignalIdsByItemId().get(signal.getItemId());
-            RadarSignal existing = id == null ? null : state.getSignals().get(id);
-            if (id == null) {
-                id = store.stableId("signal", signal.getItemId());
+            List<RadarSignal> captured = new ArrayList<>();
+            for (RadarSignal signal : signals) {
+                captured.add(capture(state, signal, now));
             }
-            signal.setId(id);
-            signal.setFirstSeenAt(existing == null || existing.getFirstSeenAt() == null
-                    ? now : existing.getFirstSeenAt());
-            signal.setLastSeenAt(now);
-            signal.setStatus(RadarSignalStatus.ACTIVE.code());
-            if (signal.getPreviousSourceRank() == null && existing != null) {
-                signal.setPreviousSourceRank(existing.getSourceRank());
-            }
-            state.getSignals().put(id, signal);
-            state.getSignalIdsByItemId().put(signal.getItemId(), id);
-            return signal;
+            return captured;
         });
+    }
+
+    private RadarSignal capture(RadarCacheState state, RadarSignal signal, LocalDateTime now) {
+        Long id = state.getSignalIdsByItemId().get(signal.getItemId());
+        RadarSignal existing = id == null ? null : state.getSignals().get(id);
+        if (id == null) {
+            id = store.stableId("signal", signal.getItemId());
+        }
+        signal.setId(id);
+        signal.setFirstSeenAt(existing == null || existing.getFirstSeenAt() == null
+                ? now : existing.getFirstSeenAt());
+        signal.setLastSeenAt(now);
+        signal.setStatus(RadarSignalStatus.ACTIVE.code());
+        if (signal.getPreviousSourceRank() == null && existing != null) {
+            signal.setPreviousSourceRank(existing.getSourceRank());
+        }
+        state.getSignals().put(id, signal);
+        state.getSignalIdsByItemId().put(signal.getItemId(), id);
+        return signal;
     }
 
     public List<RadarSignal> findActiveSignals(LocalDateTime since, int limit) {

@@ -78,11 +78,14 @@ public class RadarEventInterpretationRepository {
 
     public Map<Long, RadarEventInterpretation> findLatestByEventIds(List<Long> eventIds) {
         Map<Long, RadarEventInterpretation> result = new LinkedHashMap<Long, RadarEventInterpretation>();
-        if (eventIds == null) {
+        if (eventIds == null || eventIds.isEmpty()) {
             return result;
         }
+        RadarCacheState state = store.read();
         for (Long eventId : eventIds) {
-            findLatestByEventId(eventId).ifPresent(value -> result.put(eventId, value));
+            state.getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
+                    .max(Comparator.comparing(RadarEventInterpretation::getId))
+                    .ifPresent(value -> result.put(eventId, value));
         }
         return result;
     }
