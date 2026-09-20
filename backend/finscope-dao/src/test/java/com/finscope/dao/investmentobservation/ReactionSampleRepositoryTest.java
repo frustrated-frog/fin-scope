@@ -89,6 +89,32 @@ class ReactionSampleRepositoryTest {
         assertTrue(repository.findDue(now.plusDays(30), 20).isEmpty());
     }
 
+    @Test
+    void changesAreIdempotentAndSameDayPriceRevisionIsACorrection() {
+        ReactionSample sample = sample();
+        sample.setState(ReactionSampleState.OBSERVING);
+        sample = repository.create(sample);
+        ReactionCalculation calculation = new ReactionCalculation();
+        var point = new com.finscope.domain.investmentobservation.ReactionPoint();
+        point.setSession(1);
+        point.setTradeDate(now.toLocalDate());
+        point.setStockReturnPct(java.math.BigDecimal.ONE);
+        point.setStatus(com.finscope.common.enums.investmentobservation.ReactionWindowStatus.READY);
+        calculation.setPoints(java.util.List.of(point));
+        assertTrue(repository.saveCalculation(sample.getId(), 0, calculation, now));
+        assertTrue(repository.saveCalculation(sample.getId(), 1, calculation, now.plusMinutes(20)));
+        assertEquals(1, repository.changes(now.toLocalDate(), Long.MAX_VALUE, 100).size());
+        point.setStockReturnPct(java.math.BigDecimal.TEN);
+        assertTrue(repository.saveCalculation(sample.getId(), 2, calculation, now.plusMinutes(40)));
+        var changes = repository.changes(now.toLocalDate(), Long.MAX_VALUE, 100);
+        assertEquals(2, changes.size());
+        assertEquals(com.finscope.common.enums.investmentobservation.ReactionChangeType.DATA_CORRECTION, changes.get(0).getChangeType());
+        assertFalse(repository.saveCalculation(sample.getId(), 2, calculation, now));
+        assertEquals(2, repository.changes(now.toLocalDate(), Long.MAX_VALUE, 100).size());
+        assertTrue(repository.followEvent(sample.getSourceIdentity(), true));
+        assertEquals(1, repository.followed(Long.MAX_VALUE, 100).size());
+    }
+
     private ReactionSample sample() {
         ReactionSample sample = new ReactionSample();
         sample.setMajorEventId(5L);

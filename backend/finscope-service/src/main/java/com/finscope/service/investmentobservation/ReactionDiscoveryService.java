@@ -67,7 +67,7 @@ public class ReactionDiscoveryService {
             available = news.getWarnings().isEmpty();
             for (ResearchMaterial item : news.getMaterials()) {
                 result.setCaptured(result.getCaptured() + capture(item.getTitle(), item.getContent(), item.getUrl(),
-                        item.getPublishedAt(), now, "NEWS_ITEM", item.getProviderCode() + ":" + item.getExternalId(), now));
+                        item.getPublishedAt(), now, "NEWS_ITEM", (item.getExternalId() == null || item.getExternalId().isBlank()) ? null : item.getProviderCode() + ":" + item.getExternalId(), now));
             }
         } catch (RuntimeException ex) {
             available = false;
@@ -161,6 +161,7 @@ public class ReactionDiscoveryService {
         sample.setRegisteredAt(draft.getRegisteredAt());
         sample.setHistoricalBackfill(draft.isHistoricalBackfill());
         sample.setAutomatic(true);
+        sample.setFollowed(draft.isFollowed());
         sample.setEventType(draft.getEventType());
         var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(draft.getTitle());
         sample.setEventSubtype(decision.getSubtype());

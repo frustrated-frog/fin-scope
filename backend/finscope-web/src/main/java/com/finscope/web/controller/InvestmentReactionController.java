@@ -1,5 +1,12 @@
 package com.finscope.web.controller;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDate;
+import com.finscope.web.request.FollowReactionRequest;
+import com.finscope.service.investmentobservation.ReactionWorkspaceService;
+import com.finscope.domain.investmentobservation.ReactionSource;
+import com.finscope.domain.investmentobservation.ReactionHistoryComparison;
+import com.finscope.domain.investmentobservation.ReactionChange;
 import com.finscope.service.investmentobservation.ReactionRefreshScheduler;
 import com.finscope.domain.investmentobservation.ReactionDiscoveryStatus;
 import com.finscope.common.api.ApiResponse;
@@ -30,6 +37,43 @@ public class InvestmentReactionController {
 
     @Resource
     private ReactionRefreshScheduler scheduler;
+
+    @Resource
+    private ReactionWorkspaceService workspace;
+
+    @GetMapping("/changes")
+    public ApiResponse<List<ReactionChange>> changes(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "9223372036854775807") long beforeId) {
+        return ApiResponses.success(workspace.changes(date, beforeId));
+    }
+
+    @GetMapping("/followed")
+    public ApiResponse<List<ReactionSampleResponse>> followed(@RequestParam(defaultValue = "9223372036854775807") long beforeId) {
+        return ApiResponses.success(workspace.followed(beforeId).stream().map(ReactionSampleResponse::from).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/{id}/peers")
+    public ApiResponse<List<ReactionSampleResponse>> peers(@PathVariable long id) {
+        return ApiResponses.success(workspace.peers(id).stream().map(ReactionSampleResponse::from).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/{id}/sources")
+    public ApiResponse<List<ReactionSource>> sources(@PathVariable long id) {
+        return ApiResponses.success(workspace.sources(id));
+    }
+
+    @GetMapping("/{id}/comparables")
+    public ApiResponse<ReactionHistoryComparison> comparables(@PathVariable long id,
+            @RequestParam(defaultValue = "5") int sessions) {
+        return ApiResponses.success(workspace.compare(id, sessions));
+    }
+
+    @PatchMapping("/{id}/follow")
+    public ApiResponse<List<ReactionSampleResponse>> follow(@PathVariable long id,
+            @Valid @RequestBody FollowReactionRequest request) {
+        return ApiResponses.success(workspace.follow(id, request.getFollowed()).stream().map(ReactionSampleResponse::from).collect(Collectors.toList()));
+    }
 
     @GetMapping("/discovery")
     public ApiResponse<ReactionDiscoveryStatus> discoveryStatus() {

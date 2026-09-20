@@ -8,6 +8,12 @@ class ReactionEventRulesTest {
     private final ReactionEventRules rules = new ReactionEventRules();
 
     @Test
+    void keepsFullBracketHeadlinesAndCompanyNamesContainingHe() {
+        assertEquals(java.util.List.of("和而泰"), rules.evaluate("【和而泰签订重大合同】").getSubjects());
+        assertEquals(java.util.List.of("示例公司"), rules.evaluate("示例公司终止此前签订的合同").getSubjects());
+    }
+
+    @Test
     void separatesEventStageAndRejectsResearchOpinion() {
         assertNull(rules.evaluate("中信证券：看好胜宏科技业绩增长").getEventType());
         assertEquals(ReactionEventSubtype.CONTRACT_TERMINATED, rules.evaluate("示例公司终止此前签订的合同").getSubtype());

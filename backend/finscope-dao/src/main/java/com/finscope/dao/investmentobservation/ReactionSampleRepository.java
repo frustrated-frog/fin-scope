@@ -1,5 +1,13 @@
 package com.finscope.dao.investmentobservation;
 
+import org.springframework.transaction.annotation.Transactional;
+import java.util.Comparator;
+import java.time.LocalDate;
+import com.finscope.domain.investmentobservation.ReactionWindow;
+import com.finscope.domain.investmentobservation.ReactionSource;
+import com.finscope.domain.investmentobservation.ReactionPoint;
+import com.finscope.domain.investmentobservation.ReactionChange;
+import com.finscope.common.enums.investmentobservation.ReactionChangeType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.investmentobservation.ReactionSampleState;
@@ -46,10 +54,10 @@ public class ReactionSampleRepository {
             sample.setSourceIdentity("MAJOR_EVENT:" + sample.getMajorEventId());
         }
         int changed = jdbcTemplate.update("INSERT INTO investment_reaction_sample(major_event_id,source_identity,instrument_code,"
-                        + "state,snapshot_json,registered_at) VALUES(?,?,?,?,?,?) "
+                        + "state,snapshot_json,registered_at,followed) VALUES(?,?,?,?,?,?,?) "
                         + "ON CONFLICT(source_identity,instrument_code) DO NOTHING",
                 sample.getMajorEventId(), sample.getSourceIdentity(), sample.getInstrumentCode(), sample.getState().name(),
-                write(sample), TimeUtil.text(sample.getRegisteredAt()));
+                write(sample), TimeUtil.text(sample.getRegisteredAt()), sample.isFollowed() ? 1 : 0);
         if (changed != 0 && changed != 1) {
             throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR);
         }
@@ -58,7 +66,7 @@ public class ReactionSampleRepository {
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR));
     }
 
-    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)
     public boolean captureSource(ReactionSample proposed) {
         String origin = proposed.getSourceOriginType();
         String key = proposed.getSourceOriginKey();
@@ -92,9 +100,9 @@ public class ReactionSampleRepository {
         return false;
     }
 
-    public List<com.finscope.domain.investmentobservation.ReactionSource> sources(String eventKey) {
+    public List<ReactionSource> sources(String eventKey) {
         return jdbcTemplate.query("SELECT * FROM investment_reaction_source WHERE event_key=? ORDER BY captured_at LIMIT 100", (rs, n) -> {
-            var source = new com.finscope.domain.investmentobservation.ReactionSource();
+            var source = new ReactionSource();
             source.setOriginType(rs.getString("origin_type"));
             source.setOriginKey(rs.getString("origin_key"));
             source.setEventKey(rs.getString("event_key"));
@@ -141,7 +149,7 @@ public class ReactionSampleRepository {
                 mapper, before.toString(), Math.max(1, Math.min(10, limit)));
     }
 
-    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)
     public boolean promoteDraft(ReactionSample draft, List<ReactionSample> samples) {
         // 条件写获取数据库写锁，归档或人工确认先完成时不再自动创建样本。
         if (!saveDraft(draft)) {
@@ -199,23 +207,92 @@ public class ReactionSampleRepository {
                 state.name(), id, revision) == 1;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public boolean saveCalculation(long id, int revision, ReactionCalculation calculation, LocalDateTime attemptedAt) {
+        ReactionSample previous = findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         boolean complete = calculation.getPoints().size() == 11 && calculation.getPoints().stream()
                 .allMatch(point -> point.getStatus() == ReactionWindowStatus.READY);
-        java.time.LocalDate end = calculation.getWindows().stream().filter(window -> window.getSessions() == 5)
-                .map(com.finscope.domain.investmentobservation.ReactionWindow::getEndDate).findFirst().orElse(null);
+        LocalDate end = calculation.getWindows().stream().filter(window -> window.getSessions() == 5)
+                .map(ReactionWindow::getEndDate).findFirst().orElse(null);
         boolean ended = end != null && !end.atTime(15, 0).isAfter(attemptedAt);
         boolean stop = ended && (complete || !attemptedAt.toLocalDate().isBefore(end.plusDays(7)));
-        return jdbcTemplate.update("UPDATE investment_reaction_sample SET calculation_json=?,last_attempt_at=?,"
+        boolean updated = jdbcTemplate.update("UPDATE investment_reaction_sample SET calculation_json=?,last_attempt_at=?,"
                         + "refresh_error=NULL,completed=?,next_attempt_at=?,revision=revision+1 WHERE id=? AND revision=? AND state=?",
                 write(calculation), TimeUtil.text(attemptedAt), stop ? 1 : 0,
                 ended && !complete ? TimeUtil.text(attemptedAt.plusDays(1)) : null,
                 id, revision, ReactionSampleState.OBSERVING.name()) == 1;
+        if (updated) {
+            recordChange(previous, calculation, attemptedAt, revision + 1);
+        }
+        return updated;
+    }
+
+    private void recordChange(ReactionSample previous, ReactionCalculation next, LocalDateTime now, int revision) {
+        ReactionCalculation old = previous.getCalculation();
+        var last = next.getPoints().stream().filter(point -> point.getSession() > 0 && point.getStatus() == ReactionWindowStatus.READY)
+                .max(Comparator.comparingInt(ReactionPoint::getSession));
+        if (last.isEmpty() || old != null && write(old.getPoints()).equals(write(next.getPoints()))) {
+            return;
+        }
+        int oldSession = old == null ? 0 : old.getPoints().stream()
+                .filter(point -> point.getSession() > 0 && point.getStatus() == ReactionWindowStatus.READY)
+                .mapToInt(ReactionPoint::getSession).max().orElse(0);
+        var type = ReactionChangeType.NEW_SESSION;
+        if (oldSession >= last.get().getSession()) {
+            type = ReactionChangeType.DATA_CORRECTION;
+        } else if (last.get().getSession() == 5) {
+            type = ReactionChangeType.WINDOW_COMPLETED;
+        } else if (oldSession == 0) {
+            type = ReactionChangeType.FIRST_REACTION;
+        } else if (old != null && old.getPathType() != next.getPathType()) {
+            type = ReactionChangeType.PATH_CHANGED;
+        }
+        String summary = next.getProfile() == null ? "新增第" + last.get().getSession() + "个交易日行情" : next.getProfile().getSummary();
+        if (type == ReactionChangeType.DATA_CORRECTION) {
+            summary = "已记录行情发生修正；" + summary;
+        }
+        jdbcTemplate.update("INSERT INTO investment_reaction_change(sample_id,revision,event_key,change_type,trade_date,detected_at,summary,snapshot_json) "
+                        + "VALUES(?,?,?,?,?,?,?,?)", previous.getId(), revision, previous.getSourceIdentity(), type.name(),
+                last.get().getTradeDate().toString(), now.toString(), summary, write(next));
+    }
+
+    public List<ReactionChange> changes(LocalDate date, long beforeId, int limit) {
+        return jdbcTemplate.query("SELECT c.*,s.followed,s.snapshot_json AS sample_json FROM investment_reaction_change c "
+                        + "JOIN investment_reaction_sample s ON s.id=c.sample_id WHERE c.detected_at>=? AND c.detected_at<? "
+                        + "AND c.id<? AND s.state<>'ARCHIVED' ORDER BY c.id DESC LIMIT ?", (rs, n) -> {
+            var change = new ReactionChange();
+            var sample = read(rs.getString("sample_json"), ReactionSample.class);
+            change.setId(rs.getLong("id"));
+            change.setSampleId(rs.getLong("sample_id"));
+            change.setEventKey(rs.getString("event_key"));
+            change.setTitle(sample.getTitle());
+            change.setInstrumentName(sample.getInstrumentName());
+            change.setChangeType(ReactionChangeType.valueOf(rs.getString("change_type")));
+            change.setTradeDate(LocalDate.parse(rs.getString("trade_date")));
+            change.setDetectedAt(TimeUtil.localDateTime(rs, "detected_at"));
+            change.setSummary(rs.getString("summary"));
+            change.setFollowed(rs.getInt("followed") == 1);
+            return change;
+        }, date.atStartOfDay().toString(), date.plusDays(1).atStartOfDay().toString(), beforeId, Math.max(1, Math.min(100, limit)));
+    }
+
+    public List<ReactionSample> followed(long beforeId, int limit) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE followed=1 AND state<>'ARCHIVED' "
+                + "AND id<? ORDER BY id DESC LIMIT ?", mapper, beforeId, Math.max(1, Math.min(100, limit)));
     }
 
     public boolean saveFailure(long id, int revision, String message, LocalDateTime attemptedAt) {
-        return jdbcTemplate.update("UPDATE investment_reaction_sample SET last_attempt_at=?,refresh_error=?,revision=revision+1 "
-                        + "WHERE id=? AND revision=? AND state=?", TimeUtil.text(attemptedAt), message,
+        ReactionSample sample = findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        LocalDate end = sample.getCalculation() == null ? null : sample.getCalculation().getWindows().stream()
+                .filter(window -> window.getSessions() == 5).map(ReactionWindow::getEndDate).findFirst().orElse(null);
+        boolean pastWindow = end != null && !attemptedAt.toLocalDate().isBefore(end);
+        boolean stop = pastWindow && !attemptedAt.toLocalDate().isBefore(end.plusDays(7));
+        if (end == null && sample.getPublishedAt() != null && !attemptedAt.isBefore(sample.getPublishedAt().plusDays(28))) {
+            stop = true;
+        }
+        return jdbcTemplate.update("UPDATE investment_reaction_sample SET last_attempt_at=?,refresh_error=?,revision=revision+1,"
+                        + "completed=?,next_attempt_at=? WHERE id=? AND revision=? AND state=?", TimeUtil.text(attemptedAt), message,
+                stop ? 1 : 0, pastWindow ? TimeUtil.text(attemptedAt.plusDays(1)) : null,
                 id, revision, ReactionSampleState.OBSERVING.name()) == 1;
     }
 

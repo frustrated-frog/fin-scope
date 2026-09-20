@@ -42,6 +42,7 @@ public class ReactionSchemaMigrator implements InitializingBean {
         });
         migrateAutomaticSources();
         migrateEventSources();
+        migrateReactionChanges();
     }
 
     private void migrateAutomaticSources() {
@@ -84,6 +85,20 @@ public class ReactionSchemaMigrator implements InitializingBean {
             jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN followed INTEGER NOT NULL DEFAULT 0");
             jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN next_attempt_at TEXT");
             jdbcTemplate.update("INSERT INTO schema_migration VALUES(412,?,?)", "stable sources and bounded observation retries", LocalDateTime.now().toString());
+        });
+    }
+
+    private void migrateReactionChanges() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            if (jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=413", Integer.class) > 0) {
+                return;
+            }
+            jdbcTemplate.execute("CREATE TABLE investment_reaction_change (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "sample_id INTEGER NOT NULL,revision INTEGER NOT NULL,event_key TEXT NOT NULL,change_type TEXT NOT NULL,"
+                    + "trade_date TEXT NOT NULL,detected_at TEXT NOT NULL,summary TEXT NOT NULL,snapshot_json TEXT NOT NULL,"
+                    + "UNIQUE(sample_id,revision))");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_change_date ON investment_reaction_change(detected_at,id)");
+            jdbcTemplate.update("INSERT INTO schema_migration VALUES(413,?,?)", "reaction history and daily changes", LocalDateTime.now().toString());
         });
     }
 
