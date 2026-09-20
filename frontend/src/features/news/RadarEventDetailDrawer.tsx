@@ -1,3 +1,4 @@
+import { RadarRankHistory } from "./RadarRankHistory";
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
@@ -65,7 +66,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
         </section>:null}
 
         {tab==='tracking'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>临时跟踪</h3><span>随事件缓存过期</span></div><p className="radar-empty-copy">需要长期保存和记录后续变化时，请先将事件记入大事记。</p>
-          <div className="radar-research-links"><h3>关联研究结论</h3>{detail?.researchLinks?.length?<ul>{detail.researchLinks.map((link)=><li key={link.id}><div><strong>研究运行 #{link.researchRunId}</strong><span>{link.status}</span></div>{link.questionSnapshot?<p>{link.questionSnapshot}</p>:null}{link.summary?<small>{link.summary}</small>:null}</li>)}</ul>:<p className="radar-empty-copy">从事件卡片启动研究后，结论会回到这里。</p>}</div>
+          <RadarRankHistory eventId={event.id} /><div className="radar-research-links"><h3>关联研究结论</h3>{detail?.researchLinks?.length?<ul>{detail.researchLinks.map((link)=><li key={link.id}><div><strong>研究运行 #{link.researchRunId}</strong><span>{link.status}</span></div>{link.questionSnapshot?<p>{link.questionSnapshot}</p>:null}{link.summary?<small>{link.summary}</small>:null}</li>)}</ul>:<p className="radar-empty-copy">从事件卡片启动研究后，结论会回到这里。</p>}</div>
         </section>:null}
       </div>
     </aside>

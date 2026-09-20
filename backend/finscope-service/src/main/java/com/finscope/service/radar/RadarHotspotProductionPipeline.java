@@ -27,7 +27,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -66,7 +65,6 @@ public class RadarHotspotProductionPipeline {
     private RadarRankHistoryService rankHistory;
 
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
-        String category = normalizeCategory(requestedCategory);
         RadarRefreshRun run = runs.startRun("radar-" + UUID.randomUUID(), triggerType, now);
         try {
             runs.startStep(run.getId(), "FETCH", now);
@@ -309,9 +307,7 @@ public class RadarHotspotProductionPipeline {
         return warnings == null ? "" : String.join("；", warnings);
     }
 
-    private String normalizeCategory(String value) {
-        return value == null || value.trim().isEmpty() ? "ALL" : value.trim().toUpperCase(Locale.ROOT);
-    }
+
 
     private String firstNonBlank(String first, String second) {
         return first == null || first.trim().isEmpty() ? (second == null ? "" : second.trim()) : first.trim();
