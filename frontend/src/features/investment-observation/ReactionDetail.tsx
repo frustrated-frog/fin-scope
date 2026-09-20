@@ -1,17 +1,21 @@
 import type { ReactionSample } from './reactionTypes';
 import { dateTime, eventLabels, pathLabels, signed, sourceHref, statusLabels } from './reactionTypes';
+import { ReactionEventContext } from './ReactionEventContext';
 import { ReactionChart } from './ReactionChart';
 
-export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, onCompare, onResearch }: {
+export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, onCompare, onResearch, onFollow, onOpen }: {
   sample: ReactionSample;
   samples: ReactionSample[];
   busy: boolean;
   onRefresh: () => void;
   onArchive: () => void;
   onCompare: () => void;
+  onFollow: () => void;
+  onOpen: (id: number) => void;
   onResearch?: (question: string) => void;
 }) {
   const calculation = sample.calculation;
+  const profile = calculation?.profile;
   const href = sourceHref(sample.sourceUrl);
   const overlaps = calculation ? samples.filter(other => other.id !== sample.id && (other.sourceIdentity || other.majorEventId) !== (sample.sourceIdentity || sample.majorEventId)
     && other.instrumentCode === sample.instrumentCode && other.publishedAt
@@ -21,6 +25,7 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
     <div className="reaction-detail-head">
       <div><span>{sample.eventType && eventLabels[sample.eventType]} · {sample.instrumentCode}</span><h4>{sample.title}</h4></div>
       <div className="reaction-actions">
+        <button disabled={busy} aria-pressed={Boolean(sample.followed)} onClick={onFollow}>{sample.followed ? '取消关注' : '关注事件'}</button>
         {sample.state === 'OBSERVING' && <button disabled={busy} onClick={onRefresh}>更新此样本</button>}
         {calculation && <button onClick={onCompare}>加入同类对照</button>}
         <button disabled={busy} onClick={onArchive}>{sample.state === 'ARCHIVED' ? '恢复观察' : '归档样本'}</button>
@@ -37,6 +42,14 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
     {!href && <p className="reaction-note">原始来源链接不可用，已保留登记时的文字快照。</p>}
     {sample.refreshError && <p className="reaction-warning" role="status">{sample.refreshError} 最近尝试：{dateTime(sample.lastAttemptAt)}</p>}
     {!calculation ? <p className="reaction-empty">事件已登记，尚无成功计算的行情结果。系统会自动补齐事件前行情并持续更新后续窗口。</p> : <>
+      {profile && <section className="reaction-profile" aria-label="三阶段反应画像">
+        <h5>从事前到现在</h5><p>{profile.summary}</p>
+        <div className="reaction-phases">
+          <article><span>01 / 事前 5 日</span><strong>个股 {signed(profile.beforeStockPct, '%')}</strong><small>基准 {signed(profile.beforeBenchmarkPct, '%')} · 相对 {signed(profile.beforeRelativePp, ' pp')}</small></article>
+          <article><span>02 / 首日反应</span><strong>相对 {signed(profile.firstRelativePp, ' pp')}</strong><small>成交量 / 事前均量 {profile.firstVolumeRatio?.toFixed(2) ?? '—'} 倍</small></article>
+          <article><span>03 / 后续路径 · 已观察 {profile.observedSessions} 日</span><strong>当前相对 {signed(profile.currentRelativePp, ' pp')}</strong><small>阶段最高 {signed(profile.peakRelativePp, ' pp')}（第 {profile.peakSession ?? '—'} 日）</small><small>高点回吐 {signed(profile.givebackPp, ' pp')} · 收盘最大回撤 {signed(profile.maxDrawdownPct, '%')}</small></article>
+        </div><p className="reaction-note">{profile.windowEnded ? '五日观察窗口已结束' : '观察窗口仍在进行'} · {profile.dataComplete ? '逐日数据完整' : profile.hasGaps ? '含缺失数据，已知点之间的回撤仅供参考' : '等待后续交易日'}。成交量以同批行情事前五日均量为基准；价格路径描述不代表新闻的因果影响。</p>
+      </section>}
       <ReactionChart series={[
         { label: sample.instrumentName || sample.instrumentCode, metric: 'stockReturnPct', points: calculation.points, color: 'var(--reaction-ink)' },
         { label: '沪深300', metric: 'benchmarkReturnPct', points: calculation.points, color: 'var(--reaction-teal)' }
@@ -55,7 +68,7 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
       )}>把这个差异带入研究 →</button>}
       <details className="reaction-method"><summary>逐日数据与计算口径</summary>
         <p>所有时间为北京时间。股票使用同批前复权收盘价；相对表现 = 个股累计收益 − 沪深300同期累计收益（百分点）。窗口按交易所交易日固定，不随个股停牌顺延。</p>
-        <p>“优势保留／回吐／后续走强”等标签仅在五日窗口完整后生成。首日相对表现 ≥ 2pp、五日回落 ≥ 2pp 标记回吐；否则保留首日一半以上优势标记优势保留。首日绝对相对表现 &lt; 1pp、五日 ≥ 2pp 标记后续走强；其余五日 ≤ −2pp 标记相对走弱。</p>
+        <p>“优势保留／回吐／后续走强”等标签仅在五日窗口完整后生成。阶段最高相对表现 ≥ 2pp、至五日回落 ≥ 2pp 标记回吐；收盘最大回撤 ≥ 5% 且最终相对表现为正标记下探后修复；否则保留首日一半以上优势标记优势保留。首日绝对相对表现 &lt; 1pp、五日 ≥ 2pp 标记后续走强；其余五日 ≤ −2pp 标记相对走弱。</p>
         <p>计算时间 {dateTime(calculation.calculatedAt)} · 个股行情截至 {calculation.stockAsOf} · 基准行情截至 {calculation.benchmarkAsOf}</p>
         <p>行情来源：{calculation.stockSource} / {calculation.benchmarkSource} · 质量：{calculation.stockQuality} / {calculation.benchmarkQuality} · 方法：{calculation.methodVersion}</p>
         <ul>{calculation.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
@@ -68,5 +81,6 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
           : <p>当前已加载样本中没有同股票的其他重叠事件。这不代表期间没有其他重要信息。</p>}
       </aside>
     </>}
+    <ReactionEventContext sample={sample} onOpen={onOpen} />
   </div>;
 }

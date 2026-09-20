@@ -7,6 +7,14 @@ import { reactionSample } from './reactionFixtures.test-support';
 import type { ReactionSample } from './reactionTypes';
 
 function view() {
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (/\/(changes|followed|peers|sources|comparables)(\?|$)/.test(path)) {
+      return Promise.resolve(apiResponse([]));
+    }
+    return originalFetch(input, init);
+  });
   const props = { setMessage: vi.fn(), addToast: vi.fn(), onOpenMajorEvents: vi.fn(), onResearch: vi.fn() };
   render(<InvestmentObservationView {...props} />);
   return props;

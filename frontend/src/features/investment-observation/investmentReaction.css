@@ -167,3 +167,32 @@
 .reaction-automation strong { color: var(--reaction-teal); }
 .reaction-automation small { flex-basis: 100%; color: var(--reaction-muted); }
 .reaction-selected > details { margin: 18px 0; }
+
+.reaction-activity { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 28px; padding: 24px 0; border-bottom: 1px solid var(--reaction-line); }
+.reaction-activity header, .reaction-history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.reaction-activity label, .reaction-history-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--reaction-muted); }
+.reaction-activity aside { border-left: 1px solid var(--reaction-line); padding-left: 24px; }
+.reaction-feed { padding: 0; list-style: none; max-height: 420px; overflow: auto; }
+.reaction-feed li { padding: 16px 0; border-top: 1px solid var(--reaction-line); }
+.reaction-feed small { display: block; color: var(--reaction-muted); margin-bottom: 6px; }
+.reaction-feed button, .reaction-context li button { text-align: left; color: var(--reaction-ink); font-weight: 600; }
+.reaction-feed p { font-size: 13px; margin: 8px 0 0; }
+.reaction-followed { width: 100%; text-align: left; display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--reaction-line); }
+.reaction-followed span { font-size: 12px; color: var(--reaction-muted); }
+.reaction-profile { margin: 24px 0; padding: 20px; background: var(--reaction-band); }
+.reaction-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.reaction-phases article { display: grid; align-content: start; gap: 10px; }
+.reaction-phases span, .reaction-phases small { font-size: 12px; color: var(--reaction-muted); }
+.reaction-context { margin-top: 24px; border-top: 1px solid var(--reaction-line); padding-top: 20px; }
+.reaction-context details { margin: 20px 0; }
+.reaction-context h5 { font-size: 15px; margin: 12px 0; }
+.reaction-history-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.reaction-history-groups article { padding: 16px; border: 1px solid var(--reaction-line); min-width: 0; }
+.reaction-history-groups p, .reaction-history-groups li { font-size: 13px; }
+.reaction-history-groups ul { padding-left: 16px; }
+.reaction-context small { color: var(--reaction-muted); }
+@media (max-width: 760px) {
+  .reaction-activity, .reaction-phases, .reaction-history-groups { grid-template-columns: 1fr; }
+  .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
+  .reaction-phases article + article { border-top: 1px solid var(--reaction-line); padding-top: 14px; }
+}

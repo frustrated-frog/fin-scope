@@ -29,6 +29,7 @@ const dashboardRadarEvent = {
 
 const responses: Record<string, unknown> = {
   '/api/investment-reactions/recent': [],
+  '/api/investment-reactions/followed': [],
   '/api/investment-reactions/discovery': { running: false, captured: 0, resolved: 0, message: '自动发现已开启' },
   '/api/investment-observations': {
     focus: [{
@@ -724,7 +725,7 @@ beforeEach(() => {
       }
       return mockApiResponse(detail);
     }
-    return mockApiResponse(state[url] ?? {});
+    return mockApiResponse(state[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {}));
   }));
 });
 
@@ -917,7 +918,7 @@ test('sources workspace shows failed intake batches as errors', async () => {
       });
     }
     return mockApiResponse(
-      (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? {}
+      (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {})
     );
   });
 
@@ -1219,7 +1220,7 @@ test('agent runs view refreshes itself while visible', async () => {
         ? [{ id: 2, nodeName: 'article-interpret', status: 'SUCCESS', durationMs: 88, createdAt: '2026-07-08T22:10:00' }]
         : []);
     }
-    return mockApiResponse(state[url] ?? {});
+    return mockApiResponse(state[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {}));
   });
 
   render(<App />);
