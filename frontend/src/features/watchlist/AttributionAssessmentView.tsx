@@ -4,7 +4,7 @@ import './attributionAssessment.css';
 const dispositions = {
   PREFERRED: '当前更倾向', COEXISTING: '同时起作用', NOT_ADOPTED: '暂不采用', UNRESOLVED: '尚待区分'
 };
-const statuses = { COMPLETE: '已形成研判', INSUFFICIENT_EVIDENCE: '保留分歧', DEGRADED: '部分结果' };
+const statuses = { COMPLETE: '已形成研判', INSUFFICIENT_EVIDENCE: '保留分歧', DEGRADED: '研判未完成' };
 
 function percent(value?: number | null, suffix = '%') {
   if (value == null || !Number.isFinite(value)) {
@@ -24,26 +24,35 @@ function sourceLink(value: string) {
 
 export function AttributionAssessmentView({ assessment }: { assessment: AttributionAssessment }) {
   const context = assessment.marketContext;
+  const degraded = assessment.status === 'DEGRADED';
+  const gaps = Array.from(new Set([...assessment.missingInformation, ...(context?.limitations || [])]));
   const accepted = assessment.hypotheses.filter(item => ['PREFERRED', 'COEXISTING'].includes(item.disposition));
   const paragraphs = assessment.commentary.filter(text => text !== assessment.mainJudgment && text !== assessment.pricingDebate && text !== assessment.unexplainedScope.join('；'));
   return (
-    <article className="assessment-note" aria-label="股票异动研判">
+    <article className="assessment-note" data-status={assessment.status} aria-label="股票异动研判">
       <header className="assessment-focus">
         <div className="assessment-kicker"><span>异动研判 · {context?.reportDate || '日期待确认'}</span><span>{statuses[assessment.status]}</span></div>
+        {degraded ? <div className="assessment-failure" role="status">
+          <h3>本次研判未完成</h3>
+          <p>原因分析尚未生成，已保留获取到的行情与证据。这不代表已确认没有相关原因。</p>
+          {assessment.warnings.map((warning, index) => <p className="assessment-caption" key={index}>{warning}</p>)}
+          <p className="assessment-caption">可返回自选重新发起归因；本次报告仍保留在历史记录中。</p>
+        </div> : <>
         <span className="assessment-label">本次研究焦点</span>
         <h3>{assessment.researchFocus}</h3>
         {assessment.focusReason && <p className="assessment-focus-reason">{assessment.focusReason}</p>}
+        </>}
       </header>
 
-      <section className="assessment-judgment" aria-label="当前判断">
+      {!degraded && <section className="assessment-judgment" aria-label="当前判断">
         <h4>当前判断</h4>
         <p className="assessment-lead">{assessment.mainJudgment}</p>
         {assessment.pricingDebate && <p className="assessment-debate"><strong>关键分歧</strong>{assessment.pricingDebate}</p>}
-      </section>
+      </section>}
 
       {context && (
         <details className="assessment-market" open>
-          <summary>判断所依据的行情 <span>目标日快照</span></summary>
+          <summary>行情对照 <span>目标日快照</span></summary>
           <dl className="assessment-metrics">
             <div><dt>个股涨跌</dt><dd>{percent(context.stockChangePct)}</dd></div>
             <div><dt>{context.benchmarkName || '市场基准'}</dt><dd>{percent(context.benchmarkChangePct)}</dd></div>
@@ -56,18 +65,18 @@ export function AttributionAssessmentView({ assessment }: { assessment: Attribut
         </details>
       )}
 
-      {paragraphs.length > 0 && <section className="assessment-prose" aria-label="研判短评">
+      {!degraded && paragraphs.length > 0 && <section className="assessment-prose" aria-label="研判短评">
         <h4>判断如何形成</h4>
         {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
       </section>}
 
-      <aside className="assessment-boundary" aria-label="解释边界">
+      {!degraded && (assessment.explainedScope.length > 0 || assessment.unexplainedScope.length > 0) && <aside className="assessment-boundary" aria-label="解释边界">
         <h4>这份判断解释到哪里</h4>
         {assessment.explainedScope.length > 0 && <p><strong>能够解释</strong>{assessment.explainedScope.join('；')}</p>}
         <p><strong>尚未解释</strong>{assessment.unexplainedScope.join('；') || '尚未确认可解释的范围。'}</p>
-      </aside>
+      </aside>}
 
-      {accepted.length > 0 && <section className="assessment-revision" aria-label="关键假设与改判条件">
+      {!degraded && accepted.length > 0 && <section className="assessment-revision" aria-label="关键假设与改判条件">
         <h4>什么情况下需要改判</h4>
         {accepted.map(item => <div key={item.id}>
           <h5>{item.explanation}</h5>
@@ -76,9 +85,8 @@ export function AttributionAssessmentView({ assessment }: { assessment: Attribut
         </div>)}
       </section>}
 
-      <details className="assessment-alternatives">
+      {!degraded && assessment.hypotheses.length > 0 && <details className="assessment-alternatives">
         <summary>为什么采用这个解释 <span>{assessment.hypotheses.length} 个候选</span></summary>
-        {assessment.hypotheses.length === 0 && <p>当前材料不足以形成可核验的候选解释。</p>}
         {assessment.hypotheses.map(item => <section className="assessment-hypothesis" key={item.id}>
           <span className="assessment-label">{dispositions[item.disposition]}</span>
           <h5>{item.explanation}</h5>
@@ -90,12 +98,12 @@ export function AttributionAssessmentView({ assessment }: { assessment: Attribut
             <a key={`${url}-${index}`} href={sourceLink(url)} target="_blank" rel="noreferrer">证据 {index + 1} ↗</a>)}
           </div>
         </section>)}
-      </details>
-      <details className="assessment-gaps">
+      </details>}
+      {gaps.length > 0 && <details className="assessment-gaps">
         <summary>仍缺少哪些信息</summary>
-        <ul>{Array.from(new Set([...assessment.missingInformation, ...(context?.limitations || [])])).map((item, index) => <li key={index}>{item}</li>)}</ul>
-      </details>
-      {assessment.warnings.map((warning, index) => <p className="assessment-warning" role="status" key={index}>{warning}</p>)}
+        <ul>{gaps.map((item, index) => <li key={index}>{item}</li>)}</ul>
+      </details>}
+      {!degraded && assessment.warnings.map((warning, index) => <p className="assessment-warning" role="status" key={index}>{warning}</p>)}
     </article>
   );
 }

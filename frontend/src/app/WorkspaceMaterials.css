@@ -58,7 +58,7 @@
   .market-pulse-pressure-card, .market-pulse-momentum-card, .market-pulse-internal-card,
   .ic-research-panel, .ic-driver-board, .ic-bottleneck-board, .ic-stage-profile
 ):not(:where(
-  [data-flow-surface], .glass-workspace *,
+  [data-flow-surface], .glass-workspace *, .assessment-note,
   [role="dialog"], [role="dialog"] *, [aria-modal="true"] *,
   [class*="-drawer"], [class*="-drawer"] *, [class*="-modal"], [class*="-modal"] *,
   [class*="-overlay"], [class*="-overlay"] *,

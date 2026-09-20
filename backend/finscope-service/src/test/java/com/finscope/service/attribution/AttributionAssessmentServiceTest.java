@@ -90,6 +90,8 @@ class AttributionAssessmentServiceTest {
         assertEquals("订单新增了什么", result.getResearchFocus());
         assertNotNull(result.getMarketContext());
         assertTrue(result.getHypotheses().isEmpty());
+        assertTrue(result.getWarnings().get(0).contains("比较候选解释阶段未完成"));
+        assertFalse(result.getMainJudgment().contains("公开信息不足"));
         verify(llm, times(2)).complete(anyString(), anyString());
     }
 

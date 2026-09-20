@@ -57,7 +57,7 @@ public class AttributionAssessmentService {
         result.setMarketContext(marketContextService.capture(instrument, report.getReportDate()));
         report.setChangePct(result.getMarketContext().getStockChangePct());
         result.setResearchFocus("解释目标日价格变化及公开信息能够解释的边界");
-        result.setMainJudgment("当前公开信息不足以形成可核验的主判断。");
+        result.setMainJudgment("研判尚未完成，暂未生成原因分析。");
         result.setStatus(AssessmentStatus.INSUFFICIENT_EVIDENCE);
         result.getMissingInformation().addAll(result.getMarketContext().getLimitations());
         if (!llmChatClient.isConfigured()) {
@@ -65,6 +65,7 @@ public class AttributionAssessmentService {
             result.getWarnings().add("研判模型未配置，保留行情与证据，未生成原因。");
             return result;
         }
+        String currentStage = "确定研究焦点";
         try {
             String material = material(report, instrument, evidence, startDate, result);
             stage.accept("research-focus");
@@ -78,6 +79,7 @@ public class AttributionAssessmentService {
             }
             supplement(report, instrument, evidence, startDate, focus.path("followUpQuery").asText(""), result, stage);
             material = material(report, instrument, evidence, startDate, result);
+            currentStage = "比较候选解释";
             stage.accept("hypothesis-comparison");
             JsonNode decision = call("hypothesis-comparison", material + "\n研究焦点=" + result.getResearchFocus()
                     + "\n最多提出3个实质不同的解释，不凑数。允许共存或无法区分，不强制选主因。每个解释须引用证据原URL，解释覆盖与未覆盖的现象。"
@@ -112,7 +114,7 @@ public class AttributionAssessmentService {
         } catch (Exception ex) {
             log.warn("股票研判降级 reportId={} error={}", report.getId(), ex.getClass().getSimpleName());
             result.setStatus(AssessmentStatus.DEGRADED);
-            result.getWarnings().add("研判生成未完成，保留已获取的行情、焦点和证据；未强行生成主因。");
+            result.getWarnings().add(currentStage + "阶段未完成，可能是模型调用失败或返回内容不符合要求；已保留行情与证据，可重新发起归因。");
         }
         return result;
     }

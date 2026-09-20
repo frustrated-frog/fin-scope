@@ -40,3 +40,18 @@ test('shows insufficient evidence and data gaps without inventing a comparison o
   fireEvent.click(screen.getByText('仍缺少哪些信息'));
   expect(screen.getByText('目标日行情缺失')).toBeVisible();
 });
+
+test('degraded history shows failure first and keeps market data without presenting fallback text as analysis', () => {
+  render(<AttributionAssessmentView assessment={{ ...assessment, status: 'DEGRADED',
+    researchFocus: '解释目标日价格变化及公开信息能够解释的边界',
+    mainJudgment: '当前公开信息不足以形成可核验的主判断。', focusReason: '',
+    hypotheses: [], commentary: [], explainedScope: [], unexplainedScope: [],
+    warnings: ['确定研究焦点阶段未完成'] }} />);
+  expect(screen.getByRole('heading', { name: '本次研判未完成' })).toBeVisible();
+  expect(screen.getByText('确定研究焦点阶段未完成')).toBeVisible();
+  expect(screen.getByText('+6.00%')).toBeVisible();
+  expect(screen.queryByText('当前公开信息不足以形成可核验的主判断。')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '当前判断' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('解释边界')).not.toBeInTheDocument();
+  expect(screen.queryByText('为什么采用这个解释')).not.toBeInTheDocument();
+});
