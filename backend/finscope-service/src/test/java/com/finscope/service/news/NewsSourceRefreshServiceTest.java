@@ -23,7 +23,12 @@ class NewsSourceRefreshServiceTest {
         when(gateway.refreshNewsFlashSources(any())).thenReturn(new ResearchMaterialGatewayResult(
                 Collections.emptyList(), Collections.emptyList()));
 
-        NewsSourceRefreshService service = new NewsSourceRefreshService(gateway, radar, revisions, Runnable::run);
+        NewsSourceRefreshService service = new NewsSourceRefreshService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "gateway", gateway);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "radarRefresh", radar);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "viewRevisions", revisions);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "executor", (java.util.concurrent.Executor) Runnable::run);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "window", mock(NewsWindowService.class));
 
         assertTrue(service.requestRefresh());
 

@@ -11,7 +11,7 @@ import com.finscope.domain.radar.RadarRefreshStep;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.news.NewsFeedItem;
-import com.finscope.service.news.NewsFeedService;
+import com.finscope.service.news.NewsWindowService;
 import com.finscope.service.news.NewsFeedSnapshot;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -67,7 +67,7 @@ class RadarHotspotProductionPipelineTest {
 
     @Test
     void runsFetchNormalizeAggregateRankAndPersistAsOneProductionBatch() {
-        NewsFeedService news = mock(NewsFeedService.class);
+        NewsWindowService news = mock(NewsWindowService.class);
         RadarRepository repository = mock(RadarRepository.class);
         RadarClusteringService clustering = new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService()));
         RadarPriorityService priority = new RadarPriorityService();
@@ -86,7 +86,7 @@ class RadarHotspotProductionPipelineTest {
                 "宁德时代发布新一代电池", now.minusMinutes(20));
         NewsFeedItem second = item("EASTMONEY:2", "EASTMONEY_NEWS_FLASH", "东方财富",
                 "宁德时代新电池正式发布", now.minusMinutes(25));
-        when(news.load("ALL", 100)).thenReturn(new NewsFeedSnapshot(Arrays.asList(first, second),
+        when(news.productionSnapshot()).thenReturn(new NewsFeedSnapshot(Arrays.asList(first, second),
                 Collections.<String>emptyList(), now, 2));
         when(watchlist.findByTypes(Arrays.asList("STOCK", "FUND"))).thenReturn(Collections.emptyList());
 
@@ -156,7 +156,7 @@ class RadarHotspotProductionPipelineTest {
 
     @Test
     void preservesNativeIdentityWhenAnotherClusterTriesToReuseItAsLegacyIdentity() {
-        NewsFeedService news = mock(NewsFeedService.class);
+        NewsWindowService news = mock(NewsWindowService.class);
         RadarRepository repository = mock(RadarRepository.class);
         RadarClusteringService clustering = mock(RadarClusteringService.class);
         RadarPriorityService priority = new RadarPriorityService();
@@ -168,7 +168,7 @@ class RadarHotspotProductionPipelineTest {
                 new RadarDashboardCategoryService(), new RadarHotspotPersistenceService(repository),
                 mock(RadarEventSnapshotRepository.class));
         NewsFeedSnapshot feed = new NewsFeedSnapshot(Collections.emptyList(), Collections.emptyList(), now, 0);
-        when(news.load("ALL", 100)).thenReturn(feed);
+        when(news.productionSnapshot()).thenReturn(feed);
         when(watchlist.findByTypes(Arrays.asList("STOCK", "FUND"))).thenReturn(Collections.emptyList());
         RadarRefreshRun run = new RadarRefreshRun(); run.setId(8L); run.setStatus("RUNNING");
         when(runs.startRun(anyString(), eq("TEST"), eq(now))).thenReturn(run);
@@ -230,7 +230,7 @@ class RadarHotspotProductionPipelineTest {
     }
 
     private void wire(RadarHotspotProductionPipeline pipeline,
-                      NewsFeedService news,
+                      NewsWindowService news,
                       RadarRepository repository,
                       RadarClusteringService clustering,
                       RadarPriorityService priority,

@@ -112,7 +112,7 @@ public class RadarSourceIndependenceService {
             provider = safe(signal.getSourceName()).toUpperCase(Locale.ROOT);
         }
         for (String suffix : new String[] { "_NEWS_FLASH", "_TELEGRAPH", "-NEWS-FLASH", "-TELEGRAPH",
-                "_APP", "_NEWS", "-APP", "-NEWS" }) {
+                "_DIGEST", "_FLASH", "_APP", "_NEWS", "-APP", "-NEWS" }) {
             if (provider.endsWith(suffix)) {
                 return provider.substring(0, provider.length() - suffix.length());
             }

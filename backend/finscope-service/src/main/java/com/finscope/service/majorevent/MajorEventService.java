@@ -30,6 +30,8 @@ public class MajorEventService {
     private RadarRepository radar;
     @Resource
     private NewsFeedService news;
+    @Resource
+    private com.finscope.dao.news.NewsReportRepository reports;
 
     public MajorEvent create(MajorEventCreateCommand command) {
         validateOrigin(command);
@@ -98,11 +100,11 @@ public class MajorEventService {
     }
 
     private MajorEvent liveNewsSnapshot(MajorEventCreateCommand command) {
-        NewsFeedItem item = news.load("ALL", 100).getItems().stream()
-                .filter(value -> command.getOriginKey().equals(value.getId()))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "新闻不存在或缓存已过期：" + command.getOriginKey()));
+        NewsFeedItem item = reports == null ? legacyNews(command.getOriginKey()) : reports.find(command.getOriginKey())
+                .map(value -> new NewsFeedItem(value.getId(), value.getKind(), value.getTitle(), value.getContent(), value.getUrl(),
+                        value.getPublishedAt(), value.getProviderCode(), value.getSourceName(), value.getSourceTier(),
+                        value.getCategoryCode(), value.getCategoryName(), null, value.getClassificationReason()))
+                .orElseGet(() -> legacyNews(command.getOriginKey()));
         MajorEvent event = base(command);
         event.setTitle(item.getTitle());
         event.setSummary(trimToNull(item.getContent()));
@@ -111,6 +113,14 @@ public class MajorEventService {
         event.setCategoryCode(trimToNull(item.getCategoryCode()));
         event.setOccurredDate(item.getPublishedAt() == null ? LocalDate.now() : item.getPublishedAt().toLocalDate());
         return event;
+    }
+
+    private NewsFeedItem legacyNews(String originKey) {
+        return news.load("ALL", 100).getItems().stream()
+                .filter(value -> originKey.equals(value.getId()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "新闻不存在或缓存已过期：" + originKey));
     }
 
     private MajorEvent base(MajorEventCreateCommand command) {

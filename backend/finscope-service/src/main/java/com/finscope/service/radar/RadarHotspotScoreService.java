@@ -49,10 +49,11 @@ public class RadarHotspotScoreService {
         double confirmation = confirmation(independentCount);
         double authority = sources.getAuthorityScore();
         double rankTrend = rankTrend(independentSignals);
+        boolean hasRanks = independentSignals.stream().anyMatch(signal -> signal.getSourceRank() != null);
         double persistence = persistence(independentCount, previous);
         double weighted = burst * 0.30D + confirmation * 0.22D + freshness * 0.18D
                 + authority * 0.15D + rankTrend * 0.10D + persistence * 0.05D;
-        int total = bounded(weighted * 100.0D);
+        int total = bounded((hasRanks ? weighted : (weighted - rankTrend * 0.10D) / 0.90D) * 100.0D);
         int confidence = confidence(sources);
         LocalDateTime latest = latestTime(independentSignals);
         String lifecycle = lifecycles.next(normalizedPrevious(previous, independentCount), total,
@@ -61,7 +62,7 @@ public class RadarHotspotScoreService {
                 + "；" + (independentCount > 1 ? "多源独立确认 " : "独立确认 ") + percentage(confirmation)
                 + "；时效 " + percentage(freshness)
                 + "；来源权威 " + percentage(authority)
-                + "；排名趋势 " + percentage(rankTrend)
+                + (hasRanks ? "；来源排名变化 " + percentage(rankTrend) : "；来源未提供热度排名")
                 + "；持续性 " + percentage(persistence)
                 + "；可信度 " + confidence + "%"
                 + "；生命周期 " + lifecycle

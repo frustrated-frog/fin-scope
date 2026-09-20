@@ -8,9 +8,6 @@ import com.finscope.domain.investmentobservation.ReactionDiscoveryStatus;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import com.finscope.domain.investmentobservation.ReactionStockMatch;
 import com.finscope.domain.radar.RadarSignal;
-import com.finscope.domain.research.material.ResearchMaterial;
-import com.finscope.rpc.research.material.ResearchMaterialRequest;
-import com.finscope.service.research.material.ResearchMaterialGateway;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -26,7 +23,7 @@ import java.util.List;
 @Slf4j
 public class ReactionDiscoveryService {
     @Resource
-    private ResearchMaterialGateway materials;
+    private com.finscope.service.news.NewsWindowService materials;
     @Resource
     private RadarRepository radar;
     @Resource
@@ -63,12 +60,12 @@ public class ReactionDiscoveryService {
     private boolean captureSources(LocalDateTime now, ReactionDiscoveryStatus result) {
         boolean available = true;
         try {
-            var news = materials.readNewsFlashSources(new ResearchMaterialRequest("000001", "", 50));
-            available = news.getWarnings().isEmpty();
-            for (ResearchMaterial item : news.getMaterials()) {
-                result.setCaptured(result.getCaptured() + capture(item.getTitle(), item.getContent(), item.getUrl(),
-                        item.getPublishedAt(), now, "NEWS_ITEM", (item.getExternalId() == null || item.getExternalId().isBlank()) ? null : item.getProviderCode() + ":" + item.getExternalId(), now));
-            }
+            materials.scan(batch -> {
+                for (var item : batch) {
+                    result.setCaptured(result.getCaptured() + capture(item.getTitle(), item.getContent(), item.getUrl(),
+                            item.getPublishedAt(), item.getFirstSeenAt(), "NEWS_ITEM", item.getId(), now));
+                }
+            });
         } catch (RuntimeException ex) {
             available = false;
             log.warn("reaction news snapshot unavailable; retained drafts will still be enriched", ex);
