@@ -53,3 +53,28 @@ def consecutive_observed_sessions(signal: date, outcome: date) -> bool:
     while candidate.weekday() >= 5:
         candidate += timedelta(days=1)
     return candidate == outcome
+
+
+def event_window(on_or_after: date) -> list[date] | None:
+    """Six closes before the first reaction session, then five exchange sessions.
+
+    Offsets are -5..0 (0 is the baseline close), followed by 1..5.
+    Unknown calendar coverage fails closed, including across year boundaries.
+    """
+    first = next_session(on_or_after - timedelta(days=1))
+    if first is None:
+        return None
+    earlier = []
+    current = first
+    for _ in range(6):
+        current = previous_session(current)
+        if current is None:
+            return None
+        earlier.append(current)
+    later = [first]
+    for _ in range(4):
+        current = next_session(later[-1])
+        if current is None:
+            return None
+        later.append(current)
+    return list(reversed(earlier)) + later

@@ -183,3 +183,8 @@
     outline: 2px solid Highlight;
   }
 }
+
+/* The observation detail needs the full reading area on small screens. */
+@media (max-width: 800px) {
+  .app-shell[data-view="investmentObservation"] .topbar { position: static; }
+}

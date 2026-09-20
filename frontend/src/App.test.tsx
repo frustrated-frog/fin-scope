@@ -28,6 +28,9 @@ const dashboardRadarEvent = {
 };
 
 const responses: Record<string, unknown> = {
+  '/api/investment-reactions/recent': [],
+  '/api/investment-reactions/followed': [],
+  '/api/investment-reactions/discovery': { running: false, captured: 0, resolved: 0, message: '自动发现已开启' },
   '/api/investment-observations': {
     focus: [{
       id: 7, sourceType: 'RADAR_EVENT', sourceId: 10, title: '降准后的流动性传导进入验证期',
@@ -722,7 +725,7 @@ beforeEach(() => {
       }
       return mockApiResponse(detail);
     }
-    return mockApiResponse(state[url] ?? {});
+    return mockApiResponse(state[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {}));
   }));
 });
 
@@ -769,9 +772,9 @@ test('opens investment observation as an independent top-level workspace', async
 
   await userEvent.click(screen.getByRole('button', { name: '投资观察' }));
 
-  expect(await screen.findByRole('heading', { name: '先看变化，再做判断' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '市场如何回应新信息' })).toBeInTheDocument();
   expect(screen.getByText('Investment Observation · 投资观察')).toBeInTheDocument();
-  expect(screen.getByText('降准后的流动性传导进入验证期')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '正在等待自动发现的事件' })).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {
@@ -915,7 +918,7 @@ test('sources workspace shows failed intake batches as errors', async () => {
       });
     }
     return mockApiResponse(
-      (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? {}
+      (JSON.parse(JSON.stringify(responses)) as Record<string, unknown>)[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {})
     );
   });
 
@@ -1217,7 +1220,7 @@ test('agent runs view refreshes itself while visible', async () => {
         ? [{ id: 2, nodeName: 'article-interpret', status: 'SUCCESS', durationMs: 88, createdAt: '2026-07-08T22:10:00' }]
         : []);
     }
-    return mockApiResponse(state[url] ?? {});
+    return mockApiResponse(state[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {}));
   });
 
   render(<App />);

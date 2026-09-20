@@ -1,0 +1,6 @@
+package com.finscope.common.enums.investmentobservation;
+
+public enum ReactionEventSubtype {
+    EARNINGS_FORECAST, EARNINGS_REVISION, EARNINGS_REPORT, CONTRACT_SIGNED,
+    CONTRACT_AWARDED, CONTRACT_TERMINATED, OPERATING_UPDATE, UNCLASSIFIED
+}

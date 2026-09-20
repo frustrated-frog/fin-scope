@@ -605,9 +605,11 @@ export default function App() {
         <InvestmentObservationView
           setMessage={setMessage}
           addToast={addToast}
-          onOpenSource={(eventId) => {
-            setDashboardRadarEventId(eventId);
-            setView('news');
+          onOpenMajorEvents={() => setView('majorEvents')}
+          onResearch={(question) => {
+            setResearchQuestionDraft(question);
+            setView('research');
+            setMessage('已带入事件与行情对照，请确认研究问题');
           }}
         />
       )}

@@ -15,7 +15,7 @@ describe('Market Pulse readability styles', () => {
     expect(marketPulseStart).toBeGreaterThan(-1);
     expect(marketPulseCss).toContain('--mp-text-caption: 11px;');
     expect(marketPulseCss).toContain('--mp-text-body: 14px;');
-    expect(otherPagesCss).toContain('.investment-observation-kicker { margin: 0 0 12px; color: var(--observation-green); font: 750 9px');
+    expect(otherPagesCss).not.toContain('--mp-text-body:');
   });
 
   test('does not render market pulse labels below eleven pixels', () => {
