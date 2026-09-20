@@ -9,6 +9,7 @@ import com.finscope.common.enums.investmentobservation.ReactionPathType;
 
 @Data
 public class ReactionCalculation {
+    private ReactionProfile profile;
     private String methodVersion = "DAILY_RETURN_DIFFERENCE_V1";
     private String benchmarkCode = "000300.SH";
     private String benchmarkName = "沪深300";

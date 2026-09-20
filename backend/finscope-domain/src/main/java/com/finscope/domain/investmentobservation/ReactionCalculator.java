@@ -41,7 +41,17 @@ public class ReactionCalculator {
         for (int size : new int[]{1, 3, 5}) {
             result.getWindows().add(window(size, result.getPoints()));
         }
+        result.setProfile(new ReactionProfileCalculator().calculate(result, now));
         result.setPathType(classify(result.getWindows()));
+        if (result.getProfile().isDataComplete() && result.getProfile().getGivebackPp() != null) {
+            if (result.getProfile().getPeakRelativePp().compareTo(BigDecimal.valueOf(2)) >= 0
+                    && result.getProfile().getGivebackPp().compareTo(BigDecimal.valueOf(2)) >= 0) {
+                result.setPathType(result.getProfile().getPeakSession() == 1 ? ReactionPathType.GIVEBACK : ReactionPathType.PEAK_GIVEBACK);
+            } else if (result.getProfile().getMaxDrawdownPct().compareTo(BigDecimal.valueOf(5)) >= 0
+                    && result.getProfile().getCurrentRelativePp().signum() > 0) {
+                result.setPathType(ReactionPathType.RECOVERED);
+            }
+        }
         return result;
     }
 
