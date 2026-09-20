@@ -115,6 +115,17 @@ class ReactionSampleRepositoryTest {
         assertEquals(1, repository.followed(Long.MAX_VALUE, 100).size());
     }
 
+    @Test
+    void permanentProviderFailureStopsAutomaticAttemptsButKeepsManualRefreshPossible() {
+        var sample = sample();
+        sample.setState(ReactionSampleState.OBSERVING);
+        sample.setPublishedAt(now.minusDays(30));
+        var saved = repository.create(sample);
+        assertTrue(repository.saveFailure(saved.getId(), 0, "provider unavailable", now));
+        assertTrue(repository.findDue(now.plusDays(1), 20).isEmpty());
+        assertTrue(repository.saveCalculation(saved.getId(), 1, new ReactionCalculation(), now.plusDays(1)));
+    }
+
     private ReactionSample sample() {
         ReactionSample sample = new ReactionSample();
         sample.setMajorEventId(5L);

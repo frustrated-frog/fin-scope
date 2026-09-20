@@ -168,3 +168,9 @@ export interface ReactionHistoryComparison {
   sameCompany: ReactionComparisonGroup;
   otherCompanies: ReactionComparisonGroup;
 }
+
+export const subtypeLabels: Record<string, string> = {
+  EARNINGS_FORECAST: '业绩预告', EARNINGS_REVISION: '业绩修正', EARNINGS_REPORT: '业绩报告',
+  CONTRACT_SIGNED: '合同签署', CONTRACT_AWARDED: '正式中标', CONTRACT_TERMINATED: '合同终止',
+  OPERATING_UPDATE: '经营进展', UNCLASSIFIED: '未分类'
+};

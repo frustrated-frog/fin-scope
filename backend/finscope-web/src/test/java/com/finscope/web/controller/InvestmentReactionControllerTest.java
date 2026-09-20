@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InvestmentReactionControllerTest {
     private final ReactionRegistrationService registration = mock(ReactionRegistrationService.class);
     private final ReactionRefreshService refresh = mock(ReactionRefreshService.class);
+    private final com.finscope.service.investmentobservation.ReactionWorkspaceService workspace = mock(com.finscope.service.investmentobservation.ReactionWorkspaceService.class);
     private MockMvc mvc;
 
     @BeforeEach
@@ -31,7 +32,24 @@ class InvestmentReactionControllerTest {
         InvestmentReactionController controller = new InvestmentReactionController();
         ReflectionTestUtils.setField(controller, "registration", registration);
         ReflectionTestUtils.setField(controller, "refreshService", refresh);
+        ReflectionTestUtils.setField(controller, "workspace", workspace);
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiExceptionHandler()).build();
+    }
+
+    @Test
+    void readsPersistedChangesAndValidatesFollowMutation() throws Exception {
+        var day = java.time.LocalDate.parse("2026-09-20");
+        when(workspace.changes(day, Long.MAX_VALUE)).thenReturn(List.of());
+        mvc.perform(get("/api/investment-reactions/changes?date=2026-09-20"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isArray());
+        verify(workspace).changes(day, Long.MAX_VALUE);
+        mvc.perform(patch("/api/investment-reactions/1/follow").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        verify(workspace, never()).follow(anyLong(), anyBoolean());
+        when(workspace.follow(1, true)).thenReturn(List.of());
+        mvc.perform(patch("/api/investment-reactions/1/follow").contentType(MediaType.APPLICATION_JSON).content("{\"followed\":true}"))
+                .andExpect(status().isOk());
+        verify(workspace).follow(1, true);
     }
 
     @Test
