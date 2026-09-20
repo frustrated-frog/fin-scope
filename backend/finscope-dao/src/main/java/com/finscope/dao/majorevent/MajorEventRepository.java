@@ -87,6 +87,11 @@ public class MajorEventRepository {
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
     }
 
+    public List<MajorEvent> findRecent(int limit) {
+        return jdbc.query("SELECT * FROM major_event ORDER BY occurred_date DESC,id DESC LIMIT ?",
+                mapper, Math.max(1, Math.min(100, limit)));
+    }
+
     public MajorEvent update(MajorEvent event) {
         event.setUpdatedAt(LocalDateTime.now());
         jdbc.update("UPDATE major_event SET occurred_date=?,note=?,updated_at=? WHERE id=?",

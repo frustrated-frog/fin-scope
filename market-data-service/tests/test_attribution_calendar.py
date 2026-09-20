@@ -29,3 +29,16 @@ def test_calendar_api_returns_verified_date_and_rejects_unavailable_calendar(tmp
     assert response.json() == {"previous_session": "2026-09-30"}
     assert client.get("/v1/calendar/previous-session?before=2028-10-08").status_code == 503
     assert client.get("/v1/calendar/previous-session?before=not-a-date").status_code == 422
+
+
+def test_event_window_aligns_baseline_and_five_sessions_across_holiday(tmp_path):
+    client = TestClient(create_app(settings=Settings(data_dir=tmp_path)))
+    response = client.get('/v1/calendar/event-window?on_or_after=2026-10-01')
+    assert response.status_code == 200
+    sessions = response.json()['sessions']
+    assert len(sessions) == 11
+    assert sessions[5] == '2026-09-30'
+    assert sessions[6:] == ['2026-10-08', '2026-10-09', '2026-10-12', '2026-10-13', '2026-10-14']
+    assert client.get('/v1/calendar/event-window?on_or_after=2028-10-01').status_code == 503
+    assert client.get('/v1/calendar/event-window?on_or_after=2026-01-01').status_code == 503
+    assert client.get('/v1/calendar/event-window?on_or_after=invalid').status_code == 422
