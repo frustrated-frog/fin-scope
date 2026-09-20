@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.attribution.AssessmentStatus;
 import com.finscope.common.enums.attribution.HypothesisDisposition;
+import com.finscope.common.enums.attribution.NewsImpactDirection;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.domain.attribution.AttributionAssessment;
@@ -25,7 +26,6 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -86,13 +86,13 @@ public class AttributionAssessmentService {
             currentStage = "比较候选解释";
             stage.accept("hypothesis-comparison");
             JsonNode decision = call("hypothesis-comparison", material + "\n研究焦点=" + result.getResearchFocus()
-                    + "\n最多提出3个实质不同的解释，不凑数。允许共存或无法区分，不强制选主因。每个解释须引用证据原URL，解释覆盖与未覆盖的现象。"
+                    + "\n围绕实质线索提出最多6个解释，覆盖经营、行业、预期、交易和反方因素，有多少有效线索就分析多少，不凑数。允许共存，给出相对更合理的解释，不要求证明唯一主因。每个解释须引用证据原URL，解释覆盖与未覆盖的现象。"
                     + "预期参照必须有出处；订单不等于利润，前期上涨不等于已充分消化消息。明确经营变化→价值变化→价格解释。"
-                    + "只有近期支持证据才能支撑 PREFERRED，反证和背景不能冒充支持。没有可采信解释时 mainJudgment 必须说无法确认。"
+                    + "先独立判断每条线索对该公司的影响方向：POSITIVE偏利好、NEGATIVE偏利空、MIXED多空兼有、NEUTRAL确无明显经营或价格影响、UNCLEAR材料不足以判断方向。不能因为日期较旧、未确认当天因果或置信度低就标为中性。说明影响对象、收入成本利润或估值资金的传导。timeRelevance区分当日催化、近期延续、长期背景、日期待核验。来源的SUPPORT/COUNTER只是检索轨道标签，不能代替你判断利好利空或支持哪个解释。旧消息允许成为持续背景或共同作用因素，但不得冒充新公告。mainJudgment综合最可能的机制和反向力量，不用一句证据不足替代分析。"
                     + "返回 {\"mainJudgment\":\"当前主判断\",\"pricingDebate\":\"核心定价分歧\","
                     + "\"explainedScope\":[\"能解释什么\"],\"unexplainedScope\":[\"不能解释什么\"],"
                     + "\"hypotheses\":[{\"explanation\":\"候选解释\",\"disposition\":\"PREFERRED|COEXISTING|NOT_ADOPTED|UNRESOLVED\","
-                    + "\"selectionReason\":\"采用或暂不采用的依据\",\"pricingMechanism\":\"定价机制及预期参照来源\","
+                    + "\"impactDirection\":\"POSITIVE|NEGATIVE|MIXED|NEUTRAL|UNCLEAR\",\"impactReason\":\"对该标的利好利空的原因\",\"timeRelevance\":\"消息发生时间及影响如何延续，不能偷换成当日新消息\",\"selectionReason\":\"采用或暂不采用的依据\",\"pricingMechanism\":\"定价机制及预期参照来源\","
                     + "\"explains\":\"解释范围\",\"doesNotExplain\":\"边界\",\"evidenceUrls\":[\"原URL\"],"
                     + "\"assumptions\":[\"关键假设\"],\"revisionConditions\":[\"具体新增信息及如何改判\"]}]}");
             applyDecision(result, decision, evidence, report.getReportDate(), startDate);
@@ -220,7 +220,7 @@ public class AttributionAssessmentService {
                 .append(" 至 ").append(report.getReportDate()).append("。周末与休市消息可以在复市反应，但要说明延续依据。")
                 .append("旧消息只作背景，转载不能重置事件时效；日期未知不能断言触发时间。\n行情=")
                 .append(json.writeValueAsString(result.getMarketContext())).append("\n证据（只允许引用下列URL）：\n");
-        for (AttributionEvidence item : evidence.subList(0, Math.min(12, evidence.size()))) {
+        for (AttributionEvidence item : evidenceGate.eligibleAtDate(evidence, report.getReportDate(), startDate).stream().limit(24).toList()) {
             Map<String, Object> source = new LinkedHashMap<>();
             source.put("title", item.getTitle());
             source.put("url", item.getUrl());
@@ -238,55 +238,63 @@ public class AttributionAssessmentService {
     private void applyDecision(AttributionAssessment result, JsonNode decision, List<AttributionEvidence> evidence,
                                 LocalDate date, LocalDate startDate) {
         String judgment = required(decision, "mainJudgment");
-        result.setPricingDebate(required(decision, "pricingDebate"));
+        result.setPricingDebate(decision.path("pricingDebate").asText(""));
         result.setExplainedScope(strings(decision.path("explainedScope"), 4));
         result.setUnexplainedScope(strings(decision.path("unexplainedScope"), 4));
         List<AttributionHypothesis> hypotheses = new ArrayList<>();
         boolean supported = false;
         JsonNode candidates = decision.path("hypotheses");
-        if (!candidates.isArray() || candidates.size() > 3) {
-            throw new IllegalArgumentException("候选解释必须为最多三项的数组");
+        if (!candidates.isArray() || candidates.size() > 6) {
+            throw new IllegalArgumentException("候选解释必须为最多六项的数组");
         }
         for (JsonNode candidate : candidates) {
             AttributionHypothesis hypothesis = new AttributionHypothesis();
             hypothesis.setId("h" + (hypotheses.size() + 1));
+            if (StringUtils.isBlank(candidate.path("explanation").asText(""))) {
+                continue;
+            }
             hypothesis.setExplanation(required(candidate, "explanation"));
             hypothesis.setSelectionReason(required(candidate, "selectionReason"));
             hypothesis.setPricingMechanism(required(candidate, "pricingMechanism"));
-            hypothesis.setExplains(required(candidate, "explains"));
-            hypothesis.setDoesNotExplain(required(candidate, "doesNotExplain"));
+            hypothesis.setExplains(candidate.path("explains").asText("解释范围待核验。"));
+            hypothesis.setDoesNotExplain(candidate.path("doesNotExplain").asText("不能据此单独确定当天涨跌的原因。"));
             hypothesis.setAssumptions(strings(candidate.path("assumptions"), 3));
             hypothesis.setRevisionConditions(strings(candidate.path("revisionConditions"), 3));
-            HypothesisDisposition disposition = HypothesisDisposition.valueOf(required(candidate, "disposition"));
+            HypothesisDisposition disposition;
+            try {
+                disposition = HypothesisDisposition.valueOf(candidate.path("disposition").asText("UNRESOLVED"));
+            } catch (IllegalArgumentException ex) {
+                disposition = HypothesisDisposition.UNRESOLVED;
+            }
             List<String> urls = strings(candidate.path("evidenceUrls"), 6);
-            boolean recentSupport = false;
-            boolean counter = false;
-            for (AttributionEvidence item : evidence.subList(0, Math.min(12, evidence.size()))) {
+
+            for (AttributionEvidence item : evidenceGate.eligibleAtDate(evidence, date, startDate).stream().limit(24).toList()) {
                 if (StringUtils.isNotBlank(item.getUrl()) && urls.contains(item.getUrl())) {
                     hypothesis.getEvidenceUrls().add(item.getUrl());
-                    recentSupport |= evidenceGate.isRecentSupport(item, date, startDate);
-                    counter |= "COUNTER".equals(item.getStance());
                 }
             }
-            if ((disposition == HypothesisDisposition.PREFERRED || disposition == HypothesisDisposition.COEXISTING)
-                    && (!recentSupport || counter || hypothesis.getAssumptions().isEmpty() || hypothesis.getRevisionConditions().isEmpty())) {
-                disposition = HypothesisDisposition.UNRESOLVED;
-                hypothesis.setSelectionReason("缺少近期支持证据、存在未消解反证或缺少假设与改判条件，暂不采纳。 " + hypothesis.getSelectionReason());
+            try {
+                hypothesis.setImpactDirection(NewsImpactDirection.valueOf(candidate.path("impactDirection").asText("UNCLEAR")));
+            } catch (IllegalArgumentException ex) {
+                hypothesis.setImpactDirection(NewsImpactDirection.UNCLEAR);
             }
-            if (hypothesis.getEvidenceUrls().size() != new LinkedHashSet<>(urls).size()) {
+            hypothesis.setImpactReason(candidate.path("impactReason").asText("尚未单独判断影响方向。"));
+            hypothesis.setTimeRelevance(candidate.path("timeRelevance").asText("消息时间与目标日的关系仍需核验。"));
+            // 只校验引用真实性；旧消息、反向检索标签和可选字段缺失不再否决分析。
+            if (hypothesis.getEvidenceUrls().isEmpty() || hypothesis.getEvidenceUrls().size() != new LinkedHashSet<>(urls).size()) {
                 disposition = HypothesisDisposition.UNRESOLVED;
-                hypothesis.setSelectionReason("引用包含材料之外的来源，暂不采纳。");
+                hypothesis.setSelectionReason("引用尚未核实，此解释作为待验证推断。 " + hypothesis.getSelectionReason());
             }
             hypothesis.setDisposition(disposition);
             supported |= disposition == HypothesisDisposition.PREFERRED || disposition == HypothesisDisposition.COEXISTING;
             hypotheses.add(hypothesis);
         }
         result.setHypotheses(hypotheses);
-        result.setMainJudgment(supported ? judgment : "现有证据无法区分或确认主要解释，暂不采用确定的涨跌原因。");
+        boolean hasSources = hypotheses.stream().anyMatch(item -> !item.getEvidenceUrls().isEmpty());
+        result.setMainJudgment(supported ? judgment : hasSources
+                ? "以下为可能的解释，主因尚待核验：" + judgment
+                : "现有材料无法区分主要解释，以下推断仍需补充具体来源。");
         result.setStatus(supported ? AssessmentStatus.COMPLETE : AssessmentStatus.INSUFFICIENT_EVIDENCE);
-        if (!supported) {
-            result.setExplainedScope(Collections.emptyList());
-        }
         result.getUnexplainedScope().add("缺少行业与同业对照，不能把宽基相对表现解释为公司事件的独立贡献。");
     }
 
@@ -295,7 +303,7 @@ public class AttributionAssessmentService {
         values.put("judgment", result.getMainJudgment());
         values.put("debate", result.getPricingDebate());
         for (AttributionHypothesis hypothesis : result.getHypotheses()) {
-            if (hypothesis.getDisposition() == HypothesisDisposition.PREFERRED || hypothesis.getDisposition() == HypothesisDisposition.COEXISTING) {
+            if (hypothesis.getDisposition() != HypothesisDisposition.NOT_ADOPTED) {
                 values.put(hypothesis.getId(), hypothesis.getPricingMechanism() + " " + hypothesis.getSelectionReason());
             }
         }

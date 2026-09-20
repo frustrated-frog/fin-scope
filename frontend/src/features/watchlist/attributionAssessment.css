@@ -56,3 +56,14 @@
 }
 .attribution-research-details > .attribution-disclaimer { border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 14px 16px; }
 .attribution-research-details > .attribution-disclaimer p { margin: 8px 0 0; color: var(--muted); }
+.attribution-impact { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; margin-top: 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); }
+.attribution-impact > strong { flex-shrink: 0; font-size: 12px; padding: 3px 7px; border-radius: 5px; color: var(--ink); background: var(--surface); }
+.attribution-impact.impact-positive > strong { color: #df6856; background: rgba(208,52,44,.1); }
+.attribution-impact.impact-negative > strong { color: var(--accent); background: color-mix(in srgb,var(--accent) 12%,var(--surface)); }
+.attribution-impact.impact-mixed > strong { color: var(--ink); border: 1px solid var(--line); }
+.attribution-impact p { margin: 0; }
+.attribution-impact-timing { color: var(--muted); font-size: 12px; }
+.attribution-impact-timing > strong { margin-right: 10px; font-size: 12px; }
+@media(max-width:600px) {
+  .attribution-impact { flex-direction: column; gap: 8px; }
+}

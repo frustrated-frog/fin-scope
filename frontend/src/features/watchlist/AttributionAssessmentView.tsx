@@ -1,6 +1,8 @@
 import { AttributionAssessment } from '../../shared/types';
 import './attributionAssessment.css';
 
+const directions = { POSITIVE: '偏利好', NEGATIVE: '偏利空', MIXED: '多空兼有', NEUTRAL: '影响中性', UNCLEAR: '方向待判断' };
+
 const dispositions = { PREFERRED: '当前更倾向', COEXISTING: '同时起作用', NOT_ADOPTED: '暂不采用', UNRESOLVED: '尚待区分' };
 
 function readable(value: string) {
@@ -32,10 +34,10 @@ export function AttributionAssessmentView({ assessment }: { assessment: Attribut
   return <section className="attribution-research-details" aria-label="研判补充">
     {degraded && <div className="attribution-disclaimer" role="status">
       <strong>研判未完成</strong>
-      <p>这是生成失败，不代表没有相关原因。可返回自选重新发起归因。</p>
+      <p>部分研究步骤未完成，已有分析和行情仍保留展示。可返回自选重新发起归因。</p>
       {assessment.warnings.map((item, index) => <p key={index}>{item}</p>)}
     </div>}
-    {!degraded && assessment.hypotheses.length > 0 && <section aria-label="候选解释与改判条件">
+    {assessment.hypotheses.length > 0 && <section aria-label="候选解释与改判条件">
       <div className="attribution-research-heading"><h4 className="attribution-section-title">候选解释与改判条件</h4><span>{assessment.hypotheses.length} 个候选 · 区分已采纳与待核验的解释</span></div>
       <div className="attribution-drivers">
         {assessment.hypotheses.map((rawItem, index) => {
@@ -51,6 +53,11 @@ export function AttributionAssessmentView({ assessment }: { assessment: Attribut
               <span className={`attribution-hypothesis-status status-${item.disposition.toLowerCase()}`}>{dispositions[item.disposition]}</span>
             </div>
             {description && <p className="attribution-driver-plain">{description}</p>}
+            {item.impactDirection && <div className={`attribution-impact impact-${item.impactDirection.toLowerCase()}`}>
+              <strong>{directions[item.impactDirection]}</strong>
+              <p>{readable(item.impactReason || '尚未提供方向判断理由。')}</p>
+            </div>}
+            {item.timeRelevance && <p className="attribution-impact-timing"><strong>作用时间</strong>{readable(item.timeRelevance)}</p>}
             <section className="attribution-driver-ai" aria-label="候选解释解读">
               <div className="attribution-driver-ai-heading"><span aria-hidden="true">AI</span><strong>解释与依据</strong></div>
               <div className="attribution-driver-ai-grid">

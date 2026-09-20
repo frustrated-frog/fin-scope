@@ -82,7 +82,7 @@ class AttributionAgentSearchEvidenceTest {
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = com.finscope.common.enums.attribution.AssessmentStatus.class,
-            names = {"COMPLETE", "INSUFFICIENT_EVIDENCE"})
+            names = {"COMPLETE", "INSUFFICIENT_EVIDENCE", "DEGRADED"})
     void stockAssessmentStillProducesNarrativeAndDriverCards(com.finscope.common.enums.attribution.AssessmentStatus status) throws Exception {
         SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
         when(gateway.isConfigured(SearchDepth.DEEP)).thenReturn(true);

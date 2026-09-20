@@ -10,6 +10,9 @@ public class AttributionHypothesis {
     private String id;
     private String explanation;
     private com.finscope.common.enums.attribution.HypothesisDisposition disposition;
+    private com.finscope.common.enums.attribution.NewsImpactDirection impactDirection;
+    private String impactReason;
+    private String timeRelevance;
     private String selectionReason;
     private String pricingMechanism;
     private String explains;

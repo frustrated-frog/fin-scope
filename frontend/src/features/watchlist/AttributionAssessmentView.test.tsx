@@ -29,11 +29,11 @@ test('shows complete candidate cards with analysis, sources and revision conditi
   expect(screen.getByText('+2.00 个百分点')).toBeVisible();
 });
 
-test('degraded report retains data without presenting fallback text as analysis', () => {
+test('degraded report retains completed candidate analysis and market data', () => {
   render(<AttributionAssessmentView assessment={{ ...assessment, status: 'DEGRADED', warnings: ['模型调用失败'] }} />);
   expect(screen.getByText('研判未完成')).toBeVisible();
   expect(screen.queryByText(assessment.mainJudgment)).not.toBeInTheDocument();
-  expect(screen.queryByText('候选解释与改判条件')).not.toBeInTheDocument();
+  expect(screen.getByText('候选解释与改判条件')).toBeVisible();
   expect(screen.getByText('+6.00%')).toBeVisible();
 });
 
@@ -43,4 +43,14 @@ test('separates a long historical explanation into a short heading and preserves
   expect(screen.getByRole('heading', { name: '业绩高增的延续' })).toBeVisible();
   expect(screen.getByText(detail.split('：')[1])).toBeVisible();
   expect(screen.getByText('当前更倾向')).toHaveClass('attribution-hypothesis-status');
+});
+
+test('keeps bullish direction separate from weak attribution and historical timing', () => {
+  render(<AttributionAssessmentView assessment={{ ...assessment, hypotheses: [{ ...assessment.hypotheses[0],
+    disposition: 'UNRESOLVED', impactDirection: 'POSITIVE', impactReason: '订单增加有利于收入', timeRelevance: '旧消息持续影响，并非当日新公告' }] }} />);
+  expect(screen.getByText('偏利好')).toBeVisible();
+  expect(screen.getByText('尚待区分')).toBeVisible();
+  expect(screen.getByText('订单增加有利于收入')).toBeVisible();
+  expect(screen.getByText('旧消息持续影响，并非当日新公告')).toBeVisible();
+  expect(screen.queryByText('影响中性')).not.toBeInTheDocument();
 });

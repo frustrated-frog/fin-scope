@@ -47,6 +47,11 @@ class AttributionRepositoryTest {
         assessment.setResearchFocus("为什么与行业表现不同");
         assessment.setStatus(com.finscope.common.enums.attribution.AssessmentStatus.INSUFFICIENT_EVIDENCE);
         assessment.setCommentary(Arrays.asList("尚缺同业数据，无法确认"));
+        com.finscope.domain.attribution.AttributionHypothesis hypothesis = new com.finscope.domain.attribution.AttributionHypothesis();
+        hypothesis.setImpactDirection(com.finscope.common.enums.attribution.NewsImpactDirection.POSITIVE);
+        hypothesis.setImpactReason("旧订单增长仍有利于未来收入");
+        hypothesis.setTimeRelevance("持续背景，不是当日新公告");
+        assessment.setHypotheses(Arrays.asList(hypothesis));
         report.setAssessment(assessment);
         repository.updateResult(report);
         AttributionReport loaded = repository.findById(report.getId()).get();

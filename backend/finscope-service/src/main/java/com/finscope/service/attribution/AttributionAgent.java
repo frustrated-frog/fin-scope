@@ -249,7 +249,7 @@ public class AttributionAgent {
                 report.setWarningMessage(StringUtils.firstNonBlank(report.getWarningMessage(), "")
                         + " " + String.join("；", report.getAssessment().getWarnings()));
             }
-            if (report.getAssessment().getStatus() != com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED) {
+            if (llmChatClient != null && llmChatClient.isConfigured() && !evidences.isEmpty()) {
                 synthesized = synthesize(report, instrument, report.getChangePct(), evidences, startDate);
             } else {
                 boolean failed = report.getAssessment().getStatus() == com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED;
@@ -486,9 +486,9 @@ public class AttributionAgent {
             try {
                 String prompt = synthUserPrompt(instrument, changePct, evidences, report.getReportDate(), startDate);
                 if (report.getAssessment() != null) {
-                    prompt += "\n已核验研判=" + objectMapper.writeValueAsString(report.getAssessment())
+                    prompt += "\n研究过程（部分步骤可能未完成，仍需综合原始材料）=" + objectMapper.writeValueAsString(report.getAssessment())
                             + "\n研判状态不是停止分析的开关。即使尚无确认主因，也要结合已有事实、行业逻辑和历史背景解释可能的作用机制，输出白话摘要、故事线、为什么是它和为什么是今天。UNRESOLVED 可作为低置信候选，使用可能、待验证措辞；NOT_ADOPTED 只作反方。旧消息可解释持续的基本面背景，但不得冒充当日新催化；时点无法确认时明确写出。保留关键假设与改判条件，不得虚构市场共识或资金数据。"
-                            + "使用简洁中文：摘要不超过120字，每个解释字段不超过100字，故事线最多4步；禁止输出内部字段名和研究任务问题。";
+                            + "使用简洁中文：摘要不超过120字，每个解释字段用2至4句充分说明逻辑、对该公司的影响和可能抵消因素；故事线3至5步；禁止输出内部字段名和研究任务问题。";
                 }
                 String raw = llmChatClient.complete(synthSystemPrompt(), prompt);
                 if (parseSynthResult(report, raw)) {
@@ -538,7 +538,7 @@ public class AttributionAgent {
                 .append("最多给出 6 个有证据对应的驱动因素，不设最低数量；证据不足允许 drivers 为空，禁止凑数。每个驱动的 evidenceUrls 必须来自所给证据。\n")
                 .append("先讲清：目标交易日或近期发生了什么 → 预期改变了什么 → 为什么影响该标的 → 为什么在目标交易日集中反应 → 价格结果。")
                 .append("直接触发、放大因素、背景和反方必须分开；使用普通中文，术语出现时在同一句解释。\n")
-                .append("facts 只写证据明确支持的事实；AI 解读不得重复事实原句。")
+                .append("facts 只写证据明确支持的事实；AI 解读需要说明利好还是利空、谁受益谁受损、影响如何传递，不得只重复事实或不确定性。")
                 .append("marketInterpretation 回答市场为什么在意；expectationShift 使用‘原本预期 → 现在预期’。")
                 .append("priceImpact 必须落到盈利预期、估值倍数、风险溢价或资金行为中的至少一种。")
                 .append("explanatoryPower 综合证据直接性、时间贴近度、价格方向一致性与反证。")
@@ -548,7 +548,7 @@ public class AttributionAgent {
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
         builder.append("目标交易日:").append(reportDate == null ? "未提供，不得假定为今天" : reportDate).append("\n");
-        builder.append("只解释目标交易日；窗口内的近期消息可作为候选驱动，包括周末和节假日消息，但必须说明为何影响延续或在复市日集中反应。窗口外旧消息仅作背景，日期未知不得认定触发时间；同日发布也不代表发生在价格变化之前。反证不得作为主因的支持证据。\n");
+        builder.append("只解释目标交易日；窗口内的近期消息可作为候选驱动，包括周末和节假日消息，但必须说明为何影响延续或在复市日集中反应。窗口外旧消息仅作背景，日期未知不得认定触发时间；同日发布也不代表发生在价格变化之前。真正与解释相反的事实不能作为支持，但证据的SUPPORT/COUNTER是检索轨道标签，不代表新闻方向，须根据内容独立判断。\n");
         builder.append("近期证据窗口:").append(startDate == null ? "未知" : startDate)
                 .append(" 至 ").append(reportDate == null ? "未知" : reportDate).append("（自然日，包含休市期间）\n");
         builder.append("区分当日新催化、近期事件延续和长期背景。综合时间距离、市场是否已消化、业务关联和反证判断解释力；不能仅凭处于窗口内就断言因果。以事件首次发生或实质进展时间判断新意，转载不能刷新旧事件时效。\n");
@@ -562,7 +562,7 @@ public class AttributionAgent {
                     .append(" 发布时间=").append(StringUtils.firstNonBlank(e.getPublishedAt(), "未知"))
                     .append(" 立场=").append(e.getStance()).append(" 历史背景=").append(e.isHistoricalContext())
                     .append(" URL=").append(StringUtils.firstNonBlank(e.getUrl(), "无")).append("\n");
-            if (index > 10) {
+            if (index > 24) {
                 break;
             }
         }

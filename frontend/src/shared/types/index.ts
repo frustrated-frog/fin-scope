@@ -867,6 +867,9 @@ export type AttributionHypothesis = {
   id: string;
   explanation: string;
   disposition: 'PREFERRED' | 'COEXISTING' | 'NOT_ADOPTED' | 'UNRESOLVED';
+  impactDirection?: 'POSITIVE' | 'NEGATIVE' | 'MIXED' | 'NEUTRAL' | 'UNCLEAR';
+  impactReason?: string;
+  timeRelevance?: string;
   selectionReason: string;
   pricingMechanism: string;
   explains: string;

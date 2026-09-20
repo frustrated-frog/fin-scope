@@ -76,10 +76,12 @@ class AttributionAssessmentServiceTest {
     }
 
     @Test
-    void counterEvidenceCannotBePromotedToPreferred() throws Exception {
+    void searchTrackDoesNotOverrideModelImpactJudgment() throws Exception {
         evidence.setStance("COUNTER");
         when(llm.complete(anyString(), anyString())).thenReturn(focus, decision(evidence.getUrl()), "{}");
-        assertEquals(AssessmentStatus.INSUFFICIENT_EVIDENCE, run().getStatus());
+        AttributionAssessment result = run();
+        assertEquals(AssessmentStatus.COMPLETE, result.getStatus());
+        assertEquals(com.finscope.common.enums.attribution.NewsImpactDirection.POSITIVE, result.getHypotheses().get(0).getImpactDirection());
     }
 
     @Test
@@ -136,6 +138,35 @@ class AttributionAssessmentServiceTest {
         assertTrue(items.stream().anyMatch(item -> item.getUrl().equals(evidence.getUrl())));
     }
 
+    @Test
+    void olderBackgroundKeepsDirectionalAnalysisWithoutPretendingItIsNewNews() throws Exception {
+        evidence.setPublishedAt("2026-08-20");
+        evidence.setHistoricalContext(true);
+        evidence.setStance("BACKGROUND");
+        String answer = decision(evidence.getUrl()).replace("近期订单可能持续影响预期", "8月旧订单是持续背景，并非9月21日新增催化")
+                .replace("[\"能够复制交付\"]", "[]").replace("[\"订单取消则削弱判断\"]", "[]");
+        when(llm.complete(anyString(), anyString())).thenReturn(focus, answer, "{}");
+        AttributionAssessment result = run();
+        assertEquals(AssessmentStatus.COMPLETE, result.getStatus());
+        assertEquals(HypothesisDisposition.PREFERRED, result.getHypotheses().get(0).getDisposition());
+        assertEquals(com.finscope.common.enums.attribution.NewsImpactDirection.POSITIVE, result.getHypotheses().get(0).getImpactDirection());
+        assertTrue(result.getHypotheses().get(0).getTimeRelevance().contains("持续背景"));
+        assertTrue(result.getMainJudgment().contains("商业化取得进展"));
+    }
+
+    @Test
+    void futureEvidenceIsStillExcludedFromAnalysisAndReferences() throws Exception {
+        evidence.setPublishedAt("2026-09-22");
+        evidence.setTitle("未来公告不可用于解释");
+        when(llm.complete(anyString(), anyString())).thenReturn(focus, decision(evidence.getUrl()), "{}");
+        AttributionAssessment result = run();
+        assertEquals(AssessmentStatus.INSUFFICIENT_EVIDENCE, result.getStatus());
+        assertTrue(result.getHypotheses().get(0).getEvidenceUrls().isEmpty());
+        org.mockito.ArgumentCaptor<String> prompts = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(llm, times(3)).complete(anyString(), prompts.capture());
+        assertFalse(prompts.getAllValues().get(0).contains("未来公告不可用于解释"));
+    }
+
     private com.finscope.service.search.evidence.SearchEvidence currentSupplement() {
         com.finscope.service.search.evidence.SearchEvidence item = new com.finscope.service.search.evidence.SearchEvidence();
         item.setTitle("600519新增订单公告");
@@ -151,7 +182,7 @@ class AttributionAssessmentServiceTest {
     private String decision(String url) {
         return "{\"mainJudgment\":\"商业化取得进展，尚不能等同利润兑现\",\"pricingDebate\":\"能否规模交付\","
                 + "\"explainedScope\":[\"业务进展\"],\"unexplainedScope\":[\"异动时点\"],\"hypotheses\":[{"
-                + "\"explanation\":\"订单进展\",\"disposition\":\"PREFERRED\",\"selectionReason\":\"有公告支持\","
+                + "\"impactDirection\":\"POSITIVE\",\"impactReason\":\"订单增加有利于未来收入\",\"timeRelevance\":\"近期订单可能持续影响预期\",\"explanation\":\"订单进展\",\"disposition\":\"PREFERRED\",\"selectionReason\":\"有公告支持\","
                 + "\"pricingMechanism\":\"商业化成功可能性变化，未有利润预测\",\"explains\":\"经营变化\",\"doesNotExplain\":\"具体涨幅\","
                 + "\"evidenceUrls\":[\"" + url + "\"],\"assumptions\":[\"能够复制交付\"],\"revisionConditions\":[\"订单取消则削弱判断\"]}]}";
     }
