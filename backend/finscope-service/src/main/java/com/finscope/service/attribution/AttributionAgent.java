@@ -163,7 +163,13 @@ public class AttributionAgent {
                     trackResult.succeeded();
                     int fullTextReads = 0;
                     for (SearchEvidence hit : batch.getEvidence()) {
-                        boolean readFullText = fullTextReads < 1;
+                        String hitText = StringUtils.firstNonBlank(hit.getTitle(), "") + " " + StringUtils.firstNonBlank(hit.getContent(), "");
+                        if ("STOCK".equalsIgnoreCase(instrument.getType()) && "COMPANY".equals(queryTracks.get(q))
+                                && !hitText.contains(instrument.getCode())
+                                && (StringUtils.isBlank(instrument.getName()) || !hitText.contains(instrument.getName()))) {
+                            continue;
+                        }
+                        boolean readFullText = fullTextReads < 2;
                         if (readFullText) {
                             fullTextReads++;
                         }
@@ -243,10 +249,19 @@ public class AttributionAgent {
                 report.setWarningMessage(StringUtils.firstNonBlank(report.getWarningMessage(), "")
                         + " " + String.join("；", report.getAssessment().getWarnings()));
             }
-            report.setDrivers(new ArrayList<>());
-            report.setNarrative(null);
+            if (report.getAssessment().getStatus() == com.finscope.common.enums.attribution.AssessmentStatus.COMPLETE) {
+                synthesized = synthesize(report, instrument, report.getChangePct(), evidences, startDate);
+            } else {
+                boolean failed = report.getAssessment().getStatus() == com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED;
+                report.setSummary(failed ? "本次原因分析未完成，已保留行情与证据，可稍后重新发起。"
+                        : "目前未找到足以解释当日涨跌的近期事件。已有线索主要是历史消息或信息入口，不能据此认定当天的原因。");
+                AttributionNarrative narrative = new AttributionNarrative();
+                narrative.setPlainSummary(report.getSummary());
+                report.setNarrative(narrative);
+                report.setDrivers(new ArrayList<>());
+                synthesized = !failed;
+            }
             report.setDisclaimer("研判基于公开证据与目标日日线快照，机制解释不等于因果证明。");
-            synthesized = report.getAssessment().getStatus() != com.finscope.common.enums.attribution.AssessmentStatus.DEGRADED;
         } else {
             synthesized = synthesize(report, instrument, changePct, evidences, startDate);
         }
@@ -360,7 +375,7 @@ public class AttributionAgent {
         evidence.setOrigin("WEB_SEARCH");
         evidence.setTitle(hit.getTitle());
         evidence.setUrl(hit.getUrl());
-        evidence.setSnippet(shorten(acquired.getContent(), 200));
+        evidence.setSnippet(shorten(acquired.getContent(), 3000));
         evidence.setSourceDomain(hit.getSourceDomain());
         evidence.setSourceTier(hit.getSourceTier());
         evidence.setPublishedAt(hit.getPublishedAt());
@@ -469,7 +484,13 @@ public class AttributionAgent {
         report.setDisclaimer("本分析基于目标交易日及此前近期公开信息综合，可能含未证实传闻，非投资建议。");
         if (llmChatClient != null && llmChatClient.isConfigured() && !evidences.isEmpty()) {
             try {
-                String raw = llmChatClient.complete(synthSystemPrompt(), synthUserPrompt(instrument, changePct, evidences, report.getReportDate(), startDate));
+                String prompt = synthUserPrompt(instrument, changePct, evidences, report.getReportDate(), startDate);
+                if (report.getAssessment() != null) {
+                    prompt += "\n已核验研判=" + objectMapper.writeValueAsString(report.getAssessment())
+                            + "\n仅将 PREFERRED/COEXISTING 解释整理为驱动；其余只可作为分歧。保留关键假设与改判条件，不得把未知预期编成市场共识。"
+                            + "使用简洁中文：摘要不超过120字，每个解释字段不超过100字，故事线最多4步；禁止输出内部字段名和研究任务问题。";
+                }
+                String raw = llmChatClient.complete(synthSystemPrompt(), prompt);
                 if (parseSynthResult(report, raw)) {
                     ensureNarrative(report, instrument, changePct, evidences, startDate);
                     return true;

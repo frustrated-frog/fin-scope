@@ -118,16 +118,30 @@ class AttributionAssessmentServiceTest {
         duplicate.setSourceTier("T1");
         duplicate.setPublishedAt("2026-09-20");
         when(gateway.search(any())).thenReturn(new com.finscope.service.search.evidence.SearchEvidenceBatch(
-                Arrays.asList(hit, duplicate), Collections.emptyList(), false));
+                Arrays.asList(hit, duplicate, currentSupplement()), Collections.emptyList(), false));
         ReflectionTestUtils.setField(service, "searchEvidenceGateway", gateway);
+        com.finscope.service.search.evidence.SearchEvidenceContentService contentService = mock(com.finscope.service.search.evidence.SearchEvidenceContentService.class);
+        when(contentService.acquire(any(), any(), any(), anyBoolean())).thenReturn(
+                new com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult(
+                        "600519订单公告正文".repeat(30), "", "FULL_TEXT", "html", "SUCCESS", 300));
+        ReflectionTestUtils.setField(service, "searchEvidenceContentService", contentService);
         when(llm.complete(anyString(), anyString())).thenReturn(
                 focus.replace("订单金额\"]}", "订单金额\"],\"followUpQuery\":\"公司订单金额\"}"), decision(evidence.getUrl()), "{}");
         java.util.List<AttributionEvidence> items = new java.util.ArrayList<>(Arrays.asList(evidence));
         service.research(report, instrument, items, report.getReportDate().minusDays(3), stage -> {});
         verify(gateway, times(1)).search(any());
-        assertEquals(1, items.size());
-        assertEquals(evidence.getUrl(), items.get(0).getUrl());
-        assertEquals("SUPPORT", items.get(0).getStance());
+        assertEquals(2, items.size());
+        assertTrue(items.stream().noneMatch(item -> item.getUrl().contains("future.test")));
+        assertTrue(items.stream().allMatch(item -> "SUPPORT".equals(item.getStance())));
+        assertTrue(items.stream().anyMatch(item -> item.getUrl().equals(evidence.getUrl())));
+    }
+
+    private com.finscope.service.search.evidence.SearchEvidence currentSupplement() {
+        com.finscope.service.search.evidence.SearchEvidence item = new com.finscope.service.search.evidence.SearchEvidence();
+        item.setTitle("600519新增订单公告");
+        item.setUrl("https://source.test/new-order");
+        item.setPublishedAt("2026-09-20");
+        return item;
     }
 
     private AttributionAssessment run() {

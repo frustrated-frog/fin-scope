@@ -41,8 +41,8 @@ const stepStatusLabels: Record<string, string> = {
   PENDING: '待启动'
 };
 const ATTRIBUTION_POLL_INTERVAL_MS = 1200;
-// 覆盖搜索预算及三次模型调用；SSE 断开后仍能恢复报告。
-const ATTRIBUTION_MAX_POLL_ATTEMPTS = 900;
+// 覆盖搜索预算及研判和报告模型调用；SSE 断开后仍能恢复报告。
+const ATTRIBUTION_MAX_POLL_ATTEMPTS = 1200;
 
 function levelDots(level?: string) {
   const map: Record<string, string> = { HIGH: '●●●', MID: '●●○', LOW: '●○○' };
@@ -224,6 +224,14 @@ export function AttributionReaderView({
     return groups;
   }, {});
 
+  const assessment = report?.assessment;
+  const narrative = report?.narrative || (assessment ? {
+    plainSummary: assessment.status === 'DEGRADED'
+      ? '本次原因分析未完成，已保留行情与证据，可稍后重新发起。'
+      : assessment.status === 'INSUFFICIENT_EVIDENCE'
+        ? '目前未找到足以解释当日涨跌的近期事件。已有线索主要是历史消息或信息入口，不能据此认定当天的原因。'
+        : assessment.mainJudgment
+  } : undefined);
   const headlineChange = report?.assessment ? report.changePct : report?.changePct ?? changePct;
   const changeText = headlineChange === undefined || headlineChange === null
     ? ''
@@ -371,20 +379,19 @@ export function AttributionReaderView({
         <div className="attribution-report">
           <div className="attribution-report-layout">
             <div className="attribution-report-main">
-              {report.assessment ? <AttributionAssessmentView assessment={report.assessment} /> : <>
-              {report.narrative ? (
+              {narrative ? (
                 <section className="attribution-narrative" aria-label="今日涨跌通俗解释">
                   <div className="attribution-narrative-hero">
                     <span>30 秒看懂</span>
                     <h3>今天为什么{directionWord}</h3>
-                    <p>{report.narrative.plainSummary || report.summary}</p>
+                    <p>{narrative.plainSummary || report.summary}</p>
                   </div>
 
-                  {report.narrative.causalSteps && report.narrative.causalSteps.length > 0 && (
+                  {narrative.causalSteps && narrative.causalSteps.length > 0 && (
                     <div className="attribution-causal-section">
                       <span className="attribution-summary-label">原因故事线</span>
                       <ol className="attribution-causal-flow">
-                        {report.narrative.causalSteps.map((step, index) => (
+                        {narrative.causalSteps.map((step, index) => (
                           <li key={`${step}-${index}`}>
                             <span>{index + 1}</span>
                             <p>{step}</p>
@@ -395,32 +402,32 @@ export function AttributionReaderView({
                   )}
 
                   <div className="attribution-context-grid">
-                    {report.narrative.instrumentLink && (
+                    {narrative.instrumentLink && (
                       <article>
                         <span>为什么是它</span>
-                        <p>{report.narrative.instrumentLink}</p>
+                        <p>{narrative.instrumentLink}</p>
                       </article>
                     )}
-                    {report.narrative.whyToday && (
+                    {narrative.whyToday && (
                       <article>
                         <span>为什么是今天</span>
-                        <p>{report.narrative.whyToday}</p>
+                        <p>{narrative.whyToday}</p>
                       </article>
                     )}
                   </div>
 
-                  {((report.narrative.amplifiers?.length || 0) > 0 || (report.narrative.dampeners?.length || 0) > 0) && (
+                  {((narrative.amplifiers?.length || 0) > 0 || (narrative.dampeners?.length || 0) > 0) && (
                     <div className="attribution-forces-grid">
-                      {(report.narrative.amplifiers?.length || 0) > 0 && (
+                      {(narrative.amplifiers?.length || 0) > 0 && (
                         <article className="attribution-force-card amplifier">
                           <span>{amplifiedMoveLabel}</span>
-                          <ul>{report.narrative.amplifiers?.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                          <ul>{narrative.amplifiers?.map((item, index) => <li key={index}>{item}</li>)}</ul>
                         </article>
                       )}
-                      {(report.narrative.dampeners?.length || 0) > 0 && (
+                      {(narrative.dampeners?.length || 0) > 0 && (
                         <article className="attribution-force-card dampener">
                           <span>缓冲或反方因素</span>
-                          <ul>{report.narrative.dampeners?.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                          <ul>{narrative.dampeners?.map((item, index) => <li key={index}>{item}</li>)}</ul>
                         </article>
                       )}
                     </div>
@@ -520,7 +527,7 @@ export function AttributionReaderView({
               ) : (
                 <p className="muted">未识别到明确驱动因素。</p>
               )}
-              </>}
+              {assessment && <AttributionAssessmentView assessment={assessment} />}
             </div>
 
             <div className="attribution-report-support">

@@ -1,62 +1,18 @@
-/* 与归因阅读页共用主题色，报告使用独立底色保证深浅主题下的可读性。 */
-.assessment-note {
-  position: relative;
-  z-index: 1;
-  --assessment-ink: var(--ink, #18211f);
-  --assessment-muted: var(--muted, #66736f);
-  --assessment-paper: var(--surface, #ffffff);
-  --assessment-line: var(--line, #d9e0dc);
-  --assessment-accent: var(--accent, #15946f);
-  --assessment-caution: var(--accent-2, #d58a2d);
-  color: var(--assessment-ink);
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 20px;
-  border: 1px solid var(--assessment-line);
-  border-radius: 13px;
-  background: var(--assessment-paper);
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-.assessment-kicker { display: flex; justify-content: space-between; gap: 16px; color: var(--assessment-muted); font-size: 12px; margin-bottom: 12px; }
-.assessment-label { font-size: 12px; color: var(--assessment-accent); font-weight: 650; }
-.assessment-focus h3 { font-family: inherit; font-size: 20px; line-height: 1.55; font-weight: 600; margin: 8px 0 12px; }
-.assessment-focus-reason { color: var(--assessment-muted); font-size: 14px; }
-.assessment-note h4 { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
-.assessment-note h5 { font-size: 15px; margin: 6px 0; }
-.assessment-note p { margin: 8px 0 14px; }
-.assessment-judgment, .assessment-prose, .assessment-revision { margin-block: 18px; }
-.assessment-lead { font-size: 16px; line-height: 1.7; }
-.assessment-debate { color: var(--assessment-muted); }
-.assessment-debate strong, .assessment-boundary strong { display: block; color: var(--assessment-ink); font-size: 12px; margin-bottom: 4px; }
-.assessment-note details { border-block-start: 1px solid var(--assessment-line); padding: 14px 0; }
-.assessment-note summary { cursor: pointer; font-size: 14px; font-weight: 600; }
-.assessment-note summary span { color: var(--assessment-muted); font-size: 12px; margin-left: 10px; font-weight: 400; }
-.assessment-note summary:focus-visible, .assessment-note a:focus-visible { outline: 2px solid var(--assessment-accent); outline-offset: 5px; border-radius: 3px; }
-.assessment-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
-.assessment-metrics dt { font-size: 12px; color: var(--assessment-muted); }
-.assessment-metrics dd { margin: 4px 0 0; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 16px; font-variant-numeric: tabular-nums; }
-.assessment-caption { color: var(--assessment-muted); font-size: 12px; }
-.assessment-prose { font-size: 15px; }
-.assessment-boundary { border-inline-start: 3px solid var(--assessment-caution); padding: 8px 0 8px 20px; margin-block: 18px; background: linear-gradient(90deg, color-mix(in srgb, var(--assessment-caution) 6%, transparent), transparent); }
-.assessment-boundary p { font-size: 14px; }
-.assessment-revision > div { padding-block: 8px; }
-.assessment-note ul { padding-left: 20px; margin: 10px 0; font-size: 14px; }
-.assessment-hypothesis { padding: 14px 0; border-bottom: 1px dashed var(--assessment-line); font-size: 14px; }
-.assessment-source-links { display: flex; flex-wrap: wrap; gap: 16px; }
-.assessment-source-links a { color: var(--assessment-accent); font-size: 12px; text-underline-offset: 4px; }
-.assessment-warning { color: var(--assessment-muted); padding: 10px 14px; background: var(--surface-2, #f0f4f1); border-radius: 8px; font-size: 13px; }
-.assessment-failure { border-left: 3px solid var(--assessment-caution); padding: 2px 0 2px 14px; }
-.assessment-failure h3 { margin-top: 0; }
-.assessment-failure p { font-size: 14px; }
-.assessment-note .assessment-caption { font-size: 12px; }
-.assessment-metrics > div { padding: 10px; border-radius: 8px; background: var(--surface-2, #f0f4f1); }
+/* 使用原归因报告的色彩和卡片语言，新增研究信息默认折叠。 */
+.attribution-research-details { min-width: 0; display: grid; gap: 12px; }
+.attribution-research-details details { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); overflow-wrap: anywhere; }
+.attribution-research-details summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.attribution-research-details summary span { color: var(--muted); margin-left: 10px; font-size: 12px; font-weight: 400; }
+.attribution-research-details p, .attribution-research-details li { font-size: 14px; line-height: 1.75; }
+.attribution-research-details summary:focus-visible, .attribution-research-details a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.attribution-research-candidate { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.attribution-research-candidate:last-child { border-bottom: 0; }
+.attribution-research-candidate h4 { font-size: 15px; margin: 0 0 8px; }
+.attribution-research-candidate small { display: inline-block; font-size: 12px; color: var(--muted); margin-left: 8px; }
+.attribution-research-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.attribution-research-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.attribution-research-metrics dt { color: var(--muted); font-size: 12px; }
+.attribution-research-metrics dd { margin: 6px 0 0; font-size: 16px; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) {
-  .assessment-note { padding: 14px; }
-  .assessment-focus h3 { font-size: 18px; }
-  .assessment-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .assessment-kicker { flex-wrap: wrap; gap: 4px 14px; margin-bottom: 16px; }
-  .assessment-lead { font-size: 16px; }
-  .assessment-boundary { padding-left: 14px; }
+  .attribution-research-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

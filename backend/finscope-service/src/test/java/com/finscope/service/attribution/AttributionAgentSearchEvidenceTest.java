@@ -81,6 +81,56 @@ class AttributionAgentSearchEvidenceTest {
         assertTrue(captor.getAllValues().stream().allMatch(request -> request.getQuery().contains("2026-09-18")));
     }
     @Test
+    void stockAssessmentStillProducesNarrativeAndDriverCards() throws Exception {
+        SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
+        when(gateway.isConfigured(SearchDepth.DEEP)).thenReturn(true);
+        SearchEvidence evidence = new SearchEvidence();
+        evidence.setTitle("英伟达发布最新经营公告");
+        evidence.setUrl("https://example.com/company?a=1");
+        evidence.setContent("公告显示订单和收入增长");
+        evidence.setSourceDomain("example.com");
+        evidence.setSourceTier("T1");
+        evidence.setFusionScore(0.03D);
+        evidence.setProviders(Arrays.asList("ANYSEARCH", "TAVILY"));
+        when(gateway.search(any(SearchEvidenceRequest.class))).thenReturn(new SearchEvidenceBatch(
+                Collections.singletonList(evidence), Collections.emptyList(), false));
+
+        AttributionAgent agent = new AttributionAgent();
+        ReflectionTestUtils.setField(agent, "evidenceGate", new AttributionEvidenceGate());
+        ReflectionTestUtils.setField(agent, "searchEvidenceGateway", gateway);
+        SearchEvidenceContentService contentService = mock(SearchEvidenceContentService.class);
+        when(contentService.acquire(any(SearchEvidence.class), any(String.class), any(String.class), any(Boolean.class)))
+                .thenReturn(new ResearchEvidenceAcquisitionResult("公告显示订单和收入增长", "搜索摘要",
+                        "FULL_TEXT", "html:readability", "SUCCESS", 12));
+        ReflectionTestUtils.setField(agent, "searchEvidenceContentService", contentService);
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(any(), any())).thenReturn("{\"summary\":\"订单改善预期\",\"narrative\":{\"plainSummary\":\"新增订单可能改善收入\",\"causalSteps\":[\"订单增加\",\"收入预期改善\"]},\"drivers\":[{\"claim\":\"订单增加\",\"evidenceUrls\":[\"https://example.com/company?a=1\"]}]}");
+        AttributionAssessmentService assessmentService = mock(AttributionAssessmentService.class);
+        com.finscope.domain.attribution.AttributionAssessment assessment = new com.finscope.domain.attribution.AttributionAssessment();
+        assessment.setStatus(com.finscope.common.enums.attribution.AssessmentStatus.COMPLETE);
+        when(assessmentService.research(any(), any(), any(), any(), any())).thenReturn(assessment);
+        ReflectionTestUtils.setField(agent, "assessmentService", assessmentService);
+        ReflectionTestUtils.setField(agent, "llmChatClient", llm);
+        ArticleRepository articles = mock(ArticleRepository.class);
+        when(articles.findAll()).thenReturn(Collections.emptyList());
+        ReflectionTestUtils.setField(agent, "articleRepository", articles);
+        ReflectionTestUtils.setField(agent, "agentRunRepository", mock(AgentRunRepository.class));
+        Instrument instrument = new Instrument();
+        instrument.setCode("NVDA");
+        instrument.setName("英伟达");
+        instrument.setType("STOCK");
+        AttributionReport report = new AttributionReport();
+        report.setReportDate(LocalDate.parse("2026-09-18"));
+
+        agent.research(report, instrument, 2.5D, "task-1", mock(AttributionProgressPublisher.class));
+
+        assertEquals("新增订单可能改善收入", report.getNarrative().getPlainSummary());
+        assertEquals(1, report.getDrivers().size());
+        assertEquals(2, report.getNarrative().getCausalSteps().size());
+        assertEquals(assessment, report.getAssessment());
+    }
+    @Test
     void filtersFutureWebAndLocalNewsBeforeCallingModelForHistoricalTradingDay() throws Exception {
         SearchEvidenceGateway gateway = mock(SearchEvidenceGateway.class);
         when(gateway.isConfigured(SearchDepth.DEEP)).thenReturn(true);
