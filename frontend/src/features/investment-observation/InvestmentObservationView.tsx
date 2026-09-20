@@ -111,7 +111,8 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
 
   useEffect(() => {
     if (selectedId != null) {
-      detailRef.current?.focus();
+      detailRef.current?.focus({ preventScroll: true });
+      detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
     }
   }, [selectedId, tab]);
 
@@ -209,7 +210,7 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
     </header>
     <div className="reaction-automation" role="status"><strong>{discovery?.running ? '正在发现事件并更新行情' : '自动观察已开启'}</strong><span>{discovery?.message || '正在读取后台状态'}{discovery?.lastCompletedAt && ` · 最近发现 ${dateTime(discovery.lastCompletedAt)}`}</span><small>每 5 分钟读取新闻与雷达；当前观察业绩、合同与订单。无需手动登记。</small></div>
     {tab === 'ALL' && <ReactionActivity revision={activityRevision} onOpen={id => void openSample(id)} />}
-    <nav className="reaction-tabs" aria-label="投资观察视图">{tabs.map(item => <button key={item.value} aria-pressed={tab === item.value} onClick={() => changeTab(item.value)}>{item.label}{['DRAFT', 'OBSERVING', 'ARCHIVED'].includes(item.value) && <small>{samples.filter(sample => sample.state === item.value).length}</small>}</button>)}</nav>
+    <nav className="reaction-tabs" aria-label="投资观察视图">{tabs.map(item => <button key={item.value} aria-pressed={tab === item.value} onClick={() => changeTab(item.value)}>{item.label}{['DRAFT', 'OBSERVING', 'ARCHIVED'].includes(item.value) && <span className="reaction-tab-count">{samples.filter(sample => sample.state === item.value).length}</span>}</button>)}</nav>
     {error && <div className="reaction-warning" role="alert">{error}<button disabled={busy} onClick={() => void act(async () => {
       const result = await api<ReactionSample[]>('/api/investment-reactions/recent');
       setSamples(result);
@@ -225,7 +226,7 @@ export function InvestmentObservationView({ setMessage, addToast, onOpenMajorEve
         <button disabled={busy} onClick={() => void act(() => register(candidate))}>保存到待确认</button>
       </article>)}
     </section> : <>
-      {tab === 'ALL' && <h4>新发现与持续观察的事件</h4>}
+      {tab === 'ALL' && <div className="reaction-section-heading"><h4>新发现与持续观察的事件</h4><span>{visible.length} 个样本</span></div>}
       <div className="reaction-toolbar"><div><label>事件类型<select value={eventType} onChange={e => { setEventType(e.target.value as EventType | 'ALL'); setSelectedId(undefined); }}><option value="ALL">全部类型</option>{Object.entries(eventLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>登记方式<select value={capture} onChange={e => { setCapture(e.target.value); setSelectedId(undefined); }}><option value="ALL">全部样本</option><option value="CURRENT">当日登记</option><option value="BACKFILL">历史补录</option></select></label></div><p>{tab === 'DRAFT' ? '系统自动重试关联；手动补充为可选操作' : '相对沪深300 · 累计收益差 / 百分点'}</p></div>
       {loading ? <p className="reaction-empty" role="status">正在读取观察样本…</p> : visible.length === 0 ? <div className="reaction-empty"><h4>{tab === 'DRAFT' ? '没有待确认事件' : tab === 'ARCHIVED' ? '没有归档样本' : '正在等待自动发现的事件'}</h4><p>新闻同步后，系统会自动保存业绩、合同线索并跟踪相关股票。涨跌、无反应都会保留。</p></div> : (

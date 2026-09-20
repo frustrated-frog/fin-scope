@@ -1,5 +1,9 @@
 .reaction-workspace {
-  --reaction-ink: #233b53;
+  --reaction-ink: #24364a;
+  --reaction-canvas: #f5f7fa;
+  --reaction-surface: #ffffff;
+  --reaction-control: #ffffff;
+  --reaction-numeric: ui-monospace, "SFMono-Regular", Menlo, monospace;
   --reaction-teal: #37766f;
   --reaction-muted: #697586;
   --reaction-line: #dfe6ed;
@@ -11,149 +15,161 @@
   --reaction-down: #37766f;
   --reaction-warning-bg: #fcf6e8;
   --reaction-warning-border: #e5d6b8;
-  color: var(--ink, #233b53);
+  color: var(--reaction-ink);
+  background: var(--reaction-canvas);
+  border: 1px solid var(--reaction-line);
+  border-radius: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  container-type: inline-size;
   min-width: 0;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 8px 0 32px;
+  padding: 28px;
 }
 .reaction-workspace * { box-sizing: border-box; }
-.reaction-workspace button, .reaction-workspace input, .reaction-workspace select, .reaction-workspace textarea { font: inherit; }
-.reaction-workspace button { border: 1px solid var(--reaction-line); background: var(--surface, #fff); border-radius: 7px; color: var(--reaction-ink); padding: 8px 12px; cursor: pointer; }
-.reaction-workspace button:hover:not(:disabled) { background: var(--reaction-band); }
-.reaction-workspace button:disabled { cursor: wait; opacity: .55; }
+.reaction-workspace :where(button, input, select, textarea) { font: inherit; letter-spacing: normal; }
+.reaction-workspace :where(button) { border: 1px solid var(--reaction-line); background: var(--reaction-surface); border-radius: 8px; color: var(--reaction-ink); min-height: 36px; padding: 7px 12px; font-size: 12px; font-weight: 550; line-height: 20px; cursor: pointer; box-shadow: none; transition: background-color 140ms ease, border-color 140ms ease; touch-action: manipulation; }
+.reaction-workspace :where(button:hover:not(:disabled)) { background: var(--reaction-band); }
+.reaction-workspace :where(button:disabled) { cursor: wait; opacity: .55; }
 .reaction-workspace :focus-visible { outline: 2px solid var(--reaction-teal); outline-offset: 3px; }
 .reaction-workspace a { color: var(--reaction-teal); text-underline-offset: 3px; }
-.reaction-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0 24px; }
-.reaction-eyebrow { font-size: 12px; color: var(--reaction-teal); margin: 0 0 10px; letter-spacing: .06em; }
-.reaction-header h3 { font-family: inherit; font-size: clamp(24px, 3vw, 38px); font-weight: 600; line-height: 1.3; margin: 0; letter-spacing: -.03em; }
-.reaction-header p:last-child { color: var(--reaction-muted); font-size: 13px; margin: 12px 0 0; line-height: 1.8; }
+.reaction-workspace .reaction-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 0 20px; }
+.reaction-workspace .reaction-eyebrow { font-size: 12px; color: var(--reaction-teal); margin: 0 0 10px; letter-spacing: .06em; }
+.reaction-workspace .reaction-header h3 { font-family: inherit; font-size: clamp(24px, 2.2vw, 30px); font-weight: 600; line-height: 1.3; margin: 0; letter-spacing: -.03em; }
+.reaction-workspace .reaction-header p:last-child { color: var(--reaction-muted); font-size: 13px; margin: 8px 0 0; line-height: 1.7; }
 .reaction-workspace .reaction-primary { background: var(--reaction-button); color: #fff; border-color: var(--reaction-button); flex-shrink: 0; }
 .reaction-workspace .reaction-primary:hover:not(:disabled) { background: #32526e; }
-.reaction-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--reaction-line); overflow-x: auto; padding-bottom: 8px; }
-.reaction-tabs button { border: 0; background: transparent; white-space: nowrap; font-size: 13px; }
-.reaction-tabs button[aria-pressed="true"] { background: var(--reaction-band); color: var(--reaction-ink); font-weight: 650; }
-.reaction-tabs small { margin-left: 8px; color: var(--reaction-muted); font: 11px ui-monospace, monospace; }
-.reaction-toolbar, .reaction-toolbar > div { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.reaction-toolbar { justify-content: space-between; margin: 20px 0 14px; }
-.reaction-toolbar label { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; color: var(--reaction-muted); }
-.reaction-toolbar p, .reaction-note { font-size: 12px; color: var(--reaction-muted); line-height: 1.8; }
-.reaction-workspace select, .reaction-workspace input, .reaction-workspace textarea { min-width: 0; border: 1px solid var(--reaction-line); border-radius: 5px; padding: 8px 10px; background: var(--surface, #fff); color: var(--ink, #233b53); }
-.reaction-matrix { border: 1px solid var(--reaction-line); border-radius: 10px; overflow: hidden; background: var(--surface, #fff); }
-.reaction-matrix-head, .reaction-matrix-row { display: grid; grid-template-columns: minmax(200px, 2.8fr) repeat(4, minmax(80px, 1fr)) minmax(110px, 1.2fr); align-items: center; gap: 12px; padding: 18px 22px; }
-.reaction-matrix-head { background: var(--reaction-subtle); color: var(--reaction-muted); font-size: 11px; padding-block: 12px; }
-.reaction-matrix-head > span:not(:first-child) { text-align: center; }
-.reaction-matrix-row + .reaction-matrix-row { border-top: 1px solid var(--reaction-line); }
-.reaction-matrix-row[data-selected="true"] { background: var(--reaction-selected); box-shadow: inset 3px 0 var(--reaction-teal); }
-.reaction-subject { min-width: 0; }
-.reaction-subject button { display: grid; text-align: left; border: 0; padding: 0; gap: 6px; background: transparent; width: 100%; }
-.reaction-subject strong { font-size: 15px; font-weight: 650; }
-.reaction-subject span { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.reaction-subject > small { display: block; margin-top: 8px; color: var(--reaction-muted); font-size: 10px; }
-.reaction-value { text-align: center; display: grid; gap: 7px; }
-.reaction-value strong { font: 500 17px ui-monospace, monospace; }
-.reaction-value > small { display: none; }
-.reaction-value > span { color: var(--reaction-muted); font: 10px ui-monospace, monospace; }
-.reaction-value[data-direction="up"] strong { color: var(--reaction-up); }
-.reaction-value[data-direction="down"] strong { color: var(--reaction-down); }
-.reaction-value[data-direction="neutral"] strong { color: var(--reaction-muted); font-family: inherit; font-size: 12px; }
-.reaction-row-state { display: grid; justify-items: center; gap: 9px; font-size: 11px; color: var(--reaction-muted); text-align: center; }
-.reaction-row-state button { font-size: 11px; padding: 4px 8px; }
-.reaction-empty { text-align: center; padding: 44px 20px; line-height: 1.8; font-size: 13px; color: var(--reaction-muted); border: 1px dashed var(--reaction-line); border-radius: 9px; }
-.reaction-empty h4 { color: var(--reaction-ink); font-size: 18px; }
-.reaction-warning { background: var(--reaction-warning-bg); border: 1px solid var(--reaction-warning-border); padding: 12px 16px; margin: 14px 0; border-radius: 8px; font-size: 12px; line-height: 1.7; }
-.reaction-warning button { margin-left: 16px; }
-.reaction-selected { margin-top: 22px; padding: 22px; background: var(--surface, #fff); border: 1px solid var(--reaction-line); border-radius: 10px; }
-.reaction-close { display: block; margin: 0 0 16px auto; font-size: 12px !important; }
-.reaction-detail-head { display: flex; align-items: start; gap: 20px; justify-content: space-between; }
-.reaction-detail-head span { color: var(--reaction-muted); font-size: 11px; }
-.reaction-detail h4 { font-size: 20px; margin: 8px 0 14px; line-height: 1.5; }
-.reaction-detail > p { font-size: 13px; line-height: 1.9; }
-.reaction-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
-.reaction-actions button { font-size: 12px; }
-.reaction-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--reaction-line); padding: 14px 0; margin: 16px 0; gap: 12px; }
-.reaction-facts div { display: grid; gap: 7px; }
-.reaction-facts span { font-size: 11px; color: var(--reaction-muted); }
-.reaction-facts strong { font: 12px ui-monospace, monospace; }
-.reaction-chart { margin: 26px 0 18px; }
-.reaction-chart figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; }
-.reaction-chart figcaption span { font-size: 11px; color: var(--reaction-muted); font-weight: 400; }
-.reaction-chart svg { display: block; width: 100%; height: auto; margin-top: 10px; }
-.reaction-chart svg text { font: 10px ui-monospace, monospace; fill: var(--reaction-muted); }
-.reaction-legend { display: flex; flex-wrap: wrap; gap: 12px 22px; font-size: 11px; line-height: 1.6; }
-.reaction-legend span { display: flex; align-items: center; gap: 7px; }
-.reaction-legend i { width: 16px; height: 3px; flex-shrink: 0; }
-.reaction-path-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
-.reaction-path-label span { font-size: 11px; color: var(--reaction-muted); }
-.reaction-window-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--reaction-line); border: 1px solid var(--reaction-line); border-radius: 7px; overflow: hidden; }
-.reaction-window-grid article { background: var(--reaction-subtle); padding: 16px; display: grid; gap: 10px; }
-.reaction-window-grid span, .reaction-window-grid small { color: var(--reaction-muted); font-size: 10px; line-height: 1.6; }
-.reaction-window-grid strong { font: 500 19px ui-monospace, monospace; }
-.reaction-research { margin-top: 16px; }
-.reaction-method { margin-top: 20px; font-size: 12px; line-height: 1.8; color: var(--reaction-muted); overflow-wrap: anywhere; }
-.reaction-method summary { color: var(--reaction-ink); cursor: pointer; }
-.reaction-table-scroll { overflow-x: auto; }
-.reaction-method table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 11px; }
-.reaction-method th, .reaction-method td { border-bottom: 1px solid var(--reaction-line); padding: 8px; text-align: right; }
-.reaction-overlaps { border-top: 1px solid var(--reaction-line); margin-top: 20px; padding-top: 14px; font-size: 12px; line-height: 1.8; }
-.reaction-overlaps h5 { margin: 0; font-size: 13px; }
-.reaction-overlaps p { color: var(--reaction-muted); }
-.reaction-registration { display: grid; gap: 16px; font-size: 13px; }
-.reaction-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.reaction-registration label { display: grid; gap: 7px; color: var(--reaction-ink); }
-.reaction-registration small { color: var(--reaction-muted); line-height: 1.8; }
-.reaction-registration button { justify-self: start; margin-bottom: 16px; }
-.reaction-comparison, .reaction-candidates, .reaction-legacy { padding: 22px; border: 1px solid var(--reaction-line); border-radius: 10px; background: var(--surface, #fff); margin-top: 22px; }
-.reaction-comparison header, .reaction-candidates header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.reaction-comparison h4, .reaction-candidates h4, .reaction-legacy h4 { margin: 6px 0 10px; font-size: 19px; }
-.reaction-comparison header span, .reaction-comparison header p, .reaction-candidates > p, .reaction-legacy > p { color: var(--reaction-muted); font-size: 12px; line-height: 1.8; }
-.reaction-comparison-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px 0; border-top: 1px solid var(--reaction-line); }
-.reaction-comparison-list article div { display: grid; gap: 5px; }
-.reaction-comparison-list strong { font-size: 12px; line-height: 1.7; }
-.reaction-comparison-list small { color: var(--reaction-muted); font-size: 10px; }
-.reaction-comparison-list p { display: flex; flex-wrap: wrap; gap: 16px; grid-row: 2; font-size: 11px; margin: 0; }
-.reaction-comparison-list b { font-family: ui-monospace, monospace; font-weight: 500; margin-left: 4px; }
-.reaction-comparison-list button { grid-row: 1; grid-column: 2; align-self: start; font-size: 11px; }
-.reaction-candidates article { display: flex; justify-content: space-between; gap: 24px; align-items: center; border-top: 1px solid var(--reaction-line); padding: 18px 0; }
-.reaction-candidates h5, .reaction-legacy h5 { font-size: 14px; margin: 7px 0; }
-.reaction-candidates small, .reaction-legacy small { color: var(--reaction-muted); font-size: 11px; }
-.reaction-candidates article p, .reaction-legacy article p { font-size: 12px; color: var(--reaction-muted); line-height: 1.8; }
-.reaction-candidates article button { flex-shrink: 0; font-size: 12px; }
-.reaction-legacy article { padding: 18px 0; border-top: 1px solid var(--reaction-line); }
-.reaction-footer { margin-top: 24px; color: var(--reaction-muted); font-size: 11px; line-height: 1.9; }
+.reaction-workspace .reaction-tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--reaction-line); overflow-x: auto; padding: 0 0 12px; margin: 24px 0 0; scrollbar-width: thin; }
+.reaction-workspace .reaction-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; border: 1px solid transparent; background: transparent; white-space: nowrap; font-size: 13px; padding: 7px 12px; color: var(--reaction-muted); }
+.reaction-workspace .reaction-tabs button[aria-pressed="true"] { background: var(--reaction-surface); border-color: var(--reaction-line); color: var(--reaction-ink); font-weight: 600; box-shadow: 0 1px 3px #00000008; }
+.reaction-workspace .reaction-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; background: var(--reaction-subtle); color: var(--reaction-muted); font: 11px/20px var(--reaction-numeric); font-variant-numeric: tabular-nums; }
+.reaction-workspace .reaction-toolbar, .reaction-workspace .reaction-toolbar > div { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.reaction-workspace .reaction-toolbar { justify-content: space-between; margin: 12px 0 16px; }
+.reaction-workspace .reaction-toolbar label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--reaction-muted); }
+.reaction-workspace .reaction-toolbar p, .reaction-workspace .reaction-note { font-size: 12px; color: var(--reaction-muted); line-height: 1.8; }
+.reaction-workspace :is(select, input, textarea) { width: auto; min-width: 0; min-height: 36px; border: 1px solid var(--reaction-line); border-radius: 8px; padding: 7px 10px; background: var(--reaction-control); color: var(--reaction-ink); font-size: 12px; line-height: 20px; box-shadow: none; transform: none; transition: border-color 140ms ease; }
+.reaction-workspace .reaction-matrix { border: 1px solid var(--reaction-line); border-radius: 10px; overflow: hidden; background: var(--reaction-surface); }
+.reaction-workspace .reaction-matrix-head, .reaction-workspace .reaction-matrix-row { display: grid; grid-template-columns: minmax(240px, 3fr) repeat(4, minmax(80px, 1fr)) minmax(100px, 1.15fr); align-items: center; gap: 16px; padding: 18px 20px; }
+.reaction-workspace .reaction-matrix-head { background: var(--reaction-subtle); color: var(--reaction-muted); font-size: 11px; padding-block: 12px; }
+.reaction-workspace .reaction-matrix-head > span:not(:first-child) { text-align: center; }
+.reaction-workspace .reaction-matrix-row + .reaction-matrix-row { border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-matrix-row[data-selected="true"] { background: var(--reaction-selected); box-shadow: inset 3px 0 var(--reaction-teal); }
+.reaction-workspace .reaction-subject { min-width: 0; }
+.reaction-workspace .reaction-subject button { display: grid; text-align: left; border: 0; border-radius: 3px; padding: 0; min-height: 0; gap: 5px; background: transparent; width: 100%; font-weight: 400; }
+.reaction-workspace .reaction-subject button:hover:not(:disabled), .reaction-workspace .reaction-subject button:active { background: transparent; box-shadow: none; }
+.reaction-workspace .reaction-subject strong { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.reaction-workspace .reaction-subject span { font-size: 12px; color: var(--reaction-muted); line-height: 1.65; overflow-wrap: anywhere; }
+.reaction-workspace .reaction-subject > small { display: block; margin-top: 8px; color: var(--reaction-muted); font-size: 11px; }
+.reaction-workspace .reaction-value { text-align: center; display: grid; gap: 7px; }
+.reaction-workspace .reaction-value strong { font: 500 16px/1.4 var(--reaction-numeric); font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
+.reaction-workspace .reaction-value > small { display: none; }
+.reaction-workspace .reaction-value > span { color: var(--reaction-muted); font: 11px/1.5 var(--reaction-numeric); }
+.reaction-workspace .reaction-value[data-direction="up"] strong { color: var(--reaction-up); }
+.reaction-workspace .reaction-value[data-direction="down"] strong { color: var(--reaction-down); }
+.reaction-workspace .reaction-value[data-direction="neutral"] strong { color: var(--reaction-muted); font-family: inherit; font-size: 12px; }
+.reaction-workspace .reaction-row-state { display: grid; justify-items: center; gap: 9px; font-size: 11px; color: var(--reaction-muted); text-align: center; }
+.reaction-workspace .reaction-row-state button { font-size: 11px; padding: 4px 8px; }
+.reaction-workspace .reaction-empty { text-align: center; padding: 24px 18px; line-height: 1.8; font-size: 13px; color: var(--reaction-muted); border: 1px solid var(--reaction-line); background: var(--reaction-subtle); border-radius: 9px; }
+.reaction-workspace .reaction-empty h4 { color: var(--reaction-ink); font-size: 18px; }
+.reaction-workspace .reaction-warning { background: var(--reaction-warning-bg); border: 1px solid var(--reaction-warning-border); padding: 12px 16px; margin: 14px 0; border-radius: 8px; font-size: 12px; line-height: 1.7; }
+.reaction-workspace .reaction-warning button { margin-left: 16px; }
+.reaction-workspace .reaction-selected { scroll-margin-top: 110px; margin-top: 20px; padding: 24px; background: var(--reaction-surface); border: 1px solid var(--reaction-line); border-radius: 10px; }
+.reaction-workspace .reaction-close { display: block; margin: 0 0 16px auto; font-size: 12px !important; }
+.reaction-workspace .reaction-detail-head { display: flex; align-items: start; gap: 20px; justify-content: space-between; }
+.reaction-workspace .reaction-detail-head span { color: var(--reaction-muted); font-size: 11px; }
+.reaction-workspace .reaction-detail h4 { font-size: 20px; margin: 8px 0 14px; line-height: 1.5; }
+.reaction-workspace .reaction-detail > p { font-size: 13px; line-height: 1.9; }
+.reaction-workspace .reaction-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 50%; }
+.reaction-workspace .reaction-actions button { font-size: 12px; }
+.reaction-workspace .reaction-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--reaction-line); padding: 14px 0; margin: 16px 0; gap: 12px; }
+.reaction-workspace .reaction-facts div { display: grid; gap: 7px; }
+.reaction-workspace .reaction-facts span { font-size: 11px; color: var(--reaction-muted); }
+.reaction-workspace .reaction-facts strong { font: 12px ui-monospace, monospace; }
+.reaction-workspace .reaction-chart { margin: 26px 0 18px; }
+.reaction-workspace .reaction-chart figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; }
+.reaction-workspace .reaction-chart figcaption span { font-size: 11px; color: var(--reaction-muted); font-weight: 400; }
+.reaction-workspace .reaction-chart svg { display: block; width: 100%; height: auto; margin-top: 10px; }
+.reaction-workspace .reaction-chart svg text { font: 11px/1.5 var(--reaction-numeric); fill: var(--reaction-muted); }
+.reaction-workspace .reaction-legend { display: flex; flex-wrap: wrap; gap: 12px 22px; font-size: 11px; line-height: 1.6; }
+.reaction-workspace .reaction-legend span { display: flex; align-items: center; gap: 7px; }
+.reaction-workspace .reaction-legend i { width: 16px; height: 3px; flex-shrink: 0; }
+.reaction-workspace .reaction-path-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.reaction-workspace .reaction-path-label span { font-size: 11px; color: var(--reaction-muted); }
+.reaction-workspace .reaction-window-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--reaction-line); border: 1px solid var(--reaction-line); border-radius: 7px; overflow: hidden; }
+.reaction-workspace .reaction-window-grid article { background: var(--reaction-subtle); padding: 16px; display: grid; gap: 10px; }
+.reaction-workspace .reaction-window-grid span, .reaction-workspace .reaction-window-grid small { color: var(--reaction-muted); font-size: 12px; line-height: 1.6; }
+.reaction-workspace .reaction-window-grid strong { font: 500 19px ui-monospace, monospace; }
+.reaction-workspace .reaction-research { margin-top: 16px; }
+.reaction-workspace .reaction-method { margin-top: 20px; font-size: 12px; line-height: 1.8; color: var(--reaction-muted); overflow-wrap: anywhere; }
+.reaction-workspace .reaction-method summary { color: var(--reaction-ink); cursor: pointer; }
+.reaction-workspace .reaction-table-scroll { overflow-x: auto; }
+.reaction-workspace .reaction-method table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 11px; }
+.reaction-workspace .reaction-method th, .reaction-workspace .reaction-method td { border-bottom: 1px solid var(--reaction-line); padding: 8px; text-align: right; }
+.reaction-workspace .reaction-overlaps { border-top: 1px solid var(--reaction-line); margin-top: 20px; padding-top: 14px; font-size: 12px; line-height: 1.8; }
+.reaction-workspace .reaction-overlaps h5 { margin: 0; font-size: 13px; }
+.reaction-workspace .reaction-overlaps p { color: var(--reaction-muted); }
+.reaction-workspace .reaction-registration { display: grid; gap: 16px; font-size: 13px; }
+.reaction-workspace .reaction-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reaction-workspace .reaction-registration label { display: grid; gap: 7px; color: var(--reaction-ink); }
+.reaction-workspace .reaction-registration small { color: var(--reaction-muted); line-height: 1.8; }
+.reaction-workspace .reaction-registration button { justify-self: start; margin-bottom: 16px; }
+.reaction-workspace .reaction-comparison, .reaction-workspace .reaction-candidates, .reaction-workspace .reaction-legacy { padding: 22px; border: 1px solid var(--reaction-line); border-radius: 10px; background: var(--reaction-surface); margin-top: 22px; }
+.reaction-workspace .reaction-comparison header, .reaction-workspace .reaction-candidates header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.reaction-workspace .reaction-comparison h4, .reaction-workspace .reaction-candidates h4, .reaction-workspace .reaction-legacy h4 { margin: 6px 0 10px; font-size: 19px; }
+.reaction-workspace .reaction-comparison header span, .reaction-workspace .reaction-comparison header p, .reaction-workspace .reaction-candidates > p, .reaction-workspace .reaction-legacy > p { color: var(--reaction-muted); font-size: 12px; line-height: 1.8; }
+.reaction-workspace .reaction-comparison-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px 0; border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-comparison-list article div { display: grid; gap: 5px; }
+.reaction-workspace .reaction-comparison-list strong { font-size: 12px; line-height: 1.7; }
+.reaction-workspace .reaction-comparison-list small { color: var(--reaction-muted); font-size: 10px; }
+.reaction-workspace .reaction-comparison-list p { display: flex; flex-wrap: wrap; gap: 16px; grid-row: 2; font-size: 11px; margin: 0; }
+.reaction-workspace .reaction-comparison-list b { font-family: ui-monospace, monospace; font-weight: 500; margin-left: 4px; }
+.reaction-workspace .reaction-comparison-list button { grid-row: 1; grid-column: 2; align-self: start; font-size: 11px; }
+.reaction-workspace .reaction-candidates article { display: flex; justify-content: space-between; gap: 24px; align-items: center; border-top: 1px solid var(--reaction-line); padding: 18px 0; }
+.reaction-workspace .reaction-candidates h5, .reaction-workspace .reaction-legacy h5 { font-size: 14px; margin: 7px 0; }
+.reaction-workspace .reaction-candidates small, .reaction-workspace .reaction-legacy small { color: var(--reaction-muted); font-size: 11px; }
+.reaction-workspace .reaction-candidates article p, .reaction-workspace .reaction-legacy article p { font-size: 12px; color: var(--reaction-muted); line-height: 1.8; }
+.reaction-workspace .reaction-candidates article button { flex-shrink: 0; font-size: 12px; }
+.reaction-workspace .reaction-legacy article { padding: 18px 0; border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-footer { margin-top: 24px; color: var(--reaction-muted); font-size: 11px; line-height: 1.9; }
 @media (max-width: 1000px) {
-  .reaction-matrix-head, .reaction-matrix-row { grid-template-columns: minmax(170px, 2fr) repeat(3, minmax(70px, 1fr)) minmax(95px, 1fr); padding-inline: 14px; gap: 8px; }
-  .reaction-detail-head { flex-direction: column; gap: 8px; }
+  .reaction-workspace .reaction-matrix-head, .reaction-workspace .reaction-matrix-row { grid-template-columns: minmax(200px, 2.5fr) repeat(4, minmax(66px, 1fr)) minmax(90px, 1fr); padding-inline: 14px; gap: 8px; }
+  .reaction-workspace .reaction-detail-head { flex-direction: column; gap: 8px; }
 }
-@media (max-width: 680px) {
-  .reaction-header { flex-direction: column; align-items: start; gap: 16px; }
-  .reaction-header h3 { font-size: 25px; }
-  .reaction-tabs { gap: 0; }
-  .reaction-tabs button { padding: 8px; }
-  .reaction-toolbar { gap: 4px; }
-  .reaction-toolbar > div { gap: 10px; }
-  .reaction-matrix-head { display: none; }
-  .reaction-matrix-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 8px; padding: 18px 16px; }
-  .reaction-subject, .reaction-row-state { grid-column: 1 / -1; }
-  .reaction-row-state { display: flex; justify-content: space-between; border-top: 1px solid var(--reaction-line); padding-top: 10px; }
-  .reaction-value > small { display: block; font-size: 10px; color: var(--reaction-muted); }
-  .reaction-selected, .reaction-comparison, .reaction-candidates, .reaction-legacy { padding: 16px; }
-  .reaction-facts { grid-template-columns: 1fr; gap: 14px; }
-  .reaction-facts div { display: flex; justify-content: space-between; }
-  .reaction-window-grid { grid-template-columns: 1fr; }
-  .reaction-window-grid article { grid-template-columns: 1fr auto; gap: 8px; }
-  .reaction-window-grid small { grid-column: 1 / -1; }
-  .reaction-form-grid { grid-template-columns: 1fr; }
-  .reaction-candidates article { flex-direction: column; align-items: start; gap: 8px; }
-  .reaction-comparison header { align-items: start; flex-direction: column; gap: 0; }
+@container (max-width: 760px) {
+  .reaction-workspace .reaction-header { flex-direction: column; align-items: start; gap: 16px; }
+  .reaction-workspace .reaction-header h3 { font-size: 25px; }
+  .reaction-workspace .reaction-tabs { gap: 0; }
+  .reaction-workspace .reaction-tabs button { padding: 8px; }
+  .reaction-workspace .reaction-toolbar { gap: 4px; }
+  .reaction-workspace .reaction-toolbar > div { gap: 10px; }
+  .reaction-workspace .reaction-matrix-head { display: none; }
+  .reaction-workspace .reaction-matrix-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 8px; padding: 18px 16px; }
+  .reaction-workspace .reaction-subject, .reaction-workspace .reaction-row-state { grid-column: 1 / -1; }
+  .reaction-workspace .reaction-row-state { display: flex; justify-content: space-between; border-top: 1px solid var(--reaction-line); padding-top: 10px; }
+  .reaction-workspace .reaction-value > small { display: block; font-size: 10px; color: var(--reaction-muted); }
+  .reaction-workspace .reaction-selected, .reaction-workspace .reaction-comparison, .reaction-workspace .reaction-candidates, .reaction-workspace .reaction-legacy { padding: 16px; }
+  .reaction-workspace .reaction-facts { grid-template-columns: 1fr; gap: 14px; }
+  .reaction-workspace .reaction-facts div { display: flex; justify-content: space-between; }
+  .reaction-workspace .reaction-window-grid { grid-template-columns: 1fr; }
+  .reaction-workspace .reaction-window-grid article { grid-template-columns: 1fr auto; gap: 8px; }
+  .reaction-workspace .reaction-window-grid small { grid-column: 1 / -1; }
+  .reaction-workspace .reaction-form-grid { grid-template-columns: 1fr; }
+  .reaction-workspace .reaction-candidates article { flex-direction: column; align-items: start; gap: 8px; }
+  .reaction-workspace .reaction-comparison header { align-items: start; flex-direction: column; gap: 0; }
 }
 
 .app-shell[data-theme="dark"] .reaction-workspace {
-  --reaction-ink: #ccdcec;
+  --reaction-ink: #dce5ef;
+  --reaction-canvas: #151e2a;
+  --reaction-surface: #1b2635;
+  --reaction-control: #202d3d;
+  color-scheme: dark;
   --reaction-teal: #82c4b3;
   --reaction-muted: #a0aec0;
-  --reaction-line: #3d4b5e;
-  --reaction-band: #1c3040;
+  --reaction-line: #304052;
+  --reaction-band: #223b46;
   --reaction-subtle: #1d2837;
   --reaction-selected: #26374a;
   --reaction-button: #376076;
@@ -163,36 +179,106 @@
   --reaction-warning-border: #74613b;
 }
 
-.reaction-automation { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 16px; margin-bottom: 20px; background: var(--reaction-band); border-left: 3px solid var(--reaction-teal); font-size: 12px; line-height: 1.7; }
-.reaction-automation strong { color: var(--reaction-teal); }
-.reaction-automation small { flex-basis: 100%; color: var(--reaction-muted); }
-.reaction-selected > details { margin: 18px 0; }
+.reaction-workspace .reaction-automation { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; padding: 12px 16px; margin-bottom: 20px; background: var(--reaction-surface); border: 1px solid var(--reaction-line); border-radius: 10px; font-size: 12px; line-height: 1.7; }
+.reaction-workspace .reaction-automation strong { color: var(--reaction-teal); }
+.reaction-workspace .reaction-automation small { flex-basis: 100%; color: var(--reaction-muted); font-size: 11px; }
+.reaction-workspace .reaction-automation strong::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--reaction-teal); vertical-align: 2px; }
+.reaction-workspace .reaction-selected > details { margin: 18px 0; }
 
-.reaction-activity { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 28px; padding: 24px 0; border-bottom: 1px solid var(--reaction-line); }
-.reaction-activity header, .reaction-history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.reaction-activity label, .reaction-history-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--reaction-muted); }
-.reaction-activity aside { border-left: 1px solid var(--reaction-line); padding-left: 24px; }
-.reaction-feed { padding: 0; list-style: none; max-height: 420px; overflow: auto; }
-.reaction-feed li { padding: 16px 0; border-top: 1px solid var(--reaction-line); }
-.reaction-feed small { display: block; color: var(--reaction-muted); margin-bottom: 6px; }
-.reaction-feed button, .reaction-context li button { text-align: left; color: var(--reaction-ink); font-weight: 600; }
-.reaction-feed p { font-size: 13px; margin: 8px 0 0; }
-.reaction-followed { width: 100%; text-align: left; display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--reaction-line); }
-.reaction-followed span { font-size: 12px; color: var(--reaction-muted); }
-.reaction-profile { margin: 24px 0; padding: 20px; background: var(--reaction-band); }
-.reaction-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.reaction-phases article { display: grid; align-content: start; gap: 10px; }
-.reaction-phases span, .reaction-phases small { font-size: 12px; color: var(--reaction-muted); }
-.reaction-context { margin-top: 24px; border-top: 1px solid var(--reaction-line); padding-top: 20px; }
-.reaction-context details { margin: 20px 0; }
-.reaction-context h5 { font-size: 15px; margin: 12px 0; }
-.reaction-history-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.reaction-history-groups article { padding: 16px; border: 1px solid var(--reaction-line); min-width: 0; }
-.reaction-history-groups p, .reaction-history-groups li { font-size: 13px; }
-.reaction-history-groups ul { padding-left: 16px; }
-.reaction-context small { color: var(--reaction-muted); }
-@media (max-width: 760px) {
-  .reaction-activity, .reaction-phases, .reaction-history-groups { grid-template-columns: 1fr; }
-  .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
-  .reaction-phases article + article { border-top: 1px solid var(--reaction-line); padding-top: 14px; }
+.reaction-workspace .reaction-activity { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 24px; padding: 20px; background: var(--reaction-surface); border: 1px solid var(--reaction-line); border-radius: 12px; }
+.reaction-workspace .reaction-activity header, .reaction-workspace .reaction-history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.reaction-workspace .reaction-activity label, .reaction-workspace .reaction-history-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--reaction-muted); }
+.reaction-workspace .reaction-activity aside { border-left: 1px solid var(--reaction-line); padding-left: 24px; }
+.reaction-workspace .reaction-feed { padding: 0; list-style: none; max-height: 420px; overflow: auto; }
+.reaction-workspace .reaction-feed li { padding: 16px 0; border-top: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-feed small { display: block; color: var(--reaction-muted); margin-bottom: 6px; }
+.reaction-workspace .reaction-feed button, .reaction-workspace .reaction-context li button { text-align: left; color: var(--reaction-ink); font-weight: 600; }
+.reaction-workspace .reaction-feed p { font-size: 13px; margin: 8px 0 0; }
+.reaction-workspace .reaction-followed { width: 100%; text-align: left; display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--reaction-line); }
+.reaction-workspace .reaction-followed span { font-size: 12px; color: var(--reaction-muted); }
+.reaction-workspace .reaction-profile { margin: 24px 0; padding: 20px; background: var(--reaction-subtle); border: 1px solid var(--reaction-line); border-radius: 10px; }
+.reaction-workspace .reaction-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.reaction-workspace .reaction-phases article { display: grid; align-content: start; gap: 10px; }
+.reaction-workspace .reaction-phases span, .reaction-workspace .reaction-phases small { font-size: 12px; color: var(--reaction-muted); }
+.reaction-workspace .reaction-context { margin-top: 24px; border-top: 1px solid var(--reaction-line); padding-top: 20px; }
+.reaction-workspace .reaction-context details { margin: 20px 0; }
+.reaction-workspace .reaction-context h5 { font-size: 15px; margin: 12px 0; }
+.reaction-workspace .reaction-history-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.reaction-workspace .reaction-history-groups article { padding: 20px; border: 1px solid var(--reaction-line); border-radius: 10px; background: var(--reaction-subtle); min-width: 0; }
+.reaction-workspace .reaction-history-groups p, .reaction-workspace .reaction-history-groups li { font-size: 13px; }
+.reaction-workspace .reaction-history-groups ul { padding-left: 16px; }
+.reaction-workspace .reaction-context small { color: var(--reaction-muted); }
+@container (max-width: 700px) {
+  .reaction-workspace .reaction-activity, .reaction-workspace .reaction-phases, .reaction-workspace .reaction-history-groups { grid-template-columns: 1fr; }
+  .reaction-workspace .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
+  .reaction-workspace .reaction-phases article + article { border-top: 1px solid var(--reaction-line); padding-top: 14px; }
+}
+
+.reaction-workspace :where(h4, h5, p, figure) { margin-block: 0; }
+.reaction-workspace h4 { font-size: 15px; line-height: 1.5; font-weight: 600; letter-spacing: -.015em; }
+.reaction-workspace .reaction-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 22px; }
+.reaction-workspace .reaction-section-heading > span { color: var(--reaction-muted); font: 11px/1.5 var(--reaction-numeric); }
+.reaction-workspace .reaction-toolbar p { margin: 0; font-size: 11px; }
+.reaction-workspace .reaction-toolbar select { min-width: 116px; }
+.reaction-workspace .reaction-matrix-row { transition: background-color 140ms ease; }
+.reaction-workspace .reaction-matrix-row:hover, .reaction-workspace .reaction-matrix-row:focus-within { background: var(--reaction-subtle); }
+.reaction-workspace .reaction-matrix-row[data-selected="true"] { background: var(--reaction-selected); }
+.reaction-workspace .reaction-matrix-head > :nth-child(2), .reaction-workspace .reaction-matrix-row > :nth-child(2) { border-right: 1px solid var(--reaction-line); padding-right: 16px; }
+.reaction-workspace .reaction-row-state button { min-height: 30px; border-color: transparent; background: transparent; }
+.reaction-workspace .reaction-row-state button:hover { border-color: var(--reaction-line); background: var(--reaction-control); }
+.reaction-workspace .reaction-activity .reaction-note { margin: 8px 0 14px; font-size: 11px; }
+.reaction-workspace .reaction-activity aside > p:last-of-type { color: var(--reaction-muted); font-size: 12px; line-height: 1.8; }
+.reaction-workspace .reaction-activity input { width: 138px; font-variant-numeric: tabular-nums; }
+.reaction-workspace .reaction-feed button, .reaction-workspace .reaction-context li button { background: transparent; border: 0; padding: 3px 0; min-height: 28px; text-align: left; }
+.reaction-workspace .reaction-feed button:hover, .reaction-workspace .reaction-context li button:hover { color: var(--reaction-teal); background: transparent; }
+.reaction-workspace .reaction-followed { border: 0; border-radius: 8px; background: var(--reaction-subtle); padding: 12px; margin-top: 8px; }
+.reaction-workspace .reaction-detail > p { margin-block: 12px; }
+.reaction-workspace .reaction-phases { margin-top: 20px; }
+.reaction-workspace .reaction-phases article + article { border-left: 1px solid var(--reaction-line); padding-left: 20px; }
+.reaction-workspace .reaction-phases strong { font-size: 16px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.reaction-workspace .reaction-profile > .reaction-note { margin-top: 18px; font-size: 11px; }
+.reaction-workspace .reaction-context details { border-block: 1px solid var(--reaction-line); padding-block: 14px; }
+.reaction-workspace summary { cursor: pointer; font-size: 12px; line-height: 1.7; }
+.reaction-workspace .reaction-history-groups { margin-top: 16px; }
+.reaction-workspace .reaction-history-groups article > p + p { margin-top: 12px; }
+.reaction-workspace .reaction-registration :is(input, textarea, select) { width: 100%; }
+.reaction-workspace :is(input, select, textarea):focus { outline: 2px solid var(--reaction-teal); outline-offset: 2px; transform: none; box-shadow: none; }
+.reaction-workspace button:active:not(:disabled) { filter: brightness(.94); }
+@media (max-width: 1100px) {
+  .reaction-workspace { padding: 20px; }
+  .reaction-workspace .reaction-activity { grid-template-columns: minmax(0, 1.5fr) minmax(180px, 1fr); gap: 20px; }
+  .reaction-workspace .reaction-actions { max-width: 100%; justify-content: flex-start; }
+}
+@container (max-width: 760px) {
+  .reaction-workspace { padding: 16px; border-radius: 12px; }
+  .reaction-workspace .reaction-matrix-row > :nth-child(2) { border-right: 0; padding-right: 0; }
+  .reaction-workspace .reaction-activity { grid-template-columns: 1fr; padding: 16px; }
+  .reaction-workspace .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
+  .reaction-workspace .reaction-activity header { align-items: flex-start; }
+  .reaction-workspace .reaction-activity input { width: 132px; }
+  .reaction-workspace .reaction-section-heading { margin-top: 20px; }
+  .reaction-workspace .reaction-toolbar > div { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .reaction-workspace .reaction-toolbar label { display: grid; gap: 6px; }
+  .reaction-workspace .reaction-toolbar select { width: 100%; min-width: 0; }
+  .reaction-workspace .reaction-subject button { min-height: 44px; }
+  .reaction-workspace .reaction-phases article + article { border-left: 0; padding-left: 0; }
+  .reaction-workspace .reaction-tabs button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reaction-workspace *, .reaction-workspace *::before { transition: none; scroll-behavior: auto; }
+}
+@media (prefers-contrast: more) {
+  .reaction-workspace { --reaction-muted: var(--reaction-ink); --reaction-line: currentColor; }
+}
+
+@media (max-width: 800px) {
+  .reaction-workspace { padding: 16px; border-radius: 12px; }
+}
+
+.reaction-workspace .reaction-subject button > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.reaction-workspace .reaction-chart-plot { overflow-x: auto; scrollbar-width: thin; border-radius: 8px; margin-top: 12px; }
+.reaction-workspace .reaction-chart-plot svg { min-width: 520px; margin-top: 0; }
+@container (max-width: 760px) {
+  .reaction-workspace .reaction-detail-head { flex-direction: column; gap: 8px; }
+  .reaction-workspace .reaction-actions { max-width: 100%; justify-content: flex-start; }
 }

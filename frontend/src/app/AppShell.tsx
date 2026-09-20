@@ -76,7 +76,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="app-shell" data-theme={theme}>
+    <div className="app-shell" data-theme={theme} data-view={view}>
       <div className="shell-ambient" aria-hidden="true" />
       <FlowField mode="ambient" className="shell-flow" />
       <aside className="sidebar">

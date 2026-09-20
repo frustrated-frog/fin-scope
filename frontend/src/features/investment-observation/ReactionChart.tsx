@@ -37,7 +37,7 @@ export function ReactionChart({ series, relative = false }: { series: ReactionSe
     <figure className="reaction-chart">
       <figcaption id={labelId}>{relative ? '相对沪深300的累计表现 · 百分点' : '累计收益 · %'}<span>以首个反应交易日前一日收盘为 0</span></figcaption>
       {values.length === 0 ? <p className="reaction-empty">还没有可绘制的已收盘行情。更新样本后查看路径。</p> : (
-        <svg viewBox="0 0 720 254" role="img" aria-labelledby={labelId}>
+        <div className="reaction-chart-plot" tabIndex={0} aria-label="价格路径图，可横向滚动"><svg viewBox="0 0 720 254" role="img" aria-labelledby={labelId}>
           <rect x={x(0)} y="24" width={x(5) - x(0)} height="202" fill="var(--reaction-band)" />
           {[min, 0, max].map((value, index) => <g key={index}>
             <line x1="58" x2="688" y1={y(value)} y2={y(value)} stroke="var(--reaction-line)" strokeDasharray={value === 0 ? undefined : '3 5'} />
@@ -57,7 +57,7 @@ export function ReactionChart({ series, relative = false }: { series: ReactionSe
               </circle>;
             })}
           </g>)}
-        </svg>
+        </svg></div>
       )}
       <div className="reaction-legend">{series.map(line => <span key={line.label}><i style={{ background: line.color }} />{line.label}</span>)}</div>
     </figure>
