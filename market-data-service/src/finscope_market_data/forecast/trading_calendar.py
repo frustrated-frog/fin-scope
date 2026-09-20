@@ -31,3 +31,25 @@ def previous_session(before: date) -> date | None:
             return current
         current -= timedelta(days=1)
     return None
+
+
+def consecutive_observed_sessions(signal: date, outcome: date) -> bool:
+    """Certify a one-session label without treating a missing bar as a holiday.
+
+    For uncovered historical years only pairs with no intervening weekday are
+    retained. Both endpoints are observed prices; long holiday gaps remain
+    unverified and are excluded until an authoritative calendar covers them.
+    """
+    if outcome <= signal or signal.weekday() >= 5 or outcome.weekday() >= 5:
+        return False
+    for value in (signal, outcome):
+        if value.year in _CLOSURES and any(
+                start <= value.strftime('%m-%d') <= end for start, end in _CLOSURES[value.year]):
+            return False
+    expected = next_session(signal)
+    if expected is not None:
+        return expected == outcome
+    candidate = signal + timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate += timedelta(days=1)
+    return candidate == outcome

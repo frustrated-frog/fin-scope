@@ -109,4 +109,28 @@ def test_next_session_reports_absolute_direction_benchmarks_and_coverage():
     assert set(audit['comparisons']) == {'PRIOR','MOMENTUM','LEGACY'}
     assert audit['accuracy'] == pytest.approx(result.accuracy)
     assert (result.status == 'READY') == audit['eligible']
-    assert result.model_version == 'local-prediction-v3'
+    assert result.model_version == 'local-prediction-v3-consecutive-session-v2'
+
+
+@pytest.mark.parametrize('signal,outcome,accepted', [
+    ('2026-09-07', '2026-09-09', False),  # missing Tuesday / suspension
+    ('2026-09-24', '2026-09-28', True),   # exchange holiday
+    ('2026-09-24', '2026-09-29', False),
+    ('2026-09-25', '2026-09-28', False),  # invalid holiday endpoint
+    ('2025-09-05', '2025-09-08', True),   # no intervening weekday
+    ('2025-09-05', '2025-09-09', False),
+    ('2025-09-30', '2025-10-08', False),  # unknown long holiday fails closed
+])
+def test_next_close_samples_never_bridge_unverified_missing_sessions(signal, outcome, accepted):
+    data = bars(62)
+    data[-2] = data[-2].model_copy(update={'trade_date': signal})
+    data[-1] = data[-1].model_copy(update={'trade_date': outcome})
+    # Earlier feature history must precede both endpoints.
+    start = date.fromisoformat(signal) - timedelta(days=150)
+    for index in range(60):
+        data[index] = data[index].model_copy(update={'trade_date': (start + timedelta(days=index)).isoformat()})
+    result = build_close_samples(data)
+    assert bool(result) is accepted
+    if accepted:
+        assert result[0].exit_date == outcome
+        assert result[0].net_return == pytest.approx(data[-1].close / data[-2].close - 1)

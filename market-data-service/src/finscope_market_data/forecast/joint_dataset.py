@@ -13,8 +13,8 @@ import numpy as np
 from finscope_market_data.models import DailyBar
 from finscope_market_data.forecast.industry_features import IndustryMembership, INDUSTRY_FEATURE_CODES, industry_features
 from finscope_market_data.forecast.context import build_aligned_context
-from finscope_market_data.forecast.features import FEATURE_CODES, ForecastSample, _validated_bars, current_features
-from finscope_market_data.forecast.next_session import build_close_samples
+from finscope_market_data.forecast.features import FEATURE_CODES, ForecastSample, _validated_bars, current_features, _features
+from finscope_market_data.forecast.next_session import build_close_samples, CLOSE_SAMPLE_PROTOCOL
 from finscope_market_data.forecast.market_state_features import market_state_features, MARKET_STATE_FEATURE_CODES
 from finscope_market_data.forecast.panel_features import augment_cross_sectional_features
 
@@ -54,7 +54,7 @@ class JointDataset:
 def history_fingerprint(bars: Sequence[DailyBar]) -> str:
     effective = sorted(bars, key=lambda bar: bar.trade_date)[-HISTORY_LIMIT:]
     payload = [bar.model_dump(mode='json') for bar in effective]
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([CLOSE_SAMPLE_PROTOCOL, payload], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def _correlation(left: np.ndarray, right: np.ndarray) -> float:
@@ -123,10 +123,12 @@ def build_joint_dataset(
         samples = build_close_samples(bars, context)
         valid_labels.update((code, sample.signal_date) for sample in samples
                             if next_date.get(sample.signal_date) == sample.exit_date)
-        # Include the final observable close even when its future label is unknown.
-        # Cross-sectional feature membership must not reveal tomorrow's suspension.
-        samples.append(ForecastSample(bars[-1].trade_date, bars[-1].trade_date,
-                                      bars[-1].trade_date, current_features(bars, context), 0.0))
+        # Observable membership depends only on today's history, never on whether
+        # tomorrow's label passed the session-continuity filter.
+        labelled = {sample.signal_date: sample for sample in samples}
+        samples = [labelled[bar.trade_date] if bar.trade_date in labelled else ForecastSample(
+            bar.trade_date, bar.trade_date, bar.trade_date, _features(bars, index, context), 0.0)
+            for index, bar in enumerate(bars) if index >= 60]
         samples_by_code[code] = tuple(
             replace(sample, features=(*sample.features, *_extra_features(bars, indices[sample.signal_date])))
             for sample in samples

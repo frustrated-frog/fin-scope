@@ -22,7 +22,10 @@ from finscope_market_data.forecast.context import AlignedForecastContext
 from finscope_market_data.forecast.features import ForecastSample, _features, _validated_bars
 from finscope_market_data.forecast.model_competition import ProbabilityModel, fit_model
 from finscope_market_data.forecast.next_session_types import NextSessionPrediction
-from finscope_market_data.forecast.trading_calendar import next_session
+from finscope_market_data.forecast.trading_calendar import next_session, consecutive_observed_sessions
+
+CLOSE_SAMPLE_PROTOCOL = 'consecutive-session-v2'
+NEXT_MODEL_VERSION = f'{MODEL_VERSION}-{CLOSE_SAMPLE_PROTOCOL}'
 
 TRAIN_WINDOW = 504
 CALIBRATION_WINDOW = 60
@@ -61,7 +64,9 @@ def build_close_samples(bars: Sequence[DailyBar], context: AlignedForecastContex
         exit_date=ordered[i + 1].trade_date,
         features=_features(ordered, i, context),
         net_return=ordered[i + 1].close / ordered[i].close - 1.0,
-    ) for i in range(60, len(ordered) - 1)]
+    ) for i in range(60, len(ordered) - 1)
+        if consecutive_observed_sessions(date.fromisoformat(ordered[i].trade_date),
+                                         date.fromisoformat(ordered[i + 1].trade_date))]
 
 
 def _fit_at_legacy(samples: Sequence[ForecastSample], cutoff: str) -> RollingFit:
@@ -107,9 +112,9 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     as_of = date.fromisoformat(ordered[-1].trade_date)
     target = next_session(as_of)
     payload = [(b.trade_date, b.open, b.high, b.low, b.close, b.volume, b.amount, b.adjustment) for b in ordered]
-    fingerprint = hashlib.sha256(json.dumps([MODEL_VERSION, payload], allow_nan=False).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps([NEXT_MODEL_VERSION, payload], allow_nan=False).encode()).hexdigest()
     base = dict(as_of_date=as_of.isoformat(), target_date=target.isoformat() if target else None,
-                generated_at=current.isoformat(), last_close=ordered[-1].close, data_fingerprint=fingerprint)
+                generated_at=current.isoformat(), model_version=NEXT_MODEL_VERSION, last_close=ordered[-1].close, data_fingerprint=fingerprint)
     if as_of > current.date() or (as_of == current.date() and current.time() < time(15, 10)):
         return NextSessionPrediction(status="BEFORE_CLOSE", **base, warnings=["当日收盘数据尚未完成，15:10 后再生成"])
     if target is None:
@@ -118,9 +123,12 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
         return NextSessionPrediction(status="STALE_DATA", **base, warnings=["行情截止日过旧，禁止事后生成目标日预测"])
     if any(b.adjustment != "QFQ" for b in ordered):
         return NextSessionPrediction(status="INSUFFICIENT_DATA", **base, warnings=["次日模型需要一致的前复权日线"])
-    samples = build_close_samples(ordered, context)[-1000:]
+    all_samples = build_close_samples(ordered, context)
+    excluded = max(0, len(ordered) - 61) - len(all_samples)
+    sample_warning = f'次日标签连续性核验剔除 {excluded} 对记录；未覆盖年份仅保留中间没有工作日缺口的相邻行情'
+    samples = all_samples[-1000:]
     if len(samples) < MINIMUM_SAMPLES:
-        return NextSessionPrediction(status="INSUFFICIENT_DATA", **base, warnings=["次日模型至少需要 300 个已成熟收盘收益样本"])
+        return NextSessionPrediction(status="INSUFFICIENT_DATA", **base, warnings=[f"次日模型至少需要 300 个连续交易日收益样本，当前有效 {len(samples)} 个", sample_warning])
     base["data_fingerprint"] = hashlib.sha256(json.dumps(
         [fingerprint, [item.features for item in samples], _features(ordered, len(ordered) - 1, context)],
         allow_nan=False,
@@ -151,7 +159,7 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     direction['flatSampleCount'] = sum(s.net_return == 0 for s in tested)
     ready = direction['eligible']
     return NextSessionPrediction(
-        **base, model_version=MODEL_VERSION, direction_evaluation=direction, status="READY" if ready else "WATCH", up_probability=probability,
+        **base, direction_evaluation=direction, status="READY" if ready else "WATCH", up_probability=probability,
         expected_return=expected, lower_return=lower, upper_return=upper,
         decision=("UP" if probability >= .55 else "DOWN" if probability <= .45 else "ABSTAIN") if ready else "ABSTAIN",
         model_code=current_fit.code, training_through=current_fit.training_through,
@@ -159,7 +167,7 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
         calibration_sample_count=current_fit.calibration_count, validation_sample_count=count,
         accuracy=sum((p >= .5) == bool(label) for p, label, _, _, _ in observations) / count,
         brier_score=brier, baseline_brier_score=baseline, interval_coverage=coverage,
-        warnings=["预测次日收盘相对本次复权收盘的涨跌；不是可成交收益，不含交易费用",
+        warnings=[sample_warning, "预测次日收盘相对本次复权收盘的涨跌；不是可成交收益，不含交易费用",
                   "60 个滚动测试样本只提供初步证据，80% 残差校准区间不保证未来覆盖率",
                   *([] if ready else ["滚动概率或区间尚未形成稳定优势，保留概率供观察，暂不作方向判断"])],
     )

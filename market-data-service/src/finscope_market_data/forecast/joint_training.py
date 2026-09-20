@@ -25,7 +25,7 @@ from finscope_market_data.forecast.direction_evaluation import evaluate_directio
 from finscope_market_data.forecast.calibration import PlattCalibrator
 from finscope_market_data.forecast.joint_dataset import JointDataset, JointRow
 
-MODEL_VERSION = 'next-session-general-adaptive-v3-audit1'
+MODEL_VERSION = 'next-session-general-adaptive-v4-session2'
 METHOD_FROZEN_THROUGH = '2026-09-09'
 PARAMETERS = dict(n_estimators=100, learning_rate=.03, num_leaves=15,
                   max_depth=5, min_child_samples=40, reg_lambda=5.,
