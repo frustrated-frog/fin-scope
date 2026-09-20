@@ -12,7 +12,6 @@
 /* Explicit surfaces avoid accidentally changing charts, inputs, menus and dialog masks. */
 .app-shell[data-theme] main.workspace :is(
   article, .panel, .list-item, .insight-field-item, .article-card, .article-category-segment,
-  .investment-observation-stats, .investment-observation-focus, .investment-observation-queue,
   .recognition-update, .studio-format-map, .studio-pagination, .discovery-run-note,
   .market-intel-metrics, .market-intel-ledger, .market-intel-rule, .market-intel-evaluation,
   .global-company-command, .financials-archive,
@@ -52,7 +51,7 @@
   .financial-agent-panel, .broker-research-evidence-card,
   .news-flash-panel, .news-depth-panel, .news-depth-card, .radar-event-card,
   .radar-notification-panel, .radar-trust-panel, .radar-overview, .major-events-hero,
-  .expectations-hero, .expectation-card, .expectation-gap-panel, .investment-observation-hero,
+  .expectations-hero, .expectation-card, .expectation-gap-panel,
   .market-pulse-hero, .market-pulse-stage, .market-pulse-map-stage,
   .market-pulse-review, .market-pulse-review-overview,
   .market-pulse-pressure-card, .market-pulse-momentum-card, .market-pulse-internal-card,

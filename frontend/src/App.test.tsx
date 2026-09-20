@@ -28,6 +28,7 @@ const dashboardRadarEvent = {
 };
 
 const responses: Record<string, unknown> = {
+  '/api/investment-reactions': [],
   '/api/investment-observations': {
     focus: [{
       id: 7, sourceType: 'RADAR_EVENT', sourceId: 10, title: '降准后的流动性传导进入验证期',
@@ -769,9 +770,9 @@ test('opens investment observation as an independent top-level workspace', async
 
   await userEvent.click(screen.getByRole('button', { name: '投资观察' }));
 
-  expect(await screen.findByRole('heading', { name: '先看变化，再做判断' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '市场如何回应新信息' })).toBeInTheDocument();
   expect(screen.getByText('Investment Observation · 投资观察')).toBeInTheDocument();
-  expect(screen.getByText('降准后的流动性传导进入验证期')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '从一件明确的事件开始' })).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {
