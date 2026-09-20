@@ -131,7 +131,7 @@ async function openRadar() {
 test('opens the complete news window by default and keeps radar as a secondary view', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   expect(await screen.findByRole('heading', { name: '市场正在发生' })).toBeInTheDocument();
-  expect(await screen.findByText('找到 2 条 · 按发布时间排序')).toBeInTheDocument();
+  expect(await screen.findByText('共 2 条 · 第 1 / 1 页')).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith(expect.stringContaining('/api/news/window?'));
   await openRadar();
   expect(api).toHaveBeenCalledWith('/api/research-radar?category=ALL&watchlistOnly=false&limit=20&state=ALL');

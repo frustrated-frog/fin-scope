@@ -82,7 +82,7 @@ function setup() {
 
 test('queries the server beyond the rendered page and keeps the pagination watermark', async () => {
   setup();
-  await screen.findByText('找到 251 条 · 按发布时间排序');
+  await screen.findByText('共 251 条 · 第 1 / 6 页');
   fireEvent.click(screen.getByRole('button', { name: '下一页' }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith(expect.stringMatching(/page=1.*asOfSequence=251.*asOfTime=2026/)),
@@ -98,20 +98,20 @@ test('queries the server beyond the rendered page and keeps the pagination water
 
 test('defers background changes until the reader accepts them', async () => {
   setup();
-  await screen.findByText(report.title);
+  await screen.findByRole('heading', { name: report.title });
   latest = { ...page, items: [{ ...report, id: 'CLS:2', title: '新公告' }] };
   await act(async () => {
     onRevision();
   });
-  expect(screen.getByText(report.title)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: report.title })).toBeInTheDocument();
   expect(screen.queryByText('新公告')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '有新报道或内容更新，点击查看' }));
-  expect(await screen.findByText('新公告')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '新公告' })).toBeInTheDocument();
 });
 
 test('reads the displayed version, shows source revisions and does not invent stock associations', async () => {
   setup();
-  fireEvent.click(await screen.findByRole('button', { name: /开普检测中标/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith('/api/news/window/read?id=CLS%3A1&version=2', { method: 'POST' }),
   );
@@ -129,7 +129,7 @@ test('failed detail retrieval does not mark the report read', async () => {
     path.startsWith('/api/news/window/detail') ? Promise.reject(new Error('详情暂不可用')) : original(path),
   );
   setup();
-  fireEvent.click(await screen.findByRole('button', { name: /开普检测中标/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent('详情暂不可用');
   expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith('/api/news/window/read'))).toBe(false);
 });
@@ -141,7 +141,7 @@ test('allows manual classification of an unclassified report and keeps content a
   );
   const toast = vi.fn();
   render(<LiveNewsPanel setMessage={vi.fn()} addToast={toast} />);
-  fireEvent.click(await screen.findByRole('button', { name: /开普检测中标/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
   await screen.findByText('分类依据');
   fireEvent.change(screen.getByLabelText('调整分类'), {
     target: { value: 'COMPANY' },
@@ -153,7 +153,7 @@ test('allows manual classification of an unclassified report and keeps content a
 
 test('saves reusable filters with current applied conditions', async () => {
   setup();
-  await screen.findByText(report.title);
+  await screen.findByRole('heading', { name: report.title });
   fireEvent.click(screen.getByText('保存当前筛选'));
   fireEvent.change(screen.getByLabelText('筛选名称'), {
     target: { value: '合同跟踪' },

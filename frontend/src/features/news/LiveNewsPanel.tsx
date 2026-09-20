@@ -6,6 +6,7 @@ import { NewsReportDrawer } from './NewsReportDrawer';
 import { initialQuery, queryParams } from './newsWindowTypes';
 import type { NewsPage, NewsQuery, NewsReport, SavedFilter } from './newsWindowTypes';
 import './newsWindow.css';
+import { FlowField } from '../../shared/visuals/fluid/FlowField';
 
 export function LiveNewsPanel({
   setMessage,
@@ -24,6 +25,7 @@ export function LiveNewsPanel({
   const [filterName, setFilterName] = useState('');
   const [categories, setCategories] = useState<Array<{ code: string; name: string }>>([]);
   const [selected, setSelected] = useState<NewsReport>();
+  const [savedItems, setSavedItems] = useState<Set<string>>(new Set());
   const [compact, setCompact] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -180,100 +182,133 @@ export function LiveNewsPanel({
     }
   }
 
+
+  async function saveMajorEvent(item: NewsReport) {
+    try {
+      await api('/api/major-events', { method: 'POST', body: JSON.stringify({
+        originType: 'NEWS_ITEM', originKey: item.id,
+        occurredDate: (item.publishedAt ?? item.firstSeenAt).slice(0, 10),
+      }) });
+      setSavedItems((current) => new Set(current).add(item.id));
+      addToast('已记入大事记', 'success');
+    } catch (cause) {
+      addToast(cause instanceof Error ? cause.message : '记入大事记失败', 'error');
+    }
+  }
+
+  const flashes = (page?.items ?? []).filter((item) => item.kind !== 'ARTICLE');
+  const articles = (page?.items ?? []).filter((item) => item.kind === 'ARTICLE');
+
+  function story(item: NewsReport, depth: boolean, index: number) {
+    const content = <>
+      <div className={depth ? 'news-card-meta' : 'news-flash-meta'}>
+        <span>{item.sourceName}</span><small>{item.sourceTier}</small>
+        {item.unread ? <em>未读</em> : null}
+        {item.contentVersion > 1 ? <em>原文更新 · v{item.contentVersion}</em> : null}
+      </div>
+      <h3>{highlight(item.title, query.query)}</h3>
+      <p>{highlight(item.content, query.query)}</p>
+      {depth ? <span className="news-card-action">阅读详情与原文 <b aria-hidden="true">↗</b></span> : null}
+    </>;
+    const body = <>
+      <button type="button" className="news-story-open news-item-link" aria-label={`阅读资讯：${item.title}`} onClick={() => setSelected(item)}>{content}</button>
+      <button type="button" className={`major-event-save${savedItems.has(item.id) ? ' is-saved' : ''}`}
+        disabled={savedItems.has(item.id)} aria-label={`记入大事记：${item.title}`} onClick={() => void saveMajorEvent(item)}>
+        {savedItems.has(item.id) ? '✓ 已记入大事记' : '+ 记入大事记'}
+      </button>
+      <div className="news-classification"><span>{item.categoryName ?? '未归类'}</span>
+        <button type="button" className="ghost-button" onClick={() => setSelected(item)}>详情与分类</button>
+      </div>
+    </>;
+    return depth
+      ? <article key={item.id} className="news-depth-card" data-flow-surface={item.categoryCode || 'review'}>{body}</article>
+      : <article key={item.id} className={index === 0 ? 'news-flash-item is-latest' : 'news-flash-item'}>
+          <time dateTime={item.publishedAt}>{dateTime(item.publishedAt).slice(-5)}<small>{dateTime(item.publishedAt).slice(5, 10)}</small></time>
+          <span className="news-pulse-dot" aria-hidden="true" />
+          <div className="news-flash-content" data-flow-surface={item.categoryCode || 'active'}>{body}</div>
+        </article>;
+  }
+
   return (
-    <section className={`news-window${compact ? ' is-compact' : ''}`} aria-label="市场资讯">
-      <header className="news-window-header">
-        <div>
-          <span className="news-window-eyebrow">资讯观察</span>
+    <FlowField mode="workspace" label="市场资讯面板" className="glass-workspace">
+    <section className={`news-view${compact ? ' is-compact' : ''}`} aria-label="市场资讯">
+      <header className="news-command-bar" data-flow-surface="TECHNOLOGY">
+        <div className="news-command-copy">
+          <div className="news-live-label"><span aria-hidden="true" /> LIVE MARKET WIRE</div>
           <h1>市场正在发生</h1>
-          <p>追踪原始报道、内容更新与股票反应</p>
+          <p>{page?.items[0]?.title ?? '追踪原始报道、内容更新与股票反应'}</p>
         </div>
-        <div className="news-window-actions">
-          <button type="button" onClick={onOpenMajorEvents}>
-            查看大事记
+        <div className="news-sync-state" aria-live="polite">
+          <span>{page ? `${page.sources.length} 个资讯来源` : '连接中'}</span>
+          <strong>{page?.asOfTime ? `查询时间 ${dateTime(page.asOfTime)}` : '等待首批资讯'}</strong>
+          <button type="button" className="ghost-button news-refresh" aria-label="刷新资讯" disabled={syncing} onClick={() => void refreshSources()}>
+            {syncing ? '提交中…' : '立即刷新'}
           </button>
-          <button type="button" disabled={syncing} onClick={() => void refreshSources()}>
-            {syncing ? '提交中…' : '同步来源'}
-          </button>
+          <button type="button" className="major-events-link" onClick={onOpenMajorEvents}>查看大事记 <span aria-hidden="true">→</span></button>
         </div>
       </header>
-      <form
-        className="news-window-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          apply(draft);
-        }}
-      >
-        <label className="news-window-search">
-          检索完整窗口
-          <input
-            type="search"
-            aria-label="搜索资讯"
-            value={draft.query}
-            placeholder="公司、行业或事件关键词"
-            onChange={(event) => setDraft({ ...draft, query: event.target.value })}
-            maxLength={100}
-          />
-        </label>
-        <label>
-          排除词
-          <input
-            value={draft.exclude}
-            placeholder="不包含的关键词"
-            onChange={(event) => setDraft({ ...draft, exclude: event.target.value })}
-            maxLength={100}
-          />
-        </label>
-        <label>
-          来源
-          <select value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })}>
-            <option value="ALL">全部来源</option>
-            {(page?.sources ?? []).map((source) => (
-              <option key={source}>{source}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          时间
-          <select value={draft.hours} onChange={(event) => setDraft({ ...draft, hours: Number(event.target.value) })}>
-            <option value={36}>最近36小时</option>
-            <option value={24}>最近24小时</option>
-            <option value={6}>最近6小时</option>
-          </select>
-        </label>
-        <label>
-          类型
-          <select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value })}>
-            <option value="ALL">全部内容</option>
-            <option value="FLASH">实时快讯</option>
-            <option value="ARTICLE">要闻文章</option>
-          </select>
-        </label>
-        <label className="news-window-check">
-          <input
-            type="checkbox"
-            checked={draft.unreadOnly}
-            onChange={(event) => setDraft({ ...draft, unreadOnly: event.target.checked })}
-          />
-          只看未读
-        </label>
-        <button type="submit" className="news-window-primary">
-          检索
-        </button>
-      </form>
-      <nav className="news-window-categories" aria-label="资讯分类">
+      {page?.sourceHealth?.length ? <details className="news-source-health">
+        <summary>
+          <span className="news-health-title"><i aria-hidden="true" />来源同步</span>
+          <span className="news-health-summary">
+            {page.sourceHealth.every((item) => item.status === 'HEALTHY')
+              ? `${page.sourceHealth.length} 个渠道运行正常`
+              : `${page.sourceHealth.filter((item) => item.status === 'HEALTHY').length} / ${page.sourceHealth.length} 个渠道正常`}
+          </span>
+          <span className="news-health-toggle">详情 <span aria-hidden="true">⌄</span></span>
+        </summary>
+        <div className="news-health-grid">
+          {page.sourceHealth.map((item) => <div className="news-health-item" key={item.providerCode}>
+            <div><strong>{providerLabel(item.providerCode)}</strong>
+              <span className={item.status === 'HEALTHY' ? 'news-health-ok' : 'news-health-warning'}>
+                {({ HEALTHY: '已同步', DEGRADED: '保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' } as Record<string, string>)[item.status] ?? '状态未知'}
+              </span>
+            </div>
+            <span>最近成功 <time>{item.lastSuccessAt ? dateTime(item.lastSuccessAt) : '暂无'}</time></span>
+            {item.status !== 'HEALTHY' && item.lastAttemptAt
+              ? <span>最近尝试 <time>{dateTime(item.lastAttemptAt)}</time></span> : null}
+          </div>)}
+        </div>
+      </details> : null}
+
+      <nav className="news-category-rail" aria-label="资讯分类">
         {[{ code: 'ALL', name: '全部' }, ...categories, { code: 'UNCLASSIFIED', name: '未归类' }].map((category) => (
-          <button
-            type="button"
-            key={category.code}
-            aria-pressed={query.category === category.code}
-            onClick={() => apply({ ...query, category: category.code })}
-          >
-            {category.name}
-            <span>{page?.categoryCounts?.[category.code] ?? 0}</span>
+          <button type="button" key={category.code} className={query.category === category.code ? 'active' : ''}
+            aria-pressed={query.category === category.code} onClick={() => apply({ ...query, category: category.code })}>
+            <span>{category.name}</span><b>{page?.categoryCounts?.[category.code] ?? 0}</b>
           </button>
         ))}
       </nav>
+      <form className="news-filter-rail" onSubmit={(event) => { event.preventDefault(); apply(draft); }}>
+        <div className="news-search-control">
+          <label className="news-search"><span aria-hidden="true">⌕</span>
+            <input type="search" aria-label="搜索资讯" value={draft.query} placeholder="搜索公司、行业或事件"
+              maxLength={100} onChange={(event) => setDraft({ ...draft, query: event.target.value })} />
+          </label>
+          <button type="submit" className="news-search-submit">检索</button>
+        </div>
+        <label className="news-time-filter"><span>时间范围</span>
+          <select aria-label="资讯时间范围" value={draft.hours} onChange={(event) => apply({ ...draft, hours: Number(event.target.value) })}>
+            {[6, 12, 24, 36].map((value) => <option key={value} value={value}>最近 {value} 小时</option>)}
+          </select>
+        </label>
+        <div className="news-source-filter" role="group" aria-label="资讯来源">
+          {['ALL', ...(page?.sources ?? [])].map((source) => <button type="button" key={source}
+            className={query.source === source ? 'active' : ''} onClick={() => apply({ ...draft, source })}>
+            {source === 'ALL' ? '全部来源' : providerLabel(source)}
+          </button>)}
+        </div>
+        <details className="news-advanced-filters"><summary>更多筛选</summary>
+          <div>
+            <label>排除词<input value={draft.exclude} placeholder="不包含的关键词" maxLength={100} onChange={(event) => setDraft({ ...draft, exclude: event.target.value })} /></label>
+            <label>类型<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value })}>
+              <option value="ALL">全部内容</option><option value="FLASH">实时快讯</option><option value="ARTICLE">要闻文章</option>
+            </select></label>
+            <label className="news-unread-filter"><input type="checkbox" checked={draft.unreadOnly} onChange={(event) => setDraft({ ...draft, unreadOnly: event.target.checked })} />只看未读</label>
+            <button type="button" className="ghost-button" aria-pressed={compact} onClick={() => setCompact(!compact)}>{compact ? '舒适阅读' : '紧凑阅读'}</button>
+          </div>
+        </details>
+      </form>
       <div className="news-window-saved">
         <span>我的筛选</span>
         {filters.map((filter) => (
@@ -307,96 +342,11 @@ export function LiveNewsPanel({
           </div>
         </details>
       </div>
-      <div className="news-window-status">
-        <span>{page ? `找到 ${page.total} 条 · 按发布时间排序` : '正在读取新闻…'}</span>
-        <button type="button" aria-pressed={compact} onClick={() => setCompact(!compact)}>
-          {compact ? '舒适阅读' : '紧凑阅读'}
-        </button>
-      </div>
-      {page?.sourceHealth?.length ? <details className="news-source-health">
-        <summary>
-          <span className="news-health-title"><i aria-hidden="true" />来源同步</span>
-          <span className="news-health-summary">
-            {page.sourceHealth.every((item) => item.status === 'HEALTHY')
-              ? `${page.sourceHealth.length} 个渠道运行正常`
-              : `${page.sourceHealth.filter((item) => item.status === 'HEALTHY').length} / ${page.sourceHealth.length} 个渠道正常`}
-          </span>
-          <span className="news-health-toggle">详情 <span aria-hidden="true">⌄</span></span>
-        </summary>
-        <div className="news-health-grid">
-          {page.sourceHealth.map((item) => <div className="news-health-item" key={item.providerCode}>
-            <div><strong>{providerLabel(item.providerCode)}</strong>
-              <span className={item.status === 'HEALTHY' ? 'news-health-ok' : 'news-health-warning'}>
-                {({ HEALTHY: '已同步', DEGRADED: '保留旧资讯', UNAVAILABLE: '暂不可用', WAITING: '等待同步' } as Record<string, string>)[item.status] ?? '状态未知'}
-              </span>
-            </div>
-            <span>最近成功 <time>{item.lastSuccessAt ? dateTime(item.lastSuccessAt) : '暂无'}</time></span>
-            {item.status !== 'HEALTHY' && item.lastAttemptAt
-              ? <span>最近尝试 <time>{dateTime(item.lastAttemptAt)}</time></span> : null}
-          </div>)}
-        </div>
-      </details> : null}
-      {error ? (
-        <div className="news-window-error" role="alert">
-          {error}
-          <button type="button" onClick={() => void load(query)}>
-            重试
-          </button>
-        </div>
-      ) : null}
-      {pending ? (
-        <button
-          type="button"
-          className="news-window-update"
-          onClick={() => {
-            setQuery({
-              ...query,
-              page: 0,
-              asOfSequence: 0,
-              asOfTime: undefined,
-            });
-          }}
-        >
-          有新报道或内容更新，点击查看
-        </button>
-      ) : null}
-      <div className="news-window-list" aria-busy={loading}>
-        {loading && !page ? <p className="news-window-empty">正在读取已采集新闻…</p> : null}
-        {page?.items.map((item) => (
-          <article key={item.id} className={`news-window-row${item.unread ? ' is-unread' : ''}`}>
-            <div className="news-window-time">
-              <time>{dateTime(item.publishedAt).slice(5)}</time>
-              <span>{item.sourceName}</span>
-            </div>
-            <button type="button" className="news-window-story" onClick={() => setSelected(item)}>
-              <div className="news-window-labels">
-                {item.unread ? <span className="news-window-unread">未读</span> : null}
-                <span>{item.categoryName ?? '未归类'}</span>
-                {item.historicalBackfill ? <span>补充收录</span> : null}
-                {item.contentVersion > 1 ? <span>原文更新 · v{item.contentVersion}</span> : null}
-              </div>
-              <h2>{highlight(item.title, query.query)}</h2>
-              <p>{highlight(item.content, query.query)}</p>
-            </button>
-            <span className="news-window-chevron" aria-hidden="true">
-              ↗
-            </span>
-          </article>
-        ))}
-        {page && !page.items.length ? (
-          <div className="news-window-empty">
-            <h2>没有匹配的新闻</h2>
-            <p>尝试缩短关键词、放宽来源，或同步最新资讯。</p>
-            <button type="button" onClick={() => apply(initialQuery)}>
-              清除筛选
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <footer className="news-window-pagination">
+      <nav className="news-pagination" aria-label="资讯分页">
         <span>
-          第 {(page?.page ?? 0) + 1} 页 · 每页 {query.size} 条
+          共 {page?.total ?? 0} 条 · 第 {(page?.page ?? 0) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / query.size))} 页
         </span>
+        <div className="news-page-actions">
         <button
           type="button"
           disabled={loading || !page || page.page === 0}
@@ -425,7 +375,46 @@ export function LiveNewsPanel({
         >
           下一页
         </button>
-      </footer>
+        </div>
+      </nav>
+      {error ? (
+        <div className="news-window-error" role="alert">
+          {error}
+          <button type="button" onClick={() => void load(query)}>
+            重试
+          </button>
+        </div>
+      ) : null}
+      {pending ? (
+        <button
+          type="button"
+          className="news-window-update"
+          onClick={() => {
+            setQuery({
+              ...query,
+              page: 0,
+              asOfSequence: 0,
+              asOfTime: undefined,
+            });
+          }}
+        >
+          有新报道或内容更新，点击查看
+        </button>
+      ) : null}
+
+      <div className="news-board" aria-busy={loading}>
+        <section className="news-flash-panel" aria-labelledby="news-flash-heading">
+          <div className="news-section-heading"><div><span>01 · LIVE SIGNAL</span><h2 id="news-flash-heading">实时快讯</h2></div><strong>{flashes.length} 条</strong></div>
+          {loading && !page ? <div className="news-skeleton" aria-label="正在加载资讯"><span /><span /><span /></div>
+            : flashes.length ? <div className="news-timeline" role="feed" aria-label="实时快讯时间线">{flashes.map((item, index) => story(item, false, index))}</div>
+            : <div className="news-empty"><p>没有匹配的实时快讯</p></div>}
+        </section>
+        <aside className="news-depth-panel" role="region" aria-label="深度资讯">
+          <div className="news-section-heading"><div><span>02 · READ DEEPER</span><h2>要闻精华</h2></div><strong>{articles.length} 篇</strong></div>
+          <div className="news-depth-list">{articles.length ? articles.map((item, index) => story(item, true, index))
+            : <div className="news-empty"><p>暂无匹配的深度资讯</p></div>}</div>
+        </aside>
+      </div>
       {selected ? (
         <NewsReportDrawer
           key={selected.id}
@@ -439,6 +428,7 @@ export function LiveNewsPanel({
         />
       ) : null}
     </section>
+    </FlowField>
   );
 }
 
