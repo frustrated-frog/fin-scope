@@ -12,6 +12,11 @@ class OvernightStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript('''
+                CREATE TABLE IF NOT EXISTS overnight_capture_plan (
+                    id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS overnight_capture_run (
+                    signal_date TEXT NOT NULL, cutoff TEXT NOT NULL, payload TEXT NOT NULL,
+                    PRIMARY KEY(signal_date, cutoff));
                 CREATE TABLE IF NOT EXISTS overnight_minute (
                     code TEXT NOT NULL, ended_at TEXT NOT NULL, payload TEXT NOT NULL,
                     PRIMARY KEY(code, ended_at));
@@ -47,15 +52,47 @@ class OvernightStore:
                 (identifier, key, report['generatedAt'], json.dumps(report), json.dumps(inputs)))
             return json.loads(db.execute('SELECT payload FROM overnight_prediction WHERE id=?', (identifier,)).fetchone()[0])
 
-    def history(self, limit=50):
+    def iter_history(self, limit=None):
+        # Stream every archive, including records older than the display window.
+        query = """SELECT p.payload, o.payload FROM overnight_prediction p
+                   LEFT JOIN overnight_outcome o ON o.prediction_id=p.id AND o.observed_at=(
+                       SELECT MAX(observed_at) FROM overnight_outcome WHERE prediction_id=p.id)
+                   ORDER BY p.generated_at DESC, p.id"""
         with self.connect() as db:
-            rows = db.execute('SELECT payload FROM overnight_prediction ORDER BY generated_at DESC LIMIT ?', (limit,)).fetchall()
-            result = []
-            for row in rows:
-                report = json.loads(row[0])
-                outcome = db.execute('SELECT payload FROM overnight_outcome WHERE prediction_id=? ORDER BY observed_at DESC LIMIT 1', (report['id'],)).fetchone()
-                result.append({**report, 'outcome': json.loads(outcome[0]) if outcome else None})
-        return result
+            cursor = db.execute(query + (' LIMIT ?' if limit is not None else ''),
+                                (limit,) if limit is not None else ())
+            for row in cursor:
+                yield {**json.loads(row[0]), 'outcome': json.loads(row[1]) if row[1] else None}
+
+    def history(self, limit=50):
+        return list(self.iter_history(limit))
+
+    def plan(self):
+        with self.connect() as db:
+            row = db.execute('SELECT payload FROM overnight_capture_plan WHERE id=1').fetchone()
+        return json.loads(row[0]) if row else {'enabled': False, 'instrumentCodes': [], 'costBps': 20}
+
+    def save_plan(self, plan):
+        with self.connect() as db:
+            db.execute('INSERT INTO overnight_capture_plan VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
+                       (json.dumps(plan),))
+        return plan
+
+    def claim_run(self, run):
+        with self.connect() as db:
+            return db.execute('INSERT OR IGNORE INTO overnight_capture_run VALUES(?,?,?)',
+                (run['signalDate'], run['cutoff'], json.dumps(run))).rowcount == 1
+
+    def finish_run(self, run):
+        with self.connect() as db:
+            db.execute('UPDATE overnight_capture_run SET payload=? WHERE signal_date=? AND cutoff=?',
+                       (json.dumps(run), run['signalDate'], run['cutoff']))
+
+    def runs(self, limit=30):
+        with self.connect() as db:
+            rows = db.execute('SELECT payload FROM overnight_capture_run ORDER BY signal_date DESC, cutoff DESC LIMIT ?',
+                              (limit,)).fetchall()
+        return [json.loads(row[0]) for row in rows]
 
     def outcome(self, identifier, now, result):
         with self.connect() as db:

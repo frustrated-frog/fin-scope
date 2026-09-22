@@ -11,7 +11,7 @@ class OvernightService:
         self.provider = provider
         self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None))
 
-    def generate(self, request):
+    def generate(self, request, freeze_all=False):
         now = self.clock()
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
         warnings = []
@@ -29,13 +29,13 @@ class OvernightService:
             report['evidenceKind'] = 'RETROSPECTIVE'
         report['sourceCode'] = self.provider.source
         report['warnings'].extend(warnings)
-        if report['status'] == 'WATCH':
+        if report['status'] == 'WATCH' or freeze_all:
             report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])
         self._settle_cached(now)
         return report
 
     def _settle_cached(self, now):
-        for report in self.store.history():
+        for report in self.store.iter_history():
             if (report.get('outcome') or {}).get('status') == 'SETTLED':
                 continue
             bars = self.store.bars(report['instrumentCode'], now)
@@ -44,7 +44,7 @@ class OvernightService:
 
     def refresh_outcomes(self):
         now = self.clock()
-        pending = [r for r in self.store.history()
+        pending = [r for r in self.store.iter_history()
                    if (r.get('outcome') or {}).get('status') != 'SETTLED']
         pending.sort(key=lambda r: (r.get('outcome') or {}).get('quoteRefreshAt', ''))
         codes = list(dict.fromkeys(r['instrumentCode'] for r in pending))[:3]

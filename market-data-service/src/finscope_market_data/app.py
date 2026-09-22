@@ -16,7 +16,9 @@ from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.peer_context import research_context
-from finscope_market_data.overnight.models import OvernightRequest
+from finscope_market_data.overnight.models import OvernightRequest, CapturePlan
+from finscope_market_data.overnight.capture import OvernightCapture
+from finscope_market_data.overnight.validation import summarize as summarize_overnight
 from finscope_market_data.overnight.provider import OvernightMinuteProvider
 from finscope_market_data.overnight.store import OvernightStore
 from finscope_market_data.overnight.service import OvernightService
@@ -128,6 +130,8 @@ def create_app(
     joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
     overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
+    capture = OvernightCapture(overnight)
+
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if application.state.router is None:
@@ -185,9 +189,13 @@ def create_app(
                     ),
                 )
             )
+        capture_stop = asyncio.Event()
+        capture_task = asyncio.create_task(capture.run(capture_stop))
         try:
             yield
         finally:
+            capture_stop.set()
+            await capture_task
             close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):
@@ -390,6 +398,18 @@ def create_app(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
         )
+
+    @application.get("/v1/quant/overnight/capture")
+    async def capture_status():
+        return await asyncio.to_thread(capture.status)
+
+    @application.post("/v1/quant/overnight/capture")
+    async def configure_capture(plan: CapturePlan):
+        return await asyncio.to_thread(capture.configure, plan)
+
+    @application.get("/v1/quant/overnight/validation")
+    async def overnight_validation():
+        return await asyncio.to_thread(summarize_overnight, overnight.store)
 
     @application.post("/v1/quant/overnight/generate")
     async def generate_overnight(request: OvernightRequest):

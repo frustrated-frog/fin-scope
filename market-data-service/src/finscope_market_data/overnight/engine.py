@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from finscope_market_data.forecast.trading_calendar import next_session
 
-VERSION = 'overnight-local-v1'
+VERSION = 'overnight-local-v2'
 TARGETS = ('OPEN', '10:00', '14:30', 'CLOSE')
 
 
@@ -76,7 +76,7 @@ def build_samples(grouped, request, through):
         price = getattr(entry, field)
         for target in TARGETS:
             bar, field = target_bar(grouped[following], target)
-            if bar is None or bar.ended_at >= through or bar.amount <= 0:
+            if bar is None or bar.ended_at >= through or bar.amount <= 0 or bar.high == bar.low:
                 continue
             # Raw prices do not prove fills; exclude one-price proxy entry intervals.
             if request.mode == 'TAIL_ENTRY' and entry.high == entry.low:
@@ -121,7 +121,7 @@ def predict(request, bars, now):
         'warnings': ['价格代理不保证成交；未验证停牌、涨跌停队列与公司行为，暂不生成买入或卖出指令。']}
     if now < cutoff:
         return {**base, 'status': 'BEFORE_CUTOFF'}
-    if following is None:
+    if following is None or next_session(request.signal_date - timedelta(days=1)) != request.signal_date:
         return {**base, 'status': 'CALENDAR_UNAVAILABLE'}
     if current is None:
         return {**base, 'warnings': base['warnings'] + ['决策时点前的完整 5 分钟行情不足；禁止用收盘日线替代。']}
@@ -146,6 +146,8 @@ def predict(request, bars, now):
         lower, upper = (np.quantile(residuals, [.1, .9]) if residuals else (0, 0))
         base['targets'].append({'target': target, 'status': 'WATCH', 'sampleCount': len(values),
             'upProbability': probability, 'expectedNetReturn': expected,
+            'baselineProbability': float(np.mean([s['actualNetReturn'] > 0 for s in values])),
+            'baselineExpectedNetReturn': float(np.mean([s['actualNetReturn'] for s in values])),
             'lowerNetReturn': expected + float(lower), 'upperNetReturn': expected + float(upper),
             'trainingThrough': values[-1]['exitAt'], 'validationCount': len(checks),
             'brierScore': float(np.mean([(s['probability'] - (s['actual'] > 0)) ** 2 for s in checks])) if checks else None,
@@ -163,20 +165,27 @@ def settle(report, bars, now):
     request = OvernightRequest.model_validate(report['request'])
     target_date = next_session(request.signal_date)
     entry, field = entry_bar(grouped.get(request.signal_date, {}), request)
-    result = {'status': 'PENDING', 'targets': [], 'executionStatus': 'UNVERIFIED'}
+    result = {'status': 'PENDING', 'targets': [], 'executionStatus': 'UNVERIFIED', 'missingReasons': []}
     if entry is None or not target_date:
+        result['missingReasons'].append('ENTRY_DATA_MISSING' if target_date else 'CALENDAR_UNAVAILABLE')
         return result
     price = getattr(entry, field)
     if request.mode == 'TAIL_ENTRY' and (entry.amount <= 0 or entry.high == entry.low):
-        return {**result, 'status': 'ENTRY_UNVERIFIED'}
+        return {**result, 'status': 'ENTRY_UNVERIFIED', 'missingReasons': ['ENTRY_NOT_EXECUTABLE']}
     for target in TARGETS:
         bar, field = target_bar(grouped.get(target_date, {}), target)
         if bar is None or bar.amount <= 0:
+            result['missingReasons'].append(f'{target}:DATA_MISSING_OR_NOT_DUE')
+            continue
+        if report.get('modelVersion') == VERSION and bar.high == bar.low:
+            result['missingReasons'].append(f'{target}:EXIT_UNVERIFIED')
             continue
         net = getattr(bar, field) / price - 1 - request.cost_bps / 10000
         prediction = next((x for x in report['targets'] if x['target'] == target), {})
         probability = prediction.get('upProbability')
         result['targets'].append({'target': target, 'actualNetReturn': net, 'proxyEntryPrice': price,
-            'brierScore': (probability - (net > 0)) ** 2 if probability is not None else None})
+            'brierScore': (probability - (net > 0)) ** 2 if probability is not None else None,
+            'baselineBrier': (prediction['baselineProbability'] - (net > 0)) ** 2
+                if prediction.get('baselineProbability') is not None else None})
     result['status'] = 'SETTLED' if len(result['targets']) == 4 else 'PARTIAL' if result['targets'] else 'PENDING'
     return result

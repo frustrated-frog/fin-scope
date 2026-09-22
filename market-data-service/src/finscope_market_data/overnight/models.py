@@ -10,7 +10,7 @@ class OvernightRequest(BaseModel):
     instrument_code: str = Field(pattern=r'^(?:(?:600|601|603|605)\d{3}\.SH|(?:000|001|002|003|300|301)\d{3}\.SZ)$')
     signal_date: date
     mode: Literal['TAIL_ENTRY', 'AFTER_CLOSE_HOLDING']
-    cutoff: Literal['14:30', '14:50', '15:00']
+    cutoff: Literal['14:30', '14:45', '14:50', '15:00']
     cost_bps: float = Field(default=20, ge=0, le=200)
     cost_basis: float | None = Field(default=None, gt=0)
     quantity: float | None = Field(default=None, gt=0)
@@ -43,4 +43,27 @@ class MinuteBar(BaseModel):
             raise ValueError('分钟价格范围无效')
         if self.ended_at.tzinfo is not None:
             raise ValueError('分钟时间统一使用上海本地无时区时间')
+        return self
+
+
+class CapturePlan(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra='forbid', allow_inf_nan=False)
+    enabled: bool = False
+    instrument_codes: list[str] = Field(default_factory=list, max_length=10)
+    cost_bps: float = Field(default=20, ge=0, le=200)
+
+    @model_validator(mode='after')
+    def validate_codes(self):
+        codes = []
+        for value in self.instrument_codes:
+            code = value.strip().upper()
+            if len(code) == 6 and code.isdigit():
+                code += '.SH' if code.startswith('6') else '.SZ'
+            OvernightRequest(instrument_code=code, signal_date=date(2026, 1, 5),
+                             mode='TAIL_ENTRY', cutoff='14:30')
+            if code not in codes:
+                codes.append(code)
+        self.instrument_codes = codes
+        if self.enabled and not codes:
+            raise ValueError('启用自动留档前请设置观察名单')
         return self
