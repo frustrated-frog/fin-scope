@@ -52,6 +52,10 @@ public class NewsClassificationCoordinator {
         for (int start = 0; start < claimed.size(); start += BATCH_SIZE) {
             List<NewsClassificationCandidate> batch = new ArrayList<NewsClassificationCandidate>(
                     claimed.subList(start, Math.min(start + BATCH_SIZE, claimed.size())));
+            if (!capabilities.isModelEnabled()) {
+                classify(batch);
+                continue;
+            }
             try {
                 executor.execute(() -> classify(batch));
             } catch (RuntimeException error) {
@@ -111,7 +115,9 @@ public class NewsClassificationCoordinator {
     private String batchInput(List<NewsClassificationCandidate> batch) {
         StringBuilder value = new StringBuilder("items=");
         for (NewsClassificationCandidate candidate : batch) {
-            if (value.length() > 6) value.append(',');
+            if (value.length() > 6) {
+                value.append(',');
+            }
             value.append(candidate.getItemId());
         }
         return value.toString();
@@ -120,7 +126,9 @@ public class NewsClassificationCoordinator {
     private String output(Map<String, NewsClassificationAgent.Decision> decisions) {
         StringBuilder value = new StringBuilder();
         for (NewsClassificationAgent.Decision decision : decisions.values()) {
-            if (value.length() > 0) value.append('\n');
+            if (value.length() > 0) {
+                value.append('\n');
+            }
             value.append(decision.getItemId()).append('=').append(decision.getCategoryCode());
         }
         return value.toString();

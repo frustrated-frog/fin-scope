@@ -22,7 +22,10 @@ public class ViewRevisionSseRegistry implements ViewRevisionPublisher {
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
         subscribers.add(emitter);
         emitter.onCompletion(() -> subscribers.remove(emitter));
-        emitter.onTimeout(() -> subscribers.remove(emitter));
+        emitter.onTimeout(() -> {
+            subscribers.remove(emitter);
+            emitter.complete();
+        });
         emitter.onError(error -> subscribers.remove(emitter));
         return emitter;
     }
