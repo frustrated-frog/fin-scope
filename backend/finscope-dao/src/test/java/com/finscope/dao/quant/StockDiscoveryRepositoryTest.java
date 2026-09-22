@@ -117,6 +117,8 @@ class StockDiscoveryRepositoryTest {
         assertTrue(repository.tryMarkRunning(run.getId(), "attempt-old"));
         JdbcTemplate jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbcTemplate");
         jdbc.update("UPDATE stock_discovery_run SET started_at='2000-01-01 00:00:00' WHERE id=?", run.getId());
+        assertFalse(repository.tryMarkRunning(run.getId(), "attempt-new"));
+        assertEquals(1, repository.expireRunningBefore(LocalDateTime.now().minusMinutes(30), LocalDateTime.now(), 100));
         assertTrue(repository.tryMarkRunning(run.getId(), "attempt-new"));
 
         assertThrows(IllegalStateException.class,
@@ -125,6 +127,65 @@ class StockDiscoveryRepositoryTest {
 
         repository.complete(run.getId(), "attempt-new", report());
         assertEquals("SUCCEEDED", repository.findById(run.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void expiresOnlyOverdueRunningAttemptsAndStopsAfterTheRetryBudget() {
+        StockDiscoveryRun stale = repository.createIfAbsent("stale", LocalDate.of(2026, 9, 1),
+                6000d, "v1", "RECOVERY");
+        StockDiscoveryRun active = repository.createIfAbsent("active", LocalDate.of(2026, 9, 2),
+                6000d, "v1", "RECOVERY");
+        assertTrue(repository.tryMarkRunning(stale.getId(), "old"));
+        assertTrue(repository.tryMarkRunning(active.getId(), "active"));
+        JdbcTemplate jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbcTemplate");
+        jdbc.update("UPDATE stock_discovery_run SET started_at=NULL,created_at='2000-01-01T00:00:00' WHERE id=?", stale.getId());
+        LocalDateTime now = LocalDateTime.now();
+
+        assertEquals(1, repository.expireRunningBefore(now.minusMinutes(30), now, 100));
+        assertEquals(0, repository.expireRunningBefore(now.minusMinutes(30), now, 100));
+        assertEquals("RUNNING", repository.findById(active.getId()).orElseThrow().getStatus());
+        assertEquals("FAILED", repository.findById(stale.getId()).orElseThrow().getStatus());
+        assertTrue(repository.tryMarkRunning(stale.getId(), "second"));
+        repository.fail(stale.getId(), "old", "late failure");
+        assertEquals("RUNNING", repository.findById(stale.getId()).orElseThrow().getStatus());
+        repository.fail(stale.getId(), "second", "second failure");
+        assertTrue(repository.tryMarkRunning(stale.getId(), "third"));
+        repository.fail(stale.getId(), "third", "third failure");
+        assertFalse(repository.tryMarkRunning(stale.getId(), "fourth"));
+        assertEquals(3, repository.findById(stale.getId()).orElseThrow().getAttemptCount());
+    }
+
+    @Test
+    void lateCompletionCannotDeleteAnAlreadyPublishedReport() {
+        StockDiscoveryRun run = repository.createIfAbsent("published", LocalDate.of(2026, 9, 1),
+                6000d, "v1", "RECOVERY");
+        assertTrue(repository.tryMarkRunning(run.getId(), "current"));
+        repository.complete(run.getId(), "current", report());
+        JdbcTemplate jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbcTemplate");
+        Long candidateId = jdbc.queryForObject("SELECT MIN(id) FROM stock_discovery_candidate WHERE run_id=?", Long.class, run.getId());
+
+        assertThrows(IllegalStateException.class, () -> repository.complete(run.getId(), "old", report()));
+
+        assertEquals(candidateId, jdbc.queryForObject("SELECT MIN(id) FROM stock_discovery_candidate WHERE run_id=?", Long.class, run.getId()));
+        assertEquals("SUCCEEDED", repository.findById(run.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void failedDetailWriteRollsBackTheTerminalStatusAndAllChildren() {
+        StockDiscoveryRun run = repository.createIfAbsent("rollback", LocalDate.of(2026, 9, 1),
+                6000d, "v1", "RECOVERY");
+        assertTrue(repository.tryMarkRunning(run.getId(), "current"));
+        JdbcTemplate jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbcTemplate");
+        jdbc.execute("CREATE TRIGGER reject_candidate BEFORE INSERT ON stock_discovery_candidate "
+                + "BEGIN SELECT RAISE(ABORT, 'test write failure'); END");
+        var transactions = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getDataSource()));
+
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> transactions.executeWithoutResult(status -> repository.complete(run.getId(), "current", report())));
+
+        assertEquals("RUNNING", repository.findById(run.getId()).orElseThrow().getStatus());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM stock_discovery_sector WHERE run_id=?", Integer.class, run.getId()));
     }
 
     private StockDiscoveryReport report() {

@@ -8,9 +8,11 @@ import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.rpc.quant.PythonStockDiscoveryClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +22,10 @@ import java.util.concurrent.Executor;
 @Service
 public class StockDiscoveryService {
     public static final String POLICY_VERSION = "stock-discovery-v8-calibration-audit";
+    @Value("${finscope.stock-discovery.max-attempts:3}")
+    private int maxAttempts = 3;
+    @Value("${finscope.python-market-data.discovery-timeout-ms:900000}")
+    private long discoveryTimeoutMs = 900000;
     @Resource
     private StockDiscoveryRepository repository;
     @Resource
@@ -33,7 +39,8 @@ public class StockDiscoveryService {
         String runKey = businessDate + ":" + POLICY_VERSION;
         StockDiscoveryRun run = repository.createIfAbsent(
                 runKey, businessDate, 6000d, POLICY_VERSION, triggerType);
-        if ("SUCCEEDED".equals(run.getStatus())) {
+        if ("SUCCEEDED".equals(run.getStatus()) || "RUNNING".equals(run.getStatus())
+                || run.getAttemptCount() >= Math.max(1, maxAttempts)) {
             return run;
         }
         StockDiscoveryRequestedEvent event = event(run);
@@ -71,6 +78,20 @@ public class StockDiscoveryService {
             repository.fail(event.getRunId(), attemptToken, safe(error));
             throw error;
         }
+    }
+
+    public void recoverExpiredRuns() {
+        LocalDateTime now = LocalDateTime.now();
+        // Keep the lease longer than the HTTP budget, including connection/response handling.
+        long leaseMillis = Math.max(30 * 60 * 1000L, discoveryTimeoutMs + 60 * 1000L);
+        int expired = repository.expireRunningBefore(now.minusNanos(leaseMillis * 1_000_000L), now, 100);
+        if (expired > 0) {
+            log.warn("股票发现超时执行已回收，count={}", expired);
+        }
+    }
+
+    public boolean isRetryPending(StockDiscoveryRun run) {
+        return "FAILED".equals(run.getStatus()) && run.getAttemptCount() < Math.max(1, maxAttempts);
     }
 
     public Optional<StockDiscoveryRun> latest() {

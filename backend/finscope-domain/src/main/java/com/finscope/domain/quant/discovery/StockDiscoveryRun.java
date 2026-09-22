@@ -12,6 +12,7 @@ public class StockDiscoveryRun {
     private LocalDate businessDate;
     private String triggerType;
     private String status;
+    private int attemptCount;
     private double budget;
     private String policyVersion;
     private String asOfDate;

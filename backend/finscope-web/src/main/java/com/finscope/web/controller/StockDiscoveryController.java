@@ -69,7 +69,8 @@ public class StockDiscoveryController {
         result.put("status", run.getStatus());
         result.put("businessStatus", run.getStatus());
         result.put("deliveryStatus", run.getStartedAt() == null ? "PENDING" : "DELIVERED");
-        result.put("retryPending", "FAILED".equals(run.getStatus()));
+        result.put("retryPending", service.isRetryPending(run));
+        result.put("attemptCount", run.getAttemptCount());
         result.put("runId", run.getId());
         result.put("businessDate", run.getBusinessDate());
         result.put("nextScheduledAt", nextScheduledAt);
