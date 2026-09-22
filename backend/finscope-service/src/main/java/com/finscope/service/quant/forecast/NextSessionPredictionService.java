@@ -9,6 +9,7 @@ import com.finscope.rpc.quant.QuantDailyBarSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
@@ -23,6 +24,9 @@ import java.util.Map;
 @Slf4j
 public class NextSessionPredictionService {
     private static final ZoneId CHINA_ZONE = ZoneId.of("Asia/Shanghai");
+    @Value("${finscope.next-session-prediction.retry-delay-minutes:15}")
+    private long retryDelayMinutes = 15;
+    private final Map<String, LocalDateTime> retryAfter = new HashMap<>();
     @Resource
     private NextSessionPredictionRepository repository;
     @Resource
@@ -46,21 +50,33 @@ public class NextSessionPredictionService {
         return repository.history(code, limit);
     }
 
-    void settle(LocalDateTime now) {
+    synchronized void settle(LocalDateTime now) {
+        retryAfter.entrySet().removeIf(entry -> !now.isBefore(entry.getValue()));
         Map<String, QuantDailyBarBatch> batches = new HashMap<>();
-        for (NextSessionPredictionRecord record : repository.findPending(100)) {
+        List<NextSessionPredictionRecord> pending = repository.findPending(100);
+        Map<String, LocalDate> fromDates = new HashMap<>();
+        for (NextSessionPredictionRecord record : pending) {
+            fromDates.merge(record.getInstrumentCode(), record.getPrediction().getAsOfDate(),
+                    (left, right) -> left.isBefore(right) ? left : right);
+        }
+        for (NextSessionPredictionRecord record : pending) {
             NextSessionPrediction prediction = record.getPrediction();
             LocalDate target = prediction.getTargetDate();
             if (target.isAfter(now.toLocalDate())
                     || (target.equals(now.toLocalDate()) && now.toLocalTime().isBefore(LocalTime.of(15, 10)))) {
                 continue;
             }
+            if (retryAfter.containsKey(record.getInstrumentCode())) {
+                continue;
+            }
             try {
                 QuantDailyBarBatch batch = batches.computeIfAbsent(record.getInstrumentCode(),
-                        code -> dailyBars.fetch(code, 5000));
+                        code -> dailyBars.fetchSince(code, 5000, fromDates.get(code)));
                 settleRecord(record, batch, now);
             } catch (RuntimeException error) {
-                log.warn("次日预测结果暂不可验证，id={},instrument={}", record.getId(), record.getInstrumentCode(), error);
+                retryAfter.put(record.getInstrumentCode(), now.plusMinutes(Math.max(1, retryDelayMinutes)));
+                log.warn("次日预测结果暂不可验证，id={},instrument={},retryAfter={}",
+                        record.getId(), record.getInstrumentCode(), retryAfter.get(record.getInstrumentCode()), error);
             }
         }
     }

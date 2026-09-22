@@ -88,6 +88,40 @@ class PythonQuantDailyBarSourceTest {
                 () -> mismatched.fetch("600519.SH", 1000)).getErrorType());
     }
 
+    @Test
+    void settlementIgnoresUnneededNegativeQfqHistoryButResearchStillRejectsIt() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var root = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(payload("QFQ", "FRESH_PRIMARY"));
+        var rows = (com.fasterxml.jackson.databind.node.ArrayNode) root.get("data");
+        var old = rows.get(0).deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) old).put("trade_date", "2017-03-17").put("open", -2.2);
+        rows.insert(0, old);
+        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+                "http://127.0.0.1:8000", (provider, uri, headers) -> response(root.toString()));
+
+        assertEquals(1, source.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)).getBars().size());
+        ProviderContractException error = assertThrows(ProviderContractException.class,
+                () -> source.fetch("600519.SH", 5000));
+        assertTrue(error.getMessage().contains("2017-03-17"));
+        assertTrue(error.getMessage().contains("600519.SH"));
+        assertTrue(error.getMessage().contains("open=-2.2"));
+        assertThrows(ProviderContractException.class,
+                () -> source.fetchSince("600519.SH", 5000, LocalDate.of(2017, 3, 17)));
+    }
+
+    @Test
+    void allowsZeroTurnoverButRejectsNegativeVolumeInRequiredWindow() {
+        String zero = payload("QFQ", "FRESH_PRIMARY").replace("\"volume\":1000", "\"volume\":0")
+                .replace("\"amount\":1480500", "\"amount\":0");
+        PythonQuantDailyBarSource valid = new PythonQuantDailyBarSource(
+                "http://127.0.0.1:8000", (provider, uri, headers) -> response(zero));
+        assertEquals(1, valid.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)).getBars().size());
+        PythonQuantDailyBarSource invalid = new PythonQuantDailyBarSource(
+                "http://127.0.0.1:8000", (provider, uri, headers) -> response(zero.replace("\"volume\":0", "\"volume\":-1")));
+        assertThrows(ProviderContractException.class,
+                () -> invalid.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)));
+    }
+
     private static FinanceHttpResponse response(String body) {
         return new FinanceHttpResponse(200, body, Instant.parse("2026-07-16T07:00:01Z"), "hash");
     }
