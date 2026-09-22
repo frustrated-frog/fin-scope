@@ -24,7 +24,7 @@ class PythonQuantDailyBarSourceTest {
             requested.set(uri);
             return response(payload("QFQ", "FRESH_FALLBACK"));
         };
-        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource source = source(
                 "http://127.0.0.1:8000/", http);
 
         QuantDailyBarBatch batch = source.fetch("600519.SH", 1000);
@@ -44,7 +44,7 @@ class PythonQuantDailyBarSourceTest {
     @Test
     void requestsUpToFiveThousandBarsForSingleStockResearch() {
         AtomicReference<URI> requested = new AtomicReference<URI>();
-        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource source = source(
                 "http://127.0.0.1:8000",
                 (provider, uri, headers) -> {
                     requested.set(uri);
@@ -58,7 +58,7 @@ class PythonQuantDailyBarSourceTest {
 
     @Test
     void rejectsUnadjustedBarsInsteadOfSilentlyMixingPriceSemantics() {
-        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource source = source(
                 "http://127.0.0.1:8000",
                 (provider, uri, headers) -> response(payload("NONE", "FRESH_PRIMARY")));
 
@@ -72,10 +72,10 @@ class PythonQuantDailyBarSourceTest {
 
     @Test
     void rejectsUnavailableOrMismatchedResponses() {
-        PythonQuantDailyBarSource unavailable = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource unavailable = source(
                 "http://127.0.0.1:8000",
                 (provider, uri, headers) -> response(payload("QFQ", "UNAVAILABLE")));
-        PythonQuantDailyBarSource mismatched = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource mismatched = source(
                 "http://127.0.0.1:8000",
                 (provider, uri, headers) -> response(
                         payload("QFQ", "FRESH_PRIMARY").replace("600519", "000001")));
@@ -96,7 +96,7 @@ class PythonQuantDailyBarSourceTest {
         var old = rows.get(0).deepCopy();
         ((com.fasterxml.jackson.databind.node.ObjectNode) old).put("trade_date", "2017-03-17").put("open", -2.2);
         rows.insert(0, old);
-        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource source = source(
                 "http://127.0.0.1:8000", (provider, uri, headers) -> response(root.toString()));
 
         assertEquals(1, source.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)).getBars().size());
@@ -113,13 +113,20 @@ class PythonQuantDailyBarSourceTest {
     void allowsZeroTurnoverButRejectsNegativeVolumeInRequiredWindow() {
         String zero = payload("QFQ", "FRESH_PRIMARY").replace("\"volume\":1000", "\"volume\":0")
                 .replace("\"amount\":1480500", "\"amount\":0");
-        PythonQuantDailyBarSource valid = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource valid = source(
                 "http://127.0.0.1:8000", (provider, uri, headers) -> response(zero));
         assertEquals(1, valid.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)).getBars().size());
-        PythonQuantDailyBarSource invalid = new PythonQuantDailyBarSource(
+        PythonQuantDailyBarSource invalid = source(
                 "http://127.0.0.1:8000", (provider, uri, headers) -> response(zero.replace("\"volume\":0", "\"volume\":-1")));
         assertThrows(ProviderContractException.class,
                 () -> invalid.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)));
+    }
+
+    private static PythonQuantDailyBarSource source(String baseUrl, FinanceHttpClient http) {
+        PythonQuantDailyBarSource source = new PythonQuantDailyBarSource();
+        org.springframework.test.util.ReflectionTestUtils.setField(source, "baseUrl", baseUrl);
+        org.springframework.test.util.ReflectionTestUtils.setField(source, "http", http);
+        return source;
     }
 
     private static FinanceHttpResponse response(String body) {
@@ -132,7 +139,9 @@ class PythonQuantDailyBarSourceTest {
                 + "\"trade_date\":\"2026-07-16\",\"open\":1475.00,"
                 + "\"high\":1490.00,\"low\":1470.00,\"close\":1480.50,"
                 + "\"volume\":1000,\"amount\":1480500,\"adjustment\":\"" + adjustment + "\"\u007d]";
-        if ("UNAVAILABLE".equals(quality)) data = "null";
+        if ("UNAVAILABLE".equals(quality)) {
+            data = "null";
+        }
         return "\u007b"
                 + "\"capability\":\"DAILY_BARS\","
                 + "\"symbol\":\u007b\"market\":\"SH\",\"code\":\"600519\"\u007d,"

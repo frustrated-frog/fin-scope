@@ -27,17 +27,11 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
     private static final String CLIENT_CODE = "PYTHON_QUANT_DAILY_BARS";
     private static final Pattern INSTRUMENT = Pattern.compile("^(\\d{6})\\.(SH|SZ|BJ)$");
 
-    private final String baseUrl;
-    private final FinanceHttpClient http;
-    private final ObjectMapper json = new ObjectMapper();
-
+    @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
+    private String baseUrl;
     @Autowired
-    public PythonQuantDailyBarSource(
-            @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl,
-            FinanceHttpClient http) {
-        this.baseUrl = trimTrailingSlash(baseUrl);
-        this.http = http;
-    }
+    private FinanceHttpClient http;
+    private final ObjectMapper json = new ObjectMapper();
 
     @Override
     public QuantDailyBarBatch fetch(String instrumentCode, int limit) {
@@ -51,7 +45,7 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
             throw contract("INVALID_INSTRUMENT", "instrument code must use 600519.SH format", false);
         }
         int normalizedLimit = Math.max(1, Math.min(limit, 5000));
-        URI uri = URI.create(baseUrl + "/v1/stocks/" + matcher.group(2) + "/"
+        URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/stocks/" + matcher.group(2) + "/"
                 + matcher.group(1) + "/daily-bars?limit=" + normalizedLimit);
         try {
             FinanceHttpResponse response = http.get(
@@ -85,7 +79,7 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
                 throw contract("UNSUPPORTED_ADJUSTMENT",
                         "quant research requires QFQ adjusted daily bars", false);
             }
-            LocalDate tradeDate = LocalDate.parse(requiredText(row, "trade_date"));
+            LocalDate tradeDate = tradeDate(row);
             if (lastTradeDate == null || tradeDate.isAfter(lastTradeDate)) {
                 lastTradeDate = tradeDate;
             }
@@ -112,11 +106,7 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
     private static QuantDailyBar mapBar(JsonNode row, String instrumentCode) {
         QuantDailyBar bar = new QuantDailyBar();
         bar.setInstrumentCode(instrumentCode);
-        try {
-            bar.setTradeDate(LocalDate.parse(requiredText(row, "trade_date")));
-        } catch (DateTimeParseException error) {
-            throw contract("SCHEMA_DRIFT", "daily bar has an invalid trade_date", false, error);
-        }
+        bar.setTradeDate(tradeDate(row));
         bar.setOpen(decimal(row, "open"));
         bar.setHigh(decimal(row, "high"));
         bar.setLow(decimal(row, "low"));
@@ -126,6 +116,14 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
         bar.setAmount(decimal(row, "amount"));
         bar.setTradeStatus("TRADING");
         return bar;
+    }
+
+    private static LocalDate tradeDate(JsonNode row) {
+        try {
+            return LocalDate.parse(requiredText(row, "trade_date"));
+        } catch (DateTimeParseException error) {
+            throw contract("SCHEMA_DRIFT", "daily bar has an invalid trade_date", false, error);
+        }
     }
 
     private static void assertValidBar(QuantDailyBar bar) {

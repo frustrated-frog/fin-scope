@@ -9,4 +9,3 @@ public interface QuantDailyBarSource {
         return fetch(instrumentCode, limit);
     }
 }
-
