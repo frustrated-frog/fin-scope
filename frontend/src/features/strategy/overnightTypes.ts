@@ -16,3 +16,22 @@ export interface OvernightReport {
 export interface OvernightPosition {
   instrumentCode: string; instrumentName: string; averageCost: number; quantity: number; openedOn?: string;
 }
+
+export interface CapturePlan {
+  enabled: boolean; instrumentCodes: string[]; costBps: number; enabledSince?: string; updatedAt?: string;
+}
+export interface CaptureState {
+  plan: CapturePlan; slots: string[]; serverTime: string; calendarAvailable: boolean;
+  runs: Array<{ signalDate: string; cutoff: string; status: string; reason?: string;
+    instrumentCodes: string[]; costBps: number;
+    results: Array<{ instrumentCode: string; status: string; evidenceKind?: string; reason?: string; warnings?: string[] }> }>;
+}
+export interface OvernightValidation {
+  recordCount: number; scope: string; limitations: string[];
+  groups: Array<{ mode: OvernightMode; modelVersion: string; cutoff: string; costBps: number;
+    evidenceKind: string; recordCount: number; statuses: Record<string, number>; missingReasons: Record<string, number>;
+    targets: Array<{ target: string; count: number; days: number; accuracy: number; brier: number;
+      baselineCount: number; pairedBrier: number | null; baselineBrier: number | null;
+      meanNetReturn: number; selectedCount: number; selectedNetReturn: number;
+      bins: Array<{ lower: number; upper: number; count: number; days: number; predicted: number | null; actual: number | null }> }> }>;
+}

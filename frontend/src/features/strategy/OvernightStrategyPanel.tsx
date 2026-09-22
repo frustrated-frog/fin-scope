@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import { HoldingAnalysisDrawer, type HoldingAnalysis } from './HoldingAnalysisDrawer';
 import type { OvernightMode, OvernightPosition, OvernightReport } from './overnightTypes';
 import './OvernightStrategyPanel.css';
+import { OvernightAuditPanel } from './OvernightAuditPanel';
 
 const modeLabels = { TAIL_ENTRY: '尾盘入场', AFTER_CLOSE_HOLDING: '盘后持仓' };
 const statusLabels: Record<string, string> = {
@@ -16,6 +17,7 @@ const pct = (value?: number) => value == null ? '—' : `${(value * 100).toFixed
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 
 export function OvernightStrategyPanel() {
+  const [auditRevision, setAuditRevision] = useState(0);
   const [mode, setMode] = useState<OvernightMode>('TAIL_ENTRY');
   const [code, setCode] = useState('');
   const [signalDate, setSignalDate] = useState(today);
@@ -65,6 +67,7 @@ export function OvernightStrategyPanel() {
         instrumentCode: code, signalDate, mode, cutoff: mode === 'TAIL_ENTRY' ? cutoff : '15:00', costBps,
       }) });
       setReport(value);
+      setAuditRevision(value => value + 1);
       if (value.id) {
         setRecords(previous => [value, ...previous.filter(item => item.id !== value.id)]);
         setHistoryError('');
@@ -75,7 +78,10 @@ export function OvernightStrategyPanel() {
 
   async function settle() {
     setBusy('settle'); setHistoryError('');
-    try { setRecords(await api<OvernightReport[]>('/api/quant/overnight/settle', { method: 'POST' })); }
+    try {
+      setRecords(await api<OvernightReport[]>('/api/quant/overnight/settle', { method: 'POST' }));
+      setAuditRevision(value => value + 1);
+    }
     catch (error) { setHistoryError(error instanceof Error ? error.message : '结算失败'); }
     finally { setBusy(''); }
   }
@@ -96,7 +102,7 @@ export function OvernightStrategyPanel() {
       <button type="button" aria-pressed={mode === 'AFTER_CLOSE_HOLDING'} onClick={() => chooseMode('AFTER_CLOSE_HOLDING')} disabled={!!busy}><b>盘后持仓</b><span>已经持有，比较明天的持有时长</span></button>
     </div>
     <ol className="overnight-clock" aria-label="决策与执行时间轴">
-      <li data-active={mode === 'TAIL_ENTRY'}><time>{cutoff}</time><b>尾盘数据截止</b><span>{cutoff === '14:30' ? '14:35' : '14:55'} 入场价格代理</span></li>
+      <li data-active={mode === 'TAIL_ENTRY'}><time>{cutoff}</time><b>尾盘数据截止</b><span>{cutoff === '14:30' ? '14:35' : cutoff === '14:45' ? '14:50' : '14:55'} 入场价格代理</span></li>
       <li data-active={mode === 'AFTER_CLOSE_HOLDING'}><time>15:00</time><b>盘后持仓更新</b><span>使用完整收盘数据，独立留档</span></li>
       <li><time>T+1</time><b>次日分时评测</b><span>开盘 / 10:00 / 14:30 / 收盘</span></li>
     </ol>
@@ -109,7 +115,7 @@ export function OvernightStrategyPanel() {
       {position && mode === 'AFTER_CLOSE_HOLDING' && <div className="overnight-position"><span>账本成本 ¥{position.averageCost.toFixed(2)}</span><span>{position.quantity} 股 · 建仓 {position.openedOn ?? '未记录'}</span></div>}
       <label>信号日期<input type="date" value={signalDate} onChange={event => { setSignalDate(event.target.value); setReport(undefined); }} required disabled={!!busy} /></label>
       <label>数据截止时刻<select value={mode === 'TAIL_ENTRY' ? cutoff : '15:00'} onChange={event => { setCutoff(event.target.value); setReport(undefined); }} disabled={!!busy || mode === 'AFTER_CLOSE_HOLDING'}>
-        <option value="14:30">14:30</option><option value="14:50">14:50</option>{mode === 'AFTER_CLOSE_HOLDING' && <option value="15:00">15:00 · 收盘</option>}</select></label>
+        <option value="14:30">14:30</option><option value="14:45">14:45</option><option value="14:50">14:50</option>{mode === 'AFTER_CLOSE_HOLDING' && <option value="15:00">15:00 · 收盘</option>}</select></label>
       <label>{mode === 'TAIL_ENTRY' ? '买卖成本及滑点假设' : '后续卖出成本及滑点假设'}<div className="overnight-unit"><input type="number" min="0" max="200" step="1" value={costBps} onChange={event => { setCostBps(Number(event.target.value)); setReport(undefined); }} required disabled={!!busy} /><span>基点</span></div><small>10 基点 = 0.1%，请按你的实际费用调整。</small></label>
       <button className="overnight-primary" type="submit" disabled={!!busy || !code}>{busy === 'generate' ? '读取分钟数据并计算…' : `生成${modeLabels[mode]}研究`}</button>
       {mode === 'AFTER_CLOSE_HOLDING' && <button type="button" onClick={existingAnalysis} disabled={!!busy || !code}>查看现有持仓分析</button>}
@@ -118,7 +124,8 @@ export function OvernightStrategyPanel() {
       {error && <p role="alert" className="overnight-error">{error}</p>}
       {report ? <ResearchResult report={report} /> : <div className="overnight-waiting"><span>{mode === 'TAIL_ENTRY' ? '买入之前' : '持有之后'}</span><h4>{mode === 'TAIL_ENTRY' ? '让预测对应你能参与的那段涨跌' : '从真实持仓出发，比较明天的选择'}</h4><p>{mode === 'TAIL_ENTRY' ? '按截止时刻截断分钟线，分别研究次日不同退出时点。没有合格分钟数据时，保留空缺，不借用收盘结果。' : '成本与数量直接读取账本。新盘后判断单独保存，尾盘入场时的判断仍然保留。'}</p><div>本地模型 · 4 个退出时点 · 独立冻结记录</div></div>}
     </div></div>
-    <section className="overnight-history" aria-label="两类预测独立档案"><header><div><h4>判断留痕与次日复盘</h4><p>尾盘和盘后分别留存；模拟收益以固定时点价格为基准；每次最多更新 3 只股票，分批轮换。</p></div><button type="button" onClick={settle} disabled={!!busy || !records.length}>{busy === 'settle' ? '读取到期行情…' : '更新到期结果'}</button></header>
+    <OvernightAuditPanel mode={mode} revision={auditRevision} />
+    <section className="overnight-history" aria-label="两类预测独立档案"><header><div><h4>判断留痕与次日复盘</h4><p>展示最近 50 份档案；验收统计覆盖全部历史。每次最多更新 3 只股票，服务也会自动轮换核验。</p></div><button type="button" onClick={settle} disabled={!!busy || !records.length}>{busy === 'settle' ? '读取到期行情…' : '更新到期结果'}</button></header>
       {historyError && <p role="alert" className="overnight-error">{historyError}</p>}
       {!records.length && !historyError && <p className="overnight-empty">还没有冻结记录。完成第一份具备足够分钟历史的研究后，原始预测会保存在这里。</p>}
       {records.map(item => <details key={item.id}><summary><span className="overnight-badge">{modeLabels[item.mode]}</span><b>{item.instrumentCode}</b><span>{item.signalDate} {item.cutoff}</span><span>{item.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</span><span>{statusLabels[item.outcome?.status ?? 'PENDING'] ?? '等待结算'}</span></summary><ResearchResult report={item} /></details>)}

@@ -1,20 +1,26 @@
 package com.finscope.rpc.quant;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.finscope.domain.quant.overnight.OvernightCapturePlan;
+import com.finscope.domain.quant.overnight.OvernightCaptureState;
 import com.finscope.domain.quant.overnight.OvernightResearchInput;
 import com.finscope.domain.quant.overnight.OvernightResearchReport;
+import com.finscope.domain.quant.overnight.OvernightValidationSummary;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 import javax.annotation.Resource;
+
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class PythonOvernightClient {
@@ -64,6 +70,39 @@ public class PythonOvernightClient {
         }
     }
 
+    public OvernightCaptureState captureState() {
+        return readAudit("capture", OvernightCaptureState.class);
+    }
+
+    public OvernightValidationSummary validation() {
+        return readAudit("validation", OvernightValidationSummary.class);
+    }
+
+    public OvernightCapturePlan configureCapture(OvernightCapturePlan plan) {
+        try {
+            String body = json.writeValueAsString(Map.of("enabled", plan.isEnabled(),
+                    "instrumentCodes", plan.getInstrumentCodes(), "costBps", plan.getCostBps()));
+            FinanceHttpResponse response = http.postJson("PYTHON_OVERNIGHT", endpoint("capture"),
+                    body, Collections.emptyMap(), timeoutMs);
+            return json.readValue(response.getBody(), OvernightCapturePlan.class);
+        } catch (ProviderContractException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new ProviderContractException("SCHEMA_DRIFT", "尾盘留档计划保存失败", false, error);
+        }
+    }
+
+    private <T> T readAudit(String action, Class<T> type) {
+        try {
+            FinanceHttpResponse response = http.get("PYTHON_OVERNIGHT", endpoint(action), Collections.emptyMap());
+            return json.readValue(response.getBody(), type);
+        } catch (ProviderContractException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new ProviderContractException("SCHEMA_DRIFT", "隔夜验收信息暂不可用", false, error);
+        }
+    }
+
     private URI endpoint(String action) {
         return URI.create(baseUrl.replaceAll("/+$", "") + "/v1/quant/overnight/" + action);
     }
@@ -73,7 +112,8 @@ public class PythonOvernightClient {
                 || report.getEvidenceKind() == null || report.getInstrumentCode() == null
                 || report.getSignalDate() == null || report.getDataThrough() == null
                 || report.getTargets() == null || report.getWarnings() == null
-                || !"overnight-local-v1".equals(report.getModelVersion())
+                || !("overnight-local-v1".equals(report.getModelVersion())
+                    || "overnight-local-v2".equals(report.getModelVersion()))
                 || report.getInputFingerprint() == null
                 || !report.getInputFingerprint().matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException("隔夜研究缺少日期、版本或审计证据");

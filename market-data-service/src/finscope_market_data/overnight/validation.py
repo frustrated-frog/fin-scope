@@ -27,6 +27,8 @@ def summarize(store):
             'costBps': key[3], 'evidenceKind': key[4], 'recordCount': 0, 'statuses': Counter(),
             'missingReasons': Counter(), 'rows': defaultdict(list)})
         group['recordCount'] += 1
+        if report.get('status') != 'WATCH':
+            group['missingReasons'][f"PREDICTION:{report.get('status', 'UNKNOWN')}"] += 1
         outcome = report.get('outcome') or {}
         group['statuses'][outcome.get('status', 'PENDING')] += 1
         group['missingReasons'].update(outcome.get('missingReasons', []))

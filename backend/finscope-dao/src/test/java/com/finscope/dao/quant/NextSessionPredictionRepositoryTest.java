@@ -36,6 +36,23 @@ class NextSessionPredictionRepositoryTest {
     }
 
     @Test
+    void auditPaginationIncludesRecordsOutsideTheDisplayWindow() {
+        insertDiscovery("2026-09-04T16:00:00", "READY");
+        repository.importFrozenReports();
+        for (int index = 0; index < 505; index++) {
+            jdbc.update("INSERT INTO next_session_prediction(instrument_code,as_of_date,target_date,data_fingerprint,prediction_json) "
+                    + "SELECT '600001.SH',as_of_date,target_date,?,prediction_json FROM next_session_prediction ORDER BY id LIMIT 1",
+                    "audit-" + index);
+        }
+        var first = repository.historyAfter(null, 0);
+        assertEquals(500, first.size());
+        var second = repository.historyAfter(null, first.get(first.size() - 1).getId());
+        assertEquals(6, second.size());
+        assertEquals(100, repository.history(null, 100).size());
+        assertEquals(1, repository.historyAfter("000001", 0).size());
+    }
+
+    @Test
     void importsFrozenReportsOnceAndNeverRewritesASettledOutcome() {
         insertDiscovery("2026-09-04T16:00:00", "READY");
         assertEquals(1, repository.importFrozenReports());

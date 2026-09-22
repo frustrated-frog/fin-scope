@@ -74,6 +74,15 @@ public class NextSessionPredictionRepository {
                 + "ORDER BY as_of_date DESC,id DESC LIMIT ?", this::map, code, bounded);
     }
 
+    public List<NextSessionPredictionRecord> historyAfter(String code, long afterId) {
+        if (code == null) {
+            return jdbcTemplate.query("SELECT * FROM next_session_prediction WHERE id>? ORDER BY id LIMIT 500",
+                    this::map, afterId);
+        }
+        return jdbcTemplate.query("SELECT * FROM next_session_prediction WHERE id>? "
+                + "AND substr(instrument_code,1,6)=? ORDER BY id LIMIT 500", this::map, afterId, code);
+    }
+
     public boolean settle(Long id, double actualReturn, boolean correct, boolean covered,
                           LocalDateTime at, String source) {
         if (!Double.isFinite(actualReturn)) {

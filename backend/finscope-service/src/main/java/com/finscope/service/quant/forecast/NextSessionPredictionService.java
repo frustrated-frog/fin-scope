@@ -4,6 +4,8 @@ import com.finscope.dao.quant.NextSessionPredictionRepository;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.domain.quant.forecast.NextSessionPrediction;
 import com.finscope.domain.quant.forecast.NextSessionPredictionRecord;
+import com.finscope.domain.quant.forecast.NextSessionValidationCalculator;
+import com.finscope.domain.quant.forecast.NextSessionValidationSummary;
 import com.finscope.rpc.quant.QuantDailyBarBatch;
 import com.finscope.rpc.quant.QuantDailyBarSource;
 import lombok.extern.slf4j.Slf4j;
@@ -11,10 +13,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +48,23 @@ public class NextSessionPredictionService {
         }
         repository.importFrozenReports();
         return repository.history(code, limit);
+    }
+
+    public NextSessionValidationSummary validation(String code) {
+        if (code != null && !code.matches("[0-9]{6}")) {
+            throw new IllegalArgumentException("股票代码必须为六位数字");
+        }
+        List<NextSessionPredictionRecord> records = new ArrayList<>();
+        long cursor = 0;
+        while (true) {
+            List<NextSessionPredictionRecord> page = repository.historyAfter(code, cursor);
+            if (page.isEmpty()) {
+                break;
+            }
+            records.addAll(page);
+            cursor = page.get(page.size() - 1).getId();
+        }
+        return NextSessionValidationCalculator.summarize(records);
     }
 
     void settle(LocalDateTime now) {

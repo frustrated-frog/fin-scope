@@ -61,6 +61,37 @@ class OvernightResearchServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.generate(input));
     }
 
+    @Test
+    void capturePlanNormalizesCodesAndRejectsInvalidOrEmptyEnabledPlans() {
+        var service = new OvernightResearchService();
+        var client = mock(PythonOvernightClient.class);
+        ReflectionTestUtils.setField(service, "client", client);
+        var plan = new com.finscope.domain.quant.overnight.OvernightCapturePlan();
+        plan.setEnabled(true);
+        plan.setInstrumentCodes(List.of("605058", "605058.sh"));
+        service.configureCapture(plan);
+        assertEquals(List.of("605058.SH"), plan.getInstrumentCodes());
+        verify(client).configureCapture(plan);
+        plan.setInstrumentCodes(List.of());
+        assertThrows(IllegalArgumentException.class, () -> service.configureCapture(plan));
+        plan.setInstrumentCodes(List.of("bad-code"));
+        assertThrows(IllegalArgumentException.class, () -> service.configureCapture(plan));
+        plan.setInstrumentCodes(List.of("605058"));
+        plan.setCostBps(Double.NaN);
+        assertThrows(IllegalArgumentException.class, () -> service.configureCapture(plan));
+    }
+
+    @Test
+    void acceptsNewTailWindowWithoutReadingLedger() {
+        var service = new OvernightResearchService();
+        var client = mock(PythonOvernightClient.class);
+        ReflectionTestUtils.setField(service, "client", client);
+        var input = input(OvernightMode.TAIL_ENTRY);
+        input.setCutoff("14:45");
+        service.generate(input);
+        verify(client).generate(input);
+    }
+
     private OvernightResearchInput input(OvernightMode mode) {
         var input = new OvernightResearchInput();
         input.setInstrumentCode("605058");

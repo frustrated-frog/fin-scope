@@ -105,7 +105,7 @@ export function NextSessionOutcomeHistory({ code }: { code?: string }) {
   }, [code]);
   return <section className="next-session-forecast next-session-history" aria-label="次日预测真实验证">
     <header><strong>次日预测真实验证</strong><span>目标交易日收盘后自动结算</span></header>
-    {!failed && records.length > 0 && <NextSessionValidationSummary records={records} />}
+    {!failed && records.length > 0 && <NextSessionValidationSummary records={records} code={code} />}
     {failed ? <p role="status">验证账本暂时无法读取，稍后自动重试。</p> : records.length === 0 ? <p>尚无新协议的前瞻记录。新的预测会自动留存，未到期不计入成绩。</p> : <div className="quant-table-wrap"><table><thead><tr><th>股票</th><th>目标日</th><th>当时概率</th><th>真实涨跌</th><th>验证状态</th></tr></thead><tbody>{records.map(record => <tr key={record.id}><td>{record.instrumentCode}</td><td>{record.prediction.targetDate}</td><td>{percent(record.prediction.upProbability)}</td><td>{signed(record.actualReturn)}</td><td title={record.outcomeNote}>{record.status === 'MATURED' ? `${record.correct ? '方向命中' : '方向未中'} · ${record.intervalCovered ? '区间内' : '区间外'}` : record.status === 'PENDING' ? '等待目标日收盘' : '无法验证'}</td></tr>)}</tbody></table></div>}
   </section>;
 }

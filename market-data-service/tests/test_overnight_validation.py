@@ -114,6 +114,7 @@ def test_failed_scheduled_capture_freezes_inputs_and_first_attempt(tmp_path):
     assert report['status'] == 'DATA_UNAVAILABLE'
     assert len(store.history()) == 1
     assert summarize(store)['groups'][0]['targets'] == []
+    assert summarize(store)['groups'][0]['missingReasons']['PREDICTION:DATA_UNAVAILABLE'] == 1
 
 
 def test_frozen_prior_and_invalid_exit_are_not_profitable_fills(tmp_path):

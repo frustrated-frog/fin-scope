@@ -1,13 +1,19 @@
 package com.finscope.service.quant.overnight;
 
 import com.finscope.common.enums.overnight.OvernightMode;
+import com.finscope.domain.quant.overnight.OvernightCapturePlan;
+import com.finscope.domain.quant.overnight.OvernightCaptureState;
 import com.finscope.domain.quant.overnight.OvernightResearchInput;
 import com.finscope.domain.quant.overnight.OvernightResearchReport;
+import com.finscope.domain.quant.overnight.OvernightValidationSummary;
 import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.rpc.quant.PythonOvernightClient;
 import com.finscope.service.strategy.holding.StockAccountService;
 import org.springframework.stereotype.Service;
+
 import javax.annotation.Resource;
+
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -37,14 +43,47 @@ public class OvernightResearchService {
         if (input.getMode() == OvernightMode.AFTER_CLOSE_HOLDING) {
             input.setCutoff("15:00");
             attachPosition(input);
-        } else if (!"14:30".equals(input.getCutoff()) && !"14:50".equals(input.getCutoff())) {
-            throw new IllegalArgumentException("尾盘决策时点请选择 14:30 或 14:50");
+        } else if (!"14:30".equals(input.getCutoff()) && !"14:45".equals(input.getCutoff()) && !"14:50".equals(input.getCutoff())) {
+            throw new IllegalArgumentException("尾盘决策时点请选择 14:30、14:45 或 14:50");
         }
         return client.generate(input);
     }
 
     public List<OvernightResearchReport> history(boolean settle) {
         return client.history(settle);
+    }
+
+    public OvernightCaptureState captureState() {
+        return client.captureState();
+    }
+
+    public OvernightValidationSummary validation() {
+        return client.validation();
+    }
+
+    public OvernightCapturePlan configureCapture(OvernightCapturePlan plan) {
+        if (plan == null || plan.getInstrumentCodes() == null || plan.getInstrumentCodes().size() > 10
+                || !Double.isFinite(plan.getCostBps()) || plan.getCostBps() < 0 || plan.getCostBps() > 200) {
+            throw new IllegalArgumentException("观察名单最多 10 只，费用假设需为 0–200 基点");
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String value : plan.getInstrumentCodes()) {
+            String code = value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+            if (code.matches("\\d{6}")) {
+                code += code.startsWith("6") ? ".SH" : ".SZ";
+            }
+            if (!code.matches("(?:(?:600|601|603|605)\\d{3}\\.SH|(?:000|001|002|003|300|301)\\d{3}\\.SZ)")) {
+                throw new IllegalArgumentException("观察名单中存在不支持的沪深股票代码");
+            }
+            if (!normalized.contains(code)) {
+                normalized.add(code);
+            }
+        }
+        if (plan.isEnabled() && normalized.isEmpty()) {
+            throw new IllegalArgumentException("启用自动留档前请设置观察名单");
+        }
+        plan.setInstrumentCodes(normalized);
+        return client.configureCapture(plan);
     }
 
     private void attachPosition(OvernightResearchInput input) {
