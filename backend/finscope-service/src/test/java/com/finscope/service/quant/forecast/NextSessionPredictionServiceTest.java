@@ -27,7 +27,7 @@ class NextSessionPredictionServiceTest {
         when(repository.findPending(100)).thenReturn(List.of(record));
         var batch = new QuantDailyBarBatch(List.of(bar("2026-09-04", 9), bar("2026-09-07", 9.18)),
                 "TEST", "TEST", "FRESH_PRIMARY", LocalDate.of(2026, 9, 7), List.of());
-        when(source.fetch("000001.SZ", 5000)).thenReturn(batch);
+        when(source.fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4))).thenReturn(batch);
 
         service.settle(LocalDateTime.of(2026, 9, 7, 14, 0));
         verifyNoInteractions(source);
@@ -45,7 +45,7 @@ class NextSessionPredictionServiceTest {
         when(repository.findPending(100)).thenReturn(List.of(record()));
         var batch = new QuantDailyBarBatch(List.of(bar("2026-09-04", 10), bar("2026-09-08", 11)),
                 "TEST", "TEST", "FRESH_PRIMARY", LocalDate.of(2026, 9, 8), List.of());
-        when(source.fetch("000001.SZ", 5000)).thenReturn(batch);
+        when(source.fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4))).thenReturn(batch);
 
         service.settle(LocalDateTime.of(2026, 9, 9, 16, 0));
 
@@ -59,7 +59,7 @@ class NextSessionPredictionServiceTest {
         var source = mock(QuantDailyBarSource.class);
         var service = service(repository, source);
         when(repository.findPending(100)).thenReturn(List.of(record()));
-        when(source.fetch("000001.SZ", 5000)).thenReturn(new QuantDailyBarBatch(
+        when(source.fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4))).thenReturn(new QuantDailyBarBatch(
                 List.of(bar("2026-09-04", 10)), "TEST", "TEST", "STALE_CACHE",
                 LocalDate.of(2026, 9, 4), List.of()));
 
@@ -67,6 +67,30 @@ class NextSessionPredictionServiceTest {
 
         verify(repository, never()).unavailable(any(), any(), any());
         verify(repository, never()).settle(any(), anyDouble(), anyBoolean(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void sharesFailedFetchAcrossRecordsAndRetriesAfterCooldown() {
+        var repository = mock(NextSessionPredictionRepository.class);
+        var source = mock(QuantDailyBarSource.class);
+        var service = service(repository, source);
+        var second = record();
+        second.setId(2L);
+        when(repository.findPending(100)).thenReturn(List.of(record(), second));
+        when(source.fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4))).thenThrow(new IllegalStateException("invalid daily bar"));
+        LocalDateTime now = LocalDateTime.of(2026, 9, 7, 16, 0);
+
+        service.settle(now);
+        service.settle(now.plusMinutes(1));
+        verify(source, times(1)).fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4));
+        verify(repository, never()).unavailable(any(), any(), any());
+        doReturn(new QuantDailyBarBatch(
+                List.of(bar("2026-09-04", 10), bar("2026-09-07", 11)),
+                "TEST", "TEST", "FRESH_PRIMARY", LocalDate.of(2026, 9, 7), List.of()))
+                .when(source).fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4));
+        service.settle(now.plusMinutes(15));
+        verify(source, times(2)).fetchSince("000001.SZ", 5000, LocalDate.of(2026, 9, 4));
+        verify(repository, times(2)).settle(any(), anyDouble(), anyBoolean(), anyBoolean(), any(), eq("TEST"));
     }
 
     private NextSessionPredictionService service(NextSessionPredictionRepository repository, QuantDailyBarSource source) {

@@ -1448,6 +1448,7 @@ public class DatabaseInitializer implements InitializingBean {
                 + "final_count INTEGER NOT NULL DEFAULT 0,report_json TEXT,error_message TEXT,"
                 + "attempt_token TEXT,created_at TEXT NOT NULL,started_at TEXT,completed_at TEXT)");
         ensureColumn("stock_discovery_run", "attempt_token", "TEXT");
+        ensureColumn("stock_discovery_run", "attempt_count", "INTEGER NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_stock_discovery_run_latest "
                 + "ON stock_discovery_run(status,business_date DESC,id DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_discovery_sector ("

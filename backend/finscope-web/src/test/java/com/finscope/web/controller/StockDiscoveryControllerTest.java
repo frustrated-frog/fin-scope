@@ -35,6 +35,20 @@ class StockDiscoveryControllerTest {
     private StockDiscoveryOutcomeService outcomeService;
 
     @Test
+    void exhaustedRunDoesNotAdvertiseAnotherRetry() throws Exception {
+        StockDiscoveryRun run = new StockDiscoveryRun();
+        run.setId(8L);
+        run.setStatus("FAILED");
+        run.setAttemptCount(3);
+        when(service.history(1)).thenReturn(java.util.List.of(run));
+        when(service.isRetryPending(run)).thenReturn(false);
+        mvc.perform(get("/api/quant/stock-discoveries/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.retryPending").value(false))
+                .andExpect(jsonPath("$.data.attemptCount").value(3));
+    }
+
+    @Test
     void exposesRealOutcomeAccuracy() throws Exception {
         StockDiscoveryAccuracyReport report = new StockDiscoveryAccuracyReport();
         report.setSchemaVersion("stock-discovery-evaluation-v1");
@@ -65,6 +79,7 @@ class StockDiscoveryControllerTest {
         run.setId(7L);
         run.setBusinessDate(LocalDate.of(2026, 8, 14));
         run.setStatus("FAILED");
+        when(service.isRetryPending(run)).thenReturn(true);
         run.setStartedAt(LocalDateTime.of(2026, 8, 14, 15, 31));
         run.setErrorMessage("所有热门板块数据源不可用");
         when(service.history(1)).thenReturn(List.of(run));

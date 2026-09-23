@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
@@ -21,6 +22,8 @@ import java.util.Optional;
 
 @Repository
 public class StockDiscoveryRepository {
+    @Value("${finscope.stock-discovery.max-attempts:3}")
+    private int maxAttempts = 3;
     @Resource
     private JdbcTemplate jdbcTemplate;
     @Resource
@@ -69,20 +72,15 @@ public class StockDiscoveryRepository {
     public boolean tryMarkRunning(Long id, String attemptToken) {
         LocalDateTime now = LocalDateTime.now();
         int updated = jdbcTemplate.update("UPDATE stock_discovery_run "
-                        + "SET status='RUNNING',started_at=?,completed_at=NULL,error_message=NULL,attempt_token=? "
-                        + "WHERE id=? AND (status IN ('CREATED','FAILED') "
-                        + "OR (status='RUNNING' AND started_at<?))",
-                TimeUtil.text(now), attemptToken, id, TimeUtil.text(now.minusMinutes(30)));
+                        + "SET status='RUNNING',started_at=?,completed_at=NULL,error_message=NULL,attempt_token=?, "
+                        + "attempt_count=attempt_count+1 "
+                        + "WHERE id=? AND status IN ('CREATED','FAILED') AND attempt_count<?",
+                TimeUtil.text(now), attemptToken, id, Math.max(1, maxAttempts));
         return updated == 1;
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void complete(Long id, String attemptToken, StockDiscoveryReport report) {
-        jdbcTemplate.update("DELETE FROM stock_discovery_sector WHERE run_id=?", id);
-        jdbcTemplate.update("DELETE FROM stock_discovery_model_prediction WHERE run_id=?", id);
-        jdbcTemplate.update("DELETE FROM stock_discovery_candidate WHERE run_id=?", id);
-        persistSectors(id, report.getSectors());
-        persistCandidates(id, report);
         StockDiscoveryReport.Funnel funnel = report.getFunnel();
         int updated = jdbcTemplate.update("UPDATE stock_discovery_run SET status='SUCCEEDED',as_of_date=?,source_family=?,"
                         + "quality_status=?,data_fingerprint=?,sector_count=?,constituent_count=?,admitted_count=?,"
@@ -95,6 +93,22 @@ public class StockDiscoveryRepository {
         if (updated != 1) {
             throw new IllegalStateException("股票发现批次状态已变化，拒绝覆盖终态");
         }
+        jdbcTemplate.update("DELETE FROM stock_discovery_sector WHERE run_id=?", id);
+        jdbcTemplate.update("DELETE FROM stock_discovery_model_prediction WHERE run_id=?", id);
+        jdbcTemplate.update("DELETE FROM stock_discovery_candidate WHERE run_id=?", id);
+        persistSectors(id, report.getSectors());
+        persistCandidates(id, report);
+    }
+
+    /** Expire only bounded, overdue attempts; a late worker loses its write token. */
+    public int expireRunningBefore(LocalDateTime cutoff, LocalDateTime now, int limit) {
+        int bounded = Math.max(1, Math.min(limit, 100));
+        return jdbcTemplate.update("UPDATE stock_discovery_run SET status='FAILED',attempt_token=NULL,"
+                        + "completed_at=?,error_message=? WHERE status='RUNNING' AND id IN ("
+                        + "SELECT id FROM stock_discovery_run WHERE status='RUNNING' "
+                        + "AND datetime(COALESCE(started_at,created_at))<datetime(?) ORDER BY id LIMIT ?)",
+                TimeUtil.text(now), "执行超过恢复时限，已结束本次等待；远端结果未知，迟到结果不会覆盖新执行",
+                TimeUtil.text(cutoff), bounded);
     }
 
     public void fail(Long id, String attemptToken, String message) {
@@ -328,6 +342,7 @@ public class StockDiscoveryRepository {
         value.setBusinessDate(LocalDate.parse(rs.getString("business_date")));
         value.setTriggerType(rs.getString("trigger_type"));
         value.setStatus(rs.getString("status"));
+        value.setAttemptCount(rs.getInt("attempt_count"));
         value.setBudget(rs.getDouble("budget"));
         value.setPolicyVersion(rs.getString("policy_version"));
         value.setAsOfDate(rs.getString("as_of_date"));

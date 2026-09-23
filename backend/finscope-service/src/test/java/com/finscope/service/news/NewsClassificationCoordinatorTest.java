@@ -126,6 +126,34 @@ class NewsClassificationCoordinatorTest {
         org.mockito.Mockito.verifyNoInteractions(runs);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullAndEmptySource
+    @org.junit.jupiter.params.provider.ValueSource(strings = {" ", "\t\n"})
+    void missingApiKeyUsesRulesWithoutSubmittingModelWork(String apiKey) throws Exception {
+        NewsClassificationRepository repository = mock(NewsClassificationRepository.class);
+        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        NewsClassificationAgent agent = mock(NewsClassificationAgent.class);
+        AgentRunRepository runs = mock(AgentRunRepository.class);
+        Executor executor = mock(Executor.class);
+        when(repository.claim(anyString(), any(), any())).thenReturn(true);
+        when(categories.findEnabled()).thenReturn(Collections.singletonList(category()));
+        NewsClassificationCoordinator coordinator = createNewsClassificationCoordinator(
+                repository, categories, agent, runs, executor, fixedClock());
+        NewsWorkbenchCapabilities capabilities = new NewsWorkbenchCapabilities();
+        org.springframework.test.util.ReflectionTestUtils.setField(capabilities, "modelEnabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(capabilities, "llm",
+                new com.finscope.rpc.llm.OpenAiCompatibleLlmClient(
+                        true, "http://127.0.0.1:1", apiKey, "test-model", 100, 0));
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "capabilities", capabilities);
+
+        assertEquals(1, coordinator.schedule(Collections.singletonList(candidate("CLS:1"))));
+
+        verify(repository).markRuleResult(org.mockito.ArgumentMatchers.argThat(value ->
+                "COMPANY".equals(value.getCategoryCode())), any());
+        verify(repository, never()).markFailed(anyString(), anyString(), anyString(), any());
+        org.mockito.Mockito.verifyNoInteractions(agent, runs, executor);
+    }
+
     @Test
     void rejectedBatchReleasesClaimsForRetry() {
         NewsClassificationRepository repository = mock(NewsClassificationRepository.class);

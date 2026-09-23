@@ -111,7 +111,10 @@ finscope:
     refresh-interval-ms: 60000
   quant:
     market-data-sync-cron: 0 30 18 * * MON-FRI
+  next-session-prediction:
+    retry-delay-minutes: 15
   stock-discovery:
+    max-attempts: 3
     cron: 0 30 15 * * MON-FRI
     kafka:
       enabled: true

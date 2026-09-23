@@ -26,6 +26,7 @@ public class StockDiscoveryScheduler {
 
     @Scheduled(initialDelay = 20000L, fixedDelay = 60000L)
     public void recoverMissedRun() {
+        service.recoverExpiredRuns();
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Shanghai"));
         LocalDate candidate = now.toLocalDate();
         if (now.toLocalTime().isBefore(LocalTime.of(15, 30))) {

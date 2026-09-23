@@ -143,8 +143,45 @@ class StockDiscoveryService:
         )
         self.trading_scope = trading_scope or TradingScopePolicy()
         self._uses_default_forecast_builder = forecast_builder is None
+        self._discovery_tasks: dict[str, asyncio.Task[DiscoveryReport]] = {}
+        self._completed_discoveries: dict[str, tuple[float, DiscoveryReport]] = {}
 
     async def discover(self, request: DiscoveryRequest) -> DiscoveryReport:
+        # A disconnected HTTP waiter must not cancel or duplicate the shared computation.
+        # Include every request parameter; requests for different policies/budgets never share results.
+        key = (request.business_date or date.today().isoformat()) + ":" + request.model_dump_json()
+        now = time.monotonic()
+        self._completed_discoveries = {
+            cached_key: entry for cached_key, entry in self._completed_discoveries.items()
+            if now - entry[0] < 1800
+        }
+        cached = self._completed_discoveries.get(key)
+        if cached is not None:
+            return cached[1].model_copy(deep=True)
+        task = self._discovery_tasks.get(key)
+        if task is None:
+            if len(self._discovery_tasks) >= 4:
+                raise RuntimeError("股票发现并发计算已满，请稍后重试")
+            task = asyncio.create_task(self._discover_once(request.model_copy(deep=True)))
+            self._discovery_tasks[key] = task
+            task.add_done_callback(lambda completed: self._finish_discovery(key, completed))
+        result = await asyncio.shield(task)
+        return result.model_copy(deep=True)
+
+    def _finish_discovery(self, key: str, task: asyncio.Task[DiscoveryReport]) -> None:
+        if self._discovery_tasks.get(key) is task:
+            del self._discovery_tasks[key]
+        if task.cancelled():
+            return
+        # Retrieve failures even if all HTTP waiters have disconnected.
+        if task.exception() is not None:
+            return
+        if len(self._completed_discoveries) >= 8:
+            oldest = min(self._completed_discoveries, key=lambda value: self._completed_discoveries[value][0])
+            del self._completed_discoveries[oldest]
+        self._completed_discoveries[key] = (time.monotonic(), task.result())
+
+    async def _discover_once(self, request: DiscoveryRequest) -> DiscoveryReport:
         started = time.monotonic()
         scan = {'status': 'UNAVAILABLE', 'members': [], 'warnings': ['未配置全市场事件源']}
         if self.event_provider is not None and request.business_date:

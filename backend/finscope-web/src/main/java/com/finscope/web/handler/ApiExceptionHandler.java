@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
@@ -21,6 +22,8 @@ import org.springframework.web.context.request.async.AsyncRequestTimeoutExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
 import java.util.ArrayList;
@@ -107,9 +110,30 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(AsyncRequestTimeoutException.class)
     public ResponseEntity<ApiResponse<Void>> handleAsyncTimeout(
-            AsyncRequestTimeoutException ex, HttpServletRequest request) {
+            AsyncRequestTimeoutException ex, HttpServletRequest request, HttpServletResponse response) {
+        if (isEventStream(response)) {
+            log.debug("SSE 连接到期，path={}", request.getRequestURI());
+            return ResponseEntity.ok().build();
+        }
         return buildResponse(ErrorCode.ASYNC_TASK_ERROR,
                 ErrorCode.ASYNC_TASK_ERROR.getDefaultMessage(), ex, request);
+    }
+
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIOException(
+            IOException ex, HttpServletRequest request, HttpServletResponse response) {
+        if (isEventStream(response)) {
+            log.debug("SSE 连接已断开，path={}", request.getRequestURI(), ex);
+            return ResponseEntity.ok().build();
+        }
+        return buildResponse(ErrorCode.INTERNAL_ERROR,
+                ErrorCode.INTERNAL_ERROR.getDefaultMessage(), ex, request);
+    }
+
+    private boolean isEventStream(HttpServletResponse response) {
+        String contentType = response.getContentType();
+        return contentType != null && MediaType.TEXT_EVENT_STREAM_VALUE.equalsIgnoreCase(
+                contentType.split(";", 2)[0].trim());
     }
 
     @ExceptionHandler(Exception.class)

@@ -111,9 +111,47 @@ class ApiExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value("系统繁忙，请稍后重试"));
     }
 
+    @Test
+    void streamTimeoutAndDisconnectDoNotWriteJsonIntoEventStream() throws Exception {
+        mockMvc.perform(get("/errors/stream-timeout"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(""));
+        mockMvc.perform(get("/errors/stream-disconnect"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(""));
+        mockMvc.perform(get("/errors/async-timeout"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("FS-4003"));
+        mockMvc.perform(get("/errors/io"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("FS-5000"));
+    }
+
     @RestController
     @RequestMapping("/errors")
     static class ErrorController {
+        @GetMapping("/stream-timeout")
+        Object streamTimeout(javax.servlet.http.HttpServletResponse response) {
+            response.setContentType("text/event-stream;charset=UTF-8");
+            throw new org.springframework.web.context.request.async.AsyncRequestTimeoutException();
+        }
+
+        @GetMapping("/stream-disconnect")
+        Object streamDisconnect(javax.servlet.http.HttpServletResponse response) throws java.io.IOException {
+            response.setContentType("text/event-stream");
+            throw new java.io.IOException("Broken pipe");
+        }
+
+        @GetMapping("/async-timeout")
+        Object asyncTimeout() {
+            throw new org.springframework.web.context.request.async.AsyncRequestTimeoutException();
+        }
+
+        @GetMapping("/io")
+        Object io() throws java.io.IOException {
+            throw new java.io.IOException("internal I/O failure");
+        }
+
         @GetMapping("/not-found")
         Object notFound() {
             throw new ResourceNotFoundException("主题不存在");

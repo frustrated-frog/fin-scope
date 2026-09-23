@@ -26,6 +26,37 @@ import static org.mockito.Mockito.when;
 
 class StockDiscoveryServiceTest {
     @Test
+    void doesNotRepublishActiveOrExhaustedRuns() {
+        StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
+        StockDiscoveryEventPublisher publisher = mock(StockDiscoveryEventPublisher.class);
+        StockDiscoveryService service = service(repository, publisher, mock(PythonStockDiscoveryClient.class));
+        StockDiscoveryRun active = run("RUNNING");
+        when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(active);
+        service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
+        StockDiscoveryRun exhausted = run("FAILED");
+        exhausted.setAttemptCount(3);
+        when(repository.createIfAbsent(any(), any(), any(Double.class), any(), any())).thenReturn(exhausted);
+        service.schedule(LocalDate.of(2026, 8, 14), "RECOVERY");
+        verify(publisher, never()).publish(any());
+        org.junit.jupiter.api.Assertions.assertFalse(service.isRetryPending(exhausted));
+        exhausted.setAttemptCount(2);
+        org.junit.jupiter.api.Assertions.assertTrue(service.isRetryPending(exhausted));
+    }
+
+    @Test
+    void recoveryLeaseExceedsTheConfiguredRpcBudget() {
+        StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
+        StockDiscoveryService service = service(repository, mock(StockDiscoveryEventPublisher.class),
+                mock(PythonStockDiscoveryClient.class));
+        ReflectionTestUtils.setField(service, "discoveryTimeoutMs", 3600000L);
+        service.recoverExpiredRuns();
+        var cutoff = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        var now = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(repository).expireRunningBefore(cutoff.capture(), now.capture(), eq(100));
+        assertEquals(3660, java.time.Duration.between(cutoff.getValue(), now.getValue()).getSeconds());
+    }
+
+    @Test
     void rejectsReportWithoutRequestedClosingDate() {
         StockDiscoveryRepository repository = mock(StockDiscoveryRepository.class);
         PythonStockDiscoveryClient client = mock(PythonStockDiscoveryClient.class);
