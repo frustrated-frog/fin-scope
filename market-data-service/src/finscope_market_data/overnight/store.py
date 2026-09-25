@@ -1,5 +1,6 @@
 import hashlib
 import json
+from contextlib import closing, contextmanager
 from pathlib import Path
 import sqlite3
 
@@ -28,8 +29,11 @@ class OvernightStore:
                     payload TEXT NOT NULL, PRIMARY KEY(prediction_id, observed_at));
             ''')
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        with closing(sqlite3.connect(self.path, timeout=15)) as db:
+            with db:
+                yield db
 
     def save_bars(self, code, bars):
         with self.connect() as db:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 
@@ -13,7 +14,7 @@ from finscope_market_data.discovery.trading_scope import TradingScopePolicy
 
 def load_outcome_inputs(path: Path, signal_date: str, as_of: str):
     histories, calendar = {}, []
-    with sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True) as connection:
+    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as connection, connection:
         connection.execute('BEGIN')
         for key, payload in connection.execute("SELECT symbol_key,payload_json FROM market_data_snapshot WHERE capability='DAILY_BARS'"):
             rows = json.loads(payload).get('data') or []

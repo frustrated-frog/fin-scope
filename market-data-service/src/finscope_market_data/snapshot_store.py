@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing, contextmanager
 import sqlite3
 from math import isfinite
 from pathlib import Path
@@ -312,5 +313,8 @@ class SnapshotStore:
         except sqlite3.Error as error:
             return False, f"SQLITE_{type(error).__name__.upper()}"
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(str(self.path), timeout=5)
+    @contextmanager
+    def _connect(self):
+        with closing(sqlite3.connect(str(self.path), timeout=5)) as connection:
+            with connection:
+                yield connection
