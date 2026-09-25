@@ -12890,6 +12890,7 @@ input[type="checkbox"] {
 }
 
 .attribution-causal-section {
+  container-type: inline-size;
   padding: 14px 16px 16px;
   border: 1px solid var(--line, rgba(120, 130, 128, 0.2));
   border-radius: 12px;
@@ -12899,7 +12900,7 @@ input[type="checkbox"] {
 .attribution-causal-flow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 18px;
+  gap: 24px;
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
@@ -12907,17 +12908,22 @@ input[type="checkbox"] {
 
 .attribution-causal-flow li {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
 .attribution-causal-flow li:not(:last-child)::after {
   position: absolute;
-  top: 0;
-  left: 60%;
-  display: flex;
-  height: 23px;
-  align-items: center;
+  top: calc(50% + 16px);
+  right: -24px;
+  display: grid;
+  width: 24px;
+  place-items: center;
+  transform: translateY(-50%);
   color: rgba(49, 183, 207, 0.62);
+  font-size: 20px;
+  line-height: 1;
   content: '→';
 }
 
@@ -12925,6 +12931,7 @@ input[type="checkbox"] {
   display: grid;
   width: 23px;
   height: 23px;
+  align-self: center;
   place-items: center;
   border-radius: 50%;
   background: rgba(49, 183, 207, 0.14);
@@ -12933,9 +12940,30 @@ input[type="checkbox"] {
 }
 
 .attribution-causal-flow p {
-  margin: 7px 0 0;
+  flex: 1;
+  margin: 9px 0 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(49, 183, 207, 0.28);
+  border-radius: 10px;
+  background: var(--surface, #fff);
   font-size: 12px;
   line-height: 1.55;
+}
+
+@container (max-width: 800px) {
+  .attribution-causal-flow {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .attribution-causal-flow li:not(:last-child)::after {
+    top: auto;
+    bottom: -27px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    content: '↓';
+  }
 }
 
 .attribution-context-grid,
@@ -13240,28 +13268,9 @@ input[type="checkbox"] {
     position: static;
   }
 
-  .attribution-causal-flow,
   .attribution-context-grid,
   .attribution-forces-grid {
     grid-template-columns: 1fr;
-  }
-
-  .attribution-causal-flow li {
-    display: grid;
-    grid-template-columns: 23px 1fr;
-    gap: 9px;
-    align-items: start;
-  }
-
-  .attribution-causal-flow li:not(:last-child)::after {
-    top: 28px;
-    left: 8px;
-    right: auto;
-    content: '↓';
-  }
-
-  .attribution-causal-flow p {
-    margin-top: 2px;
   }
 }
 
