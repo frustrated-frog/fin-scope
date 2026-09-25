@@ -12845,7 +12845,7 @@ input[type="checkbox"] {
   --attribution-muted: #9eafc5;
   container-type: inline-size;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   color: #e8f0f8;
 }
 
@@ -12868,8 +12868,8 @@ input[type="checkbox"] {
 .attribution-narrative-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(360px, 1fr);
-  gap: 28px;
-  padding: 28px;
+  gap: 18px;
+  padding: 19px 20px;
   border: 1px solid var(--attribution-border);
   border-radius: 11px;
   background: #172639;
@@ -12877,7 +12877,7 @@ input[type="checkbox"] {
 
 .attribution-hero-thesis {
   position: relative;
-  padding-left: 32px;
+  padding-left: 24px;
 }
 
 .attribution-hero-thesis::before {
@@ -12885,8 +12885,8 @@ input[type="checkbox"] {
   top: 0;
   bottom: auto;
   left: 0;
-  width: 5px;
-  height: 64px;
+  width: 4px;
+  height: 50px;
   border-radius: 3px;
   background: var(--attribution-accent);
   content: '';
@@ -12894,47 +12894,47 @@ input[type="checkbox"] {
 
 .attribution-hero-eyebrow {
   color: var(--attribution-accent);
-  font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: .08em;
 }
 
 .attribution-narrative-hero h3 {
-  margin: 7px 0 0;
-  font-size: clamp(24px, 2.5vw, 32px);
+  margin: 6px 0 0;
+  font-size: 21px;
   line-height: 1.25;
 }
 
 .attribution-hero-thesis p {
   max-width: 75ch;
-  margin: 24px 0 0;
-  font-size: 18px;
+  margin: 10px 0 0;
+  font-size: 15px;
   line-height: 1.75;
 }
 
 .attribution-hero-rail {
   display: grid;
   align-content: space-between;
-  gap: 24px;
-  padding-left: 24px;
+  gap: 14px;
+  padding-left: 16px;
   border-left: 1px solid var(--attribution-border);
 }
 
 .attribution-hero-instrument {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .attribution-hero-instrument-icon {
   display: grid;
-  width: 50px;
-  height: 50px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 10px;
   background: #213751;
   color: #6aaeff;
-  font-size: 28px;
+  font-size: 20px;
 }
 
 .attribution-hero-instrument > div:nth-child(2) {
@@ -12944,13 +12944,13 @@ input[type="checkbox"] {
 }
 
 .attribution-hero-instrument strong {
-  font-size: 22px;
+  font-size: 17px;
 }
 
 .attribution-hero-instrument > div:nth-child(2) > span,
 .attribution-hero-price time {
   color: var(--attribution-muted);
-  font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .attribution-hero-price {
@@ -12962,11 +12962,11 @@ input[type="checkbox"] {
 }
 
 .attribution-hero-price > strong {
-  padding: 7px 12px;
+  padding: 5px 9px;
   border: 1px solid currentColor;
   border-radius: 8px;
   background: rgba(255, 98, 120, .12);
-  font: 700 21px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 16px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .attribution-hero-price > strong.watchlist-down {
@@ -12976,7 +12976,7 @@ input[type="checkbox"] {
 .attribution-hero-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   margin: 0;
 }
 
@@ -12984,11 +12984,11 @@ input[type="checkbox"] {
   container-type: inline-size;
   display: flex;
   min-width: 0;
-  min-height: 104px;
+  min-height: 72px;
   flex-direction: column;
   justify-content: center;
-  gap: 9px;
-  padding: 12px;
+  gap: 6px;
+  padding: 8px;
   border: 1px solid var(--attribution-border);
   border-radius: 10px;
   background: #1d3045;
@@ -12997,27 +12997,27 @@ input[type="checkbox"] {
 .attribution-hero-metric dt {
   order: 1;
   color: var(--attribution-muted);
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1.3;
   text-align: center;
 }
 
 .attribution-hero-metric dd span {
-  margin-right: 9px;
+  margin-right: 6px;
   color: var(--attribution-accent);
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .attribution-hero-metric dd {
   margin: 0;
-  font: 700 23px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 16px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
   white-space: nowrap;
 }
 
 @container (max-width: 150px) {
   .attribution-hero-metric dd {
-    font-size: 18px;
+    font-size: 15px;
   }
 
   .attribution-hero-metric dd span {
@@ -13031,7 +13031,7 @@ input[type="checkbox"] {
 
 .attribution-causal-section {
   container-type: inline-size;
-  padding: 22px 24px 20px;
+  padding: 14px 16px 16px;
   border: 1px solid var(--attribution-border);
   border-radius: 11px;
   background: #172639;
@@ -13040,38 +13040,38 @@ input[type="checkbox"] {
 .attribution-causal-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   min-width: 0;
 }
 
 .attribution-section-icon {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 5px;
   background: #3e82dc;
   color: #fff;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .attribution-causal-heading strong {
-  font-size: 19px;
+  font-size: 15px;
 }
 
 .attribution-causal-heading > span:last-child {
   color: var(--attribution-muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .attribution-causal-flow {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(165px, 1fr);
-  gap: 24px;
+  grid-auto-columns: minmax(150px, 1fr);
+  gap: 20px;
   overflow-x: auto;
-  margin: 20px 0 0;
+  margin: 12px 0 0;
   padding: 0 0 8px;
   list-style: none;
   scrollbar-color: #52738e transparent;
@@ -13080,9 +13080,9 @@ input[type="checkbox"] {
 
 .attribution-causal-flow li:not(:last-child)::before {
   position: absolute;
-  top: 17px;
+  top: 11px;
   left: 50%;
-  width: calc(100% + 24px);
+  width: calc(100% + 20px);
   border-top: 1px dashed #52738e;
   content: '';
 }
@@ -13096,28 +13096,28 @@ input[type="checkbox"] {
 
 .attribution-causal-flow li:not(:last-child)::after {
   position: absolute;
-  top: calc(50% + 18px);
-  right: -24px;
+  top: calc(50% + 12px);
+  right: -20px;
   display: grid;
-  width: 24px;
+  width: 20px;
   place-items: center;
   transform: translateY(-50%);
   color: var(--attribution-accent);
-  font-size: 21px;
+  font-size: 18px;
   line-height: 1;
   content: '→';
 }
 
 .attribution-causal-number {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 23px;
+  height: 23px;
   align-self: center;
   place-items: center;
   border-radius: 50%;
   background: #52c0e3;
   color: #fff;
-  font: 700 15px ui-monospace, monospace;
+  font: 700 10px ui-monospace, monospace;
   z-index: 1;
 }
 
@@ -13128,11 +13128,11 @@ input[type="checkbox"] {
 .attribution-causal-card {
   display: flex;
   flex: 1;
-  min-height: 220px;
+  min-height: 132px;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
   margin-top: 0;
-  padding: 16px;
+  padding: 12px 13px;
   border: 1px solid #35536e;
   border-radius: 10px;
   background: #142338;
@@ -13140,69 +13140,69 @@ input[type="checkbox"] {
 
 .attribution-causal-card > span {
   color: #b6c7ea;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .attribution-causal-card strong {
-  font-size: 18px;
+  font-size: 13px;
   line-height: 1.35;
 }
 
 .attribution-causal-card p {
   margin: 2px 0 0;
   color: #d1dbea;
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .attribution-context-grid,
 .attribution-forces-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 10px;
 }
 
 .attribution-context-grid article,
 .attribution-force-card {
   min-width: 0;
-  padding: 24px 26px;
+  padding: 13px 14px;
   border: 1px solid var(--attribution-border);
   border-radius: 10px;
   background: #172639;
 }
 
 .attribution-context-grid article {
-  min-height: 225px;
+  min-height: 0;
 }
 
 .attribution-context-heading,
 .attribution-force-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 9px;
   color: #e8f0f8;
-  font-size: 19px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .attribution-context-heading i,
 .attribution-force-heading i {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   place-items: center;
   border-radius: 5px;
   background: #3977cc;
   color: #dfeaff;
-  font-size: 21px;
+  font-size: 16px;
   font-style: normal;
 }
 
 .attribution-context-grid p {
-  margin: 14px 0 0;
+  margin: 7px 0 0;
   color: #d1dbea;
-  font-size: 17px;
-  line-height: 1.75;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .attribution-force-card.amplifier {
@@ -13233,12 +13233,12 @@ input[type="checkbox"] {
 
 .attribution-force-card ul {
   display: grid;
-  gap: 7px;
-  margin: 16px 0 0;
-  padding-left: 24px;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
   color: #d1dbea;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .attribution-force-card li::marker {
@@ -13255,7 +13255,7 @@ input[type="checkbox"] {
   }
 
   .attribution-hero-rail {
-    padding: 22px 0 0;
+    padding: 14px 0 0;
     border-top: 1px solid var(--attribution-border);
     border-left: 0;
   }
@@ -13277,11 +13277,11 @@ input[type="checkbox"] {
   .attribution-causal-section,
   .attribution-context-grid article,
   .attribution-force-card {
-    padding: 18px;
+    padding: 14px;
   }
 
   .attribution-hero-thesis {
-    padding-left: 18px;
+    padding-left: 16px;
   }
 
   .attribution-hero-instrument {
