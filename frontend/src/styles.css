@@ -12912,8 +12912,11 @@ input[type="checkbox"] {
 
 .attribution-causal-flow li:not(:last-child)::after {
   position: absolute;
-  top: 11px;
-  right: -13px;
+  top: 0;
+  left: 60%;
+  display: flex;
+  height: 23px;
+  align-items: center;
   color: rgba(49, 183, 207, 0.62);
   content: '→';
 }
