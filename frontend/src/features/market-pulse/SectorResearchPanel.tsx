@@ -4,6 +4,7 @@ import type { SectorFilter } from './marketResearchTypes';
 import type { SectorRotation, StockDiscoveryMarketContext } from './marketPulseTypes';
 
 type Props = { sectors: SectorRotation[]; businessDate: string; onOpenStockDiscovery?: (context: StockDiscoveryMarketContext) => void };
+const returnTone = (value?: number | null) => value == null ? '' : value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : '';
 export function SectorResearchPanel({ sectors, businessDate, onOpenStockDiscovery }: Props) {
   const [filter, setFilter] = useState<SectorFilter>({ kind: 'ALL', search: '' });
   const [selected, setSelected] = useState<string[]>([]);
@@ -28,7 +29,7 @@ export function SectorResearchPanel({ sectors, businessDate, onOpenStockDiscover
     </div>
     <p className="mp-research-note">{sectorRules[filter.kind]} 缺少筛选所需指标的行业不参与结果。数据日：{businessDate}。</p>
     <div className="mp-research-table-wrap"><table><caption>行业指标与比较选择</caption><thead><tr><th>比较</th><th>行业</th><th>今日</th><th>5日</th><th>20日</th><th>5日超额</th><th>上涨比例</th><th>继续研究</th></tr></thead><tbody>
-      {results.map(item => <tr key={item.sectorCode}><td><input type="checkbox" aria-label={`比较${item.sectorName}`} checked={selected.includes(item.sectorCode)} onChange={() => toggle(item.sectorCode)} /></td><th scope="row">{item.sectorName}</th><td>{pct(item.return1d)}</td><td>{pct(item.return5d)}</td><td>{pct(item.return20d)}</td><td>{pct(item.excessReturn5d)}</td><td>{ratio(item.breadthRatio)}</td><td><button type="button" disabled={!onOpenStockDiscovery} onClick={() => onOpenStockDiscovery?.(buildResearchContext([item], businessDate))}>研究行业</button></td></tr>)}
+      {results.map(item => <tr key={item.sectorCode}><td><input type="checkbox" aria-label={`比较${item.sectorName}`} checked={selected.includes(item.sectorCode)} onChange={() => toggle(item.sectorCode)} /></td><th scope="row">{item.sectorName}</th><td className={returnTone(item.return1d)}>{pct(item.return1d)}</td><td className={returnTone(item.return5d)}>{pct(item.return5d)}</td><td className={returnTone(item.return20d)}>{pct(item.return20d)}</td><td className={returnTone(item.excessReturn5d)}>{pct(item.excessReturn5d)}</td><td>{ratio(item.breadthRatio)}</td><td><button type="button" disabled={!onOpenStockDiscovery} onClick={() => onOpenStockDiscovery?.(buildResearchContext([item], businessDate))}>研究行业</button></td></tr>)}
     </tbody></table></div>
     {!results.length && <p className="mp-research-note">暂无行业满足条件。可放宽筛选，或补刷新行业行情后再试。</p>}
     <div className="mp-research-compare"><span>最多比较3个：{compared.map(item => item.sectorName).join(' / ') || '勾选行业开始比较'}</span><button type="button" disabled={!compared.length || !onOpenStockDiscovery} onClick={() => onOpenStockDiscovery?.(buildResearchContext(compared, businessDate))}>研究已选行业</button></div>

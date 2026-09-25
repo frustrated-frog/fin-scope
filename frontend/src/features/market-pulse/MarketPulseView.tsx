@@ -6,6 +6,7 @@ import { MarketTransitionPanel } from './MarketTransitionPanel';
 import { DailyResearchPanel } from './DailyResearchPanel';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
 import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
+import './MarketPulsePolish.css';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -575,9 +576,15 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
         </div>
         <div className="market-pulse-confidence">
           <span className={`quality-${workspace.qualityStatus.toLowerCase()}`}>{workspace.qualityStatus}</span>
-          <strong>{regime?.confidenceScore ?? 0}</strong>
+          <div className="market-pulse-confidence-dial">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle className="dial-track" cx="60" cy="60" r="49" />
+              <circle className="dial-value" cx="60" cy="60" r="49" pathLength="100"
+                strokeDasharray={`${Math.max(0, Math.min(100, regime?.confidenceScore ?? 0))} 100`} />
+            </svg>
+            <strong>{regime?.confidenceScore ?? 0}</strong>
+          </div>
           <small>判断置信度 / 100</small>
-          <i><b style={{ width: `${regime?.confidenceScore ?? 0}%` }} /></i>
         </div>
         <div className="market-pulse-controls">
           <div className="market-pulse-auto-refresh" aria-label="自动刷新计划">
