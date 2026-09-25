@@ -6,6 +6,7 @@ import com.finscope.domain.globalexpectations.GlobalExpectationInterpretation;
 import com.finscope.domain.globalexpectations.GlobalExpectationItem;
 import com.finscope.domain.globalexpectations.GlobalExpectationRadarMatch;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
@@ -28,8 +29,13 @@ public class GlobalExpectationEnhancementService {
     private GlobalExpectationInterpretationAgent agent;
     @Resource(name = "globalExpectationExecutor")
     private Executor executor;
+    @Value("${finscope.global-expectations.model-enabled:false}")
+    private boolean modelEnabled;
 
     public void request(List<GlobalExpectationEventGroup> groups) {
+        if (!modelEnabled) {
+            return;
+        }
         int requested = 0;
         for (GlobalExpectationEventGroup group : groups) {
             if (requested >= MAX_GROUPS_PER_REFRESH) {

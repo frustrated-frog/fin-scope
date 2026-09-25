@@ -25,6 +25,7 @@ import com.finscope.service.article.ArticleIngestCoordinator;
 import com.finscope.service.dedupe.FingerprintService;
 import com.finscope.service.fetch.RawItemSelector;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
@@ -71,6 +72,8 @@ public class IntakeService {
     private ArticleRepository articleRepository;
     @Resource
     private PromotionWorkflowService promotionWorkflowService;
+    @Value("${finscope.intake.scheduled-review-model-enabled:false}")
+    private boolean scheduledReviewModelEnabled;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -113,7 +116,10 @@ public class IntakeService {
                     duplicateCount++;
                 } else {
                     phase(progress, TaskPhase.LLM);
-                    CandidateReviewAgent.ReviewResult reviewResult = candidateReviewAgent.reviewWithResult(candidate);
+                    boolean modelEnabled = !IntakeEnums.TRIGGER_SCHEDULED.equals(triggerType)
+                            || scheduledReviewModelEnabled;
+                    CandidateReviewAgent.ReviewResult reviewResult =
+                            candidateReviewAgent.reviewWithResult(candidate, modelEnabled);
                     applyReview(candidate, reviewResult);
                     newCandidateCount++;
                 }

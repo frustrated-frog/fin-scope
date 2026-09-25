@@ -19,6 +19,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class GlobalExpectationEnhancementServiceTest {
     @Test
+    void disabledModelKeepsRuleInterpretationWithoutQueuingWork() {
+        FakeCache cache = new FakeCache();
+        CountingAgent agent = new CountingAgent();
+        List<Runnable> tasks = new ArrayList<Runnable>();
+        GlobalExpectationEnhancementService service = service(cache, agent, tasks::add);
+        ReflectionTestUtils.setField(service, "modelEnabled", false);
+        GlobalExpectationEventGroup group = group();
+
+        service.request(List.of(group));
+
+        assertEquals(0, tasks.size());
+        assertEquals(0, agent.calls);
+        assertEquals("RULE", group.getInterpretation().getStatus());
+    }
+
+    @Test
     void asynchronouslyCachesOneInterpretationPerUnchangedSignalFingerprint() {
         FakeCache cache = new FakeCache();
         CountingAgent agent = new CountingAgent();
@@ -26,6 +42,7 @@ class GlobalExpectationEnhancementServiceTest {
         ReflectionTestUtils.setField(service, "cacheRepository", cache);
         ReflectionTestUtils.setField(service, "agent", agent);
         ReflectionTestUtils.setField(service, "executor", (java.util.concurrent.Executor) Runnable::run);
+        ReflectionTestUtils.setField(service, "modelEnabled", true);
         GlobalExpectationEventGroup group = group();
 
         service.request(List.of(group));
@@ -95,6 +112,7 @@ class GlobalExpectationEnhancementServiceTest {
         ReflectionTestUtils.setField(service, "cacheRepository", cache);
         ReflectionTestUtils.setField(service, "agent", agent);
         ReflectionTestUtils.setField(service, "executor", executor);
+        ReflectionTestUtils.setField(service, "modelEnabled", true);
         return service;
     }
 

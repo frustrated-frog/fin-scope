@@ -30,12 +30,17 @@ public class CandidateReviewAgent {
     }
 
     public ReviewResult reviewWithResult(IntakeCandidate candidate) {
+        return reviewWithResult(candidate, true);
+    }
+
+    public ReviewResult reviewWithResult(IntakeCandidate candidate, boolean modelEnabled) {
         long start = System.currentTimeMillis();
         String input = traceInput(candidate);
-        if (llmChatClient == null || !llmChatClient.isConfigured()) {
+        if (!modelEnabled || llmChatClient == null || !llmChatClient.isConfigured()) {
             CandidateReview fallback = fallback(candidate);
-            record("FALLBACK", input, toJson(fallback), "LLM_UNCONFIGURED", start);
-            return new ReviewResult(fallback, IntakeEnums.AGENT_FALLBACK, "fallback", "LLM_UNCONFIGURED");
+            String reason = modelEnabled ? "LLM_UNCONFIGURED" : null;
+            record("FALLBACK", input, toJson(fallback), reason, start);
+            return new ReviewResult(fallback, IntakeEnums.AGENT_FALLBACK, "fallback", reason);
         }
         try {
             String raw = llmChatClient.complete(systemPrompt(), userPrompt(candidate));
