@@ -12854,11 +12854,15 @@ input[type="checkbox"] {
 }
 
 .attribution-reader-grid.has-narrative {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 286px;
 }
 
 .attribution-reader-grid.has-narrative .attribution-history {
-  position: static;
+  position: sticky;
+}
+
+.attribution-reader-grid.has-narrative .attribution-report {
+  min-width: 0;
 }
 
 .attribution-narrative-hero {
@@ -12977,6 +12981,7 @@ input[type="checkbox"] {
 }
 
 .attribution-hero-metric {
+  container-type: inline-size;
   display: flex;
   min-width: 0;
   min-height: 104px;
@@ -13008,6 +13013,16 @@ input[type="checkbox"] {
   font: 700 23px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
   white-space: nowrap;
+}
+
+@container (max-width: 150px) {
+  .attribution-hero-metric dd {
+    font-size: 18px;
+  }
+
+  .attribution-hero-metric dd span {
+    display: none;
+  }
 }
 
 .attribution-hero-metric.relative dd { color: #ff7185; }
@@ -13259,7 +13274,7 @@ input[type="checkbox"] {
   color: #5fd0ae;
 }
 
-@container (max-width: 1000px) {
+@container (max-width: 1200px) {
   .attribution-narrative-hero {
     grid-template-columns: 1fr;
   }
@@ -13309,6 +13324,16 @@ input[type="checkbox"] {
 
   .attribution-causal-heading {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .attribution-reader-grid.has-narrative {
+    grid-template-columns: 1fr;
+  }
+
+  .attribution-reader-grid.has-narrative .attribution-history {
+    position: static;
   }
 }
 
