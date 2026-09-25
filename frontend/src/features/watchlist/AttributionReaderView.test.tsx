@@ -362,15 +362,20 @@ test('separates AI market interpretation from factual evidence', async () => {
 
 test('assessment augments the original narrative and driver cards instead of replacing them', async () => {
   vi.mocked(api).mockResolvedValue({ id: 301, status: 'COMPLETED', summary: '经营改善可能带来重估',
+    instrumentCode: '603618', instrumentName: '杭电股份', instrumentType: 'STOCK', reportDate: '2026-09-24', changePct: 4.2,
     narrative: { plainSummary: '订单增长改善了收入预期', causalSteps: ['订单增长', '收入预期改善'], instrumentLink: '订单属于公司主营业务', whyToday: '周末公告在复市日受到关注' },
     drivers: [{ claim: '新增订单', plainExplanation: '新订单增加未来收入的可能性', marketInterpretation: '关注订单能否交付' }],
-    assessment: { version: 1, status: 'COMPLETE', researchFocus: '内部研究问题不要放在标题', focusReason: '', mainJudgment: '经营改善可能带来重估', pricingDebate: '', hypotheses: [], commentary: [], explainedScope: [], unexplainedScope: [], missingInformation: [], warnings: [] }
+    assessment: { version: 1, status: 'COMPLETE', researchFocus: '内部研究问题不要放在标题', focusReason: '', mainJudgment: '经营改善可能带来重估', pricingDebate: '', hypotheses: [], commentary: [], explainedScope: [], unexplainedScope: [], missingInformation: [], warnings: [],
+      marketContext: { instrumentCode: '603618', quoteVerified: true, benchmarkName: '沪深300', relativeChangePct: 2.5, amountRatio: 1.8, limitations: [] } }
   });
   render(<AttributionReaderView reportId={301} code="603618" name="杭电股份" onBack={vi.fn()} />);
   expect(await screen.findByText('30 秒看懂')).toBeVisible();
   expect(screen.getByText('原因故事线')).toBeVisible();
   expect(screen.getByText('为什么是它')).toBeVisible();
   expect(screen.getByText('为什么是今天')).toBeVisible();
+  expect(screen.getByText('603618.SS')).toBeVisible();
+  expect(screen.getByText('+2.50%')).toBeVisible();
+  expect(screen.getByText('1.80倍')).toBeVisible();
   expect(screen.getByText('AI 解读')).toBeVisible();
   expect(screen.queryByText('内部研究问题不要放在标题')).not.toBeInTheDocument();
 });

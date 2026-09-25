@@ -59,6 +59,36 @@ function hasAiInterpretation(driver: AttributionDriver) {
   );
 }
 
+function signedPercent(value?: number | null) {
+  return value == null || !Number.isFinite(value)
+    ? '—'
+    : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function displayStockCode(code: string) {
+  if (!/^\d{6}$/.test(code)) {
+    return code;
+  }
+  if (code.startsWith('6')) {
+    return `${code}.SS`;
+  }
+  if (code.startsWith('0') || code.startsWith('3')) {
+    return `${code}.SZ`;
+  }
+  return code;
+}
+
+function splitCausalStep(step: string, index: number) {
+  const date = step.match(/^\d{1,2}月\d{1,2}日(?:至\d{1,2}日)?/);
+  const content = date ? step.slice(date[0].length).trim() : step;
+  const separator = content.search(/[，。；]/);
+  return {
+    marker: date?.[0] || `节点 ${index + 1}`,
+    title: separator > 0 ? content.slice(0, separator) : content,
+    detail: separator > 0 ? content.slice(separator + 1).trim() : ''
+  };
+}
+
 export function AttributionReaderView({
   taskId,
   reportId,
@@ -268,6 +298,28 @@ export function AttributionReaderView({
   const directionWord = (displayedChangePct ?? 0) < 0 ? '跌' : (displayedChangePct ?? 0) > 0 ? '涨' : '波动';
   const amplifiedMoveLabel = (displayedChangePct ?? 0) < 0 ? '放大跌幅的因素'
     : (displayedChangePct ?? 0) > 0 ? '放大涨幅的因素' : '放大波动的因素';
+  const marketContext = assessment?.marketContext;
+  const benchmarkLabel = marketContext?.benchmarkName?.replace(/\s*[（(].*?[）)]/g, '').trim() || '基准';
+  const heroMetrics = [
+    {
+      label: `相对${benchmarkLabel}`,
+      value: signedPercent(marketContext?.relativeChangePct),
+      className: 'relative',
+      symbol: '▥'
+    },
+    {
+      label: '成交额 / 前5日均值',
+      value: marketContext?.amountRatio == null ? '—' : `${marketContext.amountRatio.toFixed(2)}倍`,
+      className: 'volume',
+      symbol: '◌'
+    },
+    {
+      label: '本次证据',
+      value: report?.evidences?.length == null ? '—' : `${report.evidences.length}条`,
+      className: 'evidence',
+      symbol: '✦'
+    }
+  ];
 
   return (
     <section className="panel wide attribution-panel">
@@ -276,7 +328,7 @@ export function AttributionReaderView({
           <span className="attribution-back-icon" aria-hidden="true">←</span>
           <span className="attribution-back-label">返回自选</span>
         </button>
-        <div className="attribution-title">
+        <div className={`attribution-title${report && narrative ? ' attribution-title-in-hero' : ''}`}>
           <strong>{name || code}</strong>
           <span className="watchlist-meta">{code}</span>
           {changeText && <span className={`attribution-change ${changeCls}`}>{changeText}</span>}
@@ -384,28 +436,62 @@ export function AttributionReaderView({
       )}
 
       {report && (
-        <div className="attribution-reader-grid">
+        <div className={`attribution-reader-grid${narrative ? ' has-narrative' : ''}`}>
         <div className="attribution-report">
           <div className="attribution-report-layout">
             <div className="attribution-report-main">
               {narrative ? (
                 <section className="attribution-narrative" aria-label="今日涨跌通俗解释">
                   <div className="attribution-narrative-hero">
-                    <span>30 秒看懂</span>
-                    <h3>今天为什么{directionWord}</h3>
-                    <p>{narrative.plainSummary || report.summary}</p>
+                    <div className="attribution-hero-thesis">
+                      <span className="attribution-hero-eyebrow">30 秒看懂</span>
+                      <h3>今天为什么{directionWord}</h3>
+                      <p>{narrative.plainSummary || report.summary}</p>
+                    </div>
+                    <div className="attribution-hero-rail">
+                      <div className="attribution-hero-instrument">
+                        <span className="attribution-hero-instrument-icon" aria-hidden="true">▥</span>
+                        <div>
+                          <strong>{report.instrumentName || name || code}</strong>
+                          <span>{type === 'STOCK' || report.instrumentType === 'STOCK' ? displayStockCode(code) : code}</span>
+                        </div>
+                        <div className="attribution-hero-price">
+                          {changeText && <strong className={changeCls}>{changeText}</strong>}
+                          {report.reportDate && <time dateTime={report.reportDate}>{report.reportDate.replace(/-/g, '.')} 收盘</time>}
+                        </div>
+                      </div>
+                      <dl className="attribution-hero-metrics">
+                        {heroMetrics.map((metric) => (
+                          <div className={`attribution-hero-metric ${metric.className}`} key={metric.className}>
+                            <dt>{metric.label}</dt>
+                            <dd><span aria-hidden="true">{metric.symbol}</span>{metric.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
                   </div>
 
                   {narrative.causalSteps && narrative.causalSteps.length > 0 && (
                     <div className="attribution-causal-section">
-                      <span className="attribution-summary-label">原因故事线{tentativeStory ? " · 待验证的解释路径" : ""}</span>
+                      <div className="attribution-causal-heading">
+                        <span className="attribution-section-icon" aria-hidden="true">✦</span>
+                        <strong>原因故事线{tentativeStory ? " · 待验证的解释路径" : ""}</strong>
+                        <span>从事件发生到市场反应的关键节点</span>
+                      </div>
                       <ol className="attribution-causal-flow">
-                        {narrative.causalSteps.map((step, index) => (
-                          <li key={`${step}-${index}`}>
-                            <span>{index + 1}</span>
-                            <p>{step}</p>
-                          </li>
-                        ))}
+                        {narrative.causalSteps.map((step, index) => {
+                          const parts = splitCausalStep(step, index);
+                          return (
+                            <li key={`${step}-${index}`}>
+                              <span className="attribution-causal-number">{index + 1}</span>
+                              <div className="attribution-causal-card">
+                                <span>{parts.marker}</span>
+                                <strong>{parts.title}</strong>
+                                {parts.detail && <p>{parts.detail}</p>}
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ol>
                     </div>
                   )}
@@ -413,13 +499,13 @@ export function AttributionReaderView({
                   <div className="attribution-context-grid">
                     {narrative.instrumentLink && (
                       <article>
-                        <span>为什么是它</span>
+                        <span className="attribution-context-heading"><i aria-hidden="true">▤</i>为什么是它</span>
                         <p>{narrative.instrumentLink}</p>
                       </article>
                     )}
                     {narrative.whyToday && (
                       <article>
-                        <span>为什么是今天</span>
+                        <span className="attribution-context-heading"><i aria-hidden="true">◷</i>为什么是今天</span>
                         <p>{narrative.whyToday}</p>
                       </article>
                     )}
@@ -429,13 +515,13 @@ export function AttributionReaderView({
                     <div className="attribution-forces-grid">
                       {(narrative.amplifiers?.length || 0) > 0 && (
                         <article className="attribution-force-card amplifier">
-                          <span>{amplifiedMoveLabel}</span>
+                          <span className="attribution-force-heading"><i aria-hidden="true">▥</i>{amplifiedMoveLabel}</span>
                           <ul>{narrative.amplifiers?.map((item, index) => <li key={index}>{item}</li>)}</ul>
                         </article>
                       )}
                       {(narrative.dampeners?.length || 0) > 0 && (
                         <article className="attribution-force-card dampener">
-                          <span>缓冲或反方因素</span>
+                          <span className="attribution-force-heading"><i aria-hidden="true">⬟</i>缓冲或反方因素</span>
                           <ul>{narrative.dampeners?.map((item, index) => <li key={index}>{item}</li>)}</ul>
                         </article>
                       )}
