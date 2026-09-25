@@ -16,7 +16,7 @@ class PythonDailyResearchSourceTest {
             {"schema_version":"daily-research-v1","business_date":"2026-09-11",
              "selection_date":"2026-09-10","source_code":"LOCAL_DAILY_BAR_PANEL",
              "quality_status":"PARTIAL","sample_count":1,
-             "stocks":[{"instrument_code":"600519.SH","return_1d":-2,"return_5d":null,
+             "stocks":[{"instrument_code":"600519.SH","instrument_name":"贵州茅台","return_1d":-2,"return_5d":null,
               "return_20d":null,"amount":100,"group_codes":["STRONG"]}],
              "groups":[{"code":"STRONG","label":"昨日强势组","definition":"昨日涨幅≥3%",
                "eligible_count":1,"member_count":1,"valid_count":1,"advance_ratio":null,
@@ -32,6 +32,7 @@ class PythonDailyResearchSourceTest {
         var result = source(PAYLOAD).fetch(DATE);
         assertEquals(DATE, result.getBusinessDate());
         assertEquals(-2D, result.getStocks().get(0).getReturn1d());
+        assertEquals("贵州茅台", result.getStocks().get(0).getInstrumentName());
         assertNull(result.getStocks().get(0).getReturn5d());
         assertEquals(1, result.getGroups().get(0).getMemberCount());
         assertNull(result.getGroups().get(0).getMedianReturn());

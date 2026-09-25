@@ -19,7 +19,7 @@ function GroupCard({ group, stocks, onOpenStock }: { group: ResearchGroup; stock
     {group.validCount < 5 && <p className="mp-research-note">有效样本少于5只，暂不输出统计结论。</p>}
     <div className="mp-return-distribution" aria-label={`${group.label}收益分布`}>{buckets.map(bucket => <div key={bucket.label}><span>{bucket.label}</span><meter min={0} max={Math.max(1, returns.length)} value={bucket.count} /><b>{bucket.count}只</b></div>)}</div>
     <details><summary>查看成员（{group.memberCount}）</summary>
-      <ul className="mp-research-members">{group.members.slice(0, limit).map(code => <li key={code}><div><strong>{code}</strong><span>{pct(stocks.get(code)?.return1d)}</span></div><ResearchStockActions code={code} onOpenStock={onOpenStock} /></li>)}</ul>
+      <ul className="mp-research-members">{group.members.slice(0, limit).map(code => <li key={code}><div><strong>{stocks.get(code)?.instrumentName ? `${stocks.get(code)?.instrumentName} ${code}` : code}</strong><span>{pct(stocks.get(code)?.return1d)}</span></div><ResearchStockActions code={code} onOpenStock={onOpenStock} /></li>)}</ul>
       {group.members.length > limit && <button type="button" onClick={() => setLimit(limit + 30)}>再显示30只</button>}
     </details>
   </article>;

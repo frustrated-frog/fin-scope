@@ -306,7 +306,10 @@ def create_app(
     def research_services() -> tuple[DailyResearchService, ResearchMemberService]:
         if not hasattr(application.state, "daily_research"):
             provider_router = _router(application)
-            application.state.daily_research = DailyResearchService(provider_router.snapshots)
+            application.state.daily_research = DailyResearchService(
+                provider_router.snapshots,
+                name_snapshot_path=config.data_dir / "stock-discovery-constituents.json",
+            )
             application.state.research_members = ResearchMemberService(provider_router)
         return application.state.daily_research, application.state.research_members
 

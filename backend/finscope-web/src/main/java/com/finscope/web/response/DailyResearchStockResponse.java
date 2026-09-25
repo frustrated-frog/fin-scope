@@ -9,6 +9,7 @@ import com.finscope.common.enums.marketpulse.MarketResearchGroup;
 @Data
 public class DailyResearchStockResponse {
     private String instrumentCode;
+    private String instrumentName;
     private Double return1d;
     private Double return5d;
     private Double return20d;
@@ -18,6 +19,7 @@ public class DailyResearchStockResponse {
     public static DailyResearchStockResponse of(DailyResearchStock source) {
         DailyResearchStockResponse value = new DailyResearchStockResponse();
         value.setInstrumentCode(source.getInstrumentCode());
+        value.setInstrumentName(source.getInstrumentName());
         value.setReturn1d(source.getReturn1d());
         value.setReturn5d(source.getReturn5d());
         value.setReturn20d(source.getReturn20d());

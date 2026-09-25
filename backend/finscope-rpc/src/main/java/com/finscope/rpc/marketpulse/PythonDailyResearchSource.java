@@ -107,6 +107,9 @@ public class PythonDailyResearchSource {
                 throw invalid("股票代码无效或重复");
             }
             value.setInstrumentCode(code);
+            if (!row.path("instrument_name").isMissingNode() && !row.path("instrument_name").isNull()) {
+                value.setInstrumentName(text(row, "instrument_name"));
+            }
             value.setReturn1d(number(row, "return_1d"));
             value.setReturn5d(number(row, "return_5d"));
             value.setReturn20d(number(row, "return_20d"));

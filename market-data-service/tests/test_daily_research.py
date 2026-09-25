@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import json
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -42,6 +43,19 @@ def store(tmp_path):
 
 def fetch(store, day=TODAY, now=NOW):
     return DailyResearchService(store, now=lambda: now).fetch(day)
+
+
+def test_constituent_names_enrich_cached_research_without_changing_returns(store, tmp_path):
+    save(store)
+    names = tmp_path / 'stock-discovery-constituents.json'
+    names.write_text(json.dumps({'sectors': {'one': {'values': [['600001', 'SH', '示例银行']]}}}), encoding='utf-8')
+    service = DailyResearchService(store, now=lambda: NOW, name_snapshot_path=names)
+    first = service.fetch(TODAY)
+    cached = service.fetch(TODAY)
+    assert first.stocks[0].instrument_name == '示例银行'
+    assert cached.cache_hit
+    assert cached.stocks[0].instrument_name == '示例银行'
+    assert cached.stocks[0].return_1d == first.stocks[0].return_1d
 
 
 def test_prior_selection_unaffected_by_current_jump_and_missing_today(store):

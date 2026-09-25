@@ -3,7 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { DailyResearchPanel } from './DailyResearchPanel';
 import { THEME_STORAGE_KEY } from './marketResearch';
 
-const research = { businessDate: '2026-09-11', selectionDate: '2026-09-10', sampleCount: 1, sourceCode: 'LOCAL_DAILY_BAR_PANEL', qualityStatus: 'PARTIAL', warnings: ['本地样本'], stocks: [{ instrumentCode: '600519.SH', return1d: -2, groupCodes: ['STRONG'] }], groups: [{ code: 'STRONG', label: '昨日强势组', definition: '昨日涨幅≥3%', eligibleCount: 1, memberCount: 1, validCount: 1, members: ['600519.SH'] }] };
+const research = { businessDate: '2026-09-11', selectionDate: '2026-09-10', sampleCount: 1, sourceCode: 'LOCAL_DAILY_BAR_PANEL', qualityStatus: 'PARTIAL', warnings: ['本地样本'], stocks: [{ instrumentCode: '600519.SH', instrumentName: '贵州茅台', return1d: -2, groupCodes: ['STRONG'] }], groups: [{ code: 'STRONG', label: '昨日强势组', definition: '昨日涨幅≥3%', eligibleCount: 1, memberCount: 1, validCount: 1, members: ['600519.SH'] }] };
 function response(data: unknown) {
   return { ok: true, status: 200, text: async () => JSON.stringify({ success: true, code: 'SUCCESS', message: '', traceId: 'test', timestamp: '', data }) };
 }
@@ -27,6 +27,7 @@ test('keeps small sample member visible and adds stock to watchlist', async () =
   await screen.findByText('昨日强势组');
   expect(screen.getByText(/有效样本少于5只/)).toBeInTheDocument();
   fireEvent.click(screen.getByText('查看成员（1）'));
+  expect(screen.getByText('贵州茅台 600519.SH')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '加入自选' }));
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/watchlist', expect.objectContaining({ method: 'POST', body: JSON.stringify({ code: '600519', type: 'STOCK', groupName: '市场研究' }) })));
 });

@@ -8,6 +8,7 @@ import com.finscope.common.enums.marketpulse.MarketResearchGroup;
 @Data
 public class DailyResearchStock {
     private String instrumentCode;
+    private String instrumentName;
     private Double return1d;
     private Double return5d;
     private Double return20d;

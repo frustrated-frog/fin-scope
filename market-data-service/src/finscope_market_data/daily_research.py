@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from functools import lru_cache
+import json
+from pathlib import Path
 from threading import Lock
 from math import isfinite
 from statistics import median
@@ -22,6 +24,7 @@ class ResearchModel(BaseModel):
 
 class ResearchStock(ResearchModel):
     instrument_code: str
+    instrument_name: str | None = None
     return_1d: float | None = None
     return_5d: float | None = None
     return_20d: float | None = None
@@ -53,6 +56,17 @@ class DailyResearchSnapshot(ResearchModel):
     stocks: list[ResearchStock] = Field(default_factory=list, max_length=10000)
     groups: list[ResearchGroup]
     warnings: list[str]
+
+
+@lru_cache(maxsize=4)
+def _constituent_names(path: str, _mtime_ns: int) -> dict[str, str]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    names: dict[str, str] = {}
+    for sector in payload["sectors"].values():
+        for code, market, name in sector["values"]:
+            if isinstance(name, str) and name.strip():
+                names[f"{code}.{market}"] = name.strip()
+    return names
 
 
 @lru_cache(maxsize=4096)
@@ -115,10 +129,24 @@ def is_closed_research_date(business_date: date, now: datetime) -> bool:
 class DailyResearchService:
     ALGORITHM_VERSION = "daily-research-v1.1"
 
-    def __init__(self, snapshots: SnapshotStore, now: Callable[[], datetime] | None = None):
+    def __init__(self, snapshots: SnapshotStore, now: Callable[[], datetime] | None = None,
+                 name_snapshot_path: str | Path | None = None):
         self.snapshots = snapshots
         self._cache_lock = Lock()
         self.now = now or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
+        self.name_snapshot_path = Path(name_snapshot_path) if name_snapshot_path else None
+
+    def _with_names(self, result: DailyResearchSnapshot) -> DailyResearchSnapshot:
+        path = self.name_snapshot_path
+        if path is None or not path.exists():
+            return result
+        try:
+            names = _constituent_names(str(path), path.stat().st_mtime_ns)
+        except (OSError, ValueError, TypeError, KeyError):
+            return result
+        for stock in result.stocks:
+            stock.instrument_name = names.get(stock.instrument_code)
+        return result
 
     def fetch(self, business_date: date) -> DailyResearchSnapshot:
         # Validate time on every request: an unavailable pre-close result is never cached.
@@ -131,7 +159,7 @@ class DailyResearchService:
             )
             if cached is not None:
                 try:
-                    return DailyResearchSnapshot.model_validate_json(cached).model_copy(update={"cache_hit": True}, deep=True)
+                    return self._with_names(DailyResearchSnapshot.model_validate_json(cached).model_copy(update={"cache_hit": True}, deep=True))
                 except ValueError:
                     pass
             result = self._calculate(business_date)
@@ -139,7 +167,7 @@ class DailyResearchService:
             self.snapshots.save_research_cache(
                 business_date.isoformat(), self.ALGORITHM_VERSION, revision, result.model_dump_json(),
             )
-            return result.model_copy(deep=True)
+            return self._with_names(result.model_copy(deep=True))
 
     def _calculate(self, business_date: date) -> DailyResearchSnapshot:
         groups = [
