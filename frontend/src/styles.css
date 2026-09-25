@@ -13070,18 +13070,19 @@ input[type="checkbox"] {
   grid-auto-flow: column;
   grid-auto-columns: minmax(165px, 1fr);
   gap: 24px;
-  position: relative;
   overflow-x: auto;
   margin: 20px 0 0;
-  padding: 0;
+  padding: 0 0 8px;
   list-style: none;
+  scrollbar-color: #52738e transparent;
+  scrollbar-width: thin;
 }
 
-.attribution-causal-flow::before {
+.attribution-causal-flow li:not(:last-child)::before {
   position: absolute;
   top: 17px;
-  right: 18px;
-  left: 18px;
+  left: 50%;
+  width: calc(100% + 24px);
   border-top: 1px dashed #52738e;
   content: '';
 }
@@ -13152,32 +13153,6 @@ input[type="checkbox"] {
   color: #d1dbea;
   font-size: 15px;
   line-height: 1.6;
-}
-
-@container (max-width: 900px) {
-  .attribution-causal-flow {
-    grid-auto-flow: row;
-    grid-auto-columns: auto;
-    grid-template-columns: 1fr;
-    gap: 32px;
-  }
-
-  .attribution-causal-flow::before {
-    display: none;
-  }
-
-  .attribution-causal-card {
-    min-height: 0;
-  }
-
-  .attribution-causal-flow li:not(:last-child)::after {
-    top: auto;
-    bottom: -27px;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    content: '↓';
-  }
 }
 
 .attribution-context-grid,
