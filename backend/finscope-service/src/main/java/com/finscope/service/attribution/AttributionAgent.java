@@ -2,6 +2,7 @@ package com.finscope.service.attribution;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.enums.attribution.EventContextStatus;
 import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.util.StringUtils;
@@ -10,6 +11,7 @@ import com.finscope.dao.article.ArticleRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.attribution.AttributionDriver;
 import com.finscope.domain.attribution.AttributionEvidence;
+import com.finscope.domain.attribution.AttributionEventContext;
 import com.finscope.domain.attribution.AttributionNarrative;
 import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.domain.instrument.Instrument;
@@ -58,6 +60,8 @@ public class AttributionAgent {
     private AttributionEvidenceGate evidenceGate;
     @Resource
     private AttributionAssessmentService assessmentService;
+    @Resource
+    private AttributionEventContextService eventContextService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -264,6 +268,18 @@ public class AttributionAgent {
             report.setDisclaimer("研判基于公开证据与目标日日线快照，机制解释不等于因果证明。");
         } else {
             synthesized = synthesize(report, instrument, changePct, evidences, startDate);
+        }
+        if ("STOCK".equalsIgnoreCase(instrument.getType()) && report.getAssessment() != null && eventContextService != null) {
+            publisher.publish(taskId, AttributionProgressEvent.stage("attribution-synth", "正在补充事件脉络与信息增量"));
+            try {
+                report.getAssessment().setEventContext(eventContextService.research(report, instrument, evidences));
+            } catch (RuntimeException ex) {
+                log.warn("事件扩展异常，不影响原归因 code={} error={}", instrument.getCode(), ex.getClass().getSimpleName());
+                AttributionEventContext partial = new AttributionEventContext();
+                partial.setStatus(EventContextStatus.UNAVAILABLE);
+                partial.setSummary("事件补充研究暂未完成，原归因内容已保留。");
+                report.getAssessment().setEventContext(partial);
+            }
         }
         report.setEvidences(evidences);
         agentRunRepository.record("attribution:attribution-synth", synthesized ? "SUCCESS" : "FALLBACK",

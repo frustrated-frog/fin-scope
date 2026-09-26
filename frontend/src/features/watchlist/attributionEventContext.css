@@ -1,0 +1,53 @@
+/* Independent addition: no selectors target the existing report or shared elements. */
+.attribution-event-context { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.attribution-event-context .attribution-event-section-head { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.attribution-event-context .attribution-event-eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .08em; }
+.attribution-event-context h4 { margin: 6px 0 0; font-size: 18px; line-height: 1.5; color: var(--ink); }
+.attribution-event-context .attribution-event-asof { color: var(--muted); font-size: 12px; }
+.attribution-event-context p, .attribution-event-context li { font-size: 14px; line-height: 1.85; }
+.attribution-event-context .attribution-event-summary { margin: 14px 0 20px; color: var(--ink); }
+.attribution-event-context .attribution-event-dossier { padding: 20px; margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.attribution-event-context .attribution-event-dossier-head { display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: space-between; align-items: center; }
+.attribution-event-context h5 { margin: 0; color: var(--ink); font-size: 16px; line-height: 1.6; }
+.attribution-event-context .attribution-event-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.attribution-event-context .attribution-event-tags span { font-size: 11px; padding: 3px 8px; border-radius: 5px; background: var(--surface-2); color: var(--muted); }
+.attribution-event-context .attribution-event-stage, .attribution-event-context .attribution-event-relation { margin: 12px 0; color: var(--muted); }
+.attribution-event-context .attribution-event-stage strong, .attribution-event-context .attribution-event-relation strong { color: var(--ink); margin-right: 10px; font-size: 12px; }
+.attribution-event-context h6 { margin: 0 0 10px; font-size: 12px; color: var(--muted); line-height: 1.65; }
+.attribution-event-context .attribution-event-progress { margin: 20px 0; }
+.attribution-event-context .attribution-event-progress h6 span { margin-left: 8px; font-weight: 400; font-size: 11px; }
+.attribution-event-context .attribution-event-progress ol { list-style: none; margin: 0; padding: 0; }
+.attribution-event-context .attribution-event-progress li { display: grid; grid-template-columns: 105px minmax(0,1fr); gap: 16px; padding: 0 0 18px 18px; position: relative; border-left: 1px solid var(--line); margin-left: 4px; }
+.attribution-event-context .attribution-event-progress li:last-child { padding-bottom: 0; }
+.attribution-event-context .attribution-event-progress li::before { content: ''; position: absolute; left: -4px; top: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.attribution-event-context time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.attribution-event-context .attribution-event-progress p { margin: 0; color: var(--ink); }
+.attribution-event-context .attribution-event-comparison, .attribution-event-context .attribution-event-judgments { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 18px 0; }
+.attribution-event-context .attribution-event-comparison > section { padding: 15px 17px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
+.attribution-event-context .attribution-event-comparison p, .attribution-event-context .attribution-event-judgments p, .attribution-event-context .attribution-event-impact p { margin: 0; color: var(--ink); }
+.attribution-event-context .attribution-event-impact { padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.attribution-event-context .attribution-event-direction { margin-left: 8px; color: var(--ink); }
+.attribution-event-context .direction-positive { color: #df6856; }
+.attribution-event-context .direction-negative { color: var(--accent); }
+.attribution-event-context .attribution-event-inference { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; }
+.attribution-event-context .attribution-event-pending ul { margin: 0; padding-left: 18px; color: var(--ink); }
+.attribution-event-context .attribution-event-evidence { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; color: var(--muted); font-size: 12px; }
+.attribution-event-context .attribution-event-citations { display: inline-flex; gap: 7px; flex-wrap: wrap; }
+.attribution-event-context a { color: var(--accent); text-underline-offset: 3px; }
+.attribution-event-context .attribution-event-citations a { font-size: 11px; text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.attribution-event-context a:hover { text-decoration: underline; }
+.attribution-event-context a:focus-visible, .attribution-event-context summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.attribution-event-context .attribution-event-notes { color: var(--muted); margin-top: 14px; }
+.attribution-event-context .attribution-event-notes p { font-size: 12px; margin: 6px 0; }
+.attribution-event-context .attribution-event-sources { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; }
+.attribution-event-context .attribution-event-sources summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.attribution-event-context .attribution-event-sources ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.attribution-event-context .attribution-event-sources li + li { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.attribution-event-context .attribution-event-sources li > div { display: flex; gap: 10px; }
+.attribution-event-context .attribution-event-sources small { color: var(--muted); font-size: 11px; }
+.attribution-event-context .attribution-event-sources p { margin: 5px 0 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 700px) {
+  .attribution-event-context .attribution-event-dossier { padding: 14px; }
+  .attribution-event-context .attribution-event-comparison, .attribution-event-context .attribution-event-judgments { grid-template-columns: minmax(0,1fr); }
+  .attribution-event-context .attribution-event-progress li { grid-template-columns: minmax(0,1fr); gap: 3px; }
+}

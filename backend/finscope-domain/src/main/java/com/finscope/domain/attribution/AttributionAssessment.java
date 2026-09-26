@@ -8,6 +8,8 @@ import java.util.List;
 @Data
 public class AttributionAssessment {
     private int version = 1;
+    /** 可选增量章节；旧报告为空。 */
+    private AttributionEventContext eventContext;
     private com.finscope.common.enums.attribution.AssessmentStatus status;
     private AttributionMarketContext marketContext;
     private String researchFocus;

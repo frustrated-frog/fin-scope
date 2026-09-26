@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -113,6 +114,9 @@ class AttributionAgentSearchEvidenceTest {
         assessment.setStatus(status);
         when(assessmentService.research(any(), any(), any(), any(), any())).thenReturn(assessment);
         ReflectionTestUtils.setField(agent, "assessmentService", assessmentService);
+        AttributionEventContextService eventService = mock(AttributionEventContextService.class);
+        when(eventService.research(any(), any(), any())).thenThrow(new IllegalStateException("extension unavailable"));
+        ReflectionTestUtils.setField(agent, "eventContextService", eventService);
         ReflectionTestUtils.setField(agent, "llmChatClient", llm);
         ArticleRepository articles = mock(ArticleRepository.class);
         when(articles.findAll()).thenReturn(Collections.emptyList());
@@ -131,6 +135,9 @@ class AttributionAgentSearchEvidenceTest {
         assertEquals(1, report.getDrivers().size());
         assertEquals(2, report.getNarrative().getCausalSteps().size());
         assertEquals(assessment, report.getAssessment());
+        assertEquals(com.finscope.common.enums.attribution.EventContextStatus.UNAVAILABLE,
+                report.getAssessment().getEventContext().getStatus());
+        verify(eventService).research(eq(report), eq(instrument), any());
     }
     @Test
     void filtersFutureWebAndLocalNewsBeforeCallingModelForHistoricalTradingDay() throws Exception {

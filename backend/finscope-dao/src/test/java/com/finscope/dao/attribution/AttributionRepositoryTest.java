@@ -52,6 +52,15 @@ class AttributionRepositoryTest {
         hypothesis.setImpactReason("旧订单增长仍有利于未来收入");
         hypothesis.setTimeRelevance("持续背景，不是当日新公告");
         assessment.setHypotheses(Arrays.asList(hypothesis));
+        com.finscope.domain.attribution.AttributionEventContext context = new com.finscope.domain.attribution.AttributionEventContext();
+        context.setStatus(com.finscope.common.enums.attribution.EventContextStatus.PARTIAL);
+        context.setAsOfDate("2026-09-18");
+        context.setSummary("旧事件持续影响，尚无新增经营披露");
+        com.finscope.domain.attribution.AttributionEventDossier event = new com.finscope.domain.attribution.AttributionEventDossier();
+        event.setTitle("订单进展");
+        event.setFramework(com.finscope.common.enums.attribution.EventResearchFramework.ORDER);
+        context.setEvents(Arrays.asList(event));
+        assessment.setEventContext(context);
         report.setAssessment(assessment);
         repository.updateResult(report);
         AttributionReport loaded = repository.findById(report.getId()).get();

@@ -393,3 +393,23 @@ test('historical unresolved hypotheses retain a visibly tentative story without 
   expect(screen.getByText('为什么是今天')).toBeVisible();
   expect(screen.getByText(/以下是可能的解释路径，尚不能认定/)).toBeVisible();
 });
+
+test('appends event research after all original report sections without changing them', async () => {
+  const oldReport = { id: 400, instrumentCode: '600000', status: 'COMPLETED', summary: '固定原摘要', drivers: [],
+    evidences: [{ title: '原有证据', url: 'https://example.com/original' }],
+    assessment: { version: 1, status: 'COMPLETE', researchFocus: '原焦点', mainJudgment: '原判断',
+      missingInformation: [], explainedScope: [], unexplainedScope: [], hypotheses: [], commentary: [], warnings: [] } };
+  vi.mocked(api).mockResolvedValue(oldReport);
+  const { container, rerender } = render(<AttributionReaderView reportId={400} code="600000" onBack={vi.fn()} />);
+  await screen.findByText('原有证据');
+  const originalHtml = container.querySelector('.attribution-report-layout')!.innerHTML;
+  expect(screen.queryByRole('region', { name: '事件脉络与本次增量' })).not.toBeInTheDocument();
+  vi.mocked(api).mockResolvedValue({ ...oldReport, id: 401, assessment: { ...oldReport.assessment,
+    eventContext: { version: 1, status: 'PARTIAL', summary: '新增追溯内容', events: [] } } });
+  rerender(<AttributionReaderView reportId={401} code="600000" onBack={vi.fn()} />);
+  await screen.findByText('新增追溯内容');
+  expect(container.querySelector('.attribution-report-layout')!.innerHTML).toBe(originalHtml);
+  const originalLayout = container.querySelector('.attribution-report-layout')!;
+  const section = screen.getByRole('region', { name: '事件脉络与本次增量' });
+  expect(originalLayout.nextElementSibling).toBe(section);
+});

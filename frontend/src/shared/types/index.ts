@@ -879,7 +879,45 @@ export type AttributionHypothesis = {
   revisionConditions: string[];
 };
 
+export type AttributionEventSource = {
+  id: string;
+  title: string;
+  url: string;
+  publishedAt?: string | null;
+  content?: string;
+  supplemental?: boolean;
+};
+
+export type AttributionEventDossier = {
+  title: string;
+  framework?: 'EARNINGS' | 'ORDER' | 'PRODUCT_PRICE' | 'GOVERNANCE' | 'INDUSTRY' | 'OTHER';
+  relationshipBasis?: string;
+  currentStage?: string;
+  changeType?: 'FIRST_DISCLOSURE' | 'SUBSTANTIVE_PROGRESS' | 'CONFIRMATION' | 'REPRINT' | 'UNCLEAR';
+  priorState?: string;
+  newInformation?: string;
+  impactDirection?: 'POSITIVE' | 'NEGATIVE' | 'MIXED' | 'NEUTRAL' | 'UNCLEAR';
+  impactAnalysis?: string;
+  changedJudgment?: string;
+  unchangedJudgment?: string;
+  pendingConditions?: string[];
+  timeline?: { date?: string | null; description: string; sourceIds?: string[] }[];
+  sourceIds?: string[];
+};
+
+export type AttributionEventContext = {
+  version: number;
+  status: 'COMPLETE' | 'PARTIAL' | 'UNAVAILABLE';
+  asOfDate?: string;
+  summary?: string;
+  searchCount?: number;
+  events?: AttributionEventDossier[];
+  sources?: AttributionEventSource[];
+  warnings?: string[];
+};
+
 export type AttributionAssessment = {
+  eventContext?: AttributionEventContext | null;
   version: number;
   status: 'COMPLETE' | 'INSUFFICIENT_EVIDENCE' | 'DEGRADED';
   marketContext?: AttributionMarketContext;

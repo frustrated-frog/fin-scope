@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AttributionEventContextSection } from './AttributionEventContextSection';
 import { AttributionAssessmentView } from './AttributionAssessmentView';
 import { api } from '../../shared/api/client';
 import { AttributionDriver, AttributionProgress, AttributionReport, AttributionResearchRunView } from '../../shared/types';
@@ -666,6 +667,7 @@ export function AttributionReaderView({
               </div>
             </div>
           </div>
+          <AttributionEventContextSection context={assessment?.eventContext} />
         </div>
         <aside className="attribution-history" aria-label="历史归因">
           <div className="attribution-history-head">
