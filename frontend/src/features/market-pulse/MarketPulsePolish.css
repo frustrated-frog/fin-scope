@@ -166,7 +166,8 @@
 .market-pulse-page .market-pulse-tabs {
   position: sticky;
   z-index: 8;
-  top: 142px;
+  top: var(--mp-nav-top, 8px);
+  align-self: start;
   display: flex;
   width: 100%;
   gap: 7px;
@@ -256,7 +257,7 @@
   .market-pulse-page .market-pulse-confidence-dial strong { font-size: 22px; }
   .market-pulse-page .market-pulse-confidence > small { margin: 0; }
   .market-pulse-page .market-pulse-controls { grid-template-columns: 1fr; padding: 17px 20px 20px; }
-  .market-pulse-page .market-pulse-tabs { position: static; flex-wrap: wrap; }
+  .market-pulse-page .market-pulse-tabs { flex-wrap: wrap; }
   .market-pulse-page .market-pulse-tabs button { flex: 1 1 30%; min-width: 90px; }
   .market-pulse-page .mp-research-section { padding: 20px 16px; }
   .market-pulse-page .mp-research-heading h3 { font-size: 23px; }
