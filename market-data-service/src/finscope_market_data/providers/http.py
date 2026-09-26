@@ -1,11 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 import httpx
 
 from finscope_market_data.providers.base import ProviderError
+
+
+def configure_direct_market_access() -> None:
+    """Bypass inherited proxies for local services and domestic market sources.
+
+    AKShare creates its own requests sessions, so configure their proxy bypass
+    once for this process before starting concurrent acquisition workers.
+    """
+    hosts = [
+        "localhost", "127.0.0.1", "::1", "eastmoney.com", "sina.com.cn",
+        "sinajs.cn", "sina.cn", "gtimg.cn", "qq.com", "10jqka.com.cn",
+        "cninfo.com.cn",
+    ]
+    existing = ",".join(os.environ.get(key, "") for key in ("no_proxy", "NO_PROXY"))
+    entries = list(dict.fromkeys(value.strip() for value in existing.split(",") if value.strip()))
+    entries.extend(host for host in hosts if host not in entries)
+    bypass = ",".join(entries)
+    os.environ["NO_PROXY"] = bypass
+    os.environ["no_proxy"] = bypass
 
 
 class ProviderHttpClient:
@@ -20,6 +40,7 @@ class ProviderHttpClient:
             "User-Agent": "Mozilla/5.0 FinScope-Market-Data/0.1",
         }
         self._client = client or httpx.AsyncClient(
+            trust_env=False,
             timeout=self.timeout,
             headers=self.headers,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),

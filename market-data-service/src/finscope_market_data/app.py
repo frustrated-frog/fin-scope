@@ -57,7 +57,7 @@ from finscope_market_data.providers.fuyao import (
     FuyaoSyncApiClient,
 )
 from finscope_market_data.providers.base import ProviderError
-from finscope_market_data.providers.http import ProviderHttpClient
+from finscope_market_data.providers.http import ProviderHttpClient, configure_direct_market_access
 from finscope_market_data.providers.index_daily import (
     EastmoneyIndexDailyProvider,
     SinaIndexDailyProvider,
@@ -76,6 +76,7 @@ from finscope_market_data.breadth import MarketBreadthService
 
 
 def build_router(settings: Settings | None = None) -> ProviderRouter:
+    configure_direct_market_access()
     config = settings or Settings()
     providers: list[Any] = [
         EastmoneyIndexDailyProvider(),
@@ -125,6 +126,7 @@ def create_app(
     market_dumps: Any | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:
+    configure_direct_market_access()
     config = settings or Settings()
     panel_store = PanelArtifactStore(config.data_dir / "quant")
     joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
