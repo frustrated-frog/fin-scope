@@ -123,7 +123,7 @@ const workspace = {
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
     const path = String(input);
-    const data = path.endsWith('/dates') ? ['2026-08-21']
+    const data = path.endsWith('/dates') ? ['2026-08-21', '2026-08-17']
       : path.endsWith('/refresh') && options?.method === 'POST' ? { status: 'SUCCEEDED' }
         : path.includes('/backfill?') && options?.method === 'POST' ? { status: 'SUCCEEDED', results: workspace.historyPoints }
           : path.endsWith('/2026-08-17') ? { ...workspace, businessDate: '2026-08-17', dailyReview: { ...workspace.dailyReview, businessDate: '2026-08-17', headline: '放量上行，科技主线与市场宽度共振' } }
@@ -219,8 +219,50 @@ test('keeps a manual recovery action beside the automatic schedule', async () =>
 
   fireEvent.click(await screen.findByRole('button', { name: '立即补刷新' }));
 
-  await waitFor(() => expect(addToast).toHaveBeenCalledWith('市场机会判断已补刷新', 'success'));
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('2026-08-21 市场机会判断已补刷新', 'success'));
   expect(fetch).toHaveBeenCalledWith('/api/market-pulse/refresh', expect.objectContaining({ method: 'POST' }));
+  expect(fetch).toHaveBeenCalledWith('/api/market-pulse/2026-08-21', expect.any(Object));
+});
+
+test('backfills the selected historical date and stays on that date after refresh', async () => {
+  const addToast = vi.fn();
+  render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
+  await screen.findByRole('button', { name: '立即补刷新' });
+  fireEvent.change(screen.getByLabelText('历史截面'), { target: { value: '2026-08-17' } });
+  await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' });
+  vi.mocked(fetch).mockClear();
+
+  fireEvent.click(screen.getByRole('button', { name: '立即补刷新' }));
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('2026-08-17 市场机会判断已补刷新', 'success'));
+  expect(fetch).toHaveBeenCalledWith(
+    '/api/market-pulse/backfill?startDate=2026-08-17&endDate=2026-08-17',
+    expect.objectContaining({ method: 'POST' })
+  );
+  expect(fetch).toHaveBeenCalledWith('/api/market-pulse/2026-08-17', expect.any(Object));
+  expect(fetch).not.toHaveBeenCalledWith('/api/market-pulse/refresh', expect.any(Object));
+  expect(fetch).not.toHaveBeenCalledWith('/api/market-pulse/latest', expect.any(Object));
+  expect(screen.getByLabelText('历史截面')).toHaveValue('2026-08-17');
+});
+
+test('reports a historical backfill failure even when the HTTP request succeeds', async () => {
+  const addToast = vi.fn();
+  render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
+  await screen.findByRole('button', { name: '立即补刷新' });
+  fireEvent.change(screen.getByLabelText('历史截面'), { target: { value: '2026-08-17' } });
+  await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' });
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true, status: 200,
+    text: async () => JSON.stringify({ success: true, code: 'SUCCESS', message: 'success', traceId: 'trace', timestamp: '2026-08-23T10:00:00Z', data: {
+      status: 'FAILED', results: [], failures: { '2026-08-17': '行情历史获取失败' }
+    } })
+  } as Response);
+
+  fireEvent.click(screen.getByRole('button', { name: '立即补刷新' }));
+
+  await waitFor(() => expect(addToast).toHaveBeenCalledWith('行情历史获取失败', 'error'));
+  expect(addToast).not.toHaveBeenCalledWith(expect.any(String), 'success');
+  expect(screen.getByLabelText('历史截面')).toHaveValue('2026-08-17');
 });
 
 test('does not write automatically from the page when market breadth is unavailable', async () => {

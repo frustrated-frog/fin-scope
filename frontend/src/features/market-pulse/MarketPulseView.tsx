@@ -494,15 +494,28 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }, []);
 
   const refresh = async (notify = true) => {
+    const businessDate = workspace?.businessDate;
+    const historical = businessDate && dates[0] && businessDate !== dates[0];
+    const successMessage = businessDate ? `${businessDate} 市场机会判断已补刷新` : '市场机会判断已补刷新';
     setRefreshing(true);
-    setMessage('正在补刷新市场机会判断');
+    setMessage(businessDate ? `正在补刷新 ${businessDate} 市场机会判断` : '正在补刷新市场机会判断');
     try {
-      await api('/api/market-pulse/refresh', { method: 'POST' });
-      await load();
-      if (notify) {
-        addToast('市场机会判断已补刷新', 'success');
+      if (historical) {
+        const result = await api<MarketPulseBackfillResult>(
+          `/api/market-pulse/backfill?startDate=${businessDate}&endDate=${businessDate}`,
+          { method: 'POST' }
+        );
+        if (result.status !== 'SUCCEEDED' || !result.results?.some(item => item.businessDate === businessDate)) {
+          throw new Error(result.failures?.[businessDate] ?? `${businessDate} 市场机会判断补刷新失败`);
+        }
+      } else {
+        await api('/api/market-pulse/refresh', { method: 'POST' });
       }
-      setMessage('市场机会判断已补刷新');
+      await load(businessDate);
+      if (notify) {
+        addToast(successMessage, 'success');
+      }
+      setMessage(successMessage);
     } catch (error) {
       if (notify) {
         addToast(error instanceof Error ? error.message : '市场机会补刷新失败', 'error');
@@ -601,7 +614,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
             {!dates.length && <option value={workspace.businessDate}>{workspace.businessDate}</option>}
             {dates.map(date => <option key={date} value={date}>{date}</option>)}
           </select></label>
-          <button type="button" aria-label="立即补刷新" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在计算…' : '立即补刷新'}</button>
+          <button type="button" aria-label="立即补刷新" title={`补刷新当前查看日期 ${workspace.businessDate ?? ''}`} onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在计算…' : '立即补刷新'}</button>
         </div>
       </header>
 
