@@ -469,20 +469,6 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   const [backfilling, setBackfilling] = useState(false);
   const [view, setView] = useState<'review' | 'transition' | 'breadth' | 'rotation' | 'history'>('review');
   const loadRequest = useRef(0);
-  const pageRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const page = pageRef.current;
-    const topbar = page?.closest('main')?.querySelector('.topbar');
-    if (!page || !topbar) {
-      return;
-    }
-    const updateOffset = () => page.style.setProperty('--mp-nav-top', `${topbar.getBoundingClientRect().height + 8}px`);
-    updateOffset();
-    const observer = new ResizeObserver(updateOffset);
-    observer.observe(topbar);
-    return () => observer.disconnect();
-  }, [workspace?.qualityStatus]);
 
   const load = async (date?: string) => {
     const requestId = ++loadRequest.current;
@@ -575,7 +561,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }
 
   return (
-    <section className="market-pulse-page" ref={pageRef}>
+    <section className="market-pulse-page">
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
         <button type="button" role="tab" aria-selected={view === 'transition'} onClick={() => setView('transition')}>转折与情景</button>
