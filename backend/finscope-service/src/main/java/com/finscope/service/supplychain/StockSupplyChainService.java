@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 @Service
 public class StockSupplyChainService {
     private static final long RUN_LEASE_MINUTES = 30L;
+    @org.springframework.beans.factory.annotation.Value("${finscope.stock-supply-chain.automatic-model-enabled:false}")
+    private boolean automaticModelEnabled;
 
     private final StrategyInstrumentResolver instrumentResolver;
     private final StockSupplyChainRepository repository;
@@ -30,9 +32,18 @@ public class StockSupplyChainService {
 
     public StockSupplyChainView get(String code) {
         Instrument instrument = instrumentResolver.resolve(code, "STOCK");
-        return new StockSupplyChainView(instrument.getCode(), instrument.getName(),
+        StockSupplyChainView view = new StockSupplyChainView(instrument.getCode(), instrument.getName(),
                 repository.findSnapshot(instrument.getId()).orElse(null),
                 repository.latestRun(instrument.getId()).orElse(null));
+        view.setAutomaticModelEnabled(automaticModelEnabled);
+        return view;
+    }
+
+    public StockSupplyChainRefreshRun refresh(String code, boolean automatic) {
+        if (automatic && !automaticModelEnabled) {
+            throw new BusinessConflictException("产业链自动 AI 生成已关闭，请手动点击生成");
+        }
+        return refresh(code);
     }
 
     public StockSupplyChainRefreshRun refresh(String code) {
@@ -83,6 +94,9 @@ public class StockSupplyChainService {
     }
 
     public static final class StockSupplyChainView {
+        @lombok.Getter
+        @lombok.Setter
+        private boolean automaticModelEnabled;
         private final String code;
         private final String name;
         private final StockSupplyChainSnapshot snapshot;

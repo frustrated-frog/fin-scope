@@ -78,13 +78,22 @@ class StockSupplyChainControllerTest {
         run.setId(10L);
         run.setStatus("RUNNING");
         run.setStage("QUEUED");
-        when(service.refresh("688012")).thenReturn(run);
+        when(service.refresh("688012", false)).thenReturn(run);
 
-        mockMvc.perform(post("/api/stocks/{code}/supply-chain/refresh", "688012"))
+        mockMvc.perform(post("/api/stocks/{code}/supply-chain/refresh", "688012").param("automatic", "false"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(10))
                 .andExpect(jsonPath("$.data.status").value("RUNNING"))
                 .andExpect(jsonPath("$.data.stage").value("QUEUED"));
+    }
+
+    @Test
+    void legacyRequestsAreTreatedAsAutomaticAndRejectedWhenDisabled() throws Exception {
+        when(service.refresh("688012", true)).thenThrow(
+                new com.finscope.common.exception.BusinessConflictException("产业链自动 AI 生成已关闭"));
+        mockMvc.perform(post("/api/stocks/{code}/supply-chain/refresh", "688012"))
+                .andExpect(status().isConflict());
+        org.mockito.Mockito.verify(service).refresh("688012", true);
     }
 
     private String repeat(String value, int count) {

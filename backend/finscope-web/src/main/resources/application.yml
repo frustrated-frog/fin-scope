@@ -141,6 +141,8 @@ finscope:
       retry-interval-ms: 1000
       retry-attempts: 1
       dlt-topic: finscope.radar.interpretation.requested.dlt
+  stock-supply-chain:
+    automatic-model-enabled: false
   industry-chain:
     recovery-model-enabled: false
     kafka:
@@ -151,3 +153,5 @@ finscope:
 
 # 资讯与雷达默认使用规则处理；仅显式启用时调用模型或证据搜索。
 finscope.news-workbench.model-enabled: false
+# 自动分类、聚合增强、Kafka 预解读和打开详情自动解读均需此开关。
+finscope.news-workbench.automatic-model-enabled: false

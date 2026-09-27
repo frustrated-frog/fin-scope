@@ -13,6 +13,8 @@ import java.util.List;
 
 /** 股票产业链当前快照与异步刷新状态响应。 */
 public final class StockSupplyChainViewResponse {
+    @lombok.Getter
+    private boolean automaticModelEnabled;
     private String code;
     private String name;
     private SnapshotResponse snapshot;
@@ -20,6 +22,7 @@ public final class StockSupplyChainViewResponse {
 
     public static StockSupplyChainViewResponse of(StockSupplyChainService.StockSupplyChainView view) {
         StockSupplyChainViewResponse response = new StockSupplyChainViewResponse();
+        response.automaticModelEnabled = view.isAutomaticModelEnabled();
         response.code = view.getCode();
         response.name = view.getName();
         response.snapshot = view.getSnapshot() == null ? null : SnapshotResponse.of(view.getSnapshot());

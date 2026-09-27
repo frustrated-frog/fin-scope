@@ -182,6 +182,7 @@ export type StockSupplyChainRefreshRun = {
   completedAt?: string;
 };
 export type StockSupplyChainView = {
+  automaticModelEnabled?: boolean;
   code: string;
   name: string;
   snapshot: StockSupplyChainSnapshot | null;

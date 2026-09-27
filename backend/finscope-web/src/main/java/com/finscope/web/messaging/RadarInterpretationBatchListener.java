@@ -27,7 +27,7 @@ public class RadarInterpretationBatchListener {
         if (message == null) return;
         for (Long eventId : message.getEventIds()) {
             try {
-                interpretations.request(eventId);
+                interpretations.requestAutomatic(eventId);
             } catch (BusinessException error) {
                 log.warn("跳过无法预解读的雷达事件，runKey={} eventId={} reason={}",
                         message.getRunKey(), eventId, error.getMessage());

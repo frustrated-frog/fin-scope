@@ -35,7 +35,7 @@ public class RadarEventEnhancementScheduler {
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public void schedule(RadarEvent event, List<RadarSignal> signals, LocalDateTime now, boolean includeEvidence) {
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isAutomaticModelEnabled()) {
             return;
         }
         if (event == null || event.getId() == null) {

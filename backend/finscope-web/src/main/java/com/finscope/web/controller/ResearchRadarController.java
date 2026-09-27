@@ -103,8 +103,9 @@ public class ResearchRadarController {
      * @return 雷达事件解读视图。
      */
     @PostMapping("/events/{id}/interpretation")
-    public ApiResponse<ResearchRadarView.InterpretationView> requestInterpretation(@PathVariable Long id){
-        return ApiResponses.success(service.requestInterpretation(id));
+    public ApiResponse<ResearchRadarView.InterpretationView> requestInterpretation(@PathVariable Long id,
+            @RequestParam(defaultValue = "true") boolean automatic) {
+        return ApiResponses.success(service.requestInterpretation(id, automatic));
     }
 
     /**

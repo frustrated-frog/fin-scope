@@ -56,6 +56,16 @@ class RadarEventInterpretationServiceTest {
     }
 
     @Test
+    void automaticRequestsAreBlockedEvenWhenManualModelsAreConfigured() {
+        RadarEventInterpretationService value = new RadarEventInterpretationService();
+        com.finscope.service.news.NewsWorkbenchCapabilities capabilities =
+                org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
+        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
+        org.junit.jupiter.api.Assertions.assertEquals("UNAVAILABLE", value.requestAutomatic(10L).getStatus());
+    }
+
+    @Test
     void disabledModelDoesNotCreateOrSubmitInterpretationJobs() {
         org.springframework.test.util.ReflectionTestUtils.setField(service, "capabilities",
                 mock(com.finscope.service.news.NewsWorkbenchCapabilities.class));

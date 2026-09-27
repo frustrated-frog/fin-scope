@@ -41,6 +41,21 @@ class StockSupplyChainServiceTest {
     }
 
     @Test
+    void blocksAutomaticRefreshBeforeAnyLookupOrScheduling() {
+        assertThrows(BusinessConflictException.class, () -> service.refresh("688012", true));
+        org.mockito.Mockito.verifyNoInteractions(resolver, repository, executor);
+    }
+
+    @Test
+    void explicitlyEnabledAutomaticRefreshCanSchedule() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "automaticModelEnabled", true);
+        StockSupplyChainRefreshRun run = running(LocalDateTime.now());
+        when(repository.createRun(7L)).thenReturn(run);
+        assertEquals(run, service.refresh("688012", true));
+        verify(executor).schedule(instrument, run);
+    }
+
+    @Test
     void readsAnEmptyViewForAStockThatHasNotBeenResearched() {
         when(repository.findSnapshot(7L)).thenReturn(Optional.empty());
         when(repository.latestRun(7L)).thenReturn(Optional.empty());
@@ -60,7 +75,7 @@ class StockSupplyChainServiceTest {
         when(repository.activeRun(7L)).thenReturn(Optional.empty());
         when(repository.createRun(7L)).thenReturn(run);
 
-        StockSupplyChainRefreshRun result = service.refresh("688012");
+        StockSupplyChainRefreshRun result = service.refresh("688012", false);
 
         assertEquals(run, result);
         verify(executor).schedule(instrument, run);
@@ -80,7 +95,7 @@ class StockSupplyChainServiceTest {
         when(repository.activeRun(7L)).thenReturn(Optional.of(stale));
         when(repository.createRun(7L)).thenReturn(next);
 
-        service.refresh("688012");
+        service.refresh("688012", false);
 
         assertEquals("FAILED", stale.getStatus());
         assertEquals("STALE_RUN_EXPIRED", stale.getErrorCode());
@@ -96,7 +111,7 @@ class StockSupplyChainServiceTest {
         org.mockito.Mockito.doThrow(new IllegalStateException("queue full"))
                 .when(executor).schedule(instrument, run);
 
-        StockSupplyChainRefreshRun result = service.refresh("688012");
+        StockSupplyChainRefreshRun result = service.refresh("688012", false);
 
         assertEquals("FAILED", result.getStatus());
         assertEquals("QUEUE_REJECTED", result.getErrorCode());

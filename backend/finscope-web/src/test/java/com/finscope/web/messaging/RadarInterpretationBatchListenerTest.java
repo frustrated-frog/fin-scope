@@ -36,20 +36,20 @@ class RadarInterpretationBatchListenerTest {
                 Arrays.asList(10L, 10L, 20L)));
 
         org.mockito.InOrder order = inOrder(interpretations);
-        order.verify(interpretations).request(10L);
-        order.verify(interpretations).request(20L);
-        verify(interpretations, times(2)).request(org.mockito.ArgumentMatchers.anyLong());
+        order.verify(interpretations).requestAutomatic(10L);
+        order.verify(interpretations).requestAutomatic(20L);
+        verify(interpretations, times(2)).requestAutomatic(org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test
     void skipsInvalidEventAndContinuesTheBatch() {
         RadarEventInterpretationService interpretations = mock(RadarEventInterpretationService.class);
-        doThrow(new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID)).when(interpretations).request(10L);
+        doThrow(new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID)).when(interpretations).requestAutomatic(10L);
         RadarInterpretationBatchListener listener = new RadarInterpretationBatchListener(interpretations);
 
         listener.consume(new RadarInterpretationBatchMessage("run-2", LocalDateTime.now(),
                 Arrays.asList(10L, 20L)));
 
-        verify(interpretations).request(20L);
+        verify(interpretations).requestAutomatic(20L);
     }
 }

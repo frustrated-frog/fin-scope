@@ -125,13 +125,13 @@ class ResearchRadarApiIntegrationTest {
     @Test
     void submitsEventInterpretationWithoutWaitingForCompletion() throws Exception {
         ResearchRadarView.InterpretationView queued = ResearchRadarView.InterpretationView.queued(10L);
-        when(service.requestInterpretation(10L)).thenReturn(queued);
+        when(service.requestInterpretation(10L, false)).thenReturn(queued);
 
-        mvc.perform(post("/api/research-radar/events/10/interpretation"))
+        mvc.perform(post("/api/research-radar/events/10/interpretation").param("automatic", "false"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.eventId").value("10"))
                 .andExpect(jsonPath("$.data.status").value("QUEUED"));
 
-        verify(service).requestInterpretation(10L);
+        verify(service).requestInterpretation(10L, false);
     }
 }

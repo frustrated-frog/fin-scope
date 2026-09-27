@@ -105,6 +105,7 @@ export type RadarAgentTrace = {
 };
 
 export type RadarEventDetail = {
+  automaticInterpretationEnabled?: boolean;
   event: RadarEvent;
   signals: RadarSignal[];
   evidence?: RadarEvidence[];

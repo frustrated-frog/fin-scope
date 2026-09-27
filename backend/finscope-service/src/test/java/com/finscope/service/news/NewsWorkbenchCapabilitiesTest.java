@@ -8,6 +8,21 @@ import static org.mockito.Mockito.*;
 
 class NewsWorkbenchCapabilitiesTest {
     @Test
+    void enablingManualModelsDoesNotEnableAutomaticCalls() {
+        NewsWorkbenchCapabilities capabilities = new NewsWorkbenchCapabilities();
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        ReflectionTestUtils.setField(capabilities, "llm", llm);
+        ReflectionTestUtils.setField(capabilities, "modelEnabled", true);
+        assertTrue(capabilities.isModelEnabled());
+        assertFalse(capabilities.isAutomaticModelEnabled());
+        ReflectionTestUtils.setField(capabilities, "automaticModelEnabled", true);
+        assertTrue(capabilities.isAutomaticModelEnabled());
+        ReflectionTestUtils.setField(capabilities, "modelEnabled", false);
+        assertFalse(capabilities.isAutomaticModelEnabled());
+    }
+
+    @Test
     void configuredKeyStillRespectsBothDisableSwitches() {
         NewsWorkbenchCapabilities capabilities = new NewsWorkbenchCapabilities();
         ReflectionTestUtils.setField(capabilities, "llm",

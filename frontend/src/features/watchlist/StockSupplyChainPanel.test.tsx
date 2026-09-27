@@ -77,10 +77,21 @@ describe('StockSupplyChainPanel', () => {
     expect(onOpenIndustryChain).toHaveBeenCalledWith('688012');
   });
 
-  test('automatically creates and polls the first supply-chain result', async () => {
-    vi.useFakeTimers();
+  test('does not generate on open and allows explicit manual generation', async () => {
     vi.mocked(api)
       .mockResolvedValueOnce({ code: '688012', name: '中微公司', snapshot: null, refreshRun: null } as never)
+      .mockResolvedValueOnce({ id: 10, status: 'RUNNING' } as never);
+    render(<StockSupplyChainPanel code="688012" name="中微公司" />);
+    const button = await screen.findByRole('button', { name: '开始建立图谱' });
+    expect(api).toHaveBeenCalledTimes(1);
+    await userEvent.click(button);
+    expect(api).toHaveBeenLastCalledWith('/api/stocks/688012/supply-chain/refresh?automatic=false', { method: 'POST' });
+  });
+
+  test('only automatically creates when the server explicitly enables it', async () => {
+    vi.useFakeTimers();
+    vi.mocked(api)
+      .mockResolvedValueOnce({ code: '688012', name: '中微公司', snapshot: null, refreshRun: null, automaticModelEnabled: true } as never)
       .mockResolvedValueOnce({ id: 10, status: 'RUNNING', stage: 'QUEUED' } as never)
       .mockResolvedValueOnce({
         code: '688012', name: '中微公司', snapshot,
@@ -90,7 +101,7 @@ describe('StockSupplyChainPanel', () => {
     render(<StockSupplyChainPanel code="688012" name="中微公司" />);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-    expect(api).toHaveBeenNthCalledWith(2, '/api/stocks/688012/supply-chain/refresh', { method: 'POST' });
+    expect(api).toHaveBeenNthCalledWith(2, '/api/stocks/688012/supply-chain/refresh?automatic=true', { method: 'POST' });
     expect(screen.getByText(/正在建立产业链结论/)).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
 

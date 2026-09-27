@@ -13,6 +13,13 @@ public class NewsWorkbenchCapabilities {
     @Value("${finscope.news-workbench.model-enabled:false}")
     private boolean modelEnabled;
 
+    @Value("${finscope.news-workbench.automatic-model-enabled:false}")
+    private boolean automaticModelEnabled;
+
+    public boolean isAutomaticModelEnabled() {
+        return automaticModelEnabled && isModelEnabled();
+    }
+
     public boolean isModelEnabled() {
         return modelEnabled && llm.isConfigured();
     }

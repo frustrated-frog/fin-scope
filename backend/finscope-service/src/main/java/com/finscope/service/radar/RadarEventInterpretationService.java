@@ -48,6 +48,17 @@ public class RadarEventInterpretationService {
     private ViewRevisionService viewRevisions;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
+    public boolean isAutomaticModelEnabled() {
+        return capabilities.isAutomaticModelEnabled();
+    }
+
+    public RadarEventInterpretation requestAutomatic(Long eventId) {
+        if (!isAutomaticModelEnabled()) {
+            return unavailable(eventId);
+        }
+        return request(eventId);
+    }
+
     public RadarEventInterpretation request(Long eventId) {
         RadarEvent event = findEvent(eventId);
         if (!capabilities.isModelEnabled()) {

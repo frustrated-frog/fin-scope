@@ -44,10 +44,10 @@ export function StockSupplyChainPanel({ code, name, onOpenIndustryChain }: {
     }, POLL_INTERVAL_MS);
   }, [code]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (automatic = false) => {
     setError('');
     try {
-      const nextRun = await api<StockSupplyChainRefreshRun>(`/api/stocks/${code}/supply-chain/refresh`, { method: 'POST' });
+      const nextRun = await api<StockSupplyChainRefreshRun>(`/api/stocks/${code}/supply-chain/refresh?automatic=${automatic}`, { method: 'POST' });
       if (stopped.current) return;
       setRun(nextRun);
       schedulePoll();
@@ -68,8 +68,8 @@ export function StockSupplyChainPanel({ code, name, onOpenIndustryChain }: {
         setLoading(false);
         if (view.refreshRun?.status === 'RUNNING') {
           schedulePoll();
-        } else if (!view.snapshot && !view.refreshRun) {
-          void refresh();
+        } else if (view.automaticModelEnabled === true && !view.snapshot && !view.refreshRun) {
+          void refresh(true);
         }
       })
       .catch((loadError) => {
@@ -127,7 +127,7 @@ export function StockSupplyChainPanel({ code, name, onOpenIndustryChain }: {
       ) : !running && (
         <div className="stock-chain-empty">
           <strong>暂时没有可用的产业链快照</strong>
-          <p>更新后，系统将呈现能够被公开信息支持的上下游关系。</p>
+          <p>点击后将调用 AI 模型生成上下游关系，并消耗 API 额度。</p>
           <button type="button" onClick={() => void refresh()}>开始建立图谱</button>
         </div>
       )}

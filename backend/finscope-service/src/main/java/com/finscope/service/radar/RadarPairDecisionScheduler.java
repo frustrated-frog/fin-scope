@@ -29,7 +29,7 @@ public class RadarPairDecisionScheduler {
 
     public void schedule(RadarSignal left, RadarSignal right,
                          String leftFingerprint, String rightFingerprint) {
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isAutomaticModelEnabled()) {
             return;
         }
         String pairKey = RadarPairDecision.pairKey(leftFingerprint, rightFingerprint);

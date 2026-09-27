@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 股票产业链证据快照接口。 */
@@ -27,8 +28,8 @@ public class StockSupplyChainController {
 
     @PostMapping("/refresh")
     public ApiResponse<StockSupplyChainViewResponse.RefreshRunResponse> refresh(
-            @PathVariable String code) {
+            @PathVariable String code, @RequestParam(defaultValue = "true") boolean automatic) {
         return ApiResponses.success(
-                StockSupplyChainViewResponse.RefreshRunResponse.of(service.refresh(code)));
+                StockSupplyChainViewResponse.RefreshRunResponse.of(service.refresh(code, automatic)));
     }
 }

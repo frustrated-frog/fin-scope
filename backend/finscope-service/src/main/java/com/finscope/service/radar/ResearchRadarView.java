@@ -255,6 +255,9 @@ public final class ResearchRadarView {
     }
 
     public static final class EventDetail {
+        @lombok.Getter
+        @lombok.Setter
+        private boolean automaticInterpretationEnabled;
         private final EventCard event;
         private final List<SignalView> signals;
         private final List<EvidenceView> evidence;

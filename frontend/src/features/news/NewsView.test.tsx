@@ -353,14 +353,14 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
   expect(screen.queryByRole('button', { name: /发现 .* 条新资讯/ })).not.toBeInTheDocument();
 });
 
-test('opens immediately and generates a missing interpretation in the background', async () => {
+test('requires an explicit click to generate a missing interpretation', async () => {
   vi.useFakeTimers();
   let detailCalls = 0;
   vi.mocked(api).mockImplementation((path, options) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path === '/api/news/window/filters') return Promise.resolve([]);
     if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
-    if (path === '/api/research-radar/events/10/interpretation' && options?.method === 'POST') {
+    if (path === '/api/research-radar/events/10/interpretation?automatic=false' && options?.method === 'POST') {
       return Promise.resolve({ eventId: 10, status: 'QUEUED', stale: false });
     }
     if (path === '/api/research-radar/events/10') {
@@ -376,7 +376,10 @@ test('opens immediately and generates a missing interpretation in the background
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
   expect(screen.getByRole('dialog', { name: event.title })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/research-radar/events/10/interpretation', { method: 'POST' });
+  expect(vi.mocked(api).mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: '生成 AI 解读' }));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  expect(api).toHaveBeenCalledWith('/api/research-radar/events/10/interpretation?automatic=false', { method: 'POST' });
   await act(async () => { vi.advanceTimersByTime(1_500); await Promise.resolve(); await Promise.resolve(); });
   expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
 });

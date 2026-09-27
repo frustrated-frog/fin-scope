@@ -52,7 +52,7 @@ public class NewsClassificationCoordinator {
         for (int start = 0; start < claimed.size(); start += BATCH_SIZE) {
             List<NewsClassificationCandidate> batch = new ArrayList<NewsClassificationCandidate>(
                     claimed.subList(start, Math.min(start + BATCH_SIZE, claimed.size())));
-            if (!capabilities.isModelEnabled()) {
+            if (!capabilities.isAutomaticModelEnabled()) {
                 classify(batch);
                 continue;
             }
@@ -72,7 +72,7 @@ public class NewsClassificationCoordinator {
         String input = batchInput(batch);
         try {
             List<NewsCategory> enabled = categories.findEnabled();
-            if (!capabilities.isModelEnabled()) {
+            if (!capabilities.isAutomaticModelEnabled()) {
                 for (NewsClassificationCandidate candidate : batch) {
                     repository.markRuleResult(rules.classify(candidate, enabled), LocalDateTime.now(clock));
                 }
@@ -140,7 +140,7 @@ public class NewsClassificationCoordinator {
     }
 
     private String modelName() {
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isAutomaticModelEnabled()) {
             return NewsRuleClassifier.VERSION;
         }
         String value = agent.modelName();

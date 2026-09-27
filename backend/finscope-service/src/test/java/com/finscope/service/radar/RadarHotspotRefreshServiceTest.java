@@ -175,7 +175,7 @@ class RadarHotspotRefreshServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "interpretationPublisher", interpretationPublisher);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isAutomaticModelEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }
@@ -188,7 +188,7 @@ class RadarHotspotRefreshServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isAutomaticModelEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }
@@ -202,7 +202,7 @@ class RadarHotspotRefreshServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isAutomaticModelEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }
@@ -219,7 +219,7 @@ class RadarHotspotRefreshServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "clock", clock);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isAutomaticModelEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }

@@ -283,10 +283,20 @@ public class ResearchRadarService {
             if (trust != null) trustView = trust.assess(signals, evidence, interpretation);
         } catch (RuntimeException ignored) {
         }
-        return new ResearchRadarView.EventDetail(event, signals, repository.findEventSignals(id), evidence,
+        ResearchRadarView.EventDetail detail = new ResearchRadarView.EventDetail(event, signals, repository.findEventSignals(id), evidence,
                 repository.findAgentRunsBySubject("RADAR_EVENT", id), interpretation,
                 opened == null ? null : opened.getState(), opened == null ? Collections.<RadarEventWorkspace.Observation>emptyList() : opened.getObservations(),
                 timelineEntries, trustView, opened == null ? Collections.<RadarEventWorkspace.ResearchLink>emptyList() : opened.getResearchLinks());
+        detail.setAutomaticInterpretationEnabled(interpretations != null && interpretations.isAutomaticModelEnabled());
+        return detail;
+    }
+
+    public ResearchRadarView.InterpretationView requestInterpretation(Long id, boolean automatic) {
+        if (interpretations == null) {
+            throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_UNAVAILABLE);
+        }
+        return new ResearchRadarView.InterpretationView(automatic
+                ? interpretations.requestAutomatic(id) : interpretations.request(id));
     }
 
     public ResearchRadarView.InterpretationView requestInterpretation(Long id) {
