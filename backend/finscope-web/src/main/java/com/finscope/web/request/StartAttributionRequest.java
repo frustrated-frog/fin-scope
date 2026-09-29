@@ -8,6 +8,6 @@ public class StartAttributionRequest {
     private String type;
     private String name;
     private Double changePct;
-    /** 归因对应的行情交易日，yyyy-MM-dd。 */
+    /** 归因目标日期，yyyy-MM-dd；股票仅支持北京时间今天、昨天、前天，省略时为今天。 */
     private String quoteDate;
 }

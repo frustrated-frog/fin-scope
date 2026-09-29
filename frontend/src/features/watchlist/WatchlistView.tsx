@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { recentAttributionDates } from './attributionDates';
 
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import { api } from '../../shared/api/client';
@@ -105,6 +106,12 @@ export function WatchlistView({
   const [submitting, setSubmitting] = useState(false);
   const [attribution, setAttribution] = useState<AttributionTarget | null>(null);
   const [attributing, setAttributing] = useState<string | null>(null);
+  const [attributionDates, setAttributionDates] = useState(recentAttributionDates);
+  const [selectedDates, setSelectedDates] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const timer = window.setInterval(() => setAttributionDates(recentAttributionDates()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [movingId, setMovingId] = useState<number | null>(null);
   const [groupFocused, setGroupFocused] = useState(false);
@@ -129,8 +136,15 @@ export function WatchlistView({
     await dashboard.refreshAll();
   }
 
+  function attributionDate(item: AttributionInstrument) {
+    const preferred = selectedDates[item.code] || item.quoteDate;
+    return attributionDates.some(option => option.date === preferred) ? preferred! : attributionDates[0].date;
+  }
+
   async function startAttribution(item: AttributionInstrument) {
-    const changePct = latestChangePct(item);
+    const quoteDate = item.type === 'STOCK' ? attributionDate(item) : item.quoteDate;
+    // 历史日期的涨跌幅由后端查询，不能沿用当前卡片的行情。
+    const changePct = item.type === 'STOCK' && quoteDate !== item.quoteDate ? undefined : latestChangePct(item);
     setAttributing(item.code);
     try {
       const res = await api<{ taskId: string; reportId: string | number }>('/api/attribution/start', {
@@ -140,7 +154,7 @@ export function WatchlistView({
           type: item.type,
           name: item.name,
           changePct,
-          quoteDate: item.quoteDate
+          quoteDate
         })
       });
       setAttribution({
@@ -633,6 +647,21 @@ export function WatchlistView({
                                 ))}
                               </select>
                             </label>
+                            {item.type === 'STOCK' && (
+                              <label className="watchlist-move" title="最近三个自然日；历史日期休市或日线尚未同步时会提示更换日期">
+                                <span className="watchlist-move-label">归因日期</span>
+                                <select
+                                  className="watchlist-move-select"
+                                  aria-label={`归因日期-${item.code}`}
+                                  value={attributionDate(item)}
+                                  title={attributionDate(item)}
+                                  disabled={attributing === item.code}
+                                  onChange={(event) => setSelectedDates(current => ({ ...current, [item.code]: event.target.value }))}
+                                >
+                                  {attributionDates.map(option => <option key={option.date} value={option.date}>{option.label} · {option.date.slice(5)}</option>)}
+                                </select>
+                              </label>
+                            )}
                             <button
                               className="watchlist-attr-button"
                               type="button"

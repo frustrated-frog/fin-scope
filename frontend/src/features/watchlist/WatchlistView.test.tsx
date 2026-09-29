@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 // @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
 import { readFileSync } from 'node:fs';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
 import { WatchlistView } from './WatchlistView';
@@ -496,4 +496,39 @@ test('colors stock and fund fluid by the current quote direction, with neutral u
   for (const item of cases) {
     expect((await screen.findByText(item.name)).closest('.watchlist-card')).toHaveAttribute('data-flow-surface', item.tone);
   }
+});
+
+
+afterEach(() => vi.useRealTimers());
+
+test('selects a recent stock attribution date without sending the current return for yesterday', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-29T04:00:00Z'));
+  const user = userEvent.setup();
+  const addToast = vi.fn();
+  vi.mocked(api).mockImplementation((path: string) => {
+    if (path === '/api/watchlist') {
+      return Promise.resolve([
+        { id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteDate: '2026-09-29', changePct: 9.99 },
+        { id: 2, code: '021894', type: 'FUND', name: '基金', quoteDate: '2026-09-28' }
+      ]) as never;
+    }
+    if (path === '/api/attribution/start') {
+      return Promise.reject(new Error('所选日期暂无可用日线行情'));
+    }
+    return Promise.resolve([]) as never;
+  });
+  render(<WatchlistView addToast={addToast} setMessage={vi.fn()} />);
+  const select = await screen.findByRole('combobox', { name: '归因日期-600519' });
+  expect(select).toHaveValue('2026-09-29');
+  expect(select.querySelectorAll('option')).toHaveLength(3);
+  expect(screen.queryByRole('combobox', { name: '归因日期-021894' })).not.toBeInTheDocument();
+  await user.selectOptions(select, '2026-09-28');
+  await user.click(screen.getAllByRole('button', { name: /深度归因/ })[0]);
+  await waitFor(() => expect(api).toHaveBeenCalledWith('/api/attribution/start', {
+    method: 'POST', body: JSON.stringify({ code: '600519', type: 'STOCK', name: '贵州茅台', quoteDate: '2026-09-28' })
+  }));
+  expect(addToast).toHaveBeenCalledWith('所选日期暂无可用日线行情', 'error');
+  expect(select).toHaveValue('2026-09-28');
+  expect(select).toBeEnabled();
 });

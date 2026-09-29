@@ -10,6 +10,7 @@ import com.finscope.domain.attribution.AttributionResearchRun;
 import com.finscope.domain.attribution.AttributionResearchStep;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.attribution.AttributionEvidence;
+import com.finscope.domain.attribution.AttributionMarketContext;
 import com.finscope.domain.attribution.AttributionReport;
 import com.finscope.domain.instrument.Instrument;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +40,8 @@ public class AttributionService {
     private AttributionRepository attributionRepository;
     @Resource
     private AttributionHarness attributionHarness;
+    @Resource
+    private AttributionMarketContextService marketContextService;
     @Resource(name = "attributionResearchRunRepository")
     private AttributionResearchRunRepository researchRunRepository;
     @Resource
@@ -52,6 +57,8 @@ public class AttributionService {
             throw new BusinessException(BizErrorCode.INSTRUMENT_CODE_REQUIRED);
         }
         String normalizedType = normalizeType(type);
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        LocalDate reportDate = parseReportDate(quoteDate, normalizedType, today);
         String normalizedCode = code.trim();
         java.util.Optional<Instrument> stored = "STOCK".equals(normalizedType)
                 ? instrumentRepository.findByCodeTypeAndMarket(
@@ -60,19 +67,29 @@ public class AttributionService {
         Instrument instrument = stored
                 .orElseGet(() -> transientInstrument(code.trim(), normalizedType, name));
 
+        Double targetChangePct = changePct;
+        if ("STOCK".equals(normalizedType) && reportDate.isBefore(today)) {
+            AttributionMarketContext context = marketContextService.capture(instrument, reportDate);
+            if (!context.isQuoteVerified() || context.getStockChangePct() == null) {
+                throw new BusinessException(BizErrorCode.ATTRIBUTION_DATE_QUOTE_UNAVAILABLE);
+            }
+            targetChangePct = context.getStockChangePct();
+        }
+        final Double researchChangePct = targetChangePct;
+
         // 先建 GENERATING 报告
         AttributionReport report = new AttributionReport();
         report.setInstrumentCode(instrument.getCode());
         report.setInstrumentName(StringUtils.firstNonBlank(instrument.getName(), name, instrument.getCode()));
         report.setInstrumentType(instrument.getType());
-        report.setReportDate(parseReportDate(quoteDate));
-        report.setChangePct(changePct);
+        report.setReportDate(reportDate);
+        report.setChangePct(researchChangePct);
         report.setStatus("GENERATING");
         AttributionReport saved = attributionRepository.createReport(report);
 
         String taskId = UUID.randomUUID().toString();
         try {
-            executor.execute(() -> runResearch(taskId, saved, instrument, changePct));
+            executor.execute(() -> runResearch(taskId, saved, instrument, researchChangePct));
         } catch (RuntimeException ex) {
             reportSubmissionFailed(saved, ex);
             throw new BusinessException(BizErrorCode.ATTRIBUTION_TASK_SUBMIT_FAILED);
@@ -169,14 +186,19 @@ public class AttributionService {
         return code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
     }
 
-    private LocalDate parseReportDate(String quoteDate) {
-        if (StringUtils.isBlank(quoteDate)) return LocalDate.now();
-        try {
-            return LocalDate.parse(quoteDate.trim());
-        } catch (RuntimeException ex) {
-            log.warn("行情交易日格式无效 quoteDate={}，回退当前日期", quoteDate);
-            return LocalDate.now();
+    private LocalDate parseReportDate(String quoteDate, String type, LocalDate today) {
+        LocalDate date = today;
+        if (!StringUtils.isBlank(quoteDate)) {
+            try {
+                date = LocalDate.parse(quoteDate.trim());
+            } catch (DateTimeParseException ex) {
+                throw new BusinessException(BizErrorCode.ATTRIBUTION_DATE_INVALID);
+            }
         }
+        if ("STOCK".equals(type) && (date.isAfter(today) || date.isBefore(today.minusDays(2)))) {
+            throw new BusinessException(BizErrorCode.ATTRIBUTION_DATE_OUT_OF_RANGE);
+        }
+        return date;
     }
 
     private Instrument transientInstrument(String code, String type, String name) {
