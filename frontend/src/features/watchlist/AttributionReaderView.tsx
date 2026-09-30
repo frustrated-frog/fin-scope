@@ -642,29 +642,6 @@ export function AttributionReaderView({
               )}
 
               {report.disclaimer && <p className="attribution-disclaimer">⚠ {report.disclaimer}</p>}
-
-              <div>
-                <h4 className="attribution-section-title">
-                  📰 证据 {report.evidences ? `(${report.evidences.length})` : ''}
-                  {report.durationMs ? <span className="watchlist-meta"> · 耗时 {Math.round(report.durationMs / 1000)}s</span> : null}
-                </h4>
-                <div className="attribution-evidences">
-                  {!report.evidences?.length && <p className="muted">本次报告暂无可展示的证据来源。</p>}
-                  {(report.evidences || []).map((evidence, index) => (
-                    <div className="attribution-evidence" key={evidence.id || evidence.eventKey || evidence.url || index}>
-                      <span className={`attribution-tier attribution-tier-${evidence.sourceTier || 'T3'}`}>
-                        {evidence.sourceTier || 'T3'}
-                      </span>
-                      {evidence.url ? (
-                        <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title || evidence.url}</a>
-                      ) : (
-                        <span>{evidence.title}</span>
-                      )}
-                      {evidence.sourceDomain && <span className="watchlist-meta"> · {evidence.sourceDomain}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
           <AttributionEventContextSection context={assessment?.eventContext} />

@@ -401,7 +401,9 @@ test('appends event research after all original report sections without changing
       missingInformation: [], explainedScope: [], unexplainedScope: [], hypotheses: [], commentary: [], warnings: [] } };
   vi.mocked(api).mockResolvedValue(oldReport);
   const { container, rerender } = render(<AttributionReaderView reportId={400} code="600000" onBack={vi.fn()} />);
-  await screen.findByText('原有证据');
+  await screen.findByRole('region', { name: '研判补充' });
+  expect(screen.queryByText('原有证据')).not.toBeInTheDocument();
+  expect(container.querySelector('.attribution-evidences')).toBeNull();
   const originalHtml = container.querySelector('.attribution-report-layout')!.innerHTML;
   expect(screen.queryByRole('region', { name: '事件脉络与本次增量' })).not.toBeInTheDocument();
   vi.mocked(api).mockResolvedValue({ ...oldReport, id: 401, assessment: { ...oldReport.assessment,

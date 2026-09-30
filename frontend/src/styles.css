@@ -13521,23 +13521,6 @@ input[type="checkbox"] {
   border-radius: 8px;
 }
 
-.attribution-evidences {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.attribution-evidence {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.attribution-evidence a {
-  color: inherit;
-}
-
 .attribution-tier {
   flex: 0 0 auto;
   font-size: 11px;

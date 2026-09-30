@@ -15,6 +15,8 @@
 
 /* 新旧报告共享同一阅读层级；所有样式限定在归因页面内。 */
 .attribution-report { position: relative; z-index: 1; min-width: 0; }
+.attribution-report-layout { display: flex; flex-direction: column; gap: 20px; }
+.attribution-report-support:empty { display: none; }
 .attribution-report-main, .attribution-report-support { min-width: 0; overflow-wrap: anywhere; }
 .attribution-report .attribution-driver { padding: 18px 20px; background: color-mix(in srgb, var(--surface) 94%, transparent); }
 .attribution-report .attribution-driver-title { flex: 1 1 240px; align-items: flex-start; flex-wrap: wrap; }
@@ -40,9 +42,6 @@
 .attribution-research-gaps ul { padding-left: 18px; }
 .attribution-research-gaps li + li { margin-top: 8px; }
 .attribution-report-support > div { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.attribution-report .attribution-evidence { align-items: baseline; flex-wrap: wrap; gap: 6px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.attribution-report .attribution-evidence:last-child { border-bottom: 0; }
-.attribution-report .attribution-evidence a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .attribution-report .attribution-driver { padding: 14px; }
   .attribution-report .attribution-driver-ai-grid, .attribution-hypothesis-checks, .attribution-report .attribution-context-grid, .attribution-report .attribution-forces-grid { grid-template-columns: minmax(0,1fr); }
