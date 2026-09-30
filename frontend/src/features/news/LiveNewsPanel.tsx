@@ -392,7 +392,7 @@ export function LiveNewsPanel({
       {pending ? (
         <button
           type="button"
-          className="news-window-update"
+          className="news-update-notice"
           onClick={() => {
             setQuery({
               ...query,

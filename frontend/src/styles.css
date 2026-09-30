@@ -16812,7 +16812,10 @@ input[type="checkbox"] {
 .news-source-filter button.active { border-color: color-mix(in srgb, var(--news-pulse) 55%, var(--line)); background: color-mix(in srgb, var(--news-pulse) 11%, transparent); color: var(--ink); }
 .news-degraded { display: flex; align-items: center; gap: 9px; color: var(--news-time); font-size: 13px; }
 .news-degraded span { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font: 800 11px/1 monospace; }
-.news-update-notice { justify-self: center; padding: 9px 18px; border: 1px solid color-mix(in srgb, var(--news-pulse) 50%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--news-pulse) 12%, var(--surface)); color: var(--news-pulse); font-size: 12px; font-weight: 800; cursor: pointer; }
+.news-update-notice { justify-self: center; max-width: 100%; min-height: 40px; padding: 9px 18px; border: 1px solid color-mix(in srgb, var(--news-pulse) 50%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--news-pulse) 12%, var(--surface)); color: var(--news-pulse); font-size: 12px; font-weight: 800; cursor: pointer; }
+
+.news-update-notice:hover { background: color-mix(in srgb, var(--news-pulse) 20%, var(--surface)); }
+.news-update-notice:focus-visible { outline: 2px solid var(--news-pulse); outline-offset: 3px; }
 
 .news-board { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .8fr); gap: 18px; align-items: start; }
 .news-flash-panel, .news-depth-panel { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--news-panel); }

@@ -335,12 +335,6 @@
 .news-window-error button {
   margin-left: 10px;
 }
-.news-window button.news-window-update {
-  width: 100%;
-  color: var(--nw-accent);
-  background: var(--nw-tint);
-  margin-bottom: 12px;
-}
 .news-report-dialog {
   padding: 0;
   border: 1px solid var(--nw-line);
