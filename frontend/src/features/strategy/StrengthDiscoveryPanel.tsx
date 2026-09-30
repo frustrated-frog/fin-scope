@@ -33,7 +33,7 @@ export function StrengthDiscoveryPanel({ report, onOpenResearch }: {
   const visible = filtered.slice(currentPage * 8, currentPage * 8 + 8);
   const sources = [...new Set(items.flatMap(item => item.sources))];
   return <section className="strength-discovery" aria-label="短期强势股研究">
-    <header className="strength-heading"><div><span className="strength-eyebrow">事件观察 · 次日研究</span><h3>短期强势观察池</h3></div><time>{report.as_of_date}</time></header>
+    <header className="strength-heading"><div><span className="strength-eyebrow">事件观察 · 次日研究</span><h3>短期强势观察池</h3></div><time dateTime={report.as_of_date}>研究日期 · {report.as_of_date}</time></header>
     <p className="strength-intro">先看已经发生的强势事件，再查看次日历史统计。观察名单不代表买入建议。</p>
     <div className="strength-overview">
       <div><span>观察股票</span><strong>{items.length}<small>只</small></strong></div>
@@ -50,6 +50,7 @@ export function StrengthDiscoveryPanel({ report, onOpenResearch }: {
       <label><span>事件来源</span><select value={source} onChange={event => { setSource(event.target.value); setPage(0); }}><option value="ALL">全部来源</option>{sources.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
       <span className="strength-result-count" role="status">找到 {filtered.length} 只</span>
     </div>
+    <div className="strength-columns" aria-hidden="true"><span>股票 / 事件来源</span><span>近 5 日涨跌</span><span>历史次日上涨比例</span><span>研究状态</span><span>证据</span></div>
     <div className="strength-list">{visible.map(item => {
       const evidence = item.assessment;
       return <article className="strength-stock" key={item.code}>
@@ -59,11 +60,11 @@ export function StrengthDiscoveryPanel({ report, onOpenResearch }: {
               : <strong>{item.name}<span>{item.code}</span></strong>}
             <div className="strength-tags">{item.sources.map(value => <span key={value}>{label(value)}</span>)}</div>
           </div>
-          <div className="strength-metric"><span>近 5 日涨跌</span><strong>{pct(evidence.features?.return_5)}</strong><small>成交额比 {evidence.features?.amount_ratio_20?.toFixed(1) ?? '—'}</small></div>
+          <div className="strength-metric"><span>近 5 日涨跌</span><strong data-direction={evidence.features?.return_5 == null ? undefined : evidence.features.return_5 >= 0 ? "up" : "down"}>{evidence.features?.return_5 != null && evidence.features.return_5 > 0 ? "+" : ""}{pct(evidence.features?.return_5)}</strong><small>成交额比 {evidence.features?.amount_ratio_20?.toFixed(1) ?? '—'}</small></div>
           <div className="strength-metric"><span>历史次日上涨比例</span><strong>{pct(evidence.up_probability)}</strong><small>同类样本 {evidence.sample_count} 例</small></div>
           <div className="strength-state"><span className="strength-status" data-limited={evidence.status !== 'WATCH'}>{label(evidence.status)}</span><small>{item.rejection_reasons.length ? item.rejection_reasons.map(label).join('、') : '基础准入通过，仍需门禁验证'}</small></div>
         </div>
-        <details className="strength-stock-detail"><summary>展开风险与验证<span>涨幅分布 · 失败样本 · 概率误差</span></summary>
+        <details className="strength-stock-detail"><summary aria-label={`${item.name}的风险与验证`}>风险与验证</summary>
           <div className="strength-detail-grid">
             <section><h4>上涨与延续</h4><dl><div><dt>涨幅至少 3%</dt><dd>{pct(evidence.continuation_probability)}</dd></div><div><dt>上涨比例 95% 区间</dt><dd>{evidence.up_interval?.map(pct).join(' ～ ') ?? '—'}</dd></div><div><dt>平均次日涨跌</dt><dd>{pct(evidence.mean_return)}</dd></div></dl></section>
             <section><h4>失败与回落</h4><dl><div><dt>冲高回落率</dt><dd>{pct(evidence.fade_probability)}</dd></div><div><dt>亏损率</dt><dd>{pct(evidence.loss_rate)}</dd></div><div><dt>历史疑似一字涨停</dt><dd>{pct(evidence.one_price_limit_rate)}</dd></div></dl><small>可成交性未验证</small></section>

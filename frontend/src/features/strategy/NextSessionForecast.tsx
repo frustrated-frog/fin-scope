@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { DirectionEvaluation, NextSessionPrediction, NextSessionPredictionRecord } from './quantTypes';
 import './NextSessionForecast.css';
+import './NextSessionOutcomeHistory.css';
 import { NextSessionValidationSummary } from './NextSessionValidationSummary';
 
 const statusCopy: Record<NextSessionPrediction['status'], string> = {
@@ -79,10 +80,16 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
 export function NextSessionOutcomeHistory({ code }: { code?: string }) {
   const [records, setRecords] = useState<NextSessionPredictionRecord[]>([]);
   const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState('ALL');
+  const [page, setPage] = useState(0);
   useEffect(() => {
     let active = true;
     setRecords([]);
     setFailed(false);
+    setLoading(true);
+    setPage(0);
+    setStatus('ALL');
     const load = async () => {
       try {
         const result = await api<NextSessionPredictionRecord[]>(`/api/quant/next-session-predictions?limit=100${code ? `&code=${encodeURIComponent(code.slice(0, 6))}` : ''}`);
@@ -92,10 +99,12 @@ export function NextSessionOutcomeHistory({ code }: { code?: string }) {
         if (active) {
           setRecords(Array.isArray(result) ? result : []);
           setFailed(false);
+          setLoading(false);
         }
       } catch {
         if (active) {
           setFailed(true);
+          setLoading(false);
         }
       }
     };
@@ -103,9 +112,35 @@ export function NextSessionOutcomeHistory({ code }: { code?: string }) {
     const timer = window.setInterval(load, 60000);
     return () => { active = false; window.clearInterval(timer); };
   }, [code]);
-  return <section className="next-session-forecast next-session-history" aria-label="次日预测真实验证">
-    <header><strong>次日预测真实验证</strong><span>目标交易日收盘后自动结算</span></header>
+  const filtered = records.filter(record => status === 'ALL' || record.status === status);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 8));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(currentPage * 8, currentPage * 8 + 8);
+  return <section className="next-session-history" aria-label="次日预测真实验证">
+    <header className="next-history-heading"><div><span className="next-history-eyebrow">前瞻记录 · 到期复盘</span><h3>次日预测真实验证</h3></div><span className="next-history-schedule">目标交易日收盘后自动结算</span></header>
+    <p className="next-history-intro">用预测时冻结的概率，对照下一交易日的真实结果。</p>
     {!failed && records.length > 0 && <NextSessionValidationSummary records={records} code={code} />}
-    {failed ? <p role="status">验证账本暂时无法读取，稍后自动重试。</p> : records.length === 0 ? <p>尚无新协议的前瞻记录。新的预测会自动留存，未到期不计入成绩。</p> : <div className="quant-table-wrap"><table><thead><tr><th>股票</th><th>目标日</th><th>当时概率</th><th>真实涨跌</th><th>验证状态</th></tr></thead><tbody>{records.map(record => <tr key={record.id}><td>{record.instrumentCode}</td><td>{record.prediction.targetDate}</td><td>{percent(record.prediction.upProbability)}</td><td>{signed(record.actualReturn)}</td><td title={record.outcomeNote}>{record.status === 'MATURED' ? `${record.correct ? '方向命中' : '方向未中'} · ${record.intervalCovered ? '区间内' : '区间外'}` : record.status === 'PENDING' ? '等待目标日收盘' : '无法验证'}</td></tr>)}</tbody></table></div>}
+    {failed ? <p className="next-history-empty" role="status">验证账本暂时无法读取，稍后自动重试。</p>
+      : loading ? <p className="next-history-empty" role="status">正在读取验证账本…</p>
+      : records.length === 0 ? <p className="next-history-empty">尚无新协议的前瞻记录。新的预测会自动留存，未到期不计入成绩。</p>
+      : <div className="next-history-ledger">
+        <div className="next-history-toolbar"><div><h4>逐条验证账本</h4><p>最近 {records.length} 条 · 包含各模型版本</p></div>
+          <label>验证状态<select aria-label="验证状态" value={status} onChange={event => { setStatus(event.target.value); setPage(0); }}><option value="ALL">全部状态</option><option value="MATURED">已验证</option><option value="PENDING">等待收盘</option><option value="UNAVAILABLE">无法验证</option></select></label>
+        </div>
+        <div className="next-history-table-wrap" tabIndex={0} role="region" aria-label="冻结预测明细">
+          <table><thead><tr><th>股票代码</th><th>目标交易日</th><th>当时上涨概率</th><th>真实涨跌</th><th>验证结果</th></tr></thead>
+            <tbody>{visible.map(record => <tr key={record.id}>
+              <td className="next-history-code">{record.instrumentCode}</td><td>{record.prediction.targetDate}</td><td>{percent(record.prediction.upProbability)}</td>
+              <td className="next-history-return" data-direction={record.actualReturn == null ? undefined : record.actualReturn >= 0 ? 'up' : 'down'}>{signed(record.actualReturn)}</td>
+              <td><span className="next-history-status" data-status={record.status} data-missed={record.status === 'MATURED' && record.correct === false}>{record.status === 'MATURED' ? (record.correct == null ? '方向未评估' : record.correct ? '方向命中' : '方向未中') : record.status === 'PENDING' ? '等待目标日收盘' : '无法验证'}</span>
+                {record.status === 'MATURED' && <small>{record.intervalCovered == null ? '区间未评估' : record.intervalCovered ? '区间内' : '区间外'}</small>}
+                {record.outcomeNote && <details className="next-history-note"><summary>结算说明</summary><p>{record.outcomeNote}</p></details>}
+              </td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {!filtered.length && <p className="next-history-empty">最近记录中没有该状态的预测，请切换筛选。</p>}
+        <nav className="next-history-pagination" aria-label="真实验证分页"><span role="status">{filtered.length} 条记录 · 第 {currentPage + 1} / {pageCount} 页</span><div><button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button><button type="button" disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button></div></nav>
+      </div>}
   </section>;
 }

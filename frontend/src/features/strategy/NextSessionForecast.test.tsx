@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
-import { NextSessionForecast } from './NextSessionForecast';
+import { apiResponse } from '../../test/apiEnvelope';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+import { NextSessionForecast, NextSessionOutcomeHistory } from './NextSessionForecast';
 
 const prediction = {
   status: 'READY' as const, asOfDate: '2026-09-04', targetDate: '2026-09-07', generatedAt: '2026-09-04T16:00:00',
@@ -88,4 +89,27 @@ test('shows independent local selection and calibration boundaries', () => {
   expect(screen.getByText('本地模型选择与独立校准检查')).toBeInTheDocument();
   expect(screen.getByText(/独立检查未支持校准，保留原始概率/)).toBeInTheDocument();
   expect(screen.getByText(/校准拟合截至 2026-05-30/)).toBeInTheDocument();
+});
+
+
+test('paginates the frozen ledger and resets the page when filtering status', async () => {
+  const records = Array.from({ length: 10 }, (_, index) => ({
+    id: index, instrumentCode: `60000${index}.SH`, prediction,
+    status: index === 9 ? 'MATURED' : 'PENDING', actualReturn: index === 9 ? -.02 : undefined,
+    correct: index === 9 ? false : undefined, intervalCovered: index === 9 ? true : undefined,
+  }));
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => apiResponse(url.includes('/validation') ? { recordCount: 200, groups: [] } : records)));
+  render(<NextSessionOutcomeHistory />);
+  const ledger = await screen.findByRole('region', { name: '冻结预测明细' });
+  expect(within(ledger).getByText('600000.SH')).toBeInTheDocument();
+  expect(within(ledger).queryByText('600009.SH')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+  expect(within(ledger).getByText('600009.SH')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('验证状态'), { target: { value: 'MATURED' } });
+  expect(screen.getByText('1 条记录 · 第 1 / 1 页')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
+  expect(within(ledger).getByText('方向未中')).toBeInTheDocument();
+  expect(screen.getByText(/全历史冻结账本共 200 条/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('验证状态'), { target: { value: 'UNAVAILABLE' } });
+  expect(screen.getByText(/最近记录中没有该状态/)).toBeInTheDocument();
 });
