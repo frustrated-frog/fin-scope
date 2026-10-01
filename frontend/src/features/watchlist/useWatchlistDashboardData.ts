@@ -30,7 +30,7 @@ function fingerprint(investments: WatchlistItem[], indices: MarketIndexQuote[], 
   ]);
 }
 
-export function useWatchlistDashboardData() {
+export function useWatchlistDashboardData(overviewPath = '/api/sector-market/overview') {
   const [sectorCategory, setSectorCategory] = useState<SectorCategory>('INDUSTRY');
   const [investments, setInvestments] = useState<ResourceState<WatchlistItem[]>>({ data: [], phase: 'idle' });
   const [indices, setIndices] = useState<ResourceState<MarketIndexQuote[]>>({ data: [], phase: 'idle' });
@@ -98,7 +98,7 @@ export function useWatchlistDashboardData() {
     try {
       const suffix = force ? '&refresh=true' : '';
       const value = await api<SectorMarketOverview>(
-        `/api/sector-market/overview?category=${category}&limit=5${suffix}`
+        `${overviewPath}?category=${category}&limit=5${suffix}`
       );
       if (!value || !Array.isArray(value.leaders) || !Array.isArray(value.laggards)) {
         throw new Error('板块排行响应格式不正确');
@@ -127,7 +127,7 @@ export function useWatchlistDashboardData() {
       });
       return { failed: true, degradedCount: 0 };
     }
-  }, []);
+  }, [overviewPath]);
 
   const loadFollowedSectors = useCallback(async (force = false): Promise<LoadResult> => {
     setFollowedSectors((current) => ({ ...current, phase: current.data.length ? 'refreshing' : 'loading', error: undefined }));

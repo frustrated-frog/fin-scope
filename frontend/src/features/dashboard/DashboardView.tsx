@@ -1,17 +1,13 @@
-import { Table } from '../../shared/components/Table';
+import { DashboardMarketOverview } from './DashboardMarketOverview';
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import {
   AgentRun,
   Article,
-  ContentIdea,
   Dashboard,
   DashboardHotspotItem,
   DashboardHotspotRanking,
-  EventCluster,
   IntakeCandidate,
-  LearningTask,
   ResearchRun,
-  ResearchThesis,
   View
 } from '../../shared/types';
 import { KnowledgeOverview } from '../knowledge/knowledgeTypes';
@@ -20,14 +16,11 @@ type DashboardViewProps = {
   dashboard: Dashboard | null;
   hotspotRankings: DashboardHotspotRanking[];
   articles: Article[];
-  events: EventCluster[];
-  learningTasks: LearningTask[];
-  contentIdeas: ContentIdea[];
   researchRuns: ResearchRun[];
-  researchTheses: ResearchThesis[];
   agentRuns: AgentRun[];
   intakeCandidates: IntakeCandidate[];
   knowledgeOverview: KnowledgeOverview | null;
+  marketRefreshRevision?: number;
   onChangeView: (view: View) => void;
   onOpenRadarEvent: (eventId: string | number) => void;
 };
@@ -39,14 +32,11 @@ export function DashboardView({
   dashboard,
   hotspotRankings,
   articles,
-  events,
-  learningTasks,
-  contentIdeas,
   researchRuns,
-  researchTheses,
   agentRuns,
   intakeCandidates,
   knowledgeOverview,
+  marketRefreshRevision = 0,
   onChangeView,
   onOpenRadarEvent
 }: DashboardViewProps) {
@@ -71,16 +61,6 @@ export function DashboardView({
   const dueReviewCount = knowledgeOverview?.dueReviewCount ?? 0;
   const activeRuns = researchRuns.filter((run) => ACTIVE_RUN_STATUSES.has(run.status));
   const activeAgentCount = agentRuns.filter((run) => ACTIVE_AGENT_STATUSES.has(run.status)).length;
-  const priorityEvents = [...events]
-    .filter((event) => (event.status || 'ACTIVE') !== 'ARCHIVED')
-    .sort((left, right) => (right.importanceScore ?? 0) - (left.importanceScore ?? 0))
-    .slice(0, 2);
-  const openTasks = learningTasks.filter((task) => task.status !== 'DONE').slice(0, 2);
-  const openTheses = researchTheses.filter((thesis) => thesis.status === 'OPEN');
-  const latestRun = dashboard.latestFetchRuns[0];
-  const totalNew = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.successCount, 0);
-  const totalDuplicate = dashboard.latestFetchRuns.reduce((sum, run) => sum + run.duplicateCount, 0);
-  const completedFetchRuns = dashboard.latestFetchRuns.filter((run) => run.status === 'COMPLETED').length;
   const normalizedHotspotRankings = normalizeHotspotRankings(hotspotRankings);
   const pulseItems = [
     {
@@ -175,118 +155,8 @@ export function DashboardView({
         </FlowField>
       </section>
 
-      <section className="dashboard-priority" aria-labelledby="dashboard-priority-heading">
-        <div className="dashboard-section-heading">
-          <div>
-            <span className="dashboard-section-kicker">NEXT / DECISIONS</span>
-            <h3 id="dashboard-priority-heading">优先处理</h3>
-          </div>
-          <p>首页只保留下一步，而不是复刻每个工作区的完整列表。</p>
-        </div>
-        <div className="dashboard-priority-grid">
-          <PriorityLane
-            label="事件"
-            count={priorityEvents.length}
-            command="查看研究流"
-            onOpen={() => onChangeView('news')}
-            empty="暂时没有活跃事件，新的文章会先在文章工作区等待归并。"
-            items={priorityEvents.map((event) => ({
-              title: event.canonicalTitle,
-              meta: `重要度 ${event.importanceScore ?? 0} · ${event.evidenceCount ?? 0} 条证据`,
-              description: event.summary
-            }))}
-          />
-          <PriorityLane
-            label="学习"
-            count={openTasks.length}
-            command="查看学习任务"
-            onOpen={() => onChangeView('knowledge')}
-            empty="暂无待完成学习任务，可以从知识工作台建立新的问题。"
-            items={openTasks.map((task) => ({
-              title: task.question,
-              meta: task.themeCode || '未分类主题',
-              description: task.whyNeeded
-            }))}
-          />
-          <PriorityLane
-            label="研究运行"
-            count={activeRuns.length}
-            command="打开研究运行"
-            onOpen={() => onChangeView('research')}
-            empty="当前没有运行中的研究，可从研究工作区启动新的验证。"
-            items={activeRuns.map((run) => ({
-              title: run.summary || `${run.runDate} 研究运行`,
-              meta: `${run.mode || 'QUICK'} · ${run.status}`,
-              description: `${run.articleCount ?? 0} 篇资料 · ${run.evidenceCount ?? 0} 条候选证据`
-            }))}
-          />
-        </div>
-      </section>
+      <DashboardMarketOverview refreshRevision={marketRefreshRevision} onChangeView={onChangeView} />
 
-      <section aria-labelledby="dashboard-workspaces-heading">
-        <div className="dashboard-section-heading">
-          <div>
-            <span className="dashboard-section-kicker">WORKSPACES / OVERVIEW</span>
-            <h3 id="dashboard-workspaces-heading">工作区概览</h3>
-          </div>
-          <p>把数字放在它们所属的研究阶段，而不是孤立地陈列。</p>
-        </div>
-        <div className="dashboard-workspace-grid">
-          <WorkspaceCard
-            label="研究流"
-            value={`${events.length} 个事件`}
-            detail={`${newArticleCount} 条新内容 · ${dashboard.sourceCount} 个信息源`}
-            command="进入市场资讯"
-            onOpen={() => onChangeView('news')}
-          />
-          <WorkspaceCard
-            label="知识与判断"
-            value={`${knowledgeOverview?.activeTopicCount ?? 0} 个活跃主题`}
-            detail={`${knowledgeOverview?.acceptedTaskCount ?? 0} 个已接纳任务 · ${dueReviewCount} 个待复习`}
-            command="打开知识工作台"
-            onOpen={() => onChangeView('knowledge')}
-          />
-          <WorkspaceCard
-            label="投资观察"
-            value={`${openTheses.length} 个开放命题`}
-            detail={openTheses[0]?.nextValidation || '从研究问题建立可验证的投资观察。'}
-            command="查看研究命题"
-            onOpen={() => onChangeView('research')}
-          />
-          <WorkspaceCard
-            label="内容输出"
-            value={`${contentIdeas.length} 个内容选题`}
-            detail={contentIdeas[0]?.title || '研究结论会在这里转化为可继续打磨的表达。'}
-            command="进入内容工作室"
-            onOpen={() => onChangeView('contentStudio')}
-          />
-        </div>
-      </section>
-
-      <section className="dashboard-ledger" aria-labelledby="dashboard-ledger-heading">
-        <div className="dashboard-ledger-summary">
-          <div>
-            <span className="dashboard-section-kicker">LEDGER / COLLECTION</span>
-            <h3 id="dashboard-ledger-heading">运行账本</h3>
-            <p>{latestRun ? `${latestRun.sourceName} 最近一次抓取：${latestRun.status}` : '等待首个抓取任务，信息流会在这里留下质量记录。'}</p>
-          </div>
-          <div className="dashboard-ledger-stats" aria-label="抓取汇总">
-            <span><strong>{totalNew}</strong> 新增</span>
-            <span><strong>{totalDuplicate}</strong> 重复</span>
-            <span><strong>{completedFetchRuns}</strong> 完成</span>
-          </div>
-        </div>
-        <Table
-          headers={['来源', '状态', '有效新增', '重复内容']}
-          rows={dashboard.latestFetchRuns.map((run) => [
-            run.sourceName,
-            <span key={`${run.id}-status`} className={`dashboard-status is-${run.status.toLowerCase()}`}>{run.status}</span>,
-            String(run.successCount),
-            String(run.duplicateCount)
-          ])}
-          empty="还没有抓取记录。先配置一个稳定信源，系统会在这里记录每次采集的有效产出。"
-        />
-      </section>
     </section>
   );
 }
@@ -390,62 +260,4 @@ function relativeTime(value?: string) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} 小时前`;
   return `${Math.floor(hours / 24)} 天前`;
-}
-
-function PriorityLane({
-  label,
-  count,
-  command,
-  onOpen,
-  empty,
-  items
-}: {
-  label: string;
-  count: number;
-  command: string;
-  onOpen: () => void;
-  empty: string;
-  items: Array<{ title: string; meta: string; description?: string }>;
-}) {
-  return (
-    <article className="dashboard-priority-lane">
-      <div className="dashboard-priority-lane-head">
-        <span>{label}</span>
-        <strong>{count}</strong>
-      </div>
-      <div className="dashboard-priority-items">
-        {items.length ? items.map((item) => (
-          <div key={`${item.title}-${item.meta}`} className="dashboard-priority-item">
-            <strong>{item.title}</strong>
-            <span>{item.meta}</span>
-            {item.description && <p>{item.description}</p>}
-          </div>
-        )) : <p className="dashboard-priority-empty">{empty}</p>}
-      </div>
-      <button className="ghost-button dashboard-lane-command" type="button" onClick={onOpen}>{command}</button>
-    </article>
-  );
-}
-
-function WorkspaceCard({
-  label,
-  value,
-  detail,
-  command,
-  onOpen
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  command: string;
-  onOpen: () => void;
-}) {
-  return (
-    <article className="dashboard-workspace-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <p>{detail}</p>
-      <button className="dashboard-text-command" type="button" onClick={onOpen}>{command}</button>
-    </article>
-  );
 }

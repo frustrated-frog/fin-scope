@@ -37,7 +37,7 @@
   .learning-task-card, .verification-index-item, .recognition-agent-hero,
   .studio-card, .studio-command-hero, .studio-hero-metrics, .studio-control-panel,
   .studio-lead-card, .content-studio-card,
-  .dashboard-pulse, .dashboard-priority-lane, .dashboard-workspace-card,
+  .dashboard-pulse, .dashboard-sector-board, .dashboard-stock-table,
   .attribution-path-panel, .attribution-intel-panel, .attribution-track-card,
   .attribution-narrative-hero, .attribution-force-card,
   .market-intel-hero, .market-intel-evaluation-row, .dragon-tiger-panel,
@@ -72,7 +72,7 @@
 /* Remove opaque page backplates that would otherwise hide the sky behind the cards. */
 .app-shell[data-theme] main.workspace :is(
   .knowledge-workbench, .evidence-workbench, .ic-workbench, .ic-main, .daily-research-grid,
-  .global-company-workspace, .strategy-mode-shell, .dashboard-workspace-grid
+  .global-company-workspace, .strategy-mode-shell, .dashboard-index-strip
 ) {
   background: transparent;
 }

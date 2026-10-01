@@ -40,7 +40,6 @@ import {
   EventCluster,
   FetchBatch,
   IntakeCandidate,
-  LearningTask,
   PageResponse,
   ResearchRun,
   ResearchRunDetail,
@@ -67,6 +66,7 @@ export default function App() {
   ));
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [marketRefreshRevision, setMarketRefreshRevision] = useState(0);
   const [hotspotRankings, setHotspotRankings] = useState<DashboardHotspotRanking[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -80,7 +80,6 @@ export default function App() {
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [activeTopicCount, setActiveTopicCount] = useState(0);
   const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
-  const [learningTasks, setLearningTasks] = useState<LearningTask[]>([]);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
   const [contentIdeaPage, setContentIdeaPage] = useState<PageResponse<ContentIdea> | null>(null);
   const [contentIdeaPageIndex, setContentIdeaPageIndex] = useState(0);
@@ -453,6 +452,9 @@ export default function App() {
 
   async function refreshWorkspace() {
     setMessage('正在刷新');
+    if (view === 'dashboard') {
+      setMarketRefreshRevision((current) => current + 1);
+    }
     try {
       await refresh();
       setMessage('数据已同步');
@@ -497,12 +499,9 @@ export default function App() {
         <DashboardView
           dashboard={dashboard}
           hotspotRankings={hotspotRankings}
+          marketRefreshRevision={marketRefreshRevision}
           articles={articles}
-          events={events}
-          learningTasks={learningTasks}
-          contentIdeas={contentIdeas}
           researchRuns={researchRuns}
-          researchTheses={researchTheses}
           agentRuns={agentRuns}
           intakeCandidates={intakeCandidates}
           knowledgeOverview={knowledgeOverview}

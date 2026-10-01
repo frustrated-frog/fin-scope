@@ -106,6 +106,28 @@ class SectorMarketControllerTest {
         verify(watchlistService).unfollowSector("881121");
     }
 
+    @Test
+    void exposesPriceMovementsWithRefreshAndQualityMetadata() throws Exception {
+        when(sectorMarketService.movements(SectorCategory.INDUSTRY, 5, true)).thenReturn(
+                new SectorMarketOverview(SectorCategory.INDUSTRY, MarketDataQualityStatus.STALE_FALLBACK,
+                        "PYTHON_TONGHUASHUN_SECTOR", LocalDateTime.of(2026, 9, 30, 15, 0),
+                        LocalDateTime.of(2026, 10, 1, 10, 0), 100L, "旧快照", "movement-refresh",
+                        Collections.singletonList(entry()), Collections.emptyList()));
+
+        mockMvc.perform(get("/api/sector-market/movements").param("refresh", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.qualityStatus").value("STALE_FALLBACK"))
+                .andExpect(jsonPath("$.data.leaders[0].code").value("881121"))
+                .andExpect(jsonPath("$.data.warning").value("旧快照"));
+        verify(sectorMarketService).movements(SectorCategory.INDUSTRY, 5, true);
+    }
+
+    @Test
+    void rejectsUnsupportedMovementCategory() throws Exception {
+        mockMvc.perform(get("/api/sector-market/movements").param("category", "ALL"))
+                .andExpect(status().isBadRequest());
+    }
+
     private SectorMarketEntry entry() {
         SectorMarketEntry value = new SectorMarketEntry();
         value.setCode("881121");

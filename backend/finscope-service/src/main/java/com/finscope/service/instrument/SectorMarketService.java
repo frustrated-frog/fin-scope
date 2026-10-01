@@ -58,6 +58,43 @@ public class SectorMarketService {
                 mergeWarnings(result.getWarning(), snapshot.getWarnings()));
     }
 
+    /**
+     * 首页按涨跌幅读取板块动向，保持原资金排行接口的排序语义。
+     *
+     * @param category 行业或概念板块分类。
+     * @param limit 每侧返回条数，范围为 1 到 10。
+     * @param forceRefresh 是否强制刷新板块目录。
+     * @return 涨跌排行与对应快照的数据质量信息。
+     */
+    public SectorMarketOverview movements(SectorCategory category, int limit, boolean forceRefresh) {
+        requireCategory(category);
+        validateLimit(limit, 10);
+        SectorCatalogGatewayResult result = gateway.fetchSectorCatalog(category, forceRefresh);
+        SectorMarketSnapshot snapshot = result.getSnapshot();
+        if (snapshot == null) {
+            return SectorMarketOverview.of(category, result, Collections.emptyList(),
+                    Collections.emptyList(), result.getWarning());
+        }
+        List<SectorMarketEntry> valid = snapshot.getEntries().stream()
+                .filter(value -> value.getChangePct() != null && Double.isFinite(value.getChangePct()))
+                .collect(Collectors.toList());
+        List<SectorMarketEntry> leaders = valid.stream()
+                .filter(value -> value.getChangePct() > 0D)
+                .sorted(Comparator.comparing(SectorMarketEntry::getChangePct).reversed()
+                        .thenComparing(SectorMarketEntry::getCode))
+                .limit(limit).collect(Collectors.toList());
+        List<SectorMarketEntry> laggards = valid.stream()
+                .filter(value -> value.getChangePct() < 0D)
+                .sorted(Comparator.comparing(SectorMarketEntry::getChangePct)
+                        .thenComparing(SectorMarketEntry::getCode))
+                .limit(limit).collect(Collectors.toList());
+        String warning = mergeWarnings(result.getWarning(), snapshot.getWarnings());
+        if (valid.isEmpty()) {
+            warning = mergeWarnings(warning, Collections.singletonList("当前板块目录未提供有效涨跌幅，暂无法生成涨跌排行。"));
+        }
+        return SectorMarketOverview.of(category, result, leaders, laggards, warning);
+    }
+
     /** 返回完整板块截面，供需要全市场比较的内部研究服务使用。 */
     public List<SectorMarketEntry> listEntries(SectorCategory category, boolean forceRefresh) {
         requireCategory(category);

@@ -740,21 +740,34 @@ test('renders the FinScope workspace shell and dashboard', async () => {
   expect(await screen.findByRole('heading', { name: '今天的研究脉冲' })).toBeInTheDocument();
 });
 
-test('dashboard presents the research command sections from loaded workspace data', async () => {
+test('dashboard keeps the research pulse and replaces operational sections with market summaries', async () => {
   render(<App />);
 
   expect(await screen.findByRole('heading', { name: '今天的研究脉冲' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '优先处理' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '工作区概览' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '运行账本' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '市场概况' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '优先处理' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '板块动向' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '工作区概览' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '自选股速览' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '运行账本' })).not.toBeInTheDocument();
 });
 
-test('dashboard directs the event priority item to the current market news workspace', async () => {
+test('dashboard opens the market pulse workspace from its market summary', async () => {
+  const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input) === '/api/market-pulse/latest') {
+      return mockApiResponse({ qualityStatus: 'UNAVAILABLE', sectors: [] });
+    }
+    if (String(input) === '/api/market-pulse/dates') {
+      return mockApiResponse([]);
+    }
+    return originalFetch(input, init);
+  });
   render(<App />);
 
-  await userEvent.click(await screen.findByRole('button', { name: '查看研究流' }));
+  await userEvent.click(await screen.findByRole('button', { name: '查看市场状态' }));
 
-  expect(screen.getByText('News Wire · 市场资讯')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Market Pulse · 市场机会' })).toBeInTheDocument();
 });
 
 test('dashboard hotspot opens the research radar workspace', async () => {
@@ -782,7 +795,6 @@ test('dashboard uses a responsive research command layout', () => {
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');
 
   expect(styles).toMatch(/\.dashboard-pulse\s*{[^}]*grid-template-columns:/s);
-  expect(styles).toMatch(/\.dashboard-workspace-grid\s*{[^}]*grid-template-columns:/s);
   expect(styles).toMatch(/\.dashboard-command\s*{[^}]*min-width:\s*0/s);
   expect(styles).toMatch(/\.dashboard-command\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   expect(styles).toMatch(/\.dashboard-pulse\s*{[^}]*gap:\s*52px/s);

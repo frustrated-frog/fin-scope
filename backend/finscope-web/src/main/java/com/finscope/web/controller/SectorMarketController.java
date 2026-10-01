@@ -51,6 +51,23 @@ public class SectorMarketController {
     }
 
     /**
+     * 查询首页板块涨跌排行，保留原总览接口的资金净流入排序。
+     *
+     * @param category 板块分类，默认 INDUSTRY。
+     * @param limit 每侧返回条数上限，默认 5。
+     * @param refresh 是否强制刷新行情，默认 false。
+     * @return 板块涨跌排行及快照质量信息。
+     */
+    @GetMapping("/movements")
+    public ApiResponse<SectorMarketOverviewResponse> movements(
+            @RequestParam(defaultValue = "INDUSTRY") String category,
+            @RequestParam(defaultValue = "5") int limit,
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponses.success(SectorMarketOverviewResponse.of(
+                sectorMarketService.movements(parseCategory(category, false), limit, refresh)));
+    }
+
+    /**
      * 搜索板块。
      *
      * @param query 搜索关键词。

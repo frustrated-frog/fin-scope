@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import { DashboardView } from './DashboardView';
+vi.mock('./DashboardMarketOverview', () => ({ DashboardMarketOverview: () => <div>市场行情概览</div> }));
+
 import type { Dashboard, DashboardHotspotRanking } from '../../shared/types';
 
 const dashboard: Dashboard = {
@@ -85,11 +87,7 @@ function renderDashboard(onOpenRadarEvent = vi.fn()) {
       dashboard={dashboard}
       hotspotRankings={hotspotRankings}
       articles={[]}
-      events={[]}
-      learningTasks={[]}
-      contentIdeas={[]}
       researchRuns={[]}
-      researchTheses={[]}
       agentRuns={[]}
       intakeCandidates={[]}
       knowledgeOverview={null}

@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.finscope.common.exception.BusinessException;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -127,6 +130,65 @@ class SectorMarketServiceTest {
 
         assertEquals(Arrays.asList("881121", "301558"), new java.util.ArrayList<String>(
                 service.findByCodes(Arrays.asList("881121", "301558"), true).keySet()));
+    }
+
+    @Test
+    void ranksMovementsByPriceChangeIndependentlyOfFundFlows() {
+        SectorMarketEntry gain = entry("881001", "甲", 4.0, -100.0);
+        gain.setMainNetInflow(null);
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, true)).thenReturn(result(
+                MarketDataQualityStatus.STALE_FALLBACK, gain,
+                entry("881002", "乙", -3.0, 1000.0),
+                entry("881003", "丙", 1.0, 120.0),
+                entry("881004", "丁", -2.0, -80.0),
+                entry("881005", "戊", 0.0, 999.0)));
+
+        SectorMarketOverview overview = service.movements(SectorCategory.INDUSTRY, 2, true);
+
+        assertEquals(Arrays.asList("881001", "881003"), codes(overview.getLeaders()));
+        assertEquals(Arrays.asList("881002", "881004"), codes(overview.getLaggards()));
+        assertEquals(MarketDataQualityStatus.STALE_FALLBACK, overview.getQualityStatus());
+        verify(gateway).fetchSectorCatalog(SectorCategory.INDUSTRY, true);
+    }
+
+    @Test
+    void excludesMissingAndNonFiniteMovementValuesAndOrdersTiesByCode() {
+        SectorMarketEntry missing = entry("881005", "缺失", 1.0, 100.0);
+        missing.setChangePct(null);
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY,
+                entry("881003", "丙", 2.0, 100.0), entry("881001", "甲", 2.0, 200.0),
+                entry("881004", "无效", Double.NaN, 100.0), missing,
+                entry("881006", "无限", Double.POSITIVE_INFINITY, 100.0)));
+
+        SectorMarketOverview overview = service.movements(SectorCategory.INDUSTRY, 1, false);
+
+        assertEquals(Collections.singletonList("881001"), codes(overview.getLeaders()));
+        assertTrue(overview.getLaggards().isEmpty());
+    }
+
+    @Test
+    void explainsUnavailableConceptMovementsAndMissingSnapshots() {
+        when(gateway.fetchSectorCatalog(SectorCategory.CONCEPT, false)).thenReturn(result(
+                MarketDataQualityStatus.FRESH_PRIMARY));
+        assertTrue(service.movements(SectorCategory.CONCEPT, 5, false).getWarning().contains("未提供有效涨跌幅"));
+        when(gateway.fetchSectorCatalog(SectorCategory.INDUSTRY, false)).thenReturn(
+                new SectorCatalogGatewayResult(null, MarketDataQualityStatus.UNAVAILABLE,
+                        "PYTHON_TONGHUASHUN_SECTOR", null, null, null, "目录不可用", "failed"));
+
+        SectorMarketOverview unavailable = service.movements(SectorCategory.INDUSTRY, 5, false);
+
+        assertTrue(unavailable.getLeaders().isEmpty());
+        assertTrue(unavailable.getLaggards().isEmpty());
+        assertEquals("目录不可用", unavailable.getWarning());
+        assertEquals(MarketDataQualityStatus.UNAVAILABLE, unavailable.getQualityStatus());
+    }
+
+    @Test
+    void validatesMovementCategoryAndBoundsBeforeFetching() {
+        assertThrows(BusinessException.class, () -> service.movements(null, 5, false));
+        assertThrows(BusinessException.class, () -> service.movements(SectorCategory.INDUSTRY, 0, false));
+        assertThrows(BusinessException.class, () -> service.movements(SectorCategory.INDUSTRY, 11, false));
     }
 
     private SectorCatalogGatewayResult result(MarketDataQualityStatus status, SectorMarketEntry... entries) {
