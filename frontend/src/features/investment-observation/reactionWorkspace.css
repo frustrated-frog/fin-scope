@@ -1,0 +1,442 @@
+/* Event ledger: compact title rows, a five-session progress strip, and a stable reading panel. */
+.reaction-browser {
+  --rw-bg: #ffffff;
+  --rw-line: #dce3e9;
+  --rw-muted: #657483;
+  --rw-ink: #243746;
+  --rw-accent: #286966;
+  color: var(--rw-ink);
+}
+.reaction-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 4px 0 16px;
+}
+.reaction-browser-header h3 {
+  font-size: 23px;
+  letter-spacing: -0.025em;
+  margin: 0 0 5px;
+}
+.reaction-browser-header p {
+  color: var(--rw-muted);
+  margin: 0;
+  font-size: 13px;
+}
+.reaction-browser-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.reaction-browser-tools details {
+  position: relative;
+}
+.reaction-browser-tools summary {
+  cursor: pointer;
+  padding: 8px 12px;
+}
+.reaction-browser-tools details > div {
+  position: absolute;
+  right: 0;
+  min-width: 150px;
+  padding: 8px;
+  z-index: 3;
+  display: grid;
+  background: var(--rw-bg);
+  border: 1px solid var(--rw-line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px #0002;
+}
+.reaction-browser-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  color: var(--rw-muted);
+}
+.reaction-browser-status > span {
+  color: var(--rw-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.reaction-browser-tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--rw-line);
+}
+.reaction-browser .reaction-browser-tabs button {
+  border: 0;
+  border-radius: 0;
+  padding: 12px 2px;
+  background: transparent;
+  color: var(--rw-muted);
+  border-bottom: 2px solid transparent;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.reaction-browser .reaction-browser-tabs button[aria-pressed='true'] {
+  color: var(--rw-ink);
+  border-bottom-color: var(--rw-accent);
+}
+.reaction-browser-tabs span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rw-muted);
+}
+.reaction-browser-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px 0;
+  align-items: center;
+}
+.reaction-browser-filters label {
+  margin: 0;
+}
+.reaction-browser-search {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 240px;
+  max-width: 440px;
+}
+.reaction-browser-search input {
+  min-width: 0;
+  width: 100%;
+}
+.reaction-browser-filters input,
+.reaction-browser-filters select {
+  background: var(--rw-bg);
+  color: var(--rw-ink);
+  border: 1px solid var(--rw-line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+.reaction-browser-filters button[aria-pressed='true'] {
+  background: var(--rw-accent);
+  color: #fff;
+}
+.reaction-browser-list {
+  max-height: min(64vh, 720px);
+  min-height: 180px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--rw-line);
+  border-radius: 10px;
+  background: var(--rw-bg);
+}
+.reaction-browser-columns,
+.reaction-browser .reaction-browser-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 150px;
+  gap: 24px;
+}
+.reaction-browser-columns {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--rw-bg);
+  border-bottom: 1px solid var(--rw-line);
+  padding: 11px 18px;
+  font-size: 11px;
+  color: var(--rw-muted);
+}
+.reaction-browser .reaction-browser-row {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--rw-line);
+  width: 100%;
+  padding: 16px 18px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  align-items: center;
+}
+.reaction-browser .reaction-browser-row:last-child {
+  border-bottom: 0;
+}
+.reaction-browser .reaction-browser-row:hover {
+  background: color-mix(in srgb, var(--rw-accent) 5%, var(--rw-bg));
+}
+.reaction-browser-subject {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.reaction-browser-subject strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reaction-browser-subject > span,
+.reaction-browser-value small,
+.reaction-browser-progress small {
+  color: var(--rw-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.reaction-browser-value {
+  display: grid;
+  gap: 5px;
+}
+.reaction-browser-value strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.reaction-browser-value small {
+  line-height: 1.5;
+}
+.reaction-browser-progress {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+}
+.reaction-browser-progress > div {
+  display: flex;
+  gap: 3px;
+}
+.reaction-browser-progress i {
+  width: 17px;
+  height: 3px;
+  background: var(--rw-line);
+  border-radius: 2px;
+}
+.reaction-browser-progress i[data-ready='true'] {
+  background: var(--rw-accent);
+}
+.reaction-browser-pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  color: var(--rw-muted);
+  font-size: 12px;
+}
+.reaction-browser-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reaction-browser .reaction-browser-update {
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  border-color: var(--rw-accent);
+  color: var(--rw-accent);
+}
+.reaction-browser-extra article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px;
+  border-bottom: 1px solid var(--rw-line);
+}
+.reaction-sidepanel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: min(900px, 88vw);
+  max-width: 100vw;
+  border: 0;
+  border-left: 1px solid var(--reaction-line);
+  border-radius: 0;
+  padding: 0;
+  background: var(--reaction-surface);
+  color: var(--reaction-ink);
+  box-shadow: -12px 0 50px #0003;
+  overflow: hidden;
+}
+.reaction-sidepanel[open] {
+  display: flex;
+  flex-direction: column;
+}
+.reaction-sidepanel::backdrop {
+  background: #0c172b60;
+}
+.reaction-sidepanel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--reaction-line);
+}
+.reaction-sidepanel-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 12px;
+}
+.reaction-sidepanel-tabs {
+  display: flex;
+  padding: 12px 22px;
+  gap: 8px;
+  border-bottom: 1px solid var(--reaction-line);
+  flex-wrap: wrap;
+}
+.reaction-sidepanel-tabs button[aria-pressed='true'] {
+  color: var(--reaction-surface);
+  background: var(--reaction-ink);
+}
+.reaction-sidepanel-content {
+  padding: 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+}
+.reaction-sidepanel-content p {
+  overflow-wrap: anywhere;
+}
+.reaction-sidepanel-content details {
+  margin: 14px 0;
+}
+.reaction-sidepanel-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--reaction-line);
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.reaction-sidepanel-footer small {
+  color: var(--reaction-muted);
+}
+.reaction-sidepanel .reaction-detail-head {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.reaction-sidepanel .reaction-detail-head h4 {
+  font-size: 22px;
+}
+.reaction-sidepanel .reaction-actions {
+  flex-wrap: wrap;
+}
+.reaction-browser button:focus-visible,
+.reaction-sidepanel button:focus-visible,
+.reaction-browser input:focus-visible {
+  outline: 2px solid var(--reaction-teal);
+  outline-offset: 3px;
+}
+[data-theme='dark'] .reaction-browser {
+  --rw-bg: #172331;
+  --rw-line: #344250;
+  --rw-muted: #9aabba;
+  --rw-ink: #e4edf4;
+  --rw-accent: #8ecbc2;
+}
+[data-theme='dark'] .reaction-sidepanel {
+  background: #172331;
+  color-scheme: dark;
+}
+@media (max-width: 760px) {
+  .reaction-browser-columns {
+    display: none;
+  }
+  .reaction-browser .reaction-browser-row {
+    grid-template-columns: minmax(0, 1fr) 105px;
+    gap: 12px;
+    padding: 14px;
+  }
+  .reaction-browser-progress {
+    display: none;
+  }
+  .reaction-browser-subject strong {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .reaction-browser-value strong {
+    font-size: 15px;
+  }
+  .reaction-browser-search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .reaction-browser-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .reaction-browser-pagination > div {
+    justify-content: space-between;
+  }
+  .reaction-browser-header {
+    gap: 10px;
+  }
+  .reaction-sidepanel {
+    width: 100vw;
+  }
+  .reaction-sidepanel-content {
+    padding: 16px;
+  }
+  .reaction-sidepanel-tabs {
+    padding: 10px 16px;
+  }
+  .reaction-sidepanel-bar {
+    padding: 14px 16px;
+  }
+}
+.reaction-browser .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.reaction-browser-search button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.reaction-browser .reaction-browser-row {
+  padding-block: 11px;
+}
+.reaction-browser-subject {
+  gap: 4px;
+}
+.reaction-browser-subject > span {
+  line-height: 1.4;
+}
+.reaction-browser-tools {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.reaction-browser-tools > button,
+.reaction-browser-tools summary {
+  white-space: nowrap;
+}
+.reaction-browser-list {
+  max-height: clamp(220px, calc(100dvh - 380px), 640px);
+}
+@media (max-width: 760px) {
+  .reaction-browser-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .reaction-browser-header > div:first-child {
+    flex: 1;
+    min-width: 145px;
+  }
+  .reaction-browser-list {
+    max-height: clamp(200px, calc(100dvh - 400px), 520px);
+  }
+  .reaction-browser-value small {
+    font-size: 10px;
+  }
+}

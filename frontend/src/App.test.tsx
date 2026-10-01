@@ -29,6 +29,7 @@ const dashboardRadarEvent = {
 
 const responses: Record<string, unknown> = {
   '/api/investment-reactions/recent': [],
+  '/api/investment-reactions/events?view=TRACKING&query=&page=1&size=20': { items: [], total: 0, counts: {}, stockNames: {}, stockCounts: {}, pendingReasons: {}, anchor: 0, revision: 0, page: 1, size: 20 },
   '/api/investment-reactions/followed': [],
   '/api/investment-reactions/discovery': { running: false, captured: 0, resolved: 0, message: '自动发现已开启' },
   '/api/investment-observations': {
@@ -785,9 +786,9 @@ test('opens investment observation as an independent top-level workspace', async
 
   await userEvent.click(screen.getByRole('button', { name: '投资观察' }));
 
-  expect(await screen.findByRole('heading', { name: '市场如何回应新信息' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '投资观察' })).toBeInTheDocument();
   expect(screen.getByText('Investment Observation · 投资观察')).toBeInTheDocument();
-  expect(await screen.findByRole('heading', { name: '正在等待自动发现的事件' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '当前没有符合条件的跟踪事件' })).toBeInTheDocument();
 });
 
 test('dashboard uses a responsive research command layout', () => {

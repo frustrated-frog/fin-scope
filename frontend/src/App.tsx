@@ -62,7 +62,8 @@ function isResearchRunActive(status?: string) {
 
 export default function App() {
   const [view, setView] = useState<View>(() => (
-    new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
+    new URLSearchParams(window.location.search).has('reactionEvent') || new URLSearchParams(window.location.search).has('reactionSample')
+      ? 'investmentObservation' : new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
   ));
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);

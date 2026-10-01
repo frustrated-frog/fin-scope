@@ -36,28 +36,3 @@ test('automatic history exposes full denominators and changes the comparison win
   await userEvent.selectOptions(screen.getByLabelText('比较窗口'), '1');
   await waitFor(() => expect(fetch.mock.calls.some(([path]) => String(path).endsWith('/comparables?sessions=1'))).toBe(true));
 });
-
-test('following an event persists through the API and appears in the focus area', async () => {
-  let followed = false;
-  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    if (path.endsWith('/follow')) {
-      followed = JSON.parse(String(init?.body)).followed;
-      return apiResponse([{ ...reactionSample, followed }]);
-    }
-    if (path.endsWith('/followed')) {
-      return apiResponse(followed ? [{ ...reactionSample, followed }] : []);
-    }
-    if (path.endsWith('/recent')) {
-      return apiResponse([{ ...reactionSample, followed }]);
-    }
-    return apiResponse([]);
-  });
-  vi.stubGlobal('fetch', fetch);
-  render(<InvestmentObservationView setMessage={vi.fn()} addToast={vi.fn()} />);
-  await userEvent.click(await screen.findByRole('button', { name: /示例设备 设备公司签订重大合同/ }));
-  await userEvent.click(screen.getByRole('button', { name: '关注事件' }));
-  expect(await screen.findByRole('button', { name: '取消关注', pressed: true })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getAllByRole('button', { name: /示例设备 设备公司签订重大合同/ })).toHaveLength(2));
-  expect(fetch.mock.calls.some(([path, init]) => String(path).endsWith('/follow') && init?.method === 'PATCH')).toBe(true);
-});

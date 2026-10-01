@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { ReactionChart } from '../investment-observation/ReactionChart';
-import { beforeEventReturn, dateTime, signed, sourceHref, statusLabels } from '../investment-observation/reactionTypes';
+import { beforeEventReturn, dateTime, signed, sourceHref, statusLabels, reactionHref, resolutionLabels } from '../investment-observation/reactionTypes';
 import type { NewsDetail, NewsReport } from './newsWindowTypes';
 
 export function NewsReportDrawer({
@@ -255,9 +255,10 @@ export function NewsReportDrawer({
                       {sample.instrumentName || '待关联公司'} <small>{sample.instrumentCode}</small>
                     </h4>
                     <span>
-                      {sample.state === 'ARCHIVED' ? '已归档' : sample.state === 'DRAFT' ? '等待确认关联' : '持续观察'}
+                      {sample.state === 'ARCHIVED' ? '已归档' : sample.state === 'DRAFT' ? resolutionLabels[sample.resolutionStatus || 'PENDING'] : '持续观察'}
                     </span>
                   </header>
+                  <a href={reactionHref(sample)}>{sample.state === 'DRAFT' ? '查看待补全事件' : '查看市场反应'} →</a>
                   {sample.discoveryIssue ? <p>{sample.discoveryIssue}</p> : null}
                   {sample.relationNote ? <p>{sample.relationNote}</p> : null}
                   {sample.calculation ? (

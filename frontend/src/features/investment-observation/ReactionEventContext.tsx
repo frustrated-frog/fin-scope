@@ -25,7 +25,7 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
       api<ReactionHistoryComparison>(`/api/investment-reactions/${sample.id}/comparables?sessions=${sessions}`)
     ]).then(([nextPeers, nextSources, nextHistory]) => {
       if (active) {
-        setPeers(nextPeers.filter(value => value.state !== 'DRAFT'));
+        setPeers(nextPeers);
         setSources(nextSources);
         setHistory(nextHistory);
       }
@@ -44,10 +44,10 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
     {loading && <p role="status">正在检索事件来源与完整历史样本…</p>}
     {error && <p role="alert" className="reaction-warning">{error}</p>}
     {peers.length > 1 && <section><h5>同一事件，不同股票</h5>
-      <ReactionChart relative series={peers.filter(value => value.calculation).map((value, index) => ({ label: value.instrumentName || value.instrumentCode,
+      <ReactionChart relative series={peers.filter(value => value.calculation && !value.excluded).map((value, index) => ({ label: value.instrumentName || value.instrumentCode,
         metric: 'relativeReturnPp', points: value.calculation!.points, color: colors[index % colors.length] }))} />
       <p className="reaction-note">同一时间轴上的相对基准表现（百分点）；这些股票属于同一事件，不算多次独立事件。</p>
-      <ul>{peers.map(peer => <li key={peer.id}><button onClick={() => onOpen(peer.id)}>{peer.instrumentName || peer.instrumentCode}</button> · {peer.relationNote || '标题直接提及的事件主体'}</li>)}</ul>
+      <ul>{peers.map(peer => <li key={peer.id}><button onClick={() => onOpen(peer.id)}>{peer.instrumentName || peer.instrumentCode || '待补全'}{peer.excluded ? '（已排除）' : ''}</button> · {peer.relationNote || '标题直接提及的事件主体'}</li>)}</ul>
     </section>}
     <details><summary>来源与识别依据 · {sources.length} 条报道（最多展示 100 条）</summary>
       <p>{sample.fact || sample.title}</p><p className="reaction-note">{sample.ruleEvidence && sample.eventSubtype ? sample.ruleEvidence.replace(sample.eventSubtype, subtypeLabels[sample.eventSubtype] || sample.eventSubtype) : '历史样本未记录规则依据。'} · 子类：{subtypeLabels[sample.eventSubtype || 'UNCLASSIFIED'] || '未分类'}</p>
@@ -63,6 +63,7 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
 
 function HistoryGroup({ label, group, onOpen }: { label: string; group: ReactionComparisonGroup; onOpen: (id: number) => void }) {
   return <article><h5>{label}</h5><p>{group.criteria}</p>
+    <p className="reaction-note">基础候选 {group.baseCandidateCount ?? group.sampleCount} · 无法判断事前可比性 {group.unknownComparabilityCount ?? 0}</p>
     <p><strong>{group.eventCount} 个事件 / {group.sampleCount} 个股票样本</strong></p>
     <p className="reaction-note">完整 {group.completeCount} · 未到期 {group.notDueCount} · 缺失或停牌 {group.missingCount}</p>
     {group.completeCount > 0 ? <p>相对收益中位数 <strong>{signed(group.median, ' pp')}</strong><br />中间 50% 区间 {signed(group.lowerQuartile)} 至 {signed(group.upperQuartile, ' pp')}</p> : <p>尚无可计算分布的完整样本。</p>}

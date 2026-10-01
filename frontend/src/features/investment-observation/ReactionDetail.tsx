@@ -3,7 +3,8 @@ import { dateTime, eventLabels, pathLabels, signed, sourceHref, statusLabels } f
 import { ReactionEventContext } from './ReactionEventContext';
 import { ReactionChart } from './ReactionChart';
 
-export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, onCompare, onResearch, onFollow, onOpen }: {
+export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, onCompare, onResearch, onFollow, onOpen, hideContext }: {
+  hideContext?: boolean;
   sample: ReactionSample;
   samples: ReactionSample[];
   busy: boolean;
@@ -109,7 +110,7 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
       )}>把这个差异带入研究 →</button>}
       <details className="reaction-method"><summary>逐日数据与计算口径</summary>
         <p>所有时间为北京时间。股票使用同批前复权收盘价；相对表现 = 个股累计收益 − 沪深300同期累计收益（百分点）。窗口按交易所交易日固定，不随个股停牌顺延。</p>
-        <p>“优势保留／回吐／后续走强”等标签仅在五日窗口完整后生成。阶段最高相对表现 ≥ 2pp、至五日回落 ≥ 2pp 标记回吐；收盘最大回撤 ≥ 5% 且最终相对表现为正标记下探后修复；否则保留首日一半以上优势标记优势保留。首日绝对相对表现 &lt; 1pp、五日 ≥ 2pp 标记后续走强；其余五日 ≤ −2pp 标记相对走弱。</p>
+        <p>“优势保留／回吐／后续走强”等标签仅在五日窗口完整后生成。阶段最高相对表现 ≥ 2pp、至五日回落 ≥ 2pp 标记回吐；收盘最大回撤 ≥ 5%、低点早于当前且从低点回升 ≥ 2%，在数据无缺口时标记下探后修复；否则保留首日一半以上优势标记优势保留。首日绝对相对表现 &lt; 1pp、五日 ≥ 2pp 标记后续走强；其余五日 ≤ −2pp 标记相对走弱。</p>
         <p>计算时间 {dateTime(calculation.calculatedAt)} · 个股行情截至 {calculation.stockAsOf} · 基准行情截至 {calculation.benchmarkAsOf}</p>
         <p>行情来源：{calculation.stockSource} / {calculation.benchmarkSource} · 质量：{calculation.stockQuality} / {calculation.benchmarkQuality} · 方法：{calculation.methodVersion}</p>
         <ul>{calculation.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
@@ -122,6 +123,6 @@ export function ReactionDetail({ sample, samples, busy, onRefresh, onArchive, on
           : <p>当前已加载样本中没有同股票的其他重叠事件。这不代表期间没有其他重要信息。</p>}
       </aside>
     </>}
-    <ReactionEventContext sample={sample} onOpen={onOpen} />
+    {!hideContext && <ReactionEventContext sample={sample} onOpen={onOpen} />}
   </div>;
 }

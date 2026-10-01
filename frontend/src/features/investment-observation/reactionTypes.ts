@@ -39,6 +39,8 @@ export interface ReactionCalculation {
   windows: ReactionWindow[];
 }
 export interface ReactionSample {
+  excluded?: boolean;
+  resolutionStatus?: string;
   id: number;
   majorEventId?: number | null;
   sourceIdentity?: string;
@@ -143,6 +145,8 @@ export interface ReactionChange {
   followed: boolean;
 }
 export interface ReactionSource {
+  versionId?: number;
+  body?: string;
   originType: string;
   originKey: string;
   title: string;
@@ -151,6 +155,8 @@ export interface ReactionSource {
   capturedAt?: string;
 }
 export interface ReactionComparisonGroup {
+  baseCandidateCount?: number;
+  unknownComparabilityCount?: number;
   criteria: string;
   relaxed: boolean;
   eventCount: number;
@@ -171,6 +177,40 @@ export interface ReactionHistoryComparison {
 
 export const subtypeLabels: Record<string, string> = {
   EARNINGS_FORECAST: '业绩预告', EARNINGS_REVISION: '业绩修正', EARNINGS_REPORT: '业绩报告',
+  CONTRACT_PROPOSED: '拟议合同', CONTRACT_DENIED: '合同否认／澄清',
   CONTRACT_SIGNED: '合同签署', CONTRACT_AWARDED: '正式中标', CONTRACT_TERMINATED: '合同终止',
   OPERATING_UPDATE: '经营进展', UNCLASSIFIED: '未分类'
 };
+
+export type WorkspaceView = 'TRACKING' | 'HISTORY' | 'PENDING' | 'EXCLUDED';
+export interface ReactionEventPage {
+  automaticEvents?: number;
+  linkedEvents?: number;
+  oldestPendingAt?: string;
+  items: ReactionSample[];
+  counts: Partial<Record<WorkspaceView, number>>;
+  pendingReasons: Record<string, number>;
+  stockCounts: Record<string, number>;
+  stockNames: Record<string, string>;
+  total: number;
+  anchor: number;
+  revision: number;
+  page: number;
+  size: number;
+}
+export const resolutionLabels: Record<string, string> = {
+  PENDING: '等待自动识别', RESOLVED: '已关联', TIME_MISSING: '时间待补全',
+  NO_SUBJECT: '未找到直接关联公司', AMBIGUOUS: '公司身份有歧义', LOOKUP_UNAVAILABLE: '关联服务暂不可用'
+};
+export function reactionHref(sample: ReactionSample) {
+  const params = new URLSearchParams();
+  if (sample.sourceIdentity) {
+    params.set('reactionEvent', sample.sourceIdentity);
+    if (sample.instrumentCode) {
+      params.set('reactionStock', sample.instrumentCode);
+    }
+  } else {
+    params.set('reactionSample', String(sample.id));
+  }
+  return `?${params}`;
+}
