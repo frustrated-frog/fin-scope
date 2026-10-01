@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplicationLlmConfigurationTest {
     @Test
+    void loadsLlmKeyFromLocalHomeWithoutStartingTheApplication(@org.junit.jupiter.api.io.TempDir java.nio.file.Path home) throws Exception {
+        java.nio.file.Path local = home.resolve(".config/finscope/llm.local.properties");
+        Files.createDirectories(local.getParent());
+        Files.writeString(local, "finscope.llm.api-key=test-local-key\n");
+        org.springframework.core.env.StandardEnvironment environment = new org.springframework.core.env.StandardEnvironment();
+        environment.getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource(
+                "local-config-test", java.util.Map.of("user.home", home.toString())));
+        org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor.applyTo(environment);
+        assertTrue("test-local-key".equals(environment.getProperty("finscope.llm.api-key")));
+    }
+
+    @Test
     void usesConcreteOpenAiCompatibleConfigurationWithoutProviderCoupling() throws Exception {
         String yaml = new String(Files.readAllBytes(
                 Paths.get("src/main/resources/application.yml")), StandardCharsets.UTF_8);
@@ -21,7 +33,7 @@ class ApplicationLlmConfigurationTest {
         assertTrue(Pattern.compile("(?m)^\\s+model: \\S+$").matcher(llm).find());
         assertTrue(llm.contains("timeout-ms: 300000"));
         assertTrue(llm.contains("temperature: 0.2"));
-        assertTrue(Pattern.compile("(?m)^\\s+api-key: \\S+$").matcher(llm).find());
+        assertTrue(llm.contains("api-key: \"\""));
         assertFalse(llm.contains("${"));
     }
 }

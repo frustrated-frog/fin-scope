@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  config:
+    import: optional:file:${user.home}/.config/finscope/llm.local.properties
   servlet:
     multipart:
       max-file-size: 30MB
@@ -59,7 +61,7 @@ finscope:
   llm:
     enabled: true
     base-url: https://api.deepseek.com
-    api-key: sk-97f9352463e3417393b3201571ceaadc
+    api-key: ""
     model: deepseek-flash
     timeout-ms: 300000
     temperature: 0.2
