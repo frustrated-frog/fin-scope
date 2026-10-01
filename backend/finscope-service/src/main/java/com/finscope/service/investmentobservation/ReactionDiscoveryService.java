@@ -41,7 +41,7 @@ public class ReactionDiscoveryService {
         LocalDateTime now = LocalDateTime.now(clock);
         ReactionDiscoveryStatus result = new ReactionDiscoveryStatus();
         boolean sourcesAvailable = captureSources(now, result);
-        for (ReactionSample draft : repository.findUnresolved(retryUnresolved ? now.plusSeconds(1) : now.minusMinutes(30), 30)) {
+        for (ReactionSample draft : repository.findUnresolved(retryUnresolved ? now.plusSeconds(1) : now.minusMinutes(30), 30, retryUnresolved)) {
             try {
                 result.setResolved(result.getResolved() + enrich(draft, now));
             } catch (RuntimeException ex) {
@@ -86,13 +86,21 @@ public class ReactionDiscoveryService {
                         LocalDateTime firstSeen, String origin, String key, LocalDateTime now) {
         var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluateMaterial(title, summary);
         ReactionEventType type = decision.getEventType();
-        if (type == null || (publishedAt != null && (publishedAt.isAfter(now)
-                || publishedAt.isBefore(now.minusHours(36))))) {
+        if (publishedAt != null && publishedAt.isAfter(now)) {
             return 0;
         }
         String stableKey = key == null || key.isBlank() ? (url == null || url.isBlank() ? title : url) : key;
+        List<ReactionSample> retained = repository.findByOrigin(origin, stableKey);
+        if (retained.isEmpty() && (type == null || publishedAt != null
+                && (publishedAt.isAfter(now) || publishedAt.isBefore(now.minusHours(36))))) {
+            return 0;
+        }
+        if (type == null && !retained.isEmpty()) {
+            type = retained.get(0).getEventType();
+        }
+        String identityText = decision.getFact() == null ? title : decision.getFact();
         String mergeKey = decision.getMergeAnchor() != null ? "ANNOUNCEMENT:" + decision.getMergeAnchor()
-                : (publishedAt == null ? origin + ":" + stableKey : publishedAt.toLocalDate()) + "|" + title.replaceAll("\\s", "");
+                : (publishedAt == null ? origin + ":" + stableKey : publishedAt.toLocalDate()) + "|" + identityText.replaceAll("\\s", "");
         String identity = "EVENT:" + DigestUtils.md5DigestAsHex(mergeKey.getBytes(StandardCharsets.UTF_8));
         ReactionSample sample = new ReactionSample();
         sample.setSourceIdentity(identity);
@@ -120,6 +128,7 @@ public class ReactionDiscoveryService {
         draft.setEnrichmentAttemptAt(now);
         var resolution = resolver.resolve(draft.getTitle(), draft.getSummary());
         draft.setResolutionStatus(resolution.getStatus());
+        draft.setResolutionCandidates(resolution.getCandidates());
         List<ReactionStockMatch> matches = resolution.getMatches();
         if (matches.isEmpty()) {
             draft.setDiscoveryIssue(switch (resolution.getStatus()) {

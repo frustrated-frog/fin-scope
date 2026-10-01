@@ -47,9 +47,9 @@ public class ReactionEventQueryRepository {
             where += " AND COALESCE(json_extract(s.snapshot_json,'$.resolutionStatus'),'PENDING')=?";
             params.add(query.getResolutionStatus().name());
         }
-        String grouped = "WITH events AS (SELECT s.source_identity AS event_key,MIN(s.id) AS representative,MAX(s.id) AS newest,"
-                + "COUNT(DISTINCT NULLIF(s.instrument_code,'')) AS stock_count,"
-                + "GROUP_CONCAT(DISTINCT json_extract(s.snapshot_json,'$.instrumentName')) AS stock_names,"
+        String grouped = "WITH events AS (SELECT s.source_identity AS event_key,COALESCE(MIN(CASE WHEN s.excluded=0 AND s.state='OBSERVING' THEN s.id END),MIN(s.id)) AS representative,MIN(CASE WHEN s.excluded=1 THEN s.id END) AS invalid_representative,MAX(s.id) AS newest,"
+                + "COUNT(DISTINCT CASE WHEN s.excluded=0 THEN NULLIF(s.instrument_code,'') END) AS stock_count,"
+                + "GROUP_CONCAT(DISTINCT CASE WHEN s.excluded=0 THEN json_extract(s.snapshot_json,'$.instrumentName') END) AS stock_names,SUM(s.excluded) AS invalid_count,"
                 + "CASE WHEN MIN(s.excluded)=1 THEN 'EXCLUDED' "
                 + "WHEN MAX(CASE WHEN s.state='OBSERVING' AND s.excluded=0 AND COALESCE(json_extract(s.calculation_json,'$.profile.windowEnded'),0)=0 AND s.completed=0 THEN 1 ELSE 0 END)=1 THEN 'TRACKING' "
                 + "WHEN MAX(CASE WHEN s.state='DRAFT' AND s.excluded=0 THEN 1 ELSE 0 END)=1 THEN 'PENDING' ELSE 'HISTORY' END AS view "
@@ -59,22 +59,26 @@ public class ReactionEventQueryRepository {
         jdbcTemplate.query(grouped + "SELECT view,COUNT(*) AS total FROM events GROUP BY view", rs -> {
             counts.put(rs.getString("view"), rs.getLong("total"));
         }, params.toArray());
+        Long excluded = jdbcTemplate.queryForObject(grouped + "SELECT COUNT(*) FROM events WHERE invalid_count>0", Long.class, params.toArray());
+        counts.put("EXCLUDED", excluded);
         result.setCounts(counts);
         result.setTotal(counts.getOrDefault(query.getView().name(), 0L));
         List<Object> pageParams = new ArrayList<>(params);
-        pageParams.add(query.getView().name());
+        boolean excludedView = query.getView() == com.finscope.common.enums.investmentobservation.ReactionWorkspaceView.EXCLUDED;
+        if (!excludedView) {
+            pageParams.add(query.getView().name());
+        }
         pageParams.add(query.getSize());
         pageParams.add((query.getPage() - 1L) * query.getSize());
-        var rows = jdbcTemplate.queryForList(grouped + "SELECT * FROM events WHERE view=? ORDER BY newest DESC LIMIT ? OFFSET ?", pageParams.toArray());
+        var rows = jdbcTemplate.queryForList(grouped + "SELECT * FROM events WHERE " + (excludedView ? "invalid_count>0" : "view=?") + " ORDER BY newest DESC LIMIT ? OFFSET ?", pageParams.toArray());
         var items = new ArrayList<com.finscope.domain.investmentobservation.ReactionSample>();
         var stockCounts = new LinkedHashMap<String, Integer>();
         var stockNames = new LinkedHashMap<String, String>();
         for (var row : rows) {
             String key = (String) row.get("event_key");
-            // 原始入口可能对应已归档/作废成员，选择同事件中的有效成员作为摘要。
-            var peers = samples.findByIdentity(key);
-            var representative = peers.stream().filter(value -> !value.isExcluded() && value.getState() == com.finscope.common.enums.investmentobservation.ReactionSampleState.OBSERVING)
-                    .findFirst().orElse(peers.get(0));
+            long id = ((Number) row.get(excludedView ? "invalid_representative" : "representative")).longValue();
+            var representative = samples.findById(id).orElseThrow(() ->
+                    new com.finscope.common.exception.BusinessException(com.finscope.common.exception.ErrorCode.DATA_INTEGRITY_ERROR));
             items.add(representative);
             stockCounts.put(key, ((Number) row.get("stock_count")).intValue());
             stockNames.put(key, (String) row.get("stock_names"));
@@ -90,6 +94,13 @@ public class ReactionEventQueryRepository {
             reasons.put(rs.getString("reason"), rs.getLong("total"));
         });
         result.setPendingReasons(reasons);
+        var metrics = jdbcTemplate.queryForMap("SELECT COUNT(DISTINCT source_identity) AS total,"
+                + "COUNT(DISTINCT CASE WHEN instrument_code<>'' THEN source_identity END) AS linked,"
+                + "MIN(CASE WHEN state='DRAFT' THEN registered_at END) AS oldest "
+                + "FROM investment_reaction_sample WHERE excluded=0 AND json_extract(snapshot_json,'$.automatic')=1");
+        result.setAutomaticEvents(((Number) metrics.get("total")).longValue());
+        result.setLinkedEvents(((Number) metrics.get("linked")).longValue());
+        result.setOldestPendingAt((String) metrics.get("oldest"));
         result.setPage(query.getPage());
         result.setSize(query.getSize());
         return result;

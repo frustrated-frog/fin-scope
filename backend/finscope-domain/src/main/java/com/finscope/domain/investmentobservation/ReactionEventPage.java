@@ -11,6 +11,9 @@ public class ReactionEventPage {
     private Map<String, Long> pendingReasons;
     private Map<String, Integer> stockCounts;
     private Map<String, String> stockNames;
+    private long automaticEvents;
+    private long linkedEvents;
+    private String oldestPendingAt;
     private long total;
     private long anchor;
     private long revision;

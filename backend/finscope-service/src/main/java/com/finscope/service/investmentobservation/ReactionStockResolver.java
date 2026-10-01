@@ -32,13 +32,18 @@ public class ReactionStockResolver {
 
     public ReactionStockResolution resolve(String title, String body) {
         ReactionStockResolution result = new ReactionStockResolution();
-        Set<String> subjects = new LinkedHashSet<>(rules.evaluate(title).getSubjects());
+        var titleDecision = rules.evaluate(title);
+        Set<String> titleSubjects = new LinkedHashSet<>(titleDecision.getSubjects());
+        Set<String> subjects = new LinkedHashSet<>(titleSubjects);
         if (body != null) {
             // 限制材料大小和外部查询数量；按句提取动作主体，排除泛化的公司提及。
             String bounded = body.substring(0, Math.min(body.length(), 12000));
             for (String sentence : bounded.split("[。；;\\n]")) {
                 String clean = sentence.replaceFirst("^.*?(?:电[，,]|消息[，,])", "").trim();
-                subjects.addAll(rules.evaluate(clean).getSubjects());
+                var bodyDecision = rules.evaluate(clean);
+                if (titleDecision.getEventType() == null || titleDecision.getEventType() == bodyDecision.getEventType()) {
+                    subjects.addAll(bodyDecision.getSubjects());
+                }
                 if (subjects.size() >= 8) {
                     break;
                 }
@@ -49,7 +54,11 @@ public class ReactionStockResolver {
         boolean ambiguous = false;
         List<String> evidence = new ArrayList<>();
         int attempted = 0;
+        boolean titleMatched = false;
         for (String subject : subjects) {
+            if (titleMatched && !titleSubjects.contains(subject)) {
+                break;
+            }
             if (++attempted > 8) {
                 break;
             }
@@ -71,7 +80,7 @@ public class ReactionStockResolver {
                     add(candidates, localCode, instrument.getName());
                 }
             }
-            if (candidates.isEmpty()) {
+            if (candidates.isEmpty() && !unavailable) {
                 try {
                     for (ReactionStockMatch candidate : names.search(code == null ? plain : code)) {
                         if ((code == null && plain.equals(candidate.getName()))
@@ -86,7 +95,9 @@ public class ReactionStockResolver {
             }
             if (candidates.size() > 1) {
                 ambiguous = true;
+                result.getCandidates().addAll(candidates);
             } else if (candidates.size() == 1) {
+                titleMatched = titleMatched || titleSubjects.contains(subject);
                 ReactionStockMatch match = candidates.get(0);
                 add(result.getMatches(), match.getCode().replaceAll("\\.(SH|SZ|BJ)$", ""), match.getName());
                 evidence.add("材料中的动作主体“" + subject + "”对应 " + match.getName() + "（" + match.getCode() + "）");

@@ -12,6 +12,9 @@ public class ReactionEventPageResponse {
     private Map<String, Long> pendingReasons;
     private Map<String, Integer> stockCounts;
     private Map<String, String> stockNames;
+    private long automaticEvents;
+    private long linkedEvents;
+    private String oldestPendingAt;
     private long total;
     private long anchor;
     private long revision;
@@ -25,6 +28,9 @@ public class ReactionEventPageResponse {
         result.setPendingReasons(page.getPendingReasons());
         result.setStockCounts(page.getStockCounts());
         result.setStockNames(page.getStockNames());
+        result.setAutomaticEvents(page.getAutomaticEvents());
+        result.setLinkedEvents(page.getLinkedEvents());
+        result.setOldestPendingAt(page.getOldestPendingAt());
         result.setTotal(page.getTotal());
         result.setAnchor(page.getAnchor());
         result.setRevision(page.getRevision());

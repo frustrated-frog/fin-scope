@@ -93,6 +93,8 @@ public class ReactionRegistrationService {
         sample.setRelationNote(command.getRelationNote().trim());
         sample.setHistoricalBackfill(command.getPublishedAt().toLocalDate().isBefore(sample.getRegisteredAt().toLocalDate()));
         sample.setState(ReactionSampleState.OBSERVING);
+        sample.setResolutionStatus(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.RESOLVED);
+        sample.setDiscoveryIssue(null);
         if (!repository.confirm(sample, command.getRevision())) {
             boolean duplicate = repository.findByIdentity(sample.getSourceIdentity()).stream()
                     .anyMatch(existing -> existing.getInstrumentCode().equals(sample.getInstrumentCode())

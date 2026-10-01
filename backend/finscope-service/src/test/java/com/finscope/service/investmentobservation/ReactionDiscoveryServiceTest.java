@@ -153,6 +153,21 @@ class ReactionDiscoveryServiceTest {
         assertEquals(ReactionSampleState.ARCHIVED, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
     }
 
+    @Test
+    void genericHeadlinesWithDifferentBodyEventsAreNotMerged() {
+        var first = news("最新公告");
+        first.setExternalId("generic-1");
+        first.setContent("示例公司签订设备采购合同。");
+        var second = news("最新公告");
+        second.setExternalId("generic-2");
+        second.setContent("另一公司签订材料采购合同。");
+        supplyNews(List.of(first, second));
+        service.discover();
+        var samples = repository.recent(Long.MAX_VALUE, 100);
+        assertEquals(2, samples.size());
+        assertNotEquals(samples.get(0).getSourceIdentity(), samples.get(1).getSourceIdentity());
+    }
+
     private void verifyAutomaticPriceTracking(ReactionSample sample) {
         var registration = new ReactionRegistrationService();
         ReflectionTestUtils.setField(registration, "repository", repository);

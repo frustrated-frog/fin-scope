@@ -142,6 +142,13 @@ export function ReactionDetailPanel({
                     {resolutionLabels[sample.resolutionStatus || 'PENDING']} · {sample.discoveryIssue}
                   </p>
                   <p>{sample.summary}</p>
+                  {Boolean(sample.resolutionCandidates?.length) && (
+                    <p className="reaction-note">
+                      待区分的证券：
+                      {sample.resolutionCandidates?.map((value) => `${value.name}（${value.code}）`).join('、')}
+                      。候选尚未用于行情计算。
+                    </p>
+                  )}
                   <details>
                     <summary>手动补充（可选）</summary>
                     <ReactionRegistrationForm

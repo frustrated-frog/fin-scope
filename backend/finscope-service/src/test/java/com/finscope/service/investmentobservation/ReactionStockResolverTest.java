@@ -52,6 +52,16 @@ class ReactionStockResolverTest {
         assertEquals("600519.SH", body.getMatches().get(0).getCode());
         assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.NO_SUBJECT,
                 resolver.resolve("市场概览", "背景介绍中提及示例设备。").getStatus());
+        Instrument ambiguous = new Instrument();
+        ambiguous.setType("STOCK");
+        ambiguous.setName("示例设备");
+        ambiguous.setCode("600520");
+        ambiguous.setMarket("SH");
+        when(instruments.findAll()).thenReturn(List.of(local, ambiguous));
+        var uncertain = resolver.resolve("示例设备签订合同", null);
+        assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.AMBIGUOUS, uncertain.getStatus());
+        assertTrue(uncertain.getMatches().isEmpty());
+        assertEquals(2, uncertain.getCandidates().size());
         when(names.search("另一公司")).thenThrow(new IllegalStateException("offline"));
         assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.LOOKUP_UNAVAILABLE,
                 resolver.resolve("另一公司签订重大合同", null).getStatus());

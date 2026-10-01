@@ -69,6 +69,35 @@ class ReactionWorkspaceServiceTest {
         assertThrows(com.finscope.common.exception.BusinessException.class, () -> service.compare(999, 2));
     }
 
+    @Test
+    void strictComparisonReportsUnknownCandidatesAndExcludesInvalidSamples() {
+        var repo = mock(ReactionSampleRepository.class);
+        var registration = mock(ReactionRegistrationService.class);
+        var service = new ReactionWorkspaceService();
+        ReflectionTestUtils.setField(service, "repository", repo);
+        ReflectionTestUtils.setField(service, "registration", registration);
+        var target = sample(999);
+        when(registration.require(999)).thenReturn(target);
+        List<ReactionSample> candidates = new ArrayList<>();
+        for (int i = 1; i <= 7; i++) {
+            var candidate = sample(i);
+            if (i > 3) {
+                candidate.setCalculation(null);
+            }
+            candidates.add(candidate);
+        }
+        var invalid = sample(8);
+        invalid.setExcluded(true);
+        candidates.add(invalid);
+        candidates.get(0).setState(ReactionSampleState.ARCHIVED);
+        when(repo.list(null, 0, 100)).thenReturn(candidates);
+        var result = service.compare(999, 5).getSameCompany();
+        assertEquals(7, result.getBaseCandidateCount());
+        assertEquals(4, result.getUnknownComparabilityCount());
+        assertEquals(3, result.getSampleCount());
+        assertEquals(3, result.getCompleteCount());
+    }
+
     private ReactionSample sample(long id) {
         ReactionSample sample = new ReactionSample();
         sample.setId(id);

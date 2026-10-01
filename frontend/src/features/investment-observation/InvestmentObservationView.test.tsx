@@ -226,3 +226,33 @@ test('empty state explains automatic tracking without fabricating samples', asyn
   setup((path) => (path.includes('/events?') ? page([]) : undefined));
   expect(await screen.findByRole('heading', { name: '当前没有符合条件的跟踪事件' })).toBeInTheDocument();
 });
+
+test('follow and archive keep optimistic revisions and can be undone from the same detail', async () => {
+  let current = { ...sample, followed: false };
+  const { fetch } = setup((path, init) => {
+    if (path.endsWith('/follow')) {
+      current = { ...current, followed: JSON.parse(String(init?.body)).followed, revision: current.revision + 1 };
+      return [current];
+    }
+    if (path.endsWith('/archive')) {
+      current = {
+        ...current,
+        state: JSON.parse(String(init?.body)).archived ? 'ARCHIVED' : 'OBSERVING',
+        revision: current.revision + 1,
+      };
+      return current;
+    }
+    return undefined;
+  });
+  await open();
+  await userEvent.click(screen.getByRole('button', { name: '关注事件' }));
+  expect(await screen.findByRole('button', { name: '取消关注', pressed: true })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '归档样本' }));
+  await userEvent.click(await screen.findByRole('button', { name: '恢复观察' }));
+  expect(await screen.findByRole('button', { name: '归档样本' })).toBeInTheDocument();
+  expect(
+    fetch.mock.calls
+      .filter(([path]) => String(path).endsWith('/archive'))
+      .map(([, init]) => JSON.parse(String(init?.body)).revision),
+  ).toEqual([3, 4]);
+});

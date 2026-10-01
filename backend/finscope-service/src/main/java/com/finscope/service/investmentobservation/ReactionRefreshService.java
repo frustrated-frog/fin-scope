@@ -50,7 +50,7 @@ public class ReactionRefreshService {
         }
         try {
             ReactionSample sample = registration.require(id);
-            if (sample.getState() != ReactionSampleState.OBSERVING) {
+            if (sample.isExcluded() || sample.getState() != ReactionSampleState.OBSERVING) {
                 throw new BusinessException(ErrorCode.BUSINESS_CONFLICT, "只有已确认且未归档的样本可以更新");
             }
             LocalDateTime now = LocalDateTime.now(clock);

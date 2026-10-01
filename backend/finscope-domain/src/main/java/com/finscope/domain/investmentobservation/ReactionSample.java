@@ -13,6 +13,7 @@ public class ReactionSample {
     private String ruleVersion;
     private String ruleEvidence;
     private String fact;
+    private java.util.List<com.finscope.domain.investmentobservation.ReactionStockMatch> resolutionCandidates = new java.util.ArrayList<>();
     private boolean excluded;
     private com.finscope.common.enums.investmentobservation.ReactionResolutionStatus resolutionStatus =
             com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.PENDING;

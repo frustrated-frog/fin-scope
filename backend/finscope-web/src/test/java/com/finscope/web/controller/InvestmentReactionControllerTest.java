@@ -82,4 +82,23 @@ class InvestmentReactionControllerTest {
         mvc.perform(post("/api/investment-reactions/1/refresh"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("FS-2004"));
     }
+    @Test
+    void pageContractBindsFiltersAndStableEventEntryWithoutRecentList() throws Exception {
+        var page = new com.finscope.domain.investmentobservation.ReactionEventPage();
+        page.setItems(List.of());
+        page.setTotal(125);
+        page.setCounts(java.util.Map.of("HISTORY", 125L));
+        when(workspace.query(any())).thenReturn(page);
+        mvc.perform(get("/api/investment-reactions/events?view=HISTORY&page=3&size=20&query=600519&followed=true"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(125));
+        verify(workspace).query(argThat(query -> query.getPage() == 3 && query.isFollowed()
+                && query.getQuery().equals("600519") && query.getView() == com.finscope.common.enums.investmentobservation.ReactionWorkspaceView.HISTORY));
+        ReactionSample sample = new ReactionSample();
+        sample.setId(1L);
+        when(workspace.event("EVENT:stable", null)).thenReturn(sample);
+        mvc.perform(get("/api/investment-reactions/event").param("key", "EVENT:stable"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(1));
+        verifyNoInteractions(registration);
+    }
+
 }

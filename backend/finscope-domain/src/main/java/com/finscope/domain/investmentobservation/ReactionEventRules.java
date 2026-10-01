@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 public class ReactionEventRules {
     public ReactionEventDecision evaluateMaterial(String title, String body) {
         ReactionEventDecision primary = evaluate(title);
-        if (primary.getEventType() != null || body == null) {
+        if (primary.getEventType() != null || primary.getEvidence() != null || body == null) {
             return primary;
         }
         String bounded = body.substring(0, Math.min(body.length(), 12000));
@@ -38,7 +38,7 @@ public class ReactionEventRules {
         boolean explicitEarnings = text.matches(".*(业绩预告|业绩快报|季报|年报|半年报|财报).*");
         if (contract && !explicitEarnings) {
             result.setEventType(ReactionEventType.CONTRACT);
-            if (text.matches(".*(未|尚未|没有|并未|不涉及|否认|未曾|不存在).{0,8}(签订|签署|中标|合同|订单).*")) {
+            if (text.matches(".*(未|尚未|没有|并未|不涉及|否认|未曾|不存在).{0,8}(签订|签署|中标|终止|解除|取消|合同|订单).*")) {
                 result.setSubtype(ReactionEventSubtype.CONTRACT_DENIED);
             } else if (text.matches(".*(拟|计划|有望|意向|候选|预中标).{0,10}(签订|签署|合同|订单|中标).*")) {
                 result.setSubtype(ReactionEventSubtype.CONTRACT_PROPOSED);
@@ -62,6 +62,10 @@ public class ReactionEventRules {
             } else {
                 result.setSubtype(ReactionEventSubtype.OPERATING_UPDATE);
             }
+        }
+        if (text.matches(".*(签订|签署).*(同时|并|另).*(终止|解除|取消).*")
+                || text.matches(".*(尚未|没有|否认).{0,6}(发布|披露|修正).{0,6}(业绩|预告|报告).*")) {
+            result.setSubtype(ReactionEventSubtype.UNCLASSIFIED);
         }
         if (result.getEventType() == null) {
             return result;

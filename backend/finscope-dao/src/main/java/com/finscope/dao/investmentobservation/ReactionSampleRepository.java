@@ -46,6 +46,10 @@ public class ReactionSampleRepository {
         sample.setRefreshError(rs.getString("refresh_error"));
         String calculation = rs.getString("calculation_json");
         sample.setCalculation(calculation == null ? null : read(calculation, ReactionCalculation.class));
+        if (sample.getCalculation() != null) {
+            new com.finscope.domain.investmentobservation.ReactionCalculator()
+                    .describe(sample.getCalculation(), sample.getCalculation().getCalculatedAt());
+        }
         return sample;
     };
 
@@ -75,8 +79,10 @@ public class ReactionSampleRepository {
         if (proposed.getPublishedAt() != null) {
             List<String> existingKeys = jdbcTemplate.queryForList("SELECT source_identity FROM investment_reaction_sample "
                             + "WHERE replace(json_extract(snapshot_json,'$.title'),' ','')=? "
-                            + "AND substr(json_extract(snapshot_json,'$.publishedAt'),1,10)=? ORDER BY id LIMIT 1",
-                    String.class, proposed.getTitle().replaceAll("\\s", ""), proposed.getPublishedAt().toLocalDate().toString());
+                            + "AND substr(json_extract(snapshot_json,'$.publishedAt'),1,10)=? "
+                            + "AND COALESCE(json_extract(snapshot_json,'$.fact'),json_extract(snapshot_json,'$.title'))=? ORDER BY id LIMIT 1",
+                    String.class, proposed.getTitle().replaceAll("\\s", ""), proposed.getPublishedAt().toLocalDate().toString(),
+                    proposed.getFact() == null ? proposed.getTitle() : proposed.getFact());
             if (!existingKeys.isEmpty()) {
                 proposed.setSourceIdentity(existingKeys.get(0));
             }
@@ -92,11 +98,11 @@ public class ReactionSampleRepository {
             jdbcTemplate.update("UPDATE investment_reaction_source SET published_at=COALESCE(published_at,?) WHERE origin_type=? AND origin_key=?",
                     TimeUtil.text(proposed.getPublishedAt()), origin, key);
         }
-        var versions = jdbcTemplate.queryForList("SELECT title,body FROM investment_reaction_source_version "
+        var versions = jdbcTemplate.queryForList("SELECT title,body,published_at FROM investment_reaction_source_version "
                 + "WHERE origin_type=? AND origin_key=? ORDER BY id DESC LIMIT 1", origin, key);
         boolean contentChanged = versions.isEmpty() || !java.util.Objects.equals(versions.get(0).get("title"), proposed.getTitle())
                 || !java.util.Objects.equals(versions.get(0).get("body"), proposed.getSummary());
-        if (contentChanged) {
+        if (contentChanged || versions.get(0).get("published_at") == null && proposed.getPublishedAt() != null) {
             jdbcTemplate.update("INSERT INTO investment_reaction_source_version(origin_type,origin_key,event_key,title,body,published_at,captured_at) "
                             + "VALUES(?,?,?,?,?,?,?)", origin, key, identity, proposed.getTitle(), proposed.getSummary(),
                     TimeUtil.text(proposed.getPublishedAt()), TimeUtil.text(proposed.getRegisteredAt()));
@@ -117,6 +123,7 @@ public class ReactionSampleRepository {
                 if (contentChanged) {
                     draft.setTitle(proposed.getTitle());
                     draft.setSummary(proposed.getSummary());
+                    draft.setEventType(proposed.getEventType());
                     draft.setEventSubtype(proposed.getEventSubtype());
                     draft.setRuleVersion(proposed.getRuleVersion());
                     draft.setRuleEvidence(proposed.getRuleEvidence());
@@ -127,6 +134,9 @@ public class ReactionSampleRepository {
                     throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
                 }
             }
+        }
+        if (contentChanged) {
+            jdbcTemplate.update("UPDATE investment_reaction_sample SET revision=revision+1 WHERE source_identity=? AND state<>'DRAFT'", identity);
         }
         return false;
     }
@@ -146,7 +156,7 @@ public class ReactionSampleRepository {
     }
 
     public boolean followEvent(String eventKey, boolean followed) {
-        return jdbcTemplate.update("UPDATE investment_reaction_sample SET followed=? WHERE source_identity=?",
+        return jdbcTemplate.update("UPDATE investment_reaction_sample SET followed=?,revision=revision+1 WHERE source_identity=?",
                 followed ? 1 : 0, eventKey) > 0;
     }
 
@@ -179,11 +189,23 @@ public class ReactionSampleRepository {
     }
 
     public List<ReactionSample> findUnresolved(LocalDateTime before, int limit) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
-                        + "AND json_extract(snapshot_json,'$.automatic')=1 "
-                        + "AND (enrichment_attempt_at IS NULL OR enrichment_attempt_at<?) "
-                        + "ORDER BY (enrichment_attempt_at IS NULL) DESC,enrichment_attempt_at,id DESC LIMIT ?",
-                mapper, before.toString(), Math.max(1, Math.min(30, limit)));
+        return findUnresolved(before, limit, false);
+    }
+
+    public List<ReactionSample> findUnresolved(LocalDateTime before, int limit, boolean force) {
+        int bounded = Math.max(1, Math.min(30, limit));
+        int freshLimit = Math.max(1, bounded * 2 / 3);
+        List<ReactionSample> result = new java.util.ArrayList<>(jdbcTemplate.query(
+                "SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
+                        + "AND json_extract(snapshot_json,'$.automatic')=1 AND enrichment_attempt_at IS NULL ORDER BY id DESC LIMIT ?",
+                mapper, freshLimit));
+        // 预留容量给旧线索，临时服务故障较快重试；语义缺失等待更长时间或来源版本更新。
+        result.addAll(jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
+                        + "AND json_extract(snapshot_json,'$.automatic')=1 AND enrichment_attempt_at<? "
+                        + "AND (json_extract(snapshot_json,'$.resolutionStatus')='LOOKUP_UNAVAILABLE' "
+                        + "OR enrichment_attempt_at<?) ORDER BY enrichment_attempt_at,id LIMIT ?",
+                mapper, before.toString(), (force ? before : before.minusHours(5).minusMinutes(30)).toString(), bounded - result.size()));
+        return result;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -206,7 +228,7 @@ public class ReactionSampleRepository {
 
     public boolean saveDraft(ReactionSample sample) {
         return jdbcTemplate.update("UPDATE investment_reaction_sample SET snapshot_json=?,enrichment_attempt_at=?,revision=revision+1 "
-                        + "WHERE id=? AND revision=? AND state='DRAFT'", write(sample), TimeUtil.text(sample.getEnrichmentAttemptAt()), sample.getId(), sample.getRevision()) == 1;
+                        + "WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0", write(sample), TimeUtil.text(sample.getEnrichmentAttemptAt()), sample.getId(), sample.getRevision()) == 1;
     }
 
     public List<ReactionSample> recent(long beforeId, int limit) {

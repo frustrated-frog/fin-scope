@@ -9,5 +9,6 @@ import java.util.List;
 public class ReactionStockResolution {
     private ReactionResolutionStatus status = ReactionResolutionStatus.NO_SUBJECT;
     private List<ReactionStockMatch> matches = new ArrayList<>();
+    private List<ReactionStockMatch> candidates = new ArrayList<>();
     private String evidence;
 }

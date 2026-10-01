@@ -43,8 +43,8 @@ public class InvestmentReactionController {
 
     @GetMapping("/events")
     public ApiResponse<com.finscope.web.response.ReactionEventPageResponse> events(
-            @ModelAttribute com.finscope.domain.investmentobservation.ReactionEventQuery query) {
-        return ApiResponses.success(com.finscope.web.response.ReactionEventPageResponse.from(workspace.query(query)));
+            @ModelAttribute com.finscope.web.request.ReactionEventQueryRequest query) {
+        return ApiResponses.success(com.finscope.web.response.ReactionEventPageResponse.from(workspace.query(query.toQuery())));
     }
 
     @GetMapping("/event")
@@ -59,8 +59,8 @@ public class InvestmentReactionController {
 
     @PatchMapping("/{id}/exclude")
     public ApiResponse<ReactionSampleResponse> exclude(@PathVariable long id,
-            @Valid @RequestBody ArchiveReactionSampleRequest request) {
-        return ApiResponses.success(ReactionSampleResponse.from(workspace.exclude(id, request.getRevision(), request.getArchived())));
+            @Valid @RequestBody com.finscope.web.request.ExcludeReactionSampleRequest request) {
+        return ApiResponses.success(ReactionSampleResponse.from(workspace.exclude(id, request.getRevision(), request.getExcluded())));
     }
 
     @GetMapping("/changes")

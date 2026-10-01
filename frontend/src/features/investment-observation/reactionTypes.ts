@@ -41,6 +41,7 @@ export interface ReactionCalculation {
 export interface ReactionSample {
   excluded?: boolean;
   resolutionStatus?: string;
+  resolutionCandidates?: Array<{code: string; name: string}>;
   id: number;
   majorEventId?: number | null;
   sourceIdentity?: string;

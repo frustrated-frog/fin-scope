@@ -41,7 +41,16 @@ public class ReactionCalculator {
         for (int size : new int[]{1, 3, 5}) {
             result.getWindows().add(window(size, result.getPoints()));
         }
-        result.setProfile(new ReactionProfileCalculator().calculate(result, now));
+        describe(result, now);
+        return result;
+    }
+
+    /** 重用已有逐日数据修正旧版本描述，不请求行情，也不改变当时已知数据。 */
+    public void describe(ReactionCalculation result, LocalDateTime asOf) {
+        if (asOf == null || result.getWindows().size() != 3) {
+            return;
+        }
+        result.setProfile(new ReactionProfileCalculator().calculate(result, asOf));
         result.setPathType(classify(result.getWindows()));
         if (result.getProfile().isDataComplete() && result.getProfile().getGivebackPp() != null) {
             if (result.getProfile().getPeakRelativePp().compareTo(BigDecimal.valueOf(2)) >= 0
@@ -51,7 +60,6 @@ public class ReactionCalculator {
                 result.setPathType(ReactionPathType.RECOVERED);
             }
         }
-        return result;
     }
 
     private ReactionPoint point(int offset, LocalDate date, LocalDate baseline,
