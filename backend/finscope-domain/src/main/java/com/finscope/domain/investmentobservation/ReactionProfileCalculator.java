@@ -48,6 +48,16 @@ public class ReactionProfileCalculator {
             drawdown = drawdown.max(high.subtract(price).multiply(BigDecimal.valueOf(100)).divide(high, 4, RoundingMode.HALF_UP));
         }
         result.setMaxDrawdownPct(drawdown);
+        ReactionPoint trough = after.stream().filter(point -> point.getStockReturnPct() != null)
+                .min(Comparator.comparing(ReactionPoint::getStockReturnPct)
+                        .thenComparing(ReactionPoint::getSession)).orElse(null);
+        if (trough != null && current.getStockReturnPct() != null && trough.getStockReturnPct().compareTo(BigDecimal.valueOf(-100)) > 0) {
+            BigDecimal rebound = current.getStockReturnPct().subtract(trough.getStockReturnPct())
+                    .multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(100).add(trough.getStockReturnPct()), 4, RoundingMode.HALF_UP);
+            result.setReboundPct(rebound);
+            result.setRecovered(!result.isHasGaps() && trough.getSession() < current.getSession()
+                    && drawdown.compareTo(BigDecimal.valueOf(5)) >= 0 && rebound.compareTo(BigDecimal.valueOf(2)) >= 0);
+        }
         List<BigDecimal> preVolumes = points.stream().filter(point -> point.getSession() >= -4 && point.getSession() <= 0
                 && point.getStatus() == ReactionWindowStatus.READY && point.getVolume() != null && point.getVolume().signum() > 0)
                 .map(ReactionPoint::getVolume).toList();
@@ -60,8 +70,8 @@ public class ReactionProfileCalculator {
         String path;
         if (result.getGivebackPp().compareTo(BigDecimal.valueOf(2)) >= 0) {
             path = "第" + peak.getSession() + "日达到相对高点，随后回吐 " + number(result.getGivebackPp()) + "pp";
-        } else if (drawdown.compareTo(BigDecimal.valueOf(5)) >= 0 && current.getRelativeReturnPp().signum() > 0) {
-            path = "经历明显收盘回撤后修复，目前仍强于市场";
+        } else if (result.isRecovered()) {
+            path = "收盘低点后回升至少 2%，出现阶段性修复";
         } else {
             path = "当前相对市场 " + number(current.getRelativeReturnPp()) + "pp";
         }

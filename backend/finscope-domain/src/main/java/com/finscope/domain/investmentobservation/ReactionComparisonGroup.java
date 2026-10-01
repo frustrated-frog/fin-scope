@@ -10,6 +10,8 @@ public class ReactionComparisonGroup {
     private String criteria;
     private boolean relaxed;
     private int eventCount;
+    private int baseCandidateCount;
+    private int unknownComparabilityCount;
     private int sampleCount;
     private int completeCount;
     private int notDueCount;

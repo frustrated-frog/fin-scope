@@ -33,4 +33,28 @@ class ReactionStockResolverTest {
         assertTrue(java.util.Arrays.stream(ReactionStockResolver.class.getDeclaredFields())
                 .noneMatch(field -> field.getType().getSimpleName().contains("Llm")));
     }
+    @Test
+    void bodySubjectAliasesAndMissingProviderHaveDistinctOutcomes() {
+        var resolver = new ReactionStockResolver();
+        var instruments = mock(InstrumentRepository.class);
+        var names = mock(ReactionStockNameLookup.class);
+        ReflectionTestUtils.setField(resolver, "instruments", instruments);
+        ReflectionTestUtils.setField(resolver, "names", names);
+        Instrument local = new Instrument();
+        local.setType("STOCK");
+        local.setName("示例设备");
+        local.setAliases("示例设备股份有限公司,旧设备名称");
+        local.setCode("600519");
+        local.setMarket("SH");
+        when(instruments.findAll()).thenReturn(List.of(local));
+        var body = resolver.resolve("最新公告", "示例设备股份有限公司签订重大合同。客户提到了其他上市公司。");
+        assertEquals(1, body.getMatches().size());
+        assertEquals("600519.SH", body.getMatches().get(0).getCode());
+        assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.NO_SUBJECT,
+                resolver.resolve("市场概览", "背景介绍中提及示例设备。").getStatus());
+        when(names.search("另一公司")).thenThrow(new IllegalStateException("offline"));
+        assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.LOOKUP_UNAVAILABLE,
+                resolver.resolve("另一公司签订重大合同", null).getStatus());
+    }
+
 }

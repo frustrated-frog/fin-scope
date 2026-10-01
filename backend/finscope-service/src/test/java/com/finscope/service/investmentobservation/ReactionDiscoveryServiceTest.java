@@ -59,7 +59,7 @@ class ReactionDiscoveryServiceTest {
         ReflectionTestUtils.setField(service, "radar", radar);
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
         when(radar.findActiveSignals(any(), anyInt())).thenReturn(List.of());
-        when(resolver.resolve(anyString())).thenReturn(List.of(match("600519.SH", "示例公司")));
+        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
     }
 
     @Test
@@ -71,7 +71,7 @@ class ReactionDiscoveryServiceTest {
         duplicate.setPublishedAt(news.getPublishedAt());
         duplicate.setFirstSeenAt(now.minusMinutes(1));
         when(radar.findActiveSignals(any(), anyInt())).thenReturn(List.of(duplicate));
-        when(resolver.resolve(anyString())).thenReturn(List.of(match("600519.SH", "示例公司"), match("000001.SZ", "另一公司")));
+        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"), match("000001.SZ", "另一公司"))));
         assertEquals(2, service.discover().getResolved());
         List<ReactionSample> samples = repository.recent(Long.MAX_VALUE, 100);
         assertEquals(2, samples.size());
@@ -91,15 +91,15 @@ class ReactionDiscoveryServiceTest {
     @Test
     void unresolvedNewsSurvivesCacheExpiryAndRetriesWithoutUserInput() {
         supplyNews(List.of(news("示例公司业绩增长")));
-        when(resolver.resolve(anyString())).thenReturn(List.of());
+        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of()));
         service.discover();
         ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
         assertEquals(ReactionSampleState.DRAFT, draft.getState());
         assertNotNull(draft.getDiscoveryIssue());
         service.discover();
-        verify(resolver, times(1)).resolve(anyString());
+        verify(resolver, times(1)).resolve(anyString(), nullable(String.class));
         supplyNews(List.of());
-        when(resolver.resolve(anyString())).thenReturn(List.of(match("600519.SH", "示例公司")));
+        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.plusHours(7).atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
         assertEquals(1, service.discover().getResolved());
         assertEquals(ReactionSampleState.OBSERVING, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
@@ -115,16 +115,18 @@ class ReactionDiscoveryServiceTest {
         service.discover();
         assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
         assertEquals(ReactionSampleState.DRAFT, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
-        verifyNoInteractions(resolver);
+        assertEquals("600519.SH", repository.recent(Long.MAX_VALUE, 100).get(0).getInstrumentCode());
+        assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.TIME_MISSING,
+                repository.recent(Long.MAX_VALUE, 100).get(0).getResolutionStatus());
     }
 
     @Test
     void archivedDuringEnrichmentCannotBeResurrected() {
         supplyNews(List.of(news("示例公司重大合同")));
-        when(resolver.resolve(anyString())).thenAnswer(call -> {
+        when(resolver.resolve(anyString(), nullable(String.class))).thenAnswer(call -> {
             ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
             repository.changeState(draft.getId(), draft.getRevision(), ReactionSampleState.ARCHIVED);
-            return List.of(match("600519.SH", "示例公司"));
+            return resolution(List.of(match("600519.SH", "示例公司")));
         });
         assertEquals(0, service.discover().getResolved());
         assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
@@ -197,6 +199,12 @@ class ReactionDiscoveryServiceTest {
         item.setExternalId(title);
         item.setUrl("https://example.com/news");
         return item;
+    }
+
+    private com.finscope.domain.investmentobservation.ReactionStockResolution resolution(List<ReactionStockMatch> matches) {
+        var result = new com.finscope.domain.investmentobservation.ReactionStockResolution();
+        result.setMatches(matches);
+        return result;
     }
 
     private ReactionStockMatch match(String code, String name) {

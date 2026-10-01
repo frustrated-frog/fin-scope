@@ -22,4 +22,13 @@ class ReactionEventRulesTest {
         assertEquals(ReactionEventSubtype.CONTRACT_SIGNED, rules.evaluate("示例公司签订重大合同").getSubtype());
         assertNull(rules.evaluate("示例公司：订单饱满").getMergeAnchor());
     }
+    @Test
+    void negationPlansAndContractProfitDoNotBecomeCompletedOrEarningsEvents() {
+        assertEquals(ReactionEventSubtype.CONTRACT_DENIED, rules.evaluate("示例公司：目前未签订重大合同").getSubtype());
+        assertEquals(ReactionEventSubtype.CONTRACT_PROPOSED, rules.evaluate("示例公司：拟签订重大合同").getSubtype());
+        assertEquals(ReactionEventSubtype.CONTRACT_SIGNED, rules.evaluate("示例公司：签订重大合同，预计新增净利润1亿元").getSubtype());
+        assertEquals(ReactionEventSubtype.CONTRACT_SIGNED,
+                rules.evaluateMaterial("最新公告", "示例公司签订重大合同。客户为其他公司。").getSubtype());
+    }
+
 }

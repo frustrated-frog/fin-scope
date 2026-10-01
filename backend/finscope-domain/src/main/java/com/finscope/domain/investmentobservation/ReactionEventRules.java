@@ -6,6 +6,21 @@ import java.util.regex.Pattern;
 
 /** 规则只接受文本中的主体与动作；不推断受益关系或市场预期。 */
 public class ReactionEventRules {
+    public ReactionEventDecision evaluateMaterial(String title, String body) {
+        ReactionEventDecision primary = evaluate(title);
+        if (primary.getEventType() != null || body == null) {
+            return primary;
+        }
+        String bounded = body.substring(0, Math.min(body.length(), 12000));
+        for (String sentence : bounded.split("[。；;\\n]")) {
+            ReactionEventDecision detail = evaluate(sentence.trim());
+            if (detail.getEventType() != null && !detail.getSubjects().isEmpty()) {
+                return detail;
+            }
+        }
+        return primary;
+    }
+
     public ReactionEventDecision evaluate(String title) {
         ReactionEventDecision result = new ReactionEventDecision();
         String text = title == null ? "" : title.trim();
@@ -18,7 +33,25 @@ public class ReactionEventRules {
             result.setEvidence("观点或行情报道，不作为公司自身事件");
             return result;
         }
-        if (text.matches(".*(业绩|季报|年报|半年报|财报|净利润).*")) {
+        // 主动作优先于合同收益说明中的“预计净利润”，否定与拟议不得视为落地。
+        boolean contract = text.matches(".*(合同|订单|中标).*");
+        boolean explicitEarnings = text.matches(".*(业绩预告|业绩快报|季报|年报|半年报|财报).*");
+        if (contract && !explicitEarnings) {
+            result.setEventType(ReactionEventType.CONTRACT);
+            if (text.matches(".*(未|尚未|没有|并未|不涉及|否认|未曾|不存在).{0,8}(签订|签署|中标|合同|订单).*")) {
+                result.setSubtype(ReactionEventSubtype.CONTRACT_DENIED);
+            } else if (text.matches(".*(拟|计划|有望|意向|候选|预中标).{0,10}(签订|签署|合同|订单|中标).*")) {
+                result.setSubtype(ReactionEventSubtype.CONTRACT_PROPOSED);
+            } else if (text.matches(".*(终止|解除|取消).*")) {
+                result.setSubtype(ReactionEventSubtype.CONTRACT_TERMINATED);
+            } else if (text.matches(".*(签订|签署).*")) {
+                result.setSubtype(ReactionEventSubtype.CONTRACT_SIGNED);
+            } else if (text.contains("中标") && !text.matches(".*(候选|拟中标|预中标).*")) {
+                result.setSubtype(ReactionEventSubtype.CONTRACT_AWARDED);
+            } else {
+                result.setSubtype(ReactionEventSubtype.OPERATING_UPDATE);
+            }
+        } else if (text.matches(".*(业绩|季报|年报|半年报|财报|净利润).*")) {
             result.setEventType(ReactionEventType.EARNINGS);
             if (text.matches(".*(修正|上修|下修).*")) {
                 result.setSubtype(ReactionEventSubtype.EARNINGS_REVISION);
@@ -26,17 +59,6 @@ public class ReactionEventRules {
                 result.setSubtype(ReactionEventSubtype.EARNINGS_FORECAST);
             } else if (text.matches(".*(季报|年报|半年报|财报|报告|披露|发布).*")) {
                 result.setSubtype(ReactionEventSubtype.EARNINGS_REPORT);
-            } else {
-                result.setSubtype(ReactionEventSubtype.OPERATING_UPDATE);
-            }
-        } else if (text.matches(".*(合同|订单|中标).*")) {
-            result.setEventType(ReactionEventType.CONTRACT);
-            if (text.matches(".*(终止|解除|取消).*")) {
-                result.setSubtype(ReactionEventSubtype.CONTRACT_TERMINATED);
-            } else if (text.matches(".*(签订|签署).*")) {
-                result.setSubtype(ReactionEventSubtype.CONTRACT_SIGNED);
-            } else if (text.contains("中标") && !text.matches(".*(候选|拟中标|预中标).*")) {
-                result.setSubtype(ReactionEventSubtype.CONTRACT_AWARDED);
             } else {
                 result.setSubtype(ReactionEventSubtype.OPERATING_UPDATE);
             }

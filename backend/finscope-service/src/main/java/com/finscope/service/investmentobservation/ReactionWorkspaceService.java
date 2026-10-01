@@ -25,6 +25,37 @@ public class ReactionWorkspaceService {
     @Resource
     private ReactionRegistrationService registration;
 
+    @Resource
+    private com.finscope.dao.investmentobservation.ReactionEventQueryRepository eventQueries;
+
+    public ReactionEventPage query(ReactionEventQuery query) {
+        if (query.getView() == null || query.getPage() < 1 || query.getPage() > 100000
+                || query.getSize() < 1 || query.getSize() > 50 || query.getAnchor() < 0
+                || query.getQuery() == null || query.getQuery().length() > 200) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+        }
+        query.setQuery(query.getQuery().trim());
+        return eventQueries.query(query);
+    }
+
+    public ReactionSample event(String key, String stock) {
+        List<ReactionSample> samples = repository.findByIdentity(key);
+        return samples.stream().filter(value -> stock == null || stock.equals(value.getInstrumentCode()))
+                .findFirst().orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    public ReactionSample exclude(long id, int revision, boolean excluded) {
+        registration.require(id);
+        if (!repository.exclude(id, revision, excluded)) {
+            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
+        }
+        return registration.require(id);
+    }
+
+    public List<ReactionSource> versions(long id) {
+        return repository.sourceVersions(registration.require(id).getSourceIdentity());
+    }
+
     public List<ReactionSample> peers(long id) {
         return repository.findByIdentity(registration.require(id).getSourceIdentity());
     }
@@ -80,7 +111,7 @@ public class ReactionWorkspaceService {
     }
 
     private boolean eligible(ReactionSample target, ReactionSample candidate) {
-        return candidate.getState() != ReactionSampleState.DRAFT && !target.getSourceIdentity().equals(candidate.getSourceIdentity())
+        return !candidate.isExcluded() && candidate.getState() != ReactionSampleState.DRAFT && !target.getSourceIdentity().equals(candidate.getSourceIdentity())
                 && candidate.getPublishedAt() != null && candidate.getPublishedAt().isBefore(target.getPublishedAt())
                 && candidate.getEventType() == target.getEventType() && candidate.getEventSubtype() == target.getEventSubtype()
                 && (candidate.getCalculation() == null || target.getCalculation().getBenchmarkCode().equals(candidate.getCalculation().getBenchmarkCode())
@@ -96,7 +127,9 @@ public class ReactionWorkspaceService {
         String criteria = relaxed ? "样本不足：放宽公开时段与事前相对表现；仍限定同事件子类、同基准、同计算口径"
                 : "同事件子类、同公开时段、同事前相对表现分组、同基准及计算口径";
         result.setRelaxed(relaxed);
-        result.setCriteria(criteria + "；无行情样本计入缺失；按事件时间倒序选取有行情的展示案例，不按事后涨幅挑选");
+        result.setCriteria(criteria + "；缺失统计仅覆盖已选可比样本，无法判断可比性另列；按事件时间倒序选取有行情的展示案例，不按事后涨幅挑选");
+        result.setBaseCandidateCount(eligible.size());
+        result.setUnknownComparabilityCount((int) eligible.stream().filter(value -> beforeBand(value) == null).count());
         result.setSampleCount(selected.size());
         HashSet<String> events = new HashSet<>();
         List<BigDecimal> returns = new ArrayList<>();

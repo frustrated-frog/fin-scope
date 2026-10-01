@@ -21,7 +21,14 @@ public class ReactionStockNameLookup {
     private FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
 
+    private final java.util.Map<String, CachedNames> cache = new java.util.concurrent.ConcurrentHashMap<>();
+    private record CachedNames(long expiresAt, List<ReactionStockMatch> matches) { }
+
     public List<ReactionStockMatch> search(String name) {
+        CachedNames cached = name == null ? null : cache.get(name);
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
+            return cached.matches();
+        }
         if (name == null || name.length() < 3 || name.length() > 20) {
             return List.of();
         }
@@ -56,6 +63,10 @@ public class ReactionStockNameLookup {
                 match.setName(stockName);
                 result.add(match);
             }
+            if (cache.size() >= 1000) {
+                cache.clear();
+            }
+            cache.put(name, new CachedNames(System.currentTimeMillis() + 3600000, List.copyOf(result)));
             return result;
         } catch (Exception ex) {
             throw new ProviderContractException("REACTION_STOCK_LOOKUP_FAILED", "证券名称核对暂不可用", true, ex);

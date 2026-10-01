@@ -34,4 +34,22 @@ class ReactionProfileCalculatorTest {
         }
         return new ReactionProfileCalculator().calculate(calculation, LocalDate.of(2026, 9, values.length).atTime(16, 0));
     }
+    @Test
+    void fallingLessThanBenchmarkIsNotARecovery() {
+        ReactionCalculation calculation = new ReactionCalculation();
+        for (int i = 0; i < 5; i++) {
+            ReactionPoint point = new ReactionPoint();
+            point.setSession(i + 1);
+            point.setTradeDate(LocalDate.of(2026, 9, 1).plusDays(i));
+            point.setStatus(ReactionWindowStatus.READY);
+            point.setStockReturnPct(BigDecimal.valueOf(2 - i * 2));
+            point.setRelativeReturnPp(BigDecimal.ONE);
+            calculation.getPoints().add(point);
+        }
+        var result = new ReactionProfileCalculator().calculate(calculation, LocalDate.of(2026, 9, 5).atTime(16, 0));
+        assertFalse(result.isRecovered());
+        assertFalse(result.getSummary().contains("修复"));
+        assertEquals(0, result.getReboundPct().signum());
+    }
+
 }

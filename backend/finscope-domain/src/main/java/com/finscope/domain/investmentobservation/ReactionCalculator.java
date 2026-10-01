@@ -47,8 +47,7 @@ public class ReactionCalculator {
             if (result.getProfile().getPeakRelativePp().compareTo(BigDecimal.valueOf(2)) >= 0
                     && result.getProfile().getGivebackPp().compareTo(BigDecimal.valueOf(2)) >= 0) {
                 result.setPathType(result.getProfile().getPeakSession() == 1 ? ReactionPathType.GIVEBACK : ReactionPathType.PEAK_GIVEBACK);
-            } else if (result.getProfile().getMaxDrawdownPct().compareTo(BigDecimal.valueOf(5)) >= 0
-                    && result.getProfile().getCurrentRelativePp().signum() > 0) {
+            } else if (result.getProfile().isRecovered()) {
                 result.setPathType(ReactionPathType.RECOVERED);
             }
         }

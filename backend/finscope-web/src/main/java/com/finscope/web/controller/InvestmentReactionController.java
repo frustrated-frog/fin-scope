@@ -41,6 +41,28 @@ public class InvestmentReactionController {
     @Resource
     private ReactionWorkspaceService workspace;
 
+    @GetMapping("/events")
+    public ApiResponse<com.finscope.web.response.ReactionEventPageResponse> events(
+            @ModelAttribute com.finscope.domain.investmentobservation.ReactionEventQuery query) {
+        return ApiResponses.success(com.finscope.web.response.ReactionEventPageResponse.from(workspace.query(query)));
+    }
+
+    @GetMapping("/event")
+    public ApiResponse<ReactionSampleResponse> event(@RequestParam String key, @RequestParam(required = false) String stock) {
+        return ApiResponses.success(ReactionSampleResponse.from(workspace.event(key, stock)));
+    }
+
+    @GetMapping("/{id}/versions")
+    public ApiResponse<List<ReactionSource>> versions(@PathVariable long id) {
+        return ApiResponses.success(workspace.versions(id));
+    }
+
+    @PatchMapping("/{id}/exclude")
+    public ApiResponse<ReactionSampleResponse> exclude(@PathVariable long id,
+            @Valid @RequestBody ArchiveReactionSampleRequest request) {
+        return ApiResponses.success(ReactionSampleResponse.from(workspace.exclude(id, request.getRevision(), request.getArchived())));
+    }
+
     @GetMapping("/changes")
     public ApiResponse<List<ReactionChange>> changes(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,

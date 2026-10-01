@@ -25,9 +25,10 @@ class ReactionStockNameLookupTest {
         assertEquals(1, result.size());
         assertEquals("300476", result.get(0).getCode());
         verify(http).get(eq("REACTION_STOCK_NAME"), argThat(uri -> uri.getRawQuery().contains("input=%")), anyMap(), eq(262144), eq(3000));
+        assertEquals(result, lookup.search("胜宏科技"));
         when(http.get(anyString(), any(URI.class), anyMap(), anyInt(), anyInt()))
                 .thenReturn(new FinanceHttpResponse(200, "{}", Instant.now(), "hash"));
-        assertThrows(ProviderContractException.class, () -> lookup.search("胜宏科技"));
+        assertThrows(ProviderContractException.class, () -> lookup.search("另一公司"));
         assertTrue(lookup.search("").isEmpty());
     }
 }

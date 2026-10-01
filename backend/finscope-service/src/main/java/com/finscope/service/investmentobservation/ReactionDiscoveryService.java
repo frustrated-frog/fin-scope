@@ -41,7 +41,7 @@ public class ReactionDiscoveryService {
         LocalDateTime now = LocalDateTime.now(clock);
         ReactionDiscoveryStatus result = new ReactionDiscoveryStatus();
         boolean sourcesAvailable = captureSources(now, result);
-        for (ReactionSample draft : repository.findUnresolved(retryUnresolved ? now.plusSeconds(1) : now.minusHours(6), 10)) {
+        for (ReactionSample draft : repository.findUnresolved(retryUnresolved ? now.plusSeconds(1) : now.minusMinutes(30), 30)) {
             try {
                 result.setResolved(result.getResolved() + enrich(draft, now));
             } catch (RuntimeException ex) {
@@ -84,7 +84,7 @@ public class ReactionDiscoveryService {
 
     private int capture(String title, String summary, String url, LocalDateTime publishedAt,
                         LocalDateTime firstSeen, String origin, String key, LocalDateTime now) {
-        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(title);
+        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluateMaterial(title, summary);
         ReactionEventType type = decision.getEventType();
         if (type == null || (publishedAt != null && (publishedAt.isAfter(now)
                 || publishedAt.isBefore(now.minusHours(36))))) {
@@ -118,29 +118,38 @@ public class ReactionDiscoveryService {
 
     private int enrich(ReactionSample draft, LocalDateTime now) {
         draft.setEnrichmentAttemptAt(now);
-        if (draft.getPublishedAt() == null) {
-            draft.setDiscoveryIssue("来源未提供公开时刻，已保留事件；暂不能对齐精确行情窗口");
-            repository.saveDraft(draft);
-            return 0;
-        }
-        List<ReactionStockMatch> matches = resolver.resolve(draft.getTitle());
+        var resolution = resolver.resolve(draft.getTitle(), draft.getSummary());
+        draft.setResolutionStatus(resolution.getStatus());
+        List<ReactionStockMatch> matches = resolution.getMatches();
         if (matches.isEmpty()) {
-            draft.setDiscoveryIssue("尚未可靠关联A股公司，系统每6小时重试；无需填写表单即可阅读事件");
+            draft.setDiscoveryIssue(switch (resolution.getStatus()) {
+                case LOOKUP_UNAVAILABLE -> "证券关联服务暂不可用，稍后自动重试";
+                case AMBIGUOUS -> "公司身份有歧义，等待更明确的代码或材料";
+                default -> "材料未发现可核验的直接关联 A 股公司，等待来源补充";
+            });
             repository.saveDraft(draft);
             return 0;
         }
         List<ReactionSample> samples = new java.util.ArrayList<>();
         // 每家公司保留独立价格路径，不能因为其中一只上涨才事后加入。
         for (ReactionStockMatch match : matches) {
+            if (draft.getInstrumentCode() != null && !draft.getInstrumentCode().isBlank()
+                    && !draft.getInstrumentCode().equals(match.getCode())) {
+                continue;
+            }
             ReactionSample sample = copy(draft);
             sample.setInstrumentCode(match.getCode());
             sample.setInstrumentName(match.getName());
-            sample.setState(ReactionSampleState.OBSERVING);
-            sample.setDiscoveryIssue(null);
-            sample.setRelationNote("标题明确出现“" + match.getName() + "”，代码经标的资料或行情名称核对；以来源发布时刻对齐，不代表已核实为公司首次公告。");
+            sample.setState(draft.getPublishedAt() == null ? ReactionSampleState.DRAFT : ReactionSampleState.OBSERVING);
+            sample.setResolutionStatus(draft.getPublishedAt() == null
+                    ? com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.TIME_MISSING
+                    : com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.RESOLVED);
+            sample.setDiscoveryIssue(draft.getPublishedAt() == null ? "股票已关联，来源公开时间待补全" : null);
+            sample.setEnrichmentAttemptAt(now);
+            sample.setRelationNote(resolution.getEvidence() + "；来源时间不代表首次公告时间。");
             samples.add(sample);
         }
-        // 去掉仅用于补全的无股票占位项；保留归档意味着用户主动忽略，不再重新创建。
+        // 第一只股票沿用草稿 ID，旧入口在自动补全后仍然有效。
         return repository.promoteDraft(draft, samples) ? samples.size() : 0;
     }
 
@@ -160,7 +169,7 @@ public class ReactionDiscoveryService {
         sample.setAutomatic(true);
         sample.setFollowed(draft.isFollowed());
         sample.setEventType(draft.getEventType());
-        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(draft.getTitle());
+        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluateMaterial(draft.getTitle(), draft.getSummary());
         sample.setEventSubtype(decision.getSubtype());
         sample.setRuleVersion(decision.getRuleVersion());
         sample.setRuleEvidence(decision.getEvidence());

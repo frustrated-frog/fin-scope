@@ -43,6 +43,7 @@ public class ReactionSchemaMigrator implements InitializingBean {
         migrateAutomaticSources();
         migrateEventSources();
         migrateReactionChanges();
+        migrateWorkspace();
     }
 
     private void migrateAutomaticSources() {
@@ -99,6 +100,26 @@ public class ReactionSchemaMigrator implements InitializingBean {
                     + "UNIQUE(sample_id,revision))");
             jdbcTemplate.execute("CREATE INDEX idx_reaction_change_date ON investment_reaction_change(detected_at,id)");
             jdbcTemplate.update("INSERT INTO schema_migration VALUES(413,?,?)", "reaction history and daily changes", LocalDateTime.now().toString());
+        });
+    }
+
+    private void migrateWorkspace() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            if (jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=414", Integer.class) > 0) {
+                return;
+            }
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
+            jdbcTemplate.execute("CREATE TABLE investment_reaction_source_version (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "origin_type TEXT NOT NULL,origin_key TEXT NOT NULL,event_key TEXT NOT NULL,"
+                    + "title TEXT,body TEXT,published_at TEXT,captured_at TEXT NOT NULL)");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_version_source ON investment_reaction_source_version(origin_type,origin_key,id)");
+            jdbcTemplate.execute("INSERT INTO investment_reaction_source_version(origin_type,origin_key,event_key,title,body,published_at,captured_at) "
+                    + "SELECT o.origin_type,o.origin_key,o.event_key,o.title,"
+                    + "(SELECT json_extract(s.snapshot_json,'$.summary') FROM investment_reaction_sample s WHERE s.source_identity=o.event_key ORDER BY s.id LIMIT 1),"
+                    + "o.published_at,COALESCE(o.captured_at,datetime('now')) FROM investment_reaction_source o");
+            // 旧线索只重排队一次，不改变身份、归档或原始快照。
+            jdbcTemplate.execute("UPDATE investment_reaction_sample SET enrichment_attempt_at=NULL WHERE state='DRAFT'");
+            jdbcTemplate.update("INSERT INTO schema_migration VALUES(414,?,?)", "event workspace and immutable source versions", LocalDateTime.now().toString());
         });
     }
 

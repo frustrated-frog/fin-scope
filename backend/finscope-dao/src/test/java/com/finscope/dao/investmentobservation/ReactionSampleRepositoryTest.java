@@ -155,4 +155,76 @@ class ReactionSampleRepositoryTest {
         sample.setFirstCapturedAt(now.minusDays(2));
         return sample;
     }
+    @Test
+    void eventPaginationSearchAndCountsCoverBeyondOneHundredSamples() {
+        for (int i = 0; i < 125; i++) {
+            ReactionSample item = sample();
+            item.setSourceIdentity("EVENT:" + i);
+            item.setInstrumentCode("600519.SH");
+            item.setState(i == 0 ? ReactionSampleState.ARCHIVED : ReactionSampleState.OBSERVING);
+            item.setTitle(i == 0 ? "最早的归档合同" : "合同" + i);
+            repository.create(item);
+        }
+        var queries = new ReactionEventQueryRepository();
+        ReflectionTestUtils.setField(queries, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(queries, "samples", repository);
+        var query = new com.finscope.domain.investmentobservation.ReactionEventQuery();
+        var first = queries.query(query);
+        assertEquals(124, first.getTotal());
+        assertEquals(20, first.getItems().size());
+        assertEquals(1L, first.getCounts().get("HISTORY"));
+        query.setPage(7);
+        assertEquals(4, queries.query(query).getItems().size());
+        query.setPage(1);
+        query.setView(com.finscope.common.enums.investmentobservation.ReactionWorkspaceView.HISTORY);
+        query.setQuery("最早的");
+        assertEquals("最早的归档合同", queries.query(query).getItems().get(0).getTitle());
+        ReactionSample peer = sample();
+        peer.setSourceIdentity("EVENT:0");
+        peer.setInstrumentCode("000001.SZ");
+        peer.setState(ReactionSampleState.ARCHIVED);
+        peer.setTitle("最早的归档合同");
+        repository.create(peer);
+        query.setAnchor(Long.MAX_VALUE);
+        var grouped = queries.query(query);
+        assertEquals(1, grouped.getTotal());
+        assertEquals(2, grouped.getStockCounts().get("EVENT:0"));
+    }
+
+    @Test
+    void promotionKeepsOriginalLinkAndVersionsDoNotOverwriteObservedFacts() {
+        ReactionSample proposed = sample();
+        proposed.setSourceIdentity("EVENT:stable");
+        proposed.setSourceOriginType("NEWS_ITEM");
+        proposed.setSourceOriginKey("news-1");
+        proposed.setAutomatic(true);
+        proposed.setTitle("初始合同");
+        proposed.setSummary("初始材料");
+        repository.captureSource(proposed);
+        ReactionSample draft = repository.findByIdentity("EVENT:stable").get(0);
+        long originalId = draft.getId();
+        proposed.setTitle("贵州茅台签订合同");
+        proposed.setSummary("补全后的公司材料");
+        repository.captureSource(proposed);
+        draft = repository.findById(originalId).orElseThrow();
+        assertEquals(proposed.getTitle(), draft.getTitle());
+        assertEquals(2, repository.sourceVersions("EVENT:stable").size());
+        repository.captureSource(proposed);
+        assertEquals(2, repository.sourceVersions("EVENT:stable").size());
+        ReactionSample resolved = sample();
+        resolved.setSourceIdentity("EVENT:stable");
+        resolved.setTitle(draft.getTitle());
+        resolved.setInstrumentCode("600519.SH");
+        resolved.setState(ReactionSampleState.OBSERVING);
+        assertTrue(repository.promoteDraft(draft, java.util.List.of(resolved)));
+        assertEquals("600519.SH", repository.findById(originalId).orElseThrow().getInstrumentCode());
+        proposed.setTitle("贵州茅台终止合同");
+        repository.captureSource(proposed);
+        assertEquals("贵州茅台签订合同", repository.findById(originalId).orElseThrow().getTitle());
+        assertEquals(3, repository.sourceVersions("EVENT:stable").size());
+        ReactionSample observed = repository.findById(originalId).orElseThrow();
+        assertTrue(repository.exclude(originalId, observed.getRevision(), true));
+        assertTrue(repository.findDue(now.plusDays(1), 20).isEmpty());
+    }
+
 }

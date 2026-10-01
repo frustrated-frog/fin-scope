@@ -10,7 +10,7 @@ import java.util.List;
 public class ReactionEventDecision {
     private ReactionEventType eventType;
     private ReactionEventSubtype subtype = ReactionEventSubtype.UNCLASSIFIED;
-    private String ruleVersion = "REACTION_RULES_V1";
+    private String ruleVersion = "REACTION_RULES_V2";
     private String evidence;
     private String fact;
     private String mergeAnchor;

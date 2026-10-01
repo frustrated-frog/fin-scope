@@ -15,6 +15,9 @@ public class ReactionSampleResponse {
     private String ruleVersion;
     private String ruleEvidence;
     private String fact;
+    private boolean excluded;
+    private com.finscope.common.enums.investmentobservation.ReactionResolutionStatus resolutionStatus =
+            com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.PENDING;
     private boolean followed;
     private Long id;
     private Long majorEventId;
@@ -44,6 +47,8 @@ public class ReactionSampleResponse {
     public static ReactionSampleResponse from(ReactionSample sample) {
         ReactionSampleResponse result = new ReactionSampleResponse();
         result.setId(sample.getId());
+        result.setExcluded(sample.isExcluded());
+        result.setResolutionStatus(sample.getResolutionStatus());
         result.setEventSubtype(sample.getEventSubtype());
         result.setRuleVersion(sample.getRuleVersion());
         result.setRuleEvidence(sample.getRuleEvidence());

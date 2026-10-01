@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 
 @Data
 public class ReactionProfile {
-    private String version = "REACTION_PROFILE_V1";
+    private String version = "REACTION_PROFILE_V2";
     private int observedSessions;
     private boolean windowEnded;
     private boolean dataComplete;
@@ -21,5 +21,7 @@ public class ReactionProfile {
     private BigDecimal maxDrawdownPct;
     private BigDecimal firstVolumeRatio;
     private BigDecimal currentVolumeRatio;
+    private boolean recovered;
+    private BigDecimal reboundPct;
     private String summary;
 }

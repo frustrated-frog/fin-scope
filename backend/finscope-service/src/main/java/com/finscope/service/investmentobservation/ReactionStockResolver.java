@@ -1,66 +1,107 @@
 package com.finscope.service.investmentobservation;
 
+import com.finscope.common.enums.investmentobservation.ReactionResolutionStatus;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.investmentobservation.ReactionEventRules;
 import com.finscope.domain.investmentobservation.ReactionStockMatch;
+import com.finscope.domain.investmentobservation.ReactionStockResolution;
 import com.finscope.rpc.investmentobservation.ReactionStockNameLookup;
-import com.finscope.service.instrument.QuoteService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
 import javax.annotation.Resource;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
-/** 纯规则模式：不注入也不调用模型。证券身份核验与主体提取分别执行。 */
+/** 只关联执行事件动作的主体；正文提及或价格上涨本身不构成关联依据。 */
 @Service
-@Slf4j
 public class ReactionStockResolver {
     @Resource
     private InstrumentRepository instruments;
-    @Resource
-    private QuoteService quotes;
     @Resource
     private ReactionStockNameLookup names;
     private final ReactionEventRules rules = new ReactionEventRules();
 
     public List<ReactionStockMatch> resolve(String title) {
-        List<ReactionStockMatch> matches = new ArrayList<>();
-        List<Instrument> local = instruments.findAll();
-        for (String subject : rules.evaluate(title).getSubjects()) {
-            String plain = subject.replaceAll("[（(][0-9]{6}[）)]", "").trim();
-            boolean found = false;
-            for (Instrument instrument : local) {
-                if ("STOCK".equals(instrument.getType()) && Set.of("SH", "SZ", "BJ").contains(String.valueOf(instrument.getMarket()))
-                        && plain.equals(instrument.getName())) {
-                    add(matches, instrument.getCode().replaceAll("\\.(SH|SZ|BJ)$", ""), instrument.getName());
-                    found = true;
+        return resolve(title, null).getMatches();
+    }
+
+    public ReactionStockResolution resolve(String title, String body) {
+        ReactionStockResolution result = new ReactionStockResolution();
+        Set<String> subjects = new LinkedHashSet<>(rules.evaluate(title).getSubjects());
+        if (body != null) {
+            // 限制材料大小和外部查询数量；按句提取动作主体，排除泛化的公司提及。
+            String bounded = body.substring(0, Math.min(body.length(), 12000));
+            for (String sentence : bounded.split("[。；;\\n]")) {
+                String clean = sentence.replaceFirst("^.*?(?:电[，,]|消息[，,])", "").trim();
+                subjects.addAll(rules.evaluate(clean).getSubjects());
+                if (subjects.size() >= 8) {
+                    break;
                 }
-            }
-            if (found) {
-                continue;
-            }
-            try {
-                if (plain.matches("[603489][0-9]{5}")) {
-                    for (var quote : quotes.fetch("STOCK", List.of(plain))) {
-                        if (quote.isValid() && quote.getInstrumentCode() != null
-                                && plain.equals(quote.getInstrumentCode().replaceAll("\\.(SH|SZ|BJ)$", ""))) {
-                            add(matches, plain, quote.getName());
-                        }
-                    }
-                } else {
-                    for (ReactionStockMatch match : names.search(plain)) {
-                        if (plain.equals(match.getName())) {
-                            add(matches, match.getCode(), match.getName());
-                        }
-                    }
-                }
-            } catch (RuntimeException ex) {
-                log.warn("reaction identity lookup unavailable subject={} exceptionType={}", plain, ex.getClass().getSimpleName());
             }
         }
-        return matches;
+        List<Instrument> local = instruments.findAll();
+        boolean unavailable = false;
+        boolean ambiguous = false;
+        List<String> evidence = new ArrayList<>();
+        int attempted = 0;
+        for (String subject : subjects) {
+            if (++attempted > 8) {
+                break;
+            }
+            String plain = subject.replaceAll("[（(][0-9]{6}(?:\\.(?:SH|SZ|BJ))?[）)]", "")
+                    .replaceFirst("^(公司|本公司)$", "").trim();
+            if (plain.length() < 2 || plain.length() > 45) {
+                continue;
+            }
+            var codeMatch = Pattern.compile("(?<![0-9])([603489][0-9]{5})(?![0-9])").matcher(subject);
+            String code = codeMatch.find() ? codeMatch.group(1) : null;
+            List<ReactionStockMatch> candidates = new ArrayList<>();
+            for (Instrument instrument : local) {
+                if (!"STOCK".equals(instrument.getType()) || !Set.of("SH", "SZ", "BJ").contains(String.valueOf(instrument.getMarket()))) {
+                    continue;
+                }
+                String localCode = instrument.getCode().replaceAll("\\.(SH|SZ|BJ)$", "");
+                boolean nameMatches = plain.equals(instrument.getName()) || aliases(instrument.getAliases()).contains(plain);
+                if (nameMatches && (code == null || code.equals(localCode)) || code != null && plain.equals(code) && code.equals(localCode)) {
+                    add(candidates, localCode, instrument.getName());
+                }
+            }
+            if (candidates.isEmpty()) {
+                try {
+                    for (ReactionStockMatch candidate : names.search(code == null ? plain : code)) {
+                        if ((code == null && plain.equals(candidate.getName()))
+                                || code != null && code.equals(candidate.getCode().replaceAll("\\.(SH|SZ|BJ)$", ""))
+                                && (plain.equals(code) || plain.equals(candidate.getName()))) {
+                            add(candidates, candidate.getCode().replaceAll("\\.(SH|SZ|BJ)$", ""), candidate.getName());
+                        }
+                    }
+                } catch (RuntimeException ex) {
+                    unavailable = true;
+                }
+            }
+            if (candidates.size() > 1) {
+                ambiguous = true;
+            } else if (candidates.size() == 1) {
+                ReactionStockMatch match = candidates.get(0);
+                add(result.getMatches(), match.getCode().replaceAll("\\.(SH|SZ|BJ)$", ""), match.getName());
+                evidence.add("材料中的动作主体“" + subject + "”对应 " + match.getName() + "（" + match.getCode() + "）");
+            }
+        }
+        result.setStatus(!result.getMatches().isEmpty() ? ReactionResolutionStatus.RESOLVED
+                : ambiguous ? ReactionResolutionStatus.AMBIGUOUS
+                : unavailable ? ReactionResolutionStatus.LOOKUP_UNAVAILABLE : ReactionResolutionStatus.NO_SUBJECT);
+        result.setEvidence(String.join("；", evidence));
+        return result;
+    }
+
+    private List<String> aliases(String aliases) {
+        return aliases == null ? List.of() : Arrays.stream(aliases.split("[,，;；|\\n\\[\\]\"]"))
+                .map(String::trim).filter(value -> !value.isEmpty()).toList();
     }
 
     private void add(List<ReactionStockMatch> matches, String code, String name) {

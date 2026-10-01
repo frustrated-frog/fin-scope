@@ -37,6 +37,7 @@ public class ReactionSampleRepository {
         ReactionSample sample = read(rs.getString("snapshot_json"), ReactionSample.class);
         sample.setId(rs.getLong("id"));
         sample.setFollowed(rs.getInt("followed") == 1);
+        sample.setExcluded(rs.getInt("excluded") == 1);
         sample.setSourceIdentity(rs.getString("source_identity"));
         sample.setInstrumentCode(rs.getString("instrument_code"));
         sample.setState(ReactionSampleState.valueOf(rs.getString("state")));
@@ -91,17 +92,37 @@ public class ReactionSampleRepository {
             jdbcTemplate.update("UPDATE investment_reaction_source SET published_at=COALESCE(published_at,?) WHERE origin_type=? AND origin_key=?",
                     TimeUtil.text(proposed.getPublishedAt()), origin, key);
         }
+        var versions = jdbcTemplate.queryForList("SELECT title,body FROM investment_reaction_source_version "
+                + "WHERE origin_type=? AND origin_key=? ORDER BY id DESC LIMIT 1", origin, key);
+        boolean contentChanged = versions.isEmpty() || !java.util.Objects.equals(versions.get(0).get("title"), proposed.getTitle())
+                || !java.util.Objects.equals(versions.get(0).get("body"), proposed.getSummary());
+        if (contentChanged) {
+            jdbcTemplate.update("INSERT INTO investment_reaction_source_version(origin_type,origin_key,event_key,title,body,published_at,captured_at) "
+                            + "VALUES(?,?,?,?,?,?,?)", origin, key, identity, proposed.getTitle(), proposed.getSummary(),
+                    TimeUtil.text(proposed.getPublishedAt()), TimeUtil.text(proposed.getRegisteredAt()));
+        }
         List<ReactionSample> existing = findByIdentity(identity);
         if (existing.isEmpty()) {
             create(proposed);
             return true;
         }
         for (ReactionSample draft : existing) {
-            if (draft.getState() == ReactionSampleState.DRAFT && draft.getPublishedAt() == null && proposed.getPublishedAt() != null) {
-                draft.setPublishedAt(proposed.getPublishedAt());
-                draft.setOccurredDate(proposed.getOccurredDate());
+            boolean fillsTime = draft.getPublishedAt() == null && proposed.getPublishedAt() != null;
+            if (draft.getState() == ReactionSampleState.DRAFT && !draft.isExcluded() && (contentChanged || fillsTime)) {
+                if (fillsTime) {
+                    draft.setPublishedAt(proposed.getPublishedAt());
+                    draft.setOccurredDate(proposed.getOccurredDate());
+                    draft.setHistoricalBackfill(proposed.getPublishedAt().toLocalDate().isBefore(draft.getRegisteredAt().toLocalDate()));
+                }
+                if (contentChanged) {
+                    draft.setTitle(proposed.getTitle());
+                    draft.setSummary(proposed.getSummary());
+                    draft.setEventSubtype(proposed.getEventSubtype());
+                    draft.setRuleVersion(proposed.getRuleVersion());
+                    draft.setRuleEvidence(proposed.getRuleEvidence());
+                    draft.setFact(proposed.getFact());
+                }
                 draft.setEnrichmentAttemptAt(null);
-                draft.setHistoricalBackfill(proposed.getPublishedAt().toLocalDate().isBefore(draft.getRegisteredAt().toLocalDate()));
                 if (!saveDraft(draft)) {
                     throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
                 }
@@ -151,33 +172,34 @@ public class ReactionSampleRepository {
     }
 
     public Optional<ReactionSample> findUnresolvedOrigin(String origin, String key) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' "
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
                         + "AND json_extract(snapshot_json,'$.sourceOriginType')=? "
                         + "AND json_extract(snapshot_json,'$.sourceOriginKey')=? ORDER BY id LIMIT 1",
                 mapper, origin, key).stream().findFirst();
     }
 
     public List<ReactionSample> findUnresolved(LocalDateTime before, int limit) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' "
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
                         + "AND json_extract(snapshot_json,'$.automatic')=1 "
                         + "AND (enrichment_attempt_at IS NULL OR enrichment_attempt_at<?) "
-                        + "ORDER BY COALESCE(enrichment_attempt_at,''),id LIMIT ?",
-                mapper, before.toString(), Math.max(1, Math.min(10, limit)));
+                        + "ORDER BY (enrichment_attempt_at IS NULL) DESC,enrichment_attempt_at,id DESC LIMIT ?",
+                mapper, before.toString(), Math.max(1, Math.min(30, limit)));
     }
 
     @Transactional(rollbackFor = Exception.class)
     public boolean promoteDraft(ReactionSample draft, List<ReactionSample> samples) {
-        // 条件写获取数据库写锁，归档或人工确认先完成时不再自动创建样本。
-        if (!saveDraft(draft)) {
+        if (samples.isEmpty()) {
             return false;
         }
-        for (ReactionSample sample : samples) {
-            create(sample);
+        ReactionSample first = samples.get(0);
+        int updated = jdbcTemplate.update("UPDATE investment_reaction_sample SET instrument_code=?,state=?,snapshot_json=?,"
+                        + "enrichment_attempt_at=?,revision=revision+1 WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0",
+                first.getInstrumentCode(), first.getState().name(), write(first), TimeUtil.text(draft.getEnrichmentAttemptAt()), draft.getId(), draft.getRevision());
+        if (updated != 1) {
+            return false;
         }
-        int removed = jdbcTemplate.update("DELETE FROM investment_reaction_sample WHERE id=? AND state='DRAFT'",
-                draft.getId());
-        if (removed != 1) {
-            throw new BusinessException(ErrorCode.DATA_VERSION_CONFLICT);
+        for (int i = 1; i < samples.size(); i++) {
+            create(samples.get(i));
         }
         return true;
     }
@@ -212,7 +234,7 @@ public class ReactionSampleRepository {
     }
 
     public List<ReactionSample> findDue(LocalDateTime before, int limit) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state=? AND completed=0 "
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state=? AND excluded=0 AND completed=0 "
                         + "AND (last_attempt_at IS NULL OR last_attempt_at<?) AND (next_attempt_at IS NULL OR next_attempt_at<?) "
                         + "ORDER BY last_attempt_at,id LIMIT ?",
                 mapper, ReactionSampleState.OBSERVING.name(), TimeUtil.text(before), TimeUtil.text(before.plusMinutes(20)), Math.max(1, Math.min(20, limit)));
@@ -310,6 +332,26 @@ public class ReactionSampleRepository {
                         + "completed=?,next_attempt_at=? WHERE id=? AND revision=? AND state=?", TimeUtil.text(attemptedAt), message,
                 stop ? 1 : 0, pastWindow ? TimeUtil.text(attemptedAt.plusDays(1)) : null,
                 id, revision, ReactionSampleState.OBSERVING.name()) == 1;
+    }
+
+    public boolean exclude(long id, int revision, boolean excluded) {
+        return jdbcTemplate.update("UPDATE investment_reaction_sample SET excluded=?,revision=revision+1 WHERE id=? AND revision=?",
+                excluded ? 1 : 0, id, revision) == 1;
+    }
+
+    public List<ReactionSource> sourceVersions(String eventKey) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_source_version WHERE event_key=? ORDER BY id DESC LIMIT 100", (rs, n) -> {
+            ReactionSource source = new ReactionSource();
+            source.setOriginType(rs.getString("origin_type"));
+            source.setOriginKey(rs.getString("origin_key"));
+            source.setEventKey(rs.getString("event_key"));
+            source.setTitle(rs.getString("title"));
+            source.setBody(rs.getString("body"));
+            source.setVersionId(rs.getLong("id"));
+            source.setCapturedAt(TimeUtil.localDateTime(rs, "captured_at"));
+            source.setPublishedAt(TimeUtil.localDateTime(rs, "published_at"));
+            return source;
+        }, eventKey);
     }
 
     private String write(Object value) {
