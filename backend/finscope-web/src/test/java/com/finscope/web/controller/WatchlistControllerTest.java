@@ -42,6 +42,26 @@ class WatchlistControllerTest {
     private FundHoldingDetailService fundHoldingDetailService;
 
     @Test
+    void focusEndpointPersistsDraftAndValidatesLength() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/watchlist/1/focus")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"订单\",\"nextWatch\":\"财报\",\"direction\":\"电网设备\"}"))
+                .andExpect(status().isNoContent());
+        verify(watchlistService).updateFocus(1L, "订单", "财报", "电网设备");
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/watchlist/1/focus")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"" + "a".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest());
+        WatchlistItem item = new WatchlistItem();
+        item.setId(1L);
+        item.setCode("600519");
+        item.setType("STOCK");
+        item.setReason("订单");
+        when(watchlistService.listFocuses()).thenReturn(Collections.singletonList(item));
+        mockMvc.perform(get("/api/watchlist/focuses"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].watchlistId").value(1))
+                .andExpect(jsonPath("$.data[0].reason").value("订单"));
+    }
+
+    @Test
     void listsOnlyInvestmentItemsThroughTypedService() throws Exception {
         WatchlistItem item = new WatchlistItem();
         item.setId(1L);

@@ -10,6 +10,12 @@ public class WatchlistItem {
      * 主键 ID。
      */
     private Long id;
+    @lombok.Getter @lombok.Setter
+    private String reason;
+    @lombok.Getter @lombok.Setter
+    private String nextWatch;
+    @lombok.Getter @lombok.Setter
+    private String direction;
     /**
      * 标的 ID。
      */

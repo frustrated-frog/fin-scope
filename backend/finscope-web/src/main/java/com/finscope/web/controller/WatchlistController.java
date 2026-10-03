@@ -48,6 +48,19 @@ public class WatchlistController {
         return ApiResponses.success(views.stream().map(WatchlistItemResponse::of).collect(Collectors.toList()));
     }
 
+    @GetMapping("/focuses")
+    public ApiResponse<List<com.finscope.web.response.WatchlistFocusResponse>> focuses() {
+        return ApiResponses.success(watchlistService.listFocuses().stream()
+                .map(com.finscope.web.response.WatchlistFocusResponse::of).collect(Collectors.toList()));
+    }
+
+    @PatchMapping("/{id}/focus")
+    public ResponseEntity<Void> updateFocus(@PathVariable Long id,
+            @javax.validation.Valid @RequestBody com.finscope.web.request.UpdateWatchlistFocusRequest request) {
+        watchlistService.updateFocus(id, request.getReason(), request.getNextWatch(), request.getDirection());
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * 添加自选标的。
      *

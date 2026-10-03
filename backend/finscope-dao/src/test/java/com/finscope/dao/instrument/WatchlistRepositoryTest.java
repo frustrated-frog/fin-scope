@@ -63,6 +63,20 @@ class WatchlistRepositoryTest {
         assertEquals(2, repository.findByTypes(Arrays.asList("STOCK", "FUND")).size());
     }
 
+    @Test
+    void focusSurvivesReadsCanBeClearedAndDoesNotResurrectRemovedItem() {
+        Long id = repository.findByCodeAndType("600519", "STOCK").orElseThrow().getId();
+        assertEquals(1, repository.updateFocus(id, "订单增长", "下期财报", "消费"));
+        WatchlistItem saved = repository.findById(id).orElseThrow();
+        assertEquals("订单增长", saved.getReason());
+        assertEquals("下期财报", saved.getNextWatch());
+        assertEquals("消费", saved.getDirection());
+        assertEquals(1, repository.updateFocus(id, null, null, null));
+        org.junit.jupiter.api.Assertions.assertNull(repository.findById(id).orElseThrow().getReason());
+        repository.delete(id);
+        assertEquals(0, repository.updateFocus(id, "不应恢复", "", ""));
+    }
+
     private void insert(JdbcTemplate jdbc, String code, String type, String name) {
         jdbc.update("INSERT INTO instrument(code,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
                 code, type, name, "2026-07-14T10:00:00", "2026-07-14T10:00:00");

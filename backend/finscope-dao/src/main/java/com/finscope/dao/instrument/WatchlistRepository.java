@@ -22,13 +22,16 @@ public class WatchlistRepository {
     private JdbcTemplate jdbcTemplate;
 
     private static final String SELECT_WITH_INSTRUMENT =
-            "SELECT w.id, w.instrument_id, w.group_name, w.sort_order, w.created_at, "
+            "SELECT w.id, w.instrument_id, w.group_name, w.sort_order, w.created_at, w.focus_reason, w.next_watch, w.focus_direction, "
                     + "i.code, i.type, i.name, i.market, i.sector_code "
                     + "FROM watchlist_item w JOIN instrument i ON w.instrument_id = i.id ";
 
     private final RowMapper<WatchlistItem> mapper = (rs, rowNum) -> {
         WatchlistItem item = new WatchlistItem();
         item.setId(rs.getLong("id"));
+        item.setReason(rs.getString("focus_reason"));
+        item.setNextWatch(rs.getString("next_watch"));
+        item.setDirection(rs.getString("focus_direction"));
         item.setInstrumentId(rs.getLong("instrument_id"));
         item.setGroupName(rs.getString("group_name"));
         item.setSortOrder(rs.getInt("sort_order"));
@@ -103,6 +106,11 @@ public class WatchlistRepository {
     /** 更新分组名（null/空表示移出分组，归入默认组）。 */
     public int updateGroup(Long id, String groupName) {
         return jdbcTemplate.update("UPDATE watchlist_item SET group_name = ? WHERE id = ?", groupName, id);
+    }
+
+    public int updateFocus(Long id, String reason, String nextWatch, String direction) {
+        return jdbcTemplate.update("UPDATE watchlist_item SET focus_reason=?,next_watch=?,focus_direction=? WHERE id=?",
+                reason, nextWatch, direction, id);
     }
 
     public boolean existsById(Long id) {

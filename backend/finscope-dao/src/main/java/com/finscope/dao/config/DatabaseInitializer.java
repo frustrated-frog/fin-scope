@@ -948,6 +948,9 @@ public class DatabaseInitializer implements InitializingBean {
                 + "group_name TEXT,"
                 + "sort_order INTEGER NOT NULL DEFAULT 0,"
                 + "created_at TEXT NOT NULL)");
+        ensureColumn("watchlist_item", "focus_reason", "TEXT");
+        ensureColumn("watchlist_item", "next_watch", "TEXT");
+        ensureColumn("watchlist_item", "focus_direction", "TEXT");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_instrument ON watchlist_item(instrument_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_recognition_candidate ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"

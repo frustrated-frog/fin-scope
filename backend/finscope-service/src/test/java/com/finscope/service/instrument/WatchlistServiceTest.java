@@ -55,6 +55,18 @@ class WatchlistServiceTest {
     }
 
     @Test
+    void validatesAndNormalizesFocusBeforePersisting() {
+        when(repository.findById(1L)).thenReturn(Optional.of(item(1L, "600519", "STOCK")));
+        when(repository.updateFocus(1L, "订单", null, "消费")).thenReturn(1);
+        service.updateFocus(1L, " 订单 ", " ", " 消费 ");
+        verify(repository).updateFocus(1L, "订单", null, "消费");
+        assertThrows(com.finscope.common.exception.BusinessException.class,
+                () -> service.updateFocus(1L, "x".repeat(501), "", ""));
+        assertThrows(com.finscope.common.exception.BusinessException.class,
+                () -> service.updateFocus(999L, "", "", ""));
+    }
+
+    @Test
     void investmentListExcludesExistingSectorRows() {
         when(repository.findByTypes(Arrays.asList("STOCK", "FUND")))
                 .thenReturn(Arrays.asList(item(1L, "600519", "STOCK"), item(2L, "020608", "FUND")));

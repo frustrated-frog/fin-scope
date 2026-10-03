@@ -12,6 +12,12 @@ import java.time.LocalDateTime;
  */
 public class WatchlistItemResponse extends MarketDataQualityResponse {
     private Long id;
+    @lombok.Getter
+    private String reason;
+    @lombok.Getter
+    private String nextWatch;
+    @lombok.Getter
+    private String direction;
     private String code;
     private String type;
     private String name;
@@ -44,6 +50,9 @@ public class WatchlistItemResponse extends MarketDataQualityResponse {
         Quote quote = view.getQuote();
         WatchlistItemResponse response = new WatchlistItemResponse();
         response.id = item.getId();
+        response.reason = item.getReason();
+        response.nextWatch = item.getNextWatch();
+        response.direction = item.getDirection();
         response.code = item.getCode();
         response.type = item.getType();
         response.name = item.getName();
