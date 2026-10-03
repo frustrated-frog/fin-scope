@@ -91,6 +91,31 @@ test('shows independent local selection and calibration boundaries', () => {
   expect(screen.getByText(/校准拟合截至 2026-05-30/)).toBeInTheDocument();
 });
 
+test('shows paired v4 evidence without turning a small improvement into a validated claim', () => {
+  render(<NextSessionForecast prediction={{ ...prediction, status: 'WATCH', directionEvaluation: {
+    accuracy: .5191, balancedAccuracy: .5152, brierScore: .2526, dayCount: 60, sampleCount: 60,
+    highConfidence: { coverage: .15, accuracy: .52 }, eligible: false, reason: '观察',
+    comparisons: { LOCAL_V3: { accuracy: .5095, brierScore: .2598, accuracyDifferenceLower: -.004,
+      accuracyDifferenceUpper: .023, brierDifferenceLower: -.01, brierDifferenceUpper: -.005 } },
+    trainingSelection: { modelVersion: 'local-prediction-v3', selected: 'LOGISTIC',
+      selectionStart: '2026-03-01', selectionThrough: '2026-04-15', calibrationFitThrough: '2026-05-30',
+      calibrationCheckStart: '2026-06-01', calibrationCheckThrough: '2026-07-15', calibrationApplied: false,
+      candidates: {}, enhancement: { modelVersion: 'next-session-ensemble-v4', method: 'FIXED_EQUAL_BLEND',
+        recentWeight: .5, featureCodes: ['SCALED_RETURN_1'], halfLifeSessions: 126,
+        recentTrainingThrough: '2026-09-04', recentTrainingCount: 504, incumbentTrainingThrough: '2026-04-01',
+        returnModel: 'LOCAL_V3', rule: '固定等权', incumbentProbability: .62, recentProbability: .68 } },
+  } }} />);
+  const evidence = screen.getByLabelText('近期模型与原版对照');
+  expect(within(evidence).getByText(/已学习至 2026-09-04/)).toBeInTheDocument();
+  expect(within(evidence).getByText('62.0%')).toBeInTheDocument();
+  expect(within(evidence).getByText('68.0%')).toBeInTheDocument();
+  const table = within(evidence).getByRole('table');
+  expect(within(table).getByText('50.9%')).toBeInTheDocument();
+  expect(within(table).getByText('51.9%')).toBeInTheDocument();
+  expect(within(evidence).getByText('优势尚未通过完整验证，当前仅供观察。')).toBeInTheDocument();
+  expect(screen.getByText('查看完整验证与模型明细').parentElement).not.toHaveAttribute('open');
+});
+
 
 test('paginates the frozen ledger and resets the page when filtering status', async () => {
   const records = Array.from({ length: 10 }, (_, index) => ({

@@ -400,6 +400,12 @@ export interface DirectionEvaluation {
     calibrationFitThrough: string; calibrationCheckStart: string; calibrationCheckThrough: string;
     calibrationApplied: boolean;
     candidates: Record<string, { accuracy: number; brier: number; balancedAccuracy: number | null }>;
+    enhancement?: {
+      modelVersion: string; method: 'FIXED_EQUAL_BLEND'; recentWeight: number;
+      featureCodes: string[]; halfLifeSessions: number; recentTrainingThrough: string;
+      recentTrainingCount: number; incumbentTrainingThrough: string; returnModel: string; rule: string;
+      incumbentProbability?: number; recentProbability?: number;
+    };
   };
   accuracy: number; balancedAccuracy: number | null; brierScore: number;
   predictedUpRate?: number;

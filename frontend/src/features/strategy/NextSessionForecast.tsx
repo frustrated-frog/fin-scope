@@ -4,6 +4,7 @@ import type { DirectionEvaluation, NextSessionPrediction, NextSessionPredictionR
 import './NextSessionForecast.css';
 import './NextSessionOutcomeHistory.css';
 import { NextSessionValidationSummary } from './NextSessionValidationSummary';
+import { NextSessionModelEvidence } from './NextSessionModelEvidence';
 
 const statusCopy: Record<NextSessionPrediction['status'], string> = {
   READY: '初步验证通过', WATCH: '观察预测 · 方向暂不判断', INSUFFICIENT_DATA: '历史样本不足',
@@ -20,7 +21,7 @@ export function DirectionEvidence({ audit }: { audit: DirectionEvaluation }) {
     <p>全体方向准确率 {percent(audit.accuracy)} · 平衡准确率 {percent(audit.balancedAccuracy ?? undefined)}</p>
     {audit.predictedUpRate != null && <p>预测上涨占比 {percent(audit.predictedUpRate)}（以 50% 概率为界）</p>}
     {audit.auc !== undefined && <p>分数区分能力：总体 AUC {audit.auc?.toFixed(3) ?? '—'} · 同日 AUC {audit.crossSectionAuc?.toFixed(3) ?? '—'}（{audit.crossSectionAucDayCount ?? 0} 个可计算日期；0.5 为随机水平）</p>}
-    {audit.trainingSelection && <details><summary>本地模型选择与独立校准检查</summary>
+    {audit.trainingSelection && <details><summary>{audit.trainingSelection.enhancement ? '原版分支的模型选择与校准' : '本地模型选择与独立校准检查'}</summary>
       <p>当前选择 {audit.trainingSelection.selected}；选择样本 {audit.trainingSelection.selectionStart} ～ {audit.trainingSelection.selectionThrough}。</p>
       <p>校准拟合截至 {audit.trainingSelection.calibrationFitThrough}；独立检查 {audit.trainingSelection.calibrationCheckStart} ～ {audit.trainingSelection.calibrationCheckThrough}。</p>
       <p>{audit.trainingSelection.calibrationApplied ? '独立检查支持使用校准概率' : '独立检查未支持校准，保留原始概率'}。这些是当前模型的测试前选择记录，不是未来准确率。</p>
@@ -54,7 +55,8 @@ export function NextSessionForecast({ prediction, compact = false }: { predictio
       <div><dt>80% 校准区间</dt><dd>{signed(prediction.lowerReturn)} ～ {signed(prediction.upperReturn)}</dd></div>
     </dl>}
     {!compact && valid && <div className="next-session-audit"><span>{joint?.applied ? '独立验证' : '滚动验证'} {prediction.validationSampleCount} 个样本 · 准确率 {percent(prediction.accuracy)}</span><span>Brier {prediction.brierScore?.toFixed(3) ?? '—'} / 基线 {prediction.baselineBrierScore?.toFixed(3) ?? '—'}（越低越好）</span><span>历史区间覆盖 {percent(prediction.intervalCoverage)} · 校准数据截至 {prediction.calibrationThrough}</span></div>}
-    {!compact && valid && prediction.directionEvaluation && <DirectionEvidence audit={prediction.directionEvaluation} />}
+    {valid && <NextSessionModelEvidence audit={prediction.directionEvaluation} compact={compact} />}
+    {!compact && valid && prediction.directionEvaluation && <details className="next-session-method"><summary>查看完整验证与模型明细</summary><DirectionEvidence audit={prediction.directionEvaluation} /></details>}
     {valid && joint && <div className="next-session-joint" aria-label="联合模型与排序证据">
       <strong>{joint.applied ? '联合方向模型已用于本次预测' : '联合模型对照 · 当前保留原预测'}</strong>
       {joint.applied && joint.returnApplied != null && <p>收益幅度与区间：{joint.returnApplied ? '联合收益模型' : '原单股模型'}</p>}
