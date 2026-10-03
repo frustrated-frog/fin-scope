@@ -42,7 +42,11 @@ def test_entry_uses_delayed_proxy_and_future_bars_do_not_leak():
     assert result['evidenceKind'] == 'FORWARD'
     for target in result['targets']:
         assert target['trainingThrough'] < result['dataThrough']
-        assert target['validationCount'] == 20
+        assert 20 <= target['validationCount'] <= 60
+        assert target['trainingThrough'] < target['calibrationStart']
+        assert target['calibrationThrough'] < result['dataThrough']
+        assert target['calibrationCount'] == 20
+        assert target['reliability']['intervalCoverage'] is not None
     mutated = [bar.model_copy(update={'close':bar.close * 3}) if bar.ended_at > now else bar for bar in bars]
     assert predict(req, mutated, now) == result
     samples = build_samples(group_bars(bars), req, now)

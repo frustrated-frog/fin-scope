@@ -4,13 +4,11 @@ import hashlib
 import json
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 from finscope_market_data.forecast.trading_calendar import next_session
+from finscope_market_data.overnight.learning import forecast_target
 
-VERSION = 'overnight-local-v2'
+VERSION = 'overnight-local-v3-calibrated'
 TARGETS = ('OPEN', '10:00', '14:30', 'CLOSE')
 
 
@@ -87,20 +85,6 @@ def build_samples(grouped, request, through):
     return result
 
 
-def _fit(samples, current):
-    x = np.array([s['features'] for s in samples])
-    y = np.array([s['actualNetReturn'] for s in samples])
-    labels = y > 0
-    classifier = None
-    if len(set(labels)) == 2:
-        classifier = make_pipeline(StandardScaler(), LogisticRegression(C=.1, max_iter=300, random_state=42))
-        classifier.fit(x, labels)
-    regressor = make_pipeline(StandardScaler(), Ridge(alpha=20))
-    regressor.fit(x, y)
-    probability = float(classifier.predict_proba([current])[0, 1]) if classifier is not None else float(labels.mean())
-    return probability, float(regressor.predict([current])[0])
-
-
 def predict(request, bars, now):
     cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
     usable = [bar for bar in bars if bar.ended_at <= cutoff]
@@ -127,34 +111,11 @@ def predict(request, bars, now):
         return {**base, 'warnings': base['warnings'] + ['决策时点前的完整 5 分钟行情不足；禁止用收盘日线替代。']}
     samples = build_samples(grouped, request, cutoff)
     for target, values in samples.items():
-        if len(values) < 60:
-            base['targets'].append({'target': target, 'status': 'INSUFFICIENT_DATA', 'sampleCount': len(values)})
-            continue
-        # Last 20 outcomes evaluated one at a time, training only on earlier matured labels.
-        checks = []
-        for index in range(len(values) - 20, len(values)):
-            past = [s for s in values[:index] if s['exitAt'] < f"{values[index]['signalDate']}T{request.cutoff}:00"]
-            if len(past) < 40:
-                continue
-            probability, expected = _fit(past, values[index]['features'])
-            actual = values[index]['actualNetReturn']
-            prior = float(np.mean([s['actualNetReturn'] > 0 for s in past]))
-            checks.append({'signalDate': values[index]['signalDate'], 'probability': probability,
-                          'expected': expected, 'actual': actual, 'prior': prior})
-        probability, expected = _fit(values, current)
-        residuals = [s['actual'] - s['expected'] for s in checks]
-        lower, upper = (np.quantile(residuals, [.1, .9]) if residuals else (0, 0))
-        base['targets'].append({'target': target, 'status': 'WATCH', 'sampleCount': len(values),
-            'upProbability': probability, 'expectedNetReturn': expected,
-            'baselineProbability': float(np.mean([s['actualNetReturn'] > 0 for s in values])),
-            'baselineExpectedNetReturn': float(np.mean([s['actualNetReturn'] for s in values])),
-            'lowerNetReturn': expected + float(lower), 'upperNetReturn': expected + float(upper),
-            'trainingThrough': values[-1]['exitAt'], 'validationCount': len(checks),
-            'brierScore': float(np.mean([(s['probability'] - (s['actual'] > 0)) ** 2 for s in checks])) if checks else None,
-            'baselineBrier': float(np.mean([(s['prior'] - (s['actual'] > 0)) ** 2 for s in checks])) if checks else None,
-            'directionAccuracy': float(np.mean([(s['probability'] >= .5) == (s['actual'] > 0) for s in checks])) if checks else None,
-            'costBasisReturn': (base['referencePrice'] * (1 + expected) / request.cost_basis - 1)
-                if request.cost_basis else None, 'validation': checks})
+        result = forecast_target(values, current, cutoff.isoformat())
+        if result['status'] == 'WATCH':
+            result['costBasisReturn'] = (base['referencePrice'] * (1 + result['expectedNetReturn'])
+                                         / request.cost_basis - 1) if request.cost_basis else None
+        base['targets'].append({'target': target, **result})
     base['status'] = 'WATCH' if any(s['status'] == 'WATCH' for s in base['targets']) else 'INSUFFICIENT_DATA'
     return base
 
@@ -177,7 +138,7 @@ def settle(report, bars, now):
         if bar is None or bar.amount <= 0:
             result['missingReasons'].append(f'{target}:DATA_MISSING_OR_NOT_DUE')
             continue
-        if report.get('modelVersion') == VERSION and bar.high == bar.low:
+        if report.get('modelVersion') in ('overnight-local-v2', VERSION) and bar.high == bar.low:
             result['missingReasons'].append(f'{target}:EXIT_UNVERIFIED')
             continue
         net = getattr(bar, field) / price - 1 - request.cost_bps / 10000
