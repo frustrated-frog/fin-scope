@@ -106,10 +106,15 @@ def test_next_session_reports_absolute_direction_benchmarks_and_coverage():
     audit = result.direction_evaluation
     assert audit['task'] == 'NEXT_CLOSE_DIRECTION'
     assert audit['dayCount'] == 60
-    assert set(audit['comparisons']) == {'PRIOR','MOMENTUM','LEGACY'}
+    assert set(audit['comparisons']) == {'PRIOR', 'MOMENTUM', 'LEGACY', 'LOCAL_V3', 'NOT_UP'}
     assert audit['accuracy'] == pytest.approx(result.accuracy)
     assert (result.status == 'READY') == audit['eligible']
-    assert result.model_version == 'local-prediction-v3-consecutive-session-v2'
+    assert result.model_version == 'next-session-ensemble-v4-consecutive-session-v2'
+    enhancement = audit['trainingSelection']['enhancement']
+    assert enhancement['recentTrainingThrough'] == result.training_through == '2026-09-04'
+    assert enhancement['incumbentTrainingThrough'] < result.training_through
+    assert len(enhancement['featureCodes']) == 15
+    assert result.up_probability == pytest.approx((enhancement['incumbentProbability'] + enhancement['recentProbability']) / 2)
 
 
 @pytest.mark.parametrize('signal,outcome,accepted', [

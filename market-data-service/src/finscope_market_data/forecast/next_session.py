@@ -3,7 +3,7 @@
 Rolling refits/purged segments follow Qlib's workflow design. Residual split
 conformal intervals are empirically audited, not guaranteed for dependent returns.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 import hashlib
 import json
@@ -15,7 +15,9 @@ import numpy as np
 from sklearn.linear_model import Ridge
 
 from finscope_market_data.models import DailyBar
-from finscope_market_data.forecast.local_prediction import fit_local, MODEL_VERSION
+from finscope_market_data.forecast.local_prediction import fit_local
+from finscope_market_data.forecast.next_session_ensemble import NextSessionEnsemble, MODEL_VERSION
+from finscope_market_data.forecast.short_term import short_term_features
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.forecast.calibration import CalibrationResult, PlattCalibrator
 from finscope_market_data.forecast.context import AlignedForecastContext
@@ -129,23 +131,31 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     samples = all_samples[-1000:]
     if len(samples) < MINIMUM_SAMPLES:
         return NextSessionPrediction(status="INSUFFICIENT_DATA", **base, warnings=[f"次日模型至少需要 300 个连续交易日收益样本，当前有效 {len(samples)} 个", sample_warning])
+    indices = {bar.trade_date: index for index, bar in enumerate(ordered)}
+    short_samples = [replace(item, features=short_term_features(ordered, indices[item.signal_date], context))
+                     for item in samples]
+    current_features = _features(ordered, len(ordered) - 1, context)
+    current_short_features = short_term_features(ordered, len(ordered) - 1, context)
     base["data_fingerprint"] = hashlib.sha256(json.dumps(
-        [fingerprint, [item.features for item in samples], _features(ordered, len(ordered) - 1, context)],
+        [fingerprint, [item.features for item in samples], current_features,
+         [item.features for item in short_samples], current_short_features],
         allow_nan=False,
     ).encode()).hexdigest()
     observations = []
+    incumbent_probabilities = []
     fitted = None
     legacy_fit = None
     for index in range(len(samples) - TEST_WINDOW, len(samples)):
         sample = samples[index]
         if fitted is None or len(observations) % REFIT_INTERVAL == 0:
-            fitted = _fit_at(samples[:index], sample.signal_date)
+            fitted = NextSessionEnsemble.fit(samples[:index], short_samples[:index], sample.signal_date)
             legacy_fit = _fit_at_legacy(samples[:index], sample.signal_date)
-        probability, _, lower, upper = fitted.predict(sample.features)
-        observations.append((probability, float(sample.positive), fitted.baseline,
+        probability, _, lower, upper = fitted.predict(sample.features, short_samples[index].features)
+        incumbent_probabilities.append(fitted.incumbent.predict(sample.features)[0])
+        observations.append((probability, float(sample.positive), fitted.incumbent.baseline,
                              lower <= sample.net_return <= upper, legacy_fit.predict(sample.features)[0]))
-    current_fit = _fit_at(samples, (as_of + timedelta(days=1)).isoformat())
-    probability, expected, lower, upper = current_fit.predict(_features(ordered, len(ordered) - 1, context))
+    current_fit = NextSessionEnsemble.fit(samples, short_samples, (as_of + timedelta(days=1)).isoformat())
+    probability, expected, lower, upper = current_fit.predict(current_features, current_short_features)
     count = len(observations)
     brier = sum((p - label) ** 2 for p, label, _, _, _ in observations) / count
     baseline = sum((prior - label) ** 2 for _, label, prior, _, _ in observations) / count
@@ -154,20 +164,28 @@ def build_next_session_forecast(bars: Sequence[DailyBar], *, context: AlignedFor
     direction = evaluate_direction([v[0] for v in observations], [v[1] for v in observations],
         [s.signal_date for s in tested], {'PRIOR': [v[2] for v in observations],
         'MOMENTUM': [.55 if s.features[0] > 0 else .45 for s in tested],
-        'LEGACY': [v[4] for v in observations]})
+        'LEGACY': [v[4] for v in observations], 'LOCAL_V3': incumbent_probabilities,
+        'NOT_UP': [.49] * len(tested)})
     direction['trainingSelection'] = current_fit.audit
+    direction['trainingSelection']['enhancement'].update(
+        incumbentProbability=current_fit.incumbent.predict(current_features)[0],
+        recentProbability=current_fit.recent.predict(current_short_features))
     direction['flatSampleCount'] = sum(s.net_return == 0 for s in tested)
     ready = direction['eligible']
     return NextSessionPrediction(
         **base, direction_evaluation=direction, status="READY" if ready else "WATCH", up_probability=probability,
         expected_return=expected, lower_return=lower, upper_return=upper,
         decision=("UP" if probability >= .55 else "DOWN" if probability <= .45 else "ABSTAIN") if ready else "ABSTAIN",
-        model_code=current_fit.code, training_through=current_fit.training_through,
-        calibration_through=current_fit.calibration_through, training_sample_count=current_fit.training_count,
-        calibration_sample_count=current_fit.calibration_count, validation_sample_count=count,
+        model_code=f'EQUAL_BLEND_{current_fit.incumbent.code}_SHORT_TERM',
+        training_through=current_fit.recent.training_through,
+        calibration_through=current_fit.incumbent.calibration_through,
+        training_sample_count=current_fit.recent.training_count,
+        calibration_sample_count=current_fit.incumbent.calibration_count, validation_sample_count=count,
         accuracy=sum((p >= .5) == bool(label) for p, label, _, _, _ in observations) / count,
         brier_score=brier, baseline_brier_score=baseline, interval_coverage=coverage,
         warnings=[sample_warning, "预测次日收盘相对本次复权收盘的涨跌；不是可成交收益，不含交易费用",
+                  "方向采用长期与近期模型固定等权组合；收益幅度和区间沿用原单股模型",
+                  "训练截止日和样本数对应近期模型；校准对应长期分支与收益区间，组合概率未作二次校准",
                   "60 个滚动测试样本只提供初步证据，80% 残差校准区间不保证未来覆盖率",
                   *([] if ready else ["滚动概率或区间尚未形成稳定优势，保留概率供观察，暂不作方向判断"])],
     )
