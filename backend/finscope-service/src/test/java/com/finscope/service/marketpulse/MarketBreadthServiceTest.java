@@ -81,6 +81,9 @@ class MarketBreadthServiceTest {
 
         assertEquals(5, result.getIndices().size());
         assertEquals(requested, result.getIndices().get(0).getBusinessDate());
+        assertTrue(result.getIndices().get(0).getHistory().size() >= 21);
+        assertTrue(result.getIndices().get(0).getHistory().stream()
+                .noneMatch(point -> point.getBusinessDate().isAfter(requested)));
     }
 
     @Test

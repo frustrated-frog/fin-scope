@@ -10,6 +10,7 @@ public class MarketIndexPerformance {
     private String name;
     private LocalDate businessDate;
     private Double close;
+    private java.util.List<MarketIndexHistoryPoint> history = new java.util.ArrayList<>();
     private Double return1d;
     private Double return5d;
     private Double return20d;

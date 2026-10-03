@@ -10,6 +10,8 @@ import com.finscope.common.enums.marketpulse.MarketResearchGroup;
 public class DailyResearchStockResponse {
     private String instrumentCode;
     private String instrumentName;
+    private List<String> sectorCodes = new java.util.ArrayList<>();
+    private List<String> sectorNames = new java.util.ArrayList<>();
     private Double return1d;
     private Double return5d;
     private Double return20d;
@@ -20,6 +22,8 @@ public class DailyResearchStockResponse {
         DailyResearchStockResponse value = new DailyResearchStockResponse();
         value.setInstrumentCode(source.getInstrumentCode());
         value.setInstrumentName(source.getInstrumentName());
+        value.setSectorCodes(source.getSectorCodes());
+        value.setSectorNames(source.getSectorNames());
         value.setReturn1d(source.getReturn1d());
         value.setReturn5d(source.getReturn5d());
         value.setReturn20d(source.getReturn20d());

@@ -48,13 +48,15 @@ def fetch(store, day=TODAY, now=NOW):
 def test_constituent_names_enrich_cached_research_without_changing_returns(store, tmp_path):
     save(store)
     names = tmp_path / 'stock-discovery-constituents.json'
-    names.write_text(json.dumps({'sectors': {'one': {'values': [['600001', 'SH', '示例银行']]}}}), encoding='utf-8')
+    names.write_text(json.dumps({'sectors': {'one': {'sector_code': '881155', 'sector_name': '银行', 'values': [['600001', 'SH', '示例银行']]}}}), encoding='utf-8')
     service = DailyResearchService(store, now=lambda: NOW, name_snapshot_path=names)
     first = service.fetch(TODAY)
     cached = service.fetch(TODAY)
     assert first.stocks[0].instrument_name == '示例银行'
     assert cached.cache_hit
     assert cached.stocks[0].instrument_name == '示例银行'
+    assert cached.stocks[0].sector_codes == ['881155']
+    assert cached.stocks[0].sector_names == ['银行']
     assert cached.stocks[0].return_1d == first.stocks[0].return_1d
 
 

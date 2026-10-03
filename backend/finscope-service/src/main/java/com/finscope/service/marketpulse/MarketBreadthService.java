@@ -3,6 +3,7 @@ package com.finscope.service.marketpulse;
 import com.finscope.domain.marketpulse.MarketBreadthSnapshot;
 import com.finscope.domain.marketpulse.MarketBreadthChangeSummary;
 import com.finscope.domain.marketpulse.MarketIndexPerformance;
+import com.finscope.domain.marketpulse.MarketIndexHistoryPoint;
 import com.finscope.domain.marketpulse.MarketInternalHistoryPoint;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.rpc.marketpulse.MarketBreadthSource;
@@ -20,7 +21,7 @@ import java.util.Locale;
 
 @Service
 public class MarketBreadthService {
-    private static final int INDEX_BAR_LIMIT = 30;
+    private static final int INDEX_BAR_LIMIT = 90;
     private static final List<IndexDefinition> INDICES = Arrays.asList(
             new IndexDefinition("000001.SH", "上证指数"),
             new IndexDefinition("399001.SZ", "深证成指"),
@@ -191,6 +192,12 @@ public class MarketBreadthService {
         value.setReturn1d(percentReturn(bars, last - 1, last));
         value.setReturn5d(percentReturn(bars, last - 5, last));
         value.setReturn20d(percentReturn(bars, last - 20, last));
+        for (QuantDailyBar bar : bars.subList(Math.max(0, bars.size() - 60), bars.size())) {
+            MarketIndexHistoryPoint point = new MarketIndexHistoryPoint();
+            point.setBusinessDate(bar.getTradeDate());
+            point.setClose(bar.getClose().doubleValue());
+            value.getHistory().add(point);
+        }
         value.setSourceCode(batch.getSourceCode());
         value.setQualityStatus(batch.getQualityStatus());
         return value;

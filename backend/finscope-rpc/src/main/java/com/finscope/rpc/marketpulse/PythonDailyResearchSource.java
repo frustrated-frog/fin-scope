@@ -110,6 +110,12 @@ public class PythonDailyResearchSource {
             if (!row.path("instrument_name").isMissingNode() && !row.path("instrument_name").isNull()) {
                 value.setInstrumentName(text(row, "instrument_name"));
             }
+            if (row.has("sector_codes")) {
+                value.setSectorCodes(strings(row.path("sector_codes"), 100));
+            }
+            if (row.has("sector_names")) {
+                value.setSectorNames(strings(row.path("sector_names"), 100));
+            }
             value.setReturn1d(number(row, "return_1d"));
             value.setReturn5d(number(row, "return_5d"));
             value.setReturn20d(number(row, "return_20d"));

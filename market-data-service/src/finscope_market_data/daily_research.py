@@ -25,6 +25,8 @@ class ResearchModel(BaseModel):
 class ResearchStock(ResearchModel):
     instrument_code: str
     instrument_name: str | None = None
+    sector_codes: list[str] = Field(default_factory=list)
+    sector_names: list[str] = Field(default_factory=list)
     return_1d: float | None = None
     return_5d: float | None = None
     return_20d: float | None = None
@@ -59,13 +61,18 @@ class DailyResearchSnapshot(ResearchModel):
 
 
 @lru_cache(maxsize=4)
-def _constituent_names(path: str, _mtime_ns: int) -> dict[str, str]:
+def _constituent_names(path: str, _mtime_ns: int) -> dict[str, tuple[str, list[str], list[str]]]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    names: dict[str, str] = {}
+    names: dict[str, tuple[str, list[str], list[str]]] = {}
     for sector in payload["sectors"].values():
         for code, market, name in sector["values"]:
             if isinstance(name, str) and name.strip():
-                names[f"{code}.{market}"] = name.strip()
+                entry = names.setdefault(f"{code}.{market}", (name.strip(), [], []))
+                sector_code = sector.get("sector_code")
+                sector_name = sector.get("sector_name")
+                if isinstance(sector_code, str) and isinstance(sector_name, str) and sector_code not in entry[1]:
+                    entry[1].append(sector_code)
+                    entry[2].append(sector_name)
     return names
 
 
@@ -145,7 +152,11 @@ class DailyResearchService:
         except (OSError, ValueError, TypeError, KeyError):
             return result
         for stock in result.stocks:
-            stock.instrument_name = names.get(stock.instrument_code)
+            metadata = names.get(stock.instrument_code)
+            if metadata:
+                stock.instrument_name = metadata[0]
+                stock.sector_codes = list(metadata[1])
+                stock.sector_names = list(metadata[2])
         return result
 
     def fetch(self, business_date: date) -> DailyResearchSnapshot:

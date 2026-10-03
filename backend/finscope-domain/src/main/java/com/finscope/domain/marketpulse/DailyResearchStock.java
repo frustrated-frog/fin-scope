@@ -9,6 +9,8 @@ import com.finscope.common.enums.marketpulse.MarketResearchGroup;
 public class DailyResearchStock {
     private String instrumentCode;
     private String instrumentName;
+    private List<String> sectorCodes = new java.util.ArrayList<>();
+    private List<String> sectorNames = new java.util.ArrayList<>();
     private Double return1d;
     private Double return5d;
     private Double return20d;
