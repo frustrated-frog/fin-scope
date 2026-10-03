@@ -4,6 +4,15 @@ export interface OvernightTarget {
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
   validationCount?: number; brierScore?: number; baselineBrier?: number; directionAccuracy?: number;
   trainingThrough?: string; costBasisReturn?: number;
+  minimumSamples?: number; missingSamples?: number; missingValidationSamples?: number;
+  rawUpProbability?: number; baselineProbability?: number; trainingCount?: number; calibrationCount?: number;
+  calibrationStart?: string; calibrationThrough?: string; calibrationStatus?: string; calibrationReason?: string;
+  reliability?: {
+    status: string; count: number; from?: string; through?: string;
+    brierSkill?: number | null; recentCount?: number; recentBrierSkill?: number | null;
+    rawBrier?: number; baselineAccuracy?: number; intervalCoverage?: number; nominalCoverage?: number;
+    expectedReturnMae?: number;
+  };
 }
 export interface OvernightReport {
   id?: string; mode: OvernightMode; instrumentCode: string; signalDate: string; cutoff: string;

@@ -117,11 +117,13 @@ def test_failed_scheduled_capture_freezes_inputs_and_first_attempt(tmp_path):
     assert summarize(store)['groups'][0]['missingReasons']['PREDICTION:DATA_UNAVAILABLE'] == 1
 
 
-def test_frozen_prior_and_invalid_exit_are_not_profitable_fills(tmp_path):
+@pytest.mark.parametrize('version', ['overnight-local-v2', 'overnight-local-v3-calibrated'])
+def test_frozen_prior_and_invalid_exit_are_not_profitable_fills(tmp_path, version):
     bars = history()
     day = bars[-49].ended_at.date()
     req = request(day)
     report = predict(req, bars, datetime.fromisoformat(f'{day}T14:31:00'))
+    report['modelVersion'] = version
     assert all(0 <= t['baselineProbability'] <= 1 for t in report['targets'])
     store = OvernightStore(tmp_path / 'prices.db')
     report = store.freeze(req, report, [])
