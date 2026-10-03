@@ -415,3 +415,28 @@ test('appends event research after all original report sections without changing
   const section = screen.getByRole('region', { name: '事件脉络与本次增量' });
   expect(originalLayout.nextElementSibling).toBe(section);
 });
+
+test('business appendix is added after event research with all original report markup preserved', async () => {
+  const oldReport = { id: 410, instrumentCode: '603618', instrumentName: '杭电股份', instrumentType: 'STOCK',
+    reportDate: '2026-09-18', status: 'COMPLETED', summary: '固定摘要', drivers: [],
+    narrative: { plainSummary: '订单改善', causalSteps: ['公告', '经营预期改善'], whyToday: '新增披露' },
+    assessment: { version: 1, status: 'COMPLETE', mainJudgment: '固定判断',
+      hypotheses: [], commentary: [], explainedScope: [], unexplainedScope: [], missingInformation: [], warnings: [],
+      eventContext: { status: 'COMPLETE', summary: '原事件脉络保持不变', events: [] } } };
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(path.includes('/history') ? [] : oldReport) as never);
+  const { container, rerender } = render(<AttributionReaderView reportId={410} code="603618" onBack={vi.fn()} />);
+  await screen.findByText('原事件脉络保持不变');
+  const oldLayout = container.querySelector('.attribution-report-layout')!.outerHTML;
+  const oldEvents = container.querySelector('.attribution-event-context')!.outerHTML;
+  expect(screen.queryByLabelText('公司与市场深读')).toBeNull();
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(path.includes('/history') ? [] : {
+    ...oldReport, id: 411, assessment: { ...oldReport.assessment,
+      researchInsights: { status: 'PARTIAL', businesses: [{ business: '追加业务分析', transmission: '改善收入预期' }] } }
+  }) as never);
+  rerender(<AttributionReaderView reportId={411} code="603618" onBack={vi.fn()} />);
+  await screen.findByText('追加业务分析');
+  expect(container.querySelector('.attribution-report-layout')!.outerHTML).toBe(oldLayout);
+  expect(container.querySelector('.attribution-event-context')!.outerHTML).toBe(oldEvents);
+  expect(container.querySelector('.attribution-event-context')!.nextElementSibling).toBe(screen.getByLabelText('公司与市场深读'));
+  expect(screen.getByText('原因故事线')).toBeVisible();
+});

@@ -1,0 +1,63 @@
+/* Additive report chapters. Selectors cannot change the original report. */
+.attribution-research-insights { display: grid; gap: 24px; margin-top: 24px; min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
+.attribution-research-insights .attribution-insight-section { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.attribution-research-insights .attribution-insight-section-head, .attribution-research-insights .attribution-insight-card-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 20px; }
+.attribution-research-insights .attribution-insight-eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .09em; font-weight: 700; }
+.attribution-research-insights h4 { font-size: 20px; margin: 6px 0 0; line-height: 1.4; }
+.attribution-research-insights h5 { font-size: 17px; margin: 0; line-height: 1.6; }
+.attribution-research-insights h6 { color: var(--muted); font-size: 12px; margin: 0 0 8px; font-weight: 600; }
+.attribution-research-insights p { font-size: 14px; line-height: 1.85; margin: 0; }
+.attribution-research-insights .attribution-insight-date { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.attribution-research-insights .attribution-insight-intro { margin: 10px 0 20px; color: var(--muted); font-size: 13px; }
+.attribution-research-insights .attribution-insight-card { padding: 22px; margin-top: 16px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); background: color-mix(in srgb, var(--accent) 3%, var(--surface)); border-radius: 12px; }
+.attribution-research-insights .attribution-insight-direction { padding: 4px 10px; border-radius: 6px; background: color-mix(in srgb, currentColor 9%, transparent); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.attribution-research-insights .direction-positive, .attribution-research-insights .rise { color: var(--danger); }
+.attribution-research-insights .direction-negative, .attribution-research-insights .fall { color: var(--accent); }
+.attribution-research-insights .direction-mixed { color: #d8b767; }
+.attribution-research-insights .attribution-insight-position { margin-top: 12px; }
+.attribution-research-insights .attribution-insight-anchor { display: flex; gap: 12px; align-items: baseline; margin-top: 16px; padding: 12px 16px; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; }
+.attribution-research-insights .attribution-insight-anchor > span { font-size: 12px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+.attribution-research-insights .attribution-insight-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.attribution-research-insights .attribution-insight-pair:empty { display: none; }
+.attribution-research-insights .attribution-insight-detail { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--muted) 6%, var(--surface)); }
+.attribution-research-insights .attribution-insight-detail:only-child { grid-column: 1 / -1; }
+.attribution-research-insights .expectation-pair .attribution-insight-detail:last-child { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.attribution-research-insights .attribution-insight-condition { margin-top: 16px; display: flex; align-items: baseline; gap: 12px; }
+.attribution-research-insights .attribution-insight-condition > strong { font-size: 12px; color: var(--accent); flex-shrink: 0; }
+.attribution-research-insights .attribution-insight-condition p, .attribution-research-insights .attribution-insight-basis { font-size: 13px; color: var(--muted); }
+.attribution-research-insights .attribution-insight-basis { margin-top: 12px; }
+.attribution-research-insights .attribution-insight-basis strong { margin-right: 10px; font-weight: 600; }
+.attribution-research-insights .attribution-insight-mechanism { margin-top: 18px; padding: 0 0 0 14px; border-left: 2px solid var(--accent); }
+.attribution-research-insights .attribution-insight-references { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.attribution-research-insights .attribution-insight-references a { color: var(--accent); font-size: 11px; text-decoration: none; text-underline-offset: 3px; }
+.attribution-research-insights .attribution-insight-references a:hover { text-decoration: underline; }
+.attribution-research-insights .attribution-insight-comparison-summary { margin: 16px 0; }
+.attribution-research-insights .attribution-insight-table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.attribution-research-insights .attribution-insight-comparison-table { width: 100%; min-width: 630px; border-collapse: collapse; table-layout: fixed; }
+.attribution-research-insights .attribution-insight-comparison-table caption { caption-side: bottom; padding: 12px 16px; color: var(--muted); font-size: 11px; text-align: left; line-height: 1.7; }
+.attribution-research-insights .attribution-insight-comparison-table th, .attribution-research-insights .attribution-insight-comparison-table td { padding: 16px 12px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+.attribution-research-insights .attribution-insight-comparison-table th:first-child { text-align: left; width: 43%; padding-left: 16px; }
+.attribution-research-insights .attribution-insight-comparison-table thead th { color: var(--muted); font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--muted) 6%, var(--surface)); }
+.attribution-research-insights .attribution-insight-comparison-table .is-target { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.attribution-research-insights .attribution-insight-security { display: flex; align-items: baseline; gap: 6px 8px; flex-wrap: wrap; }
+.attribution-research-insights .attribution-insight-security strong { font-size: 14px; }
+.attribution-research-insights .attribution-insight-security small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.attribution-research-insights .attribution-insight-kind { font-size: 10px; color: var(--accent); font-weight: 500; border: 1px solid var(--line); padding: 2px 5px; border-radius: 4px; }
+.attribution-research-insights .attribution-insight-comparison-table tbody th p { font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 7px; }
+.attribution-research-insights .attribution-insight-number { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.attribution-research-insights .attribution-insight-number small { font-size: 10px; font-weight: 400; }
+.attribution-research-insights .attribution-insight-number.missing { color: var(--muted); }
+.attribution-research-insights .attribution-insight-data-note { margin-top: 12px; font-size: 11px; color: var(--muted); }
+.attribution-research-insights .attribution-insight-empty { padding: 18px 0 4px; color: var(--muted); }
+.attribution-research-insights .attribution-insight-notes { color: var(--muted); font-size: 12px; }
+.attribution-research-insights .attribution-insight-notes summary { cursor: pointer; width: fit-content; }
+.attribution-research-insights .attribution-insight-notes ul { padding-left: 18px; line-height: 1.8; }
+.attribution-research-insights a:focus-visible, .attribution-research-insights summary:focus-visible, .attribution-research-insights .attribution-insight-table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.attribution-research-insights .attribution-insight-scroll-hint { display: none; }
+@media (max-width: 700px) {
+  .attribution-research-insights .attribution-insight-scroll-hint { display: block; margin: 0 0 10px; font-size: 11px; color: var(--accent); }
+  .attribution-research-insights .attribution-insight-section { padding: 16px; }
+  .attribution-research-insights .attribution-insight-card { padding: 16px; }
+  .attribution-research-insights .attribution-insight-pair { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .attribution-research-insights .attribution-insight-anchor, .attribution-research-insights .attribution-insight-condition { flex-direction: column; gap: 6px; }
+}

@@ -62,6 +62,8 @@ public class AttributionAgent {
     private AttributionAssessmentService assessmentService;
     @Resource
     private AttributionEventContextService eventContextService;
+    @Resource
+    private AttributionResearchInsightsService researchInsightsService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -279,6 +281,19 @@ public class AttributionAgent {
                 partial.setStatus(EventContextStatus.UNAVAILABLE);
                 partial.setSummary("事件补充研究暂未完成，原归因内容已保留。");
                 report.getAssessment().setEventContext(partial);
+            }
+        }
+        if ("STOCK".equalsIgnoreCase(instrument.getType()) && report.getAssessment() != null && researchInsightsService != null) {
+            publisher.publish(taskId, AttributionProgressEvent.stage("attribution-synth", "正在补充公司业务、同类行情与预期变化"));
+            try {
+                report.getAssessment().setResearchInsights(researchInsightsService.research(report, instrument, evidences));
+            } catch (RuntimeException ex) {
+                log.warn("业务扩展异常，不影响原归因 code={} error={}", instrument.getCode(), ex.getClass().getSimpleName());
+                var partial = new com.finscope.domain.attribution.AttributionResearchInsights();
+                partial.setAsOfDate(report.getReportDate() == null ? null : report.getReportDate().toString());
+                partial.setStatus(com.finscope.common.enums.attribution.AttributionInsightStatus.UNAVAILABLE);
+                partial.getWarnings().add("业务、同类行情与预期补充暂未完成，可重新归因补充。");
+                report.getAssessment().setResearchInsights(partial);
             }
         }
         report.setEvidences(evidences);

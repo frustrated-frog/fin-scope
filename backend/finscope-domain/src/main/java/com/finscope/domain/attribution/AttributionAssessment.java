@@ -10,6 +10,8 @@ public class AttributionAssessment {
     private int version = 1;
     /** 可选增量章节；旧报告为空。 */
     private AttributionEventContext eventContext;
+    /** 业务、同类行情与预期变化的可选追加章节；旧报告保持为空。 */
+    private AttributionResearchInsights researchInsights;
     private com.finscope.common.enums.attribution.AssessmentStatus status;
     private AttributionMarketContext marketContext;
     private String researchFocus;

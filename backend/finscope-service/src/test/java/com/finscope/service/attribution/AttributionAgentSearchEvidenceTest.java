@@ -117,6 +117,9 @@ class AttributionAgentSearchEvidenceTest {
         AttributionEventContextService eventService = mock(AttributionEventContextService.class);
         when(eventService.research(any(), any(), any())).thenThrow(new IllegalStateException("extension unavailable"));
         ReflectionTestUtils.setField(agent, "eventContextService", eventService);
+        AttributionResearchInsightsService insightsService = mock(AttributionResearchInsightsService.class);
+        when(insightsService.research(any(), any(), any())).thenThrow(new IllegalStateException("insights unavailable"));
+        ReflectionTestUtils.setField(agent, "researchInsightsService", insightsService);
         ReflectionTestUtils.setField(agent, "llmChatClient", llm);
         ArticleRepository articles = mock(ArticleRepository.class);
         when(articles.findAll()).thenReturn(Collections.emptyList());
@@ -138,6 +141,9 @@ class AttributionAgentSearchEvidenceTest {
         assertEquals(com.finscope.common.enums.attribution.EventContextStatus.UNAVAILABLE,
                 report.getAssessment().getEventContext().getStatus());
         verify(eventService).research(eq(report), eq(instrument), any());
+        assertEquals(com.finscope.common.enums.attribution.AttributionInsightStatus.UNAVAILABLE,
+                report.getAssessment().getResearchInsights().getStatus());
+        verify(insightsService).research(eq(report), eq(instrument), any());
     }
     @Test
     void filtersFutureWebAndLocalNewsBeforeCallingModelForHistoricalTradingDay() throws Exception {

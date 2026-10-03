@@ -917,7 +917,56 @@ export type AttributionEventContext = {
   warnings?: string[];
 };
 
+export type AttributionBusinessLink = {
+  business: string;
+  position?: string;
+  financialAnchor?: string;
+  catalyst?: string;
+  transmission?: string;
+  sensitivity?: string;
+  direction?: AttributionEventDossier['impactDirection'];
+  sourceIds?: string[];
+};
+
+export type AttributionExpectationChange = {
+  topic: string;
+  priorExpectation?: string;
+  expectationBasis?: string;
+  newInformation?: string;
+  repricingPath?: string;
+  realized?: string;
+  nextCatalyst?: string;
+  direction?: AttributionEventDossier['impactDirection'];
+  sourceIds?: string[];
+};
+
+export type AttributionComparisonRow = {
+  kind: 'STOCK' | 'PEER' | 'SECTOR' | 'BENCHMARK';
+  code: string;
+  name: string;
+  reason?: string;
+  source?: string;
+  asOfDate?: string;
+  changePct?: number | null;
+  fiveSessionChangePct?: number | null;
+  stockRelativePct?: number | null;
+  note?: string;
+};
+
+export type AttributionResearchInsights = {
+  asOfDate?: string;
+  generatedAt?: string;
+  status: 'COMPLETE' | 'PARTIAL' | 'UNAVAILABLE';
+  businesses?: AttributionBusinessLink[];
+  expectations?: AttributionExpectationChange[];
+  comparisons?: AttributionComparisonRow[];
+  comparisonSummary?: string;
+  sources?: AttributionEventSource[];
+  warnings?: string[];
+};
+
 export type AttributionAssessment = {
+  researchInsights?: AttributionResearchInsights | null;
   eventContext?: AttributionEventContext | null;
   version: number;
   status: 'COMPLETE' | 'INSUFFICIENT_EVIDENCE' | 'DEGRADED';

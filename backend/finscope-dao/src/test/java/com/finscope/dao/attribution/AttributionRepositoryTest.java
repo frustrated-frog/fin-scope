@@ -69,6 +69,31 @@ class AttributionRepositoryTest {
     }
 
     @Test
+    void persistsBusinessAndComparisonAppendixAlongsideOriginalNarrative() {
+        var report = save("603618", "STOCK", LocalDate.of(2026, 9, 18), "原摘要", 2D, "COMPLETED");
+        var assessment = new com.finscope.domain.attribution.AttributionAssessment();
+        var insights = new com.finscope.domain.attribution.AttributionResearchInsights();
+        insights.setAsOfDate("2026-09-18");
+        insights.setStatus(com.finscope.common.enums.attribution.AttributionInsightStatus.PARTIAL);
+        var business = new com.finscope.domain.attribution.AttributionBusinessLink();
+        business.setBusiness("光纤业务");
+        business.setDirection(com.finscope.common.enums.attribution.NewsImpactDirection.POSITIVE);
+        insights.setBusinesses(List.of(business));
+        var comparison = new com.finscope.domain.attribution.AttributionComparisonRow();
+        comparison.setCode("600487");
+        comparison.setKind(com.finscope.common.enums.attribution.AttributionComparisonKind.PEER);
+        comparison.setChangePct(3D);
+        comparison.setStockRelativePct(-1D);
+        insights.setComparisons(List.of(comparison));
+        assessment.setResearchInsights(insights);
+        report.setAssessment(assessment);
+        repository.updateResult(report);
+        var restored = repository.findById(report.getId()).orElseThrow();
+        assertEquals("原摘要", restored.getSummary());
+        assertEquals(insights, restored.getAssessment().getResearchInsights());
+    }
+
+    @Test
     void returnsLatestCompletedReportMetadataPerInstrument() {
         AttributionReport first = save("600519", "STOCK", LocalDate.of(2026, 7, 11), "旧归因", 1.2, "COMPLETED");
         save("600519", "STOCK", LocalDate.of(2026, 7, 12), "失败归因", -1.0, "FAILED");
