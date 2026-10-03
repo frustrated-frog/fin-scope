@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { WatchFocusDrawer } from './WatchFocusDrawer';
+import type { WatchFocus } from './watchFocusTypes';
 import { recentAttributionDates } from './attributionDates';
 
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
@@ -86,14 +88,20 @@ function loadCollapsed(): Record<string, boolean> {
 export function WatchlistView({
   addToast,
   setMessage,
+  initialTarget,
+  onTargetConsumed,
   onOpenIndustryChain
 }: {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setMessage: (message: string) => void;
   onOpenIndustryChain?: (code: string) => void;
+  initialTarget?: { code: string; reportId?: number };
+  onTargetConsumed?: () => void;
 }) {
   const dashboard = useWatchlistDashboardData();
-  const items = dashboard.investments.data;
+  const [focusOverrides, setFocusOverrides] = useState<Record<number, WatchFocus>>({});
+  const items = dashboard.investments.data.map(item => ({ ...item, ...focusOverrides[item.id] }));
+  const [focusItem, setFocusItem] = useState<WatchFocus>();
   const marketIndices = dashboard.indices.data;
   const loading = dashboard.investments.phase === 'loading';
   const loadError = dashboard.investments.error || null;
@@ -117,6 +125,22 @@ export function WatchlistView({
   const [groupFocused, setGroupFocused] = useState(false);
   const [klineItem, setKlineItem] = useState<{ code: string; name?: string } | null>(null);
   const [fundHoldingItem, setFundHoldingItem] = useState<WatchlistItem | null>(null);
+
+  useEffect(() => {
+    if (!initialTarget) {
+      return;
+    }
+    const item = items.find(value => value.code === initialTarget.code);
+    if (!item) {
+      return;
+    }
+    if (initialTarget.reportId) {
+      setAttribution({ reportId: initialTarget.reportId, code: item.code, type: item.type, name: item.name });
+    } else {
+      openInstrumentDetail(item);
+    }
+    onTargetConsumed?.();
+  }, [initialTarget, dashboard.investments.data]);
 
   function openInstrumentDetail(item: WatchlistItem) {
     if (item.type === 'STOCK') {
@@ -629,7 +653,11 @@ export function WatchlistView({
                               <span className="watchlist-attr-summary-link">查看完整报告</span>
                             </button>
                           )}
+                          {(item.reason || item.nextWatch || item.direction) && <p className="watchlist-focus-summary" title={item.reason || item.nextWatch}>
+                            {item.direction && <strong>{item.direction} · </strong>}{item.reason || item.nextWatch}
+                          </p>}
                           <div className="watchlist-card-actions">
+                            <button type="button" onClick={() => setFocusItem({ ...item, watchlistId: item.id })}>关注理由</button>
                             <label className="watchlist-move" title="移动到分组">
                               <span className="watchlist-move-label">分组</span>
                               <select
@@ -682,6 +710,8 @@ export function WatchlistView({
         </>
       )}
       </section>
+      {focusItem && <WatchFocusDrawer key={focusItem.watchlistId} item={focusItem} onClose={() => setFocusItem(undefined)}
+        onSaved={value => { setFocusOverrides(current => ({ ...current, [value.watchlistId]: value })); addToast('关注理由已保存', 'success'); }} />}
       {fundHoldingItem && (
         <WatchlistFundHoldingsDrawer
           item={{ code: fundHoldingItem.code, name: fundHoldingItem.name }}

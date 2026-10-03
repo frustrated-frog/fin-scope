@@ -7,6 +7,8 @@ import { DailyResearchPanel } from './DailyResearchPanel';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
 import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 import './MarketPulsePolish.css';
+import { PersonalMarketPanel } from './PersonalMarketPanel';
+import type { PersonalChange } from './personalMarket';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -32,6 +34,8 @@ type ViewProps = {
   setMessage: (message: string) => void;
   onOpenStockDiscovery?: (context?: StockDiscoveryMarketContext) => void;
   onOpenStock?: (code: string) => void;
+  onOpenWatchlist?: (code?: string, reportId?: number) => void;
+  onOpenEvent?: (change: PersonalChange) => void;
 };
 
 function label(value?: string) {
@@ -461,7 +465,7 @@ function HistoryPanel({ points, internalPoints, backfilling, onBackfill, onSelec
   );
 }
 
-export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, onOpenStock }: ViewProps) {
+export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, onOpenStock, onOpenWatchlist, onOpenEvent }: ViewProps) {
   const [workspace, setWorkspace] = useState<MarketPulseWorkspace | null>(null);
   const [dates, setDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -622,6 +626,8 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
 
       {view === 'review' && <>
         <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />
+        {workspace.businessDate && <PersonalMarketPanel key={workspace.businessDate} businessDate={workspace.businessDate} sectors={sectors}
+          refreshKey={workspace.generatedAt} addToast={addToast} onOpenWatchlist={onOpenWatchlist} onOpenEvent={onOpenEvent} onOpenStockDiscovery={onOpenStockDiscovery} />}
         {workspace.businessDate && <DailyResearchPanel businessDate={workspace.businessDate} sectors={sectors}
           refreshKey={workspace.generatedAt} onOpenStockDiscovery={onOpenStockDiscovery} onOpenStock={onOpenStock} />}
       </>}

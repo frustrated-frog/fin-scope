@@ -93,6 +93,7 @@ export default function App() {
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [message, setMessage] = useState('准备就绪');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [watchlistTarget, setWatchlistTarget] = useState<{ code: string; reportId?: number }>();
   const [quantResearchIntent, setQuantResearchIntent] = useState<QuantResearchEntryIntent>();
   const [stockDiscoveryMarketContext, setStockDiscoveryMarketContext] = useState<StockDiscoveryMarketContext>();
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
@@ -617,8 +618,21 @@ export default function App() {
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
+        initialTarget={watchlistTarget} onTargetConsumed={() => setWatchlistTarget(undefined)}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
       {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage}
+        onOpenWatchlist={(code, reportId) => { setWatchlistTarget(code ? { code, reportId } : undefined); setView('watchlist'); }}
+        onOpenEvent={(change) => {
+          const url = new URL(window.location.href);
+          ['reactionEvent', 'reactionSample', 'reactionStock'].forEach(key => url.searchParams.delete(key));
+          if (change.sampleId) {
+            url.searchParams.set('reactionSample', String(change.sampleId));
+          } else if (change.eventKey) {
+            url.searchParams.set('reactionEvent', change.eventKey);
+          }
+          window.history.replaceState({}, '', url);
+          setView('investmentObservation');
+        }}
         onOpenStock={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }}
         onOpenStockDiscovery={(context) => { setStockDiscoveryMarketContext(context); setView('strategy'); }} />}
       {view === 'industryChain' && <IndustryChainView addToast={addToast} setMessage={setMessage}
