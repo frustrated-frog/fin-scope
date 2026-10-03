@@ -7,6 +7,7 @@ import { DailyResearchPanel } from './DailyResearchPanel';
 import { SectorOpportunityMap } from './SectorOpportunityMap';
 import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 import './MarketPulsePolish.css';
+import { MarketPanorama } from './MarketPanorama';
 import { PersonalMarketPanel } from './PersonalMarketPanel';
 import type { PersonalChange } from './personalMarket';
 
@@ -471,7 +472,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const [view, setView] = useState<'review' | 'transition' | 'breadth' | 'rotation' | 'history'>('review');
+  const [view, setView] = useState<'panorama' | 'review' | 'transition' | 'breadth' | 'rotation' | 'history'>('panorama');
   const loadRequest = useRef(0);
 
   const load = async (date?: string) => {
@@ -578,15 +579,16 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }
 
   return (
-    <section className="market-pulse-page">
+    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : ''}`}>
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
+        <button type="button" role="tab" aria-selected={view === 'panorama'} onClick={() => setView('panorama')}>市场全景</button>
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
         <button type="button" role="tab" aria-selected={view === 'transition'} onClick={() => setView('transition')}>转折与情景</button>
         <button type="button" role="tab" aria-selected={view === 'breadth'} onClick={() => setView('breadth')}>市场宽度</button>
         <button type="button" role="tab" aria-selected={view === 'rotation'} onClick={() => setView('rotation')}>行业轮动</button>
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
-      <header className="market-pulse-hero">
+      {view !== 'panorama' && <header className="market-pulse-hero">
         <div className="market-pulse-hero-main">
           <p className="market-pulse-kicker">MARKET REGIME · {workspace.businessDate ?? 'LATEST'}</p>
           <h3>{stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}</h3>
@@ -620,7 +622,10 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
           </select></label>
           <button type="button" aria-label="立即补刷新" title={`补刷新当前查看日期 ${workspace.businessDate ?? ''}`} onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在计算…' : '立即补刷新'}</button>
         </div>
-      </header>
+      </header>}
+
+      {view === 'panorama' && <MarketPanorama workspace={workspace} dates={dates} refreshing={refreshing}
+        onLoad={date => void load(date)} onRefresh={() => void refresh()} onOpenStock={onOpenStock} onOpenStockDiscovery={onOpenStockDiscovery} />}
 
       <MarketPulseWarnings warnings={workspace.warnings} />
 

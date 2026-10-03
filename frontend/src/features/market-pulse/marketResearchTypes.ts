@@ -2,6 +2,8 @@ export type ResearchGroupCode = 'STRONG' | 'TREND' | 'BREAKOUT';
 export type ResearchStock = {
   instrumentCode: string;
   instrumentName?: string | null;
+  sectorCodes?: string[];
+  sectorNames?: string[];
   return1d?: number | null;
   return5d?: number | null;
   return20d?: number | null;

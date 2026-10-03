@@ -140,6 +140,7 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   const onOpenStockDiscovery = vi.fn();
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} onOpenStockDiscovery={onOpenStockDiscovery} />);
 
+  fireEvent.click(await screen.findByRole('tab', { name: '今日雷达' }));
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
   expect(screen.getByText('交易日 15:30')).toBeInTheDocument();
   expect(screen.getByText('错过后每小时补跑')).toBeInTheDocument();
@@ -190,10 +191,10 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.getByText(/研究候选不是买入指令/)).toBeInTheDocument();
 });
 
-test('switches from the default daily review to historical evolution', async () => {
+test('opens panorama by default and switches to historical evolution', async () => {
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('tab', { name: '今日雷达' })).toHaveAttribute('aria-selected', 'true');
+  expect(await screen.findByRole('tab', { name: '市场全景' })).toHaveAttribute('aria-selected', 'true');
   fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
 
   expect(screen.getByRole('heading', { name: '近 20 日市场演变' })).toBeInTheDocument();
@@ -227,6 +228,7 @@ test('keeps a manual recovery action beside the automatic schedule', async () =>
 test('backfills the selected historical date and stays on that date after refresh', async () => {
   const addToast = vi.fn();
   render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('tab', { name: '今日雷达' }));
   await screen.findByRole('button', { name: '立即补刷新' });
   fireEvent.change(screen.getByLabelText('历史截面'), { target: { value: '2026-08-17' } });
   await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' });
@@ -248,6 +250,7 @@ test('backfills the selected historical date and stays on that date after refres
 test('reports a historical backfill failure even when the HTTP request succeeds', async () => {
   const addToast = vi.fn();
   render(<MarketPulseView addToast={addToast} setMessage={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('tab', { name: '今日雷达' }));
   await screen.findByRole('button', { name: '立即补刷新' });
   fireEvent.change(screen.getByLabelText('历史截面'), { target: { value: '2026-08-17' } });
   await screen.findByRole('heading', { name: '放量上行，科技主线与市场宽度共振' });
@@ -294,6 +297,7 @@ test('does not write automatically from the page when market breadth is unavaila
 
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
+  fireEvent.click(await screen.findByRole('tab', { name: '今日雷达' }));
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
   await waitFor(() => expect(latestCalls).toBe(1));
   expect(fetch).not.toHaveBeenCalledWith(
@@ -334,6 +338,7 @@ test('does not write automatically from the page when historical breadth is inco
 
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
+  fireEvent.click(await screen.findByRole('tab', { name: '今日雷达' }));
   expect(await screen.findByRole('heading', { name: '震荡轮动' })).toBeInTheDocument();
   await waitFor(() => expect(latestCalls).toBe(1));
   expect(fetch).not.toHaveBeenCalledWith(

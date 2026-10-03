@@ -39,6 +39,15 @@ class PythonDailyResearchSourceTest {
     }
 
     @Test
+    void preservesIndustryMembershipAndAcceptsOlderPayloadsWithoutIt() {
+        var result = source(PAYLOAD.replace("\"amount\":100",
+                "\"amount\":100,\"sector_codes\":[\"881131\"],\"sector_names\":[\"白酒\"]")).fetch(DATE);
+        assertEquals(java.util.List.of("881131"), result.getStocks().get(0).getSectorCodes());
+        assertEquals(java.util.List.of("白酒"), result.getStocks().get(0).getSectorNames());
+        assertTrue(source(PAYLOAD).fetch(DATE).getStocks().get(0).getSectorCodes().isEmpty());
+    }
+
+    @Test
     void preservesOptionalCacheMetadata() {
         var result = source(PAYLOAD.replace("\"sample_count\":1", "\"cache_hit\":true,\"calculated_at\":\"2026-09-11T15:40:00+08:00\",\"sample_count\":1")).fetch(DATE);
         assertTrue(result.getCacheHit());

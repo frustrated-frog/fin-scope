@@ -82,6 +82,7 @@ export type MarketPulseCandidate = {
 };
 
 export type MarketIndexPerformance = {
+  history?: { businessDate: string | number[]; close?: number }[];
   code: string;
   name: string;
   businessDate?: string;
