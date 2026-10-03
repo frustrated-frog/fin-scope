@@ -70,12 +70,20 @@ test('presents the latest automatic selection without a manual refresh action', 
 
   expect(await screen.findByRole('heading', { name: /样本股份/ })).toBeInTheDocument();
   expect(screen.getAllByText('64.0%').length).toBeGreaterThanOrEqual(1);
-  expect(screen.getByText('锁定样本优于基准')).toBeInTheDocument();
+  expect(screen.getByText('锁定样本优于基准')).not.toBeVisible();
+  await userEvent.click(screen.getByText('查看预测、排序证据与风险'));
+  expect(screen.getByText('锁定样本优于基准')).toBeVisible();
   expect(screen.getByRole('heading', { name: '相对优势 Top 5' })).toBeInTheDocument();
   expect(screen.getByText('严格可行动 1')).toBeInTheDocument();
   expect(screen.getByText('严格通过')).toBeInTheDocument();
   expect(screen.getByText('双引擎一致')).toBeInTheDocument();
   expect(await screen.findByText('真实持有')).toBeInTheDocument();
+  expect(screen.queryByRole('img', { name: /深度候选风险收益分布/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: '次日预测真实验证' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /候选股票/ })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '短期强势' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: /研究诊断/ }));
+  expect(screen.queryByRole('region', { name: '稳健趋势名单' })).not.toBeInTheDocument();
   expect(screen.getByRole('img', { name: /深度候选风险收益分布/ })).toBeInTheDocument();
   expect(screen.getByRole('table', { name: '相对候选因子对比' })).toBeInTheDocument();
   expect(screen.getByText('38.9% 保留')).toBeInTheDocument();
@@ -90,17 +98,24 @@ test('presents the latest automatic selection without a manual refresh action', 
   expect(screen.getByText('同花顺成分')).toBeInTheDocument();
   expect(screen.getByText('权限范围剔除 31 只')).toBeInTheDocument();
   expect(screen.getByText('成分覆盖 52 / 52')).toBeInTheDocument();
-  expect(screen.getByText('来自市场转折雷达')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /候选股票/ }));
+  await userEvent.click(screen.getByText('市场背景 · 修复正在扩散'));
+  expect(screen.getByText('来自市场转折雷达')).toBeVisible();
   expect(screen.getByText('修复正在扩散')).toBeInTheDocument();
   expect(screen.getByText('创新药 · 贵金属')).toBeInTheDocument();
   expect(screen.getByText('均衡试错')).toBeInTheDocument();
   expect(screen.getByText('只等回撤确认')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /预测复盘/ }));
+  expect(screen.getByRole('region', { name: '次日预测真实验证' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '真实预测验收台' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '5 日持有期' }));
   expect(await screen.findByRole('heading', { name: '真实预测验收台' })).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /股票发现真实概率校准图/ })).toBeInTheDocument();
   expect(screen.getByText('真实样本尚少，继续积累，不提前宣称优势。')).toBeInTheDocument();
   expect(screen.getByText('PAIRWISE 排序挑战者')).toBeInTheDocument();
   expect(screen.getByText('Rank IC')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /刷新|运行|选股/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^(刷新|运行|选股)/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /候选股票/ }));
   await userEvent.click(screen.getByRole('button', { name: '进入单股完整研究' }));
   expect(onOpenResearch).toHaveBeenCalledWith('600001');
 });
@@ -123,4 +138,52 @@ test('shows delivered transport separately from a failed business calculation', 
   expect(screen.getByText('所有热门板块数据源不可用')).toBeInTheDocument();
   expect(screen.getByText(/系统会自动重试/)).toBeInTheDocument();
   expect(screen.getByText(/下次自动调度：2026-08-17T15:30:00\+08:00/)).toBeInTheDocument();
+});
+test('keeps historical review accessible when the current discovery batch is unavailable', async () => {
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.startsWith('/api/quant/next-session-predictions?')) {
+      return apiResponse([]);
+    }
+    if (path === '/api/strategy/stock-account') {
+      return apiResponse({ positions: [] });
+    }
+    return apiResponse({ status: 'EMPTY' });
+  }));
+  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} />);
+  await userEvent.click(screen.getByRole('button', { name: /预测复盘/ }));
+  expect(await screen.findByText(/尚无新协议的前瞻记录/)).toBeInTheDocument();
+  expect(requests.some(path => path.startsWith('/api/quant/next-session-predictions?'))).toBe(true);
+});
+
+test('starts with the strength pool and keeps diagnostics out of the daily list', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/quant/stock-discoveries/latest') {
+      return apiResponse({ report: {
+        as_of_date: '2026-09-30', retrieved_at: '2026-09-30T16:00:00', source_family: 'TONGHUASHUN',
+        quality_status: 'FRESH_PRIMARY', budget: 6000, duration_ms: 1000, warnings: ['异动来源覆盖不完整'],
+        candidates: [], deep_evidence: [], final_candidates: [], stable_candidates: [], sectors: [],
+        funnel: { constituent_count: 0, admitted_count: 0, quantified_count: 0, deep_review_count: 0, final_count: 0 },
+        strength_watchlist: [{ code: '605058', name: '澳弘电子', sources: ['LIMIT_UP'], rejection_reasons: [],
+          assessment: { status: 'INSUFFICIENT_DATA', sample_count: 3, execution_status: 'UNVERIFIED' } }],
+      } });
+    }
+    if (path === '/api/strategy/stock-account') {
+      return apiResponse({ positions: [] });
+    }
+    return apiResponse({ status: 'EMPTY' });
+  }));
+  render(<StockDiscoveryPanel addToast={vi.fn()} setMessage={vi.fn()} onOpenResearch={vi.fn()} />);
+  expect(await screen.findByRole('button', { name: '澳弘电子 605058' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '短期强势' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('region', { name: '研究诊断内容' })).not.toBeInTheDocument();
+  expect(screen.getByText(/本轮暂无通过原交易周期门禁/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '稳健趋势' }));
+  expect(screen.queryByRole('button', { name: '澳弘电子 605058' })).not.toBeInTheDocument();
+  expect(screen.getByText('深度样本暂不可用')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '短期强势' }));
+  expect(screen.getByRole('button', { name: '澳弘电子 605058' })).toBeInTheDocument();
 });
