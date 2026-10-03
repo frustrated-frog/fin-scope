@@ -802,11 +802,26 @@ export type ToastItem = {
 
 export type AttributionDriverRole = 'TRIGGER' | 'AMPLIFIER' | 'BACKGROUND' | 'COUNTER';
 
+export type NewsInterpretationType = 'EARNINGS' | 'ORDER' | 'PRICE_CHANGE' | 'POLICY'
+  | 'PRODUCT_TECHNOLOGY' | 'CORPORATE_ACTION' | 'CLARIFICATION' | 'TRADING' | 'OTHER';
+
+export type AttributionNewsAnalysis = {
+  types?: NewsInterpretationType[];
+  direction?: 'POSITIVE' | 'NEGATIVE' | 'MIXED' | 'NEUTRAL' | 'UNCLEAR';
+  keyChange?: string;
+  businessImpacts?: { label: string; analysis: string }[];
+  shortTermImpact?: string;
+  mediumTermImpact?: string;
+  longTermImpact?: string;
+  chainReaction?: string;
+};
+
 export type AttributionDriver = {
   claim: string;
   role?: AttributionDriverRole;
   plainExplanation?: string;
   marketInterpretation?: string;
+  newsAnalysis?: AttributionNewsAnalysis;
   expectationShift?: string;
   priceImpact?: string;
   explanatoryPower?: 'HIGH' | 'MID' | 'LOW';
@@ -822,6 +837,8 @@ export type AttributionDriver = {
 };
 
 export type AttributionNarrative = {
+  interactionAnalysis?: string;
+  priceNewsDivergence?: string;
   plainSummary?: string;
   event?: string;
   instrumentLink?: string;

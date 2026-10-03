@@ -13290,6 +13290,117 @@ input[type="checkbox"] {
   font-weight: 400;
 }
 
+/* Optional news depth: reuse the report palette while separating specialist dimensions. */
+.attribution-news-depth {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.attribution-news-heading,
+.attribution-news-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attribution-news-heading {
+  justify-content: space-between;
+}
+
+.attribution-news-heading > strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.attribution-news-tags > span {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.attribution-news-tags > .direction-negative {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--line));
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+
+.attribution-news-tags > :is(.direction-mixed, .direction-neutral, .direction-unclear) {
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.attribution-news-key-change {
+  padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
+}
+
+.attribution-news-key-change > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.attribution-news-findings,
+.attribution-news-horizons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.attribution-news-horizons {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.attribution-news-point {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface-2));
+}
+
+.attribution-news-point h5 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.attribution-news-depth p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .attribution-news-findings,
+  .attribution-news-horizons {
+    grid-template-columns: 1fr;
+  }
+
+  .attribution-news-point,
+  .attribution-news-key-change {
+    padding: 14px;
+  }
+}
+
 .attribution-explanatory-power {
   color: var(--accent);
   font-size: 12px;

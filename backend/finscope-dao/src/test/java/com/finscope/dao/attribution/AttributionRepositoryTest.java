@@ -156,6 +156,36 @@ class AttributionRepositoryTest {
     }
 
     @Test
+    void roundTripsOptionalNewsDepthWithoutLosingLegacyFields() {
+        var report = save("603618", "STOCK", LocalDate.of(2026, 9, 18), "原报告", 2D, "COMPLETED");
+        var driver = new AttributionDriver();
+        driver.setClaim("订单增长");
+        driver.setMarketInterpretation("订单确认后的交付是关键");
+        var analysis = new com.finscope.domain.attribution.AttributionNewsAnalysis();
+        analysis.setTypes(List.of(com.finscope.common.enums.attribution.NewsInterpretationType.ORDER));
+        analysis.setDirection(com.finscope.common.enums.attribution.NewsImpactDirection.POSITIVE);
+        analysis.setKeyChange("正式订单签订");
+        var point = new com.finscope.domain.attribution.AttributionAnalysisPoint();
+        point.setLabel("交付周期");
+        point.setAnalysis("按交付进度确认收入");
+        analysis.setBusinessImpacts(List.of(point));
+        analysis.setMediumTermImpact("交付与回款决定兑现节奏");
+        driver.setNewsAnalysis(analysis);
+        report.setDrivers(List.of(driver));
+        var narrative = new AttributionNarrative();
+        narrative.setPlainSummary("原有概览");
+        narrative.setCausalSteps(List.of("订单", "交付", "收入"));
+        narrative.setInteractionAnalysis("订单与扩产形成先后条件");
+        narrative.setPriceNewsDivergence("上涨与收入预期改善方向一致");
+        report.setNarrative(narrative);
+        repository.updateResult(report);
+        var restored = repository.findById(report.getId()).orElseThrow();
+        assertEquals(driver, restored.getDrivers().get(0));
+        assertEquals(narrative, restored.getNarrative());
+        assertEquals("原报告", restored.getSummary());
+    }
+
+    @Test
     void deletesReportAndItsEvidence() {
         AttributionReport report = save("600519", "STOCK", LocalDate.of(2026, 7, 13), "待删除", 1.2, "COMPLETED");
         AttributionEvidence evidence = new AttributionEvidence();

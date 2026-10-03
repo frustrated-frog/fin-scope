@@ -57,6 +57,12 @@ class AttributionAgentNarrativeTest {
         String prompt = agent.synthUserPrompt(instrument("STOCK"), -4.2D,
                 Collections.<AttributionEvidence>emptyList(), LocalDate.parse("2026-09-18"));
 
+        for (var type : com.finscope.common.enums.attribution.NewsInterpretationType.values()) {
+            assertTrue(prompt.contains(type.name() + " "));
+        }
+        assertTrue(prompt.contains("newsAnalysis"));
+        assertTrue(prompt.contains("interactionAnalysis"));
+        assertTrue(prompt.contains("priceNewsDivergence"));
         assertTrue(prompt.contains("目标交易日:2026-09-18"));
         assertTrue(prompt.contains("不设最低数量"));
         assertFalse(prompt.contains("4-6"));

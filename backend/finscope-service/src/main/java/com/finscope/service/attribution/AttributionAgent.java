@@ -45,6 +45,8 @@ import java.util.Set;
 @Service
 @Slf4j
 public class AttributionAgent {
+    /** 为专项解读预留完整 JSON 输出空间，超时仍沿用模型客户端配置。 */
+    private static final int STOCK_SYNTHESIS_OUTPUT_TOKENS = 8192;
     @Resource
     private SearchEvidenceGateway searchEvidenceGateway;
     @Resource
@@ -521,7 +523,9 @@ public class AttributionAgent {
                             + "\n研判状态不是停止分析的开关。即使尚无确认主因，也要结合已有事实、行业逻辑和历史背景解释可能的作用机制，输出白话摘要、故事线、为什么是它和为什么是今天。UNRESOLVED 可作为低置信候选，使用可能、待验证措辞；NOT_ADOPTED 只作反方。旧消息可解释持续的基本面背景，但不得冒充当日新催化；时点无法确认时明确写出。保留关键假设与改判条件，不得虚构市场共识或资金数据。"
                             + "使用简洁中文：摘要不超过120字，每个解释字段用2至4句充分说明逻辑、对该公司的影响和可能抵消因素；故事线3至5步；禁止输出内部字段名和研究任务问题。";
                 }
-                String raw = llmChatClient.complete(synthSystemPrompt(), prompt);
+                String raw = "STOCK".equalsIgnoreCase(instrument.getType())
+                        ? llmChatClient.complete(synthSystemPrompt(), prompt, 0, STOCK_SYNTHESIS_OUTPUT_TOKENS)
+                        : llmChatClient.complete(synthSystemPrompt(), prompt);
                 if (parseSynthResult(report, raw)) {
                     ensureNarrative(report, instrument, changePct, evidences, startDate);
                     return true;
@@ -575,6 +579,10 @@ public class AttributionAgent {
                 .append("explanatoryPower 综合证据直接性、时间贴近度、价格方向一致性与反证。")
                 .append("不得虚构数字、业务暴露或投资者行为；推断使用‘可能、意味着、市场倾向于’等边界措辞。\n")
                 .append(typeTransmissionInstruction(instrument)).append("\n");
+        if ("STOCK".equalsIgnoreCase(instrument.getType())) {
+            builder.append(AttributionNewsInterpretationPrompt.instructions())
+                    .append(AttributionNewsInterpretationPrompt.schema());
+        }
         builder.append("标的:").append(StringUtils.firstNonBlank(instrument.getName(), instrument.getCode()))
                 .append("(").append(instrument.getCode()).append(")\n");
         builder.append("类型:").append(instrument.getType()).append("\n");
@@ -618,6 +626,8 @@ public class AttributionAgent {
                 narrative.setEvent(narrativeNode.path("event").asText("").trim());
                 narrative.setInstrumentLink(narrativeNode.path("instrumentLink").asText("").trim());
                 narrative.setWhyToday(narrativeNode.path("whyToday").asText("").trim());
+                narrative.setInteractionAnalysis(AttributionNewsAnalysisParser.text(narrativeNode.path("interactionAnalysis"), 800));
+                narrative.setPriceNewsDivergence(AttributionNewsAnalysisParser.text(narrativeNode.path("priceNewsDivergence"), 800));
                 narrative.setCausalSteps(readStringArray(narrativeNode.path("causalSteps")));
                 narrative.setAmplifiers(readStringArray(narrativeNode.path("amplifiers")));
                 narrative.setDampeners(readStringArray(narrativeNode.path("dampeners")));
@@ -636,6 +646,7 @@ public class AttributionAgent {
                     driver.setRole(normRole(node.path("role").asText("BACKGROUND")));
                     driver.setPlainExplanation(node.path("plainExplanation").asText("").trim());
                     driver.setMarketInterpretation(node.path("marketInterpretation").asText("").trim());
+                    driver.setNewsAnalysis(AttributionNewsAnalysisParser.parse(node.path("newsAnalysis")));
                     driver.setExpectationShift(node.path("expectationShift").asText("").trim());
                     driver.setPriceImpact(node.path("priceImpact").asText("").trim());
                     String explanatoryPower = node.path("explanatoryPower").asText("").trim();

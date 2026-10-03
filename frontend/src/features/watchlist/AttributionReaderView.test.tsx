@@ -440,3 +440,34 @@ test('business appendix is added after event research with all original report m
   expect(container.querySelector('.attribution-event-context')!.nextElementSibling).toBe(screen.getByLabelText('公司与市场深读'));
   expect(screen.getByText('原因故事线')).toBeVisible();
 });
+
+
+test('adds news depth inside the existing AI cards and retains the original story and fields', async () => {
+  const baseReport = {
+    id: 200, status: 'COMPLETED', summary: '原有摘要',
+    narrative: { plainSummary: '订单驱动', causalSteps: ['新增订单', '交付确认收入'],
+      instrumentLink: '主营产品需求增加', whyToday: '订单正式确认' },
+    drivers: [{ claim: '订单签订', marketInterpretation: '市场关注交付', expectationShift: '从意向到签约',
+      priceImpact: '未来收入预期改善', explanatoryPowerReason: '方向一致', facts: ['签订正式订单'] }]
+  };
+  vi.mocked(api).mockResolvedValue(baseReport);
+  const first = render(<AttributionReaderView reportId={200} code="603618" onBack={vi.fn()} />);
+  await screen.findByText('市场关注交付');
+  const oldAiGrid = first.container.querySelector('.attribution-driver-ai-grid')!.innerHTML;
+  const oldStory = first.container.querySelector('.attribution-causal-flow')!.innerHTML;
+  expect(screen.queryByRole('region', { name: '新闻深读' })).not.toBeInTheDocument();
+  first.unmount();
+  vi.mocked(api).mockResolvedValue({ ...baseReport,
+    narrative: { ...baseReport.narrative, interactionAnalysis: '订单和扩产相互配合', priceNewsDivergence: '尚未形成同步放量' },
+    drivers: [{ ...baseReport.drivers[0], newsAnalysis: {
+      types: ['ORDER'], keyChange: '新增合同进入执行阶段', businessImpacts: [{ label: '收入兑现', analysis: '确认取决于交付' }]
+    } }]
+  });
+  const second = render(<AttributionReaderView reportId={200} code="603618" onBack={vi.fn()} />);
+  await screen.findByRole('region', { name: '新闻深读' });
+  expect(second.container.querySelector('.attribution-driver-ai-grid')!.innerHTML).toBe(oldAiGrid);
+  expect(second.container.querySelector('.attribution-causal-flow')!.innerHTML).toBe(oldStory);
+  expect(screen.getByText('订单和扩产相互配合')).toBeInTheDocument();
+  expect(screen.getByText('尚未形成同步放量')).toBeInTheDocument();
+  expect(screen.getByText('签订正式订单')).toBeInTheDocument();
+});

@@ -100,9 +100,13 @@ public class AttributionResearchInsightsService {
         String prompt = "公司=" + instrument.getName() + "（" + instrument.getCode() + "）；目标日=" + report.getReportDate()
                 + "。以下原摘要只用于选研究主题，不是事实来源：" + report.getSummary()
                 + "\n目标日行情事实=" + json.writeValueAsString(report.getAssessment() == null ? null : report.getAssessment().getMarketContext())
+                + "\n已有专项解读（研究推演，不是新增事实来源；依据下方资料核对并深化，不照抄）="
+                + json.writeValueAsString(report.getDrivers() == null ? java.util.List.of() : report.getDrivers().stream()
+                    .map(driver -> driver.getNewsAnalysis()).filter(java.util.Objects::nonNull).toList())
                 + "\n资料=" + json.writeValueAsString(result.getSources())
                 + "\n可用目标日行业代码/名称=" + json.writeValueAsString(sectors.stream().map(sector ->
                     java.util.Map.of("code", sector.getSectorCode(), "name", sector.getSectorName())).toList())
+                + AttributionNewsInterpretationPrompt.instructions()
                 + instructions();
         long started = System.currentTimeMillis();
         try {

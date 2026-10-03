@@ -108,7 +108,7 @@ class AttributionAgentSearchEvidenceTest {
         ReflectionTestUtils.setField(agent, "searchEvidenceContentService", contentService);
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.complete(any(), any())).thenReturn("{\"summary\":\"订单改善预期\",\"narrative\":{\"plainSummary\":\"新增订单可能改善收入\",\"causalSteps\":[\"订单增加\",\"收入预期改善\"]},\"drivers\":[{\"claim\":\"订单增加\",\"evidenceUrls\":[\"https://example.com/company?a=1\"]}]}");
+        when(llm.complete(any(), any(), eq(0), eq(8192))).thenReturn("{\"summary\":\"订单改善预期\",\"narrative\":{\"plainSummary\":\"新增订单可能改善收入\",\"causalSteps\":[\"订单增加\",\"收入预期改善\"]},\"drivers\":[{\"claim\":\"订单增加\",\"evidenceUrls\":[\"https://example.com/company?a=1\"]}]}");
         AttributionAssessmentService assessmentService = mock(AttributionAssessmentService.class);
         com.finscope.domain.attribution.AttributionAssessment assessment = new com.finscope.domain.attribution.AttributionAssessment();
         assessment.setStatus(status);
@@ -134,6 +134,7 @@ class AttributionAgentSearchEvidenceTest {
 
         agent.research(report, instrument, 2.5D, "task-1", mock(AttributionProgressPublisher.class));
 
+        verify(llm, times(1)).complete(any(), any(), eq(0), eq(8192));
         assertEquals("新增订单可能改善收入", report.getNarrative().getPlainSummary());
         assertEquals(1, report.getDrivers().size());
         assertEquals(2, report.getNarrative().getCausalSteps().size());

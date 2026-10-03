@@ -86,6 +86,7 @@ public class AttributionAssessmentService {
             currentStage = "比较候选解释";
             stage.accept("hypothesis-comparison");
             JsonNode decision = call("hypothesis-comparison", material + "\n研究焦点=" + result.getResearchFocus()
+                    + AttributionNewsInterpretationPrompt.instructions()
                     + "\n围绕实质线索提出最多6个解释，覆盖经营、行业、预期、交易和反方因素，有多少有效线索就分析多少，不凑数。允许共存，给出相对更合理的解释，不要求证明唯一主因。每个解释须引用证据原URL，解释覆盖与未覆盖的现象。"
                     + "预期参照必须有出处；订单不等于利润，前期上涨不等于已充分消化消息。明确经营变化→价值变化→价格解释。"
                     + "先独立判断每条线索对该公司的影响方向：POSITIVE偏利好、NEGATIVE偏利空、MIXED多空兼有、NEUTRAL确无明显经营或价格影响、UNCLEAR材料不足以判断方向。不能因为日期较旧、未确认当天因果或置信度低就标为中性。说明影响对象、收入成本利润或估值资金的传导。timeRelevance区分当日催化、近期延续、长期背景、日期待核验。来源的SUPPORT/COUNTER只是检索轨道标签，不能代替你判断利好利空或支持哪个解释。旧消息允许成为持续背景或共同作用因素，但不得冒充新公告。mainJudgment综合最可能的机制和反向力量，不用一句证据不足替代分析。"

@@ -28,6 +28,8 @@ public class AttributionDriver {
     private String explanatoryPower;
     /** 解释力度的判断依据及边界。 */
     private String explanatoryPowerReason;
+    /** 按新闻类型展开的业务、时段及产业链分析；兼容旧报告为空。 */
+    private AttributionNewsAnalysis newsAnalysis;
     /**
      * 影响力等级。
      */

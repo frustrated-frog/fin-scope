@@ -60,6 +60,23 @@ class AttributionResearchInsightsServiceTest {
     }
 
     @Test
+    void carriesSpecialistReasoningIntoBusinessAndExpectationAnalysisInOneCall() throws Exception {
+        var driver = new AttributionDriver();
+        var analysis = new AttributionNewsAnalysis();
+        analysis.setKeyChange("交付周期影响收入确认");
+        driver.setNewsAnalysis(analysis);
+        report.setDrivers(List.of(driver));
+        when(llm.complete(anyString(), anyString())).thenReturn("{\"businesses\":[],\"expectations\":[]}");
+        service.research(report, stock, List.of());
+        var prompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(llm, times(1)).complete(anyString(), prompt.capture());
+        assertTrue(prompt.getValue().contains("交付周期影响收入确认"));
+        assertTrue(prompt.getValue().contains("不是新增事实来源"));
+        assertTrue(prompt.getValue().contains("订单额不能直接当利润或当期收入"));
+        assertEquals(analysis, report.getDrivers().get(0).getNewsAnalysis());
+    }
+
+    @Test
     void failedMaterialsAndQuotesDoNotDiscardGeneratedBusinessAnalysis() throws Exception {
         doThrow(new IllegalStateException("search down")).when(materials).collect(any(), any(), any(), any());
         doThrow(new IllegalStateException("quotes down")).when(comparisons).capture(any(), any(), any(), any(), any());

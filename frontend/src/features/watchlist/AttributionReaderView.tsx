@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AttributionNewsAnalysisView, hasNewsAnalysis } from './AttributionNewsAnalysisView';
 import { AttributionEventContextSection } from './AttributionEventContextSection';
 import { AttributionResearchInsightsSection } from './AttributionResearchInsightsSection';
 import { AttributionAssessmentView } from './AttributionAssessmentView';
@@ -58,6 +59,7 @@ function hasAiInterpretation(driver: AttributionDriver) {
     || driver.priceImpact
     || driver.explanatoryPower
     || driver.explanatoryPowerReason
+    || hasNewsAnalysis(driver.newsAnalysis)
   );
 }
 
@@ -529,6 +531,22 @@ export function AttributionReaderView({
                       )}
                     </div>
                   )}
+                  {(narrative.interactionAnalysis || narrative.priceNewsDivergence) && (
+                    <div className="attribution-context-grid attribution-news-synthesis">
+                      {narrative.interactionAnalysis && (
+                        <article className="attribution-context-card">
+                          <span className="attribution-context-heading">多条消息如何共同作用</span>
+                          <p>{narrative.interactionAnalysis}</p>
+                        </article>
+                      )}
+                      {narrative.priceNewsDivergence && (
+                        <article className="attribution-context-card">
+                          <span className="attribution-context-heading">消息与股价对照</span>
+                          <p>{narrative.priceNewsDivergence}</p>
+                        </article>
+                      )}
+                    </div>
+                  )}
                 </section>
               ) : (
                 <>
@@ -606,6 +624,7 @@ export function AttributionReaderView({
                               </article>
                             )}
                           </div>
+                          <AttributionNewsAnalysisView analysis={driver.newsAnalysis} />
                         </section>
                       )}
                       {driver.detail && <p className="attribution-driver-detail">{driver.detail}</p>}
