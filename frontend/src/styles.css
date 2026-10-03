@@ -18436,7 +18436,6 @@ input[type="checkbox"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  padding: 0 24px 38px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: var(--mp-text-body);
   line-height: 1.6;
@@ -18864,7 +18863,6 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 760px) {
-  .market-pulse-page { padding: 0 14px 30px; }
   .market-pulse-tabs { width: 100%; }
   .market-pulse-tabs button { flex: 1 1 0; padding: 0 8px; }
   .market-pulse-hero { grid-template-columns: 1fr; gap: 20px; padding: 24px 20px; }
