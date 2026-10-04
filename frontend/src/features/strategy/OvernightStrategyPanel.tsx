@@ -157,7 +157,9 @@ export function OvernightStrategyPanel() {
 }
 
 export function ResearchResult({ report }: { report: OvernightReport }) {
-  return <article><header className="overnight-result-head"><div><span>{modeLabels[report.mode]} · {report.instrumentCode}</span><h4>{statusLabels[report.status] ?? report.status}</h4></div><b className="overnight-badge">{report.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</b></header>
+  const resultStatus = report.closeDirection?.upProbability != null && report.status === 'INSUFFICIENT_DATA'
+    ? '涨跌预测已生成 · 收益样本不足' : statusLabels[report.status] ?? report.status;
+  return <article><header className="overnight-result-head"><div><span>{modeLabels[report.mode]} · {report.instrumentCode}</span><h4>{resultStatus}</h4></div><b className="overnight-badge">{report.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</b></header>
     <dl className="overnight-evidence"><div><dt>数据截止</dt><dd>{report.dataThrough.replace('T', ' ')}</dd></div><div><dt>预测对应日期</dt><dd>{report.targetDate ?? '日历未覆盖'}</dd></div><div><dt>截止时点参考价</dt><dd>{report.referencePrice ? `¥${report.referencePrice.toFixed(2)}` : '暂无完整行情'}</dd></div><div><dt>费用假设</dt><dd>{report.costBps} 基点</dd></div></dl>
     <p className="overnight-note">{report.mode === 'TAIL_ENTRY' ? '参考价不是承诺买入价；收益目标对应决策后 5 分钟的入场价格代理。' : `持仓成本 ¥${report.costBasis?.toFixed(2)}；预期收益相对当日收盘，另列相对成本的收益。`}</p>
     {report.jointResearch && <p className="overnight-note">联合预测：{report.jointResearch.reason}</p>}

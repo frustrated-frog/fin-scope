@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test } from 'vitest';
 import { OvernightDirectionPanel, OvernightDirectionSummary } from './OvernightDirectionPanel';
+import { ResearchResult } from './OvernightStrategyPanel';
 import type { OvernightReport } from './overnightTypes';
 import type { OvernightJointState } from './overnightJointTypes';
 
@@ -65,4 +66,10 @@ test('filters direction acceptance by tail and holding modes', async () => {
   expect(screen.getByText('14:30 → 次日收盘')).toBeVisible();
   expect(screen.queryByText('15:00 → 次日收盘')).not.toBeInTheDocument();
   expect(screen.getByText(/积累真实预测 · 4 \/ 60 日/)).toBeVisible();
+});
+
+test('a ready direction forecast is visible while trading return samples are insufficient', () => {
+  render(<ResearchResult report={{ ...report, status: 'INSUFFICIENT_DATA' }} />);
+  expect(screen.getByRole('heading', { name: '涨跌预测已生成 · 收益样本不足' })).toBeVisible();
+  expect(screen.getByRole('region', { name: '次日收盘涨跌预测' })).toBeVisible();
 });

@@ -56,6 +56,6 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
       <b>{group.cutoff} → 次日收盘</b><span>{phases[group.status] ?? '等待结果'} · {group.dayCount} / {group.requiredDays} 日</span>
       <small>方向命中 / 基准 {percent(group.metrics?.accuracy)} / {percent(group.metrics?.comparisons.HISTORICAL_PRIOR?.accuracy)} · 两类平均识别 {percent(group.metrics?.balancedAccuracy)} · 可核验 {percent(group.coverage)}</small>
     </div>)}
-    {models.map(model => <p key={model.id}>{model.profile.cutoff} 历史开发对照：方向命中 {percent(model.closeDirection?.audit.historical.accuracy)} / 基准 {percent(model.closeDirection?.audit.historical.comparisons.HISTORICAL_PRIOR?.accuracy)}。仅供诊断。</p>)}
+    {models.map(model => <p key={model.id}>{model.profile.cutoff} · {model.closeDirection?.data.symbolCount} 只股票参与涨跌学习。历史开发对照：方向命中 {percent(model.closeDirection?.audit.historical.accuracy)} / 基准 {percent(model.closeDirection?.audit.historical.comparisons.HISTORICAL_PRIOR?.accuracy)}。仅供诊断。</p>)}
   </details>;
 }

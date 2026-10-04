@@ -40,8 +40,8 @@ export function OvernightJointPanel({ state, mode }: { state?: OvernightJointSta
           <td data-passed={group.eligible}>{labels[group.status] ?? '待确认'}</td></tr>)}</tbody></table></div>}
       {groups.length > 0 && <p className="overnight-joint-scroll-hint">左右滑动表格，查看完整对照。</p>}
       <p>概率误差越低越好。还需同时超过历史盈利比例、通过按日期分块的比较、满足净收益与数据覆盖条件；未通过首批验收不会不断重试直到通过。</p>
-      {models.map(model => <div className="overnight-joint-model" key={model.id}><b>{model.profile.cutoff} · {model.data.symbolCount} 只股票参与学习</b>
-        <span>{model.data.dayCount} 个历史信号日 · 数据至 {model.labelsThrough.slice(0, 10)}</span>
+      {models.map(model => <div className="overnight-joint-model" key={model.id}><b>{model.profile.cutoff} · {model.targets.length ? `${model.data.symbolCount} 只股票参与收益学习` : '收益模型仍在准备'}</b>
+        <span>{model.targets.length ? `${model.data.dayCount} 个收益信号日 · ` : ''}数据至 {model.labelsThrough.slice(0, 10)}</span>
         <small>最近训练 {model.createdAt.slice(0, 16).replace('T', ' ')}。历史检验成绩仅供诊断。</small></div>)}
       {failed && <p role="status">{failed.reason ?? '联合训练尚未完成，后台将继续积累。'}</p>}
       <p>{state.scope ?? '从已有日线缓存按板块均衡选取固定股票池，保留后续缺失成员。'}</p>
