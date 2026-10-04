@@ -16,11 +16,12 @@ export function OvernightTargetEvidence({ target }: { target: OvernightTarget })
     return null;
   }
   return <div className="overnight-target-evidence">
-    <p className="overnight-reliability" data-improved={evidence.status === 'HISTORICAL_EDGE'}>
+    {!target.joint?.adopted && <><p className="overnight-reliability" data-improved={evidence.status === 'HISTORICAL_EDGE'}>
       {conclusions[evidence.status] ?? '可靠性待确认'}
     </p>
-    <p>历史基线盈利比例 {percent(target.baselineProbability)}</p>
-    <details><summary>查看独立验证依据</summary>
+    <p>历史基线盈利比例 {percent(target.baselineProbability)}</p></>}
+    <details><summary>{target.joint?.adopted ? '原有单股模型历史诊断' : '查看独立验证依据'}</summary>
+      {target.joint?.adopted && <p>以下诊断对应原有单股模型，当前联合模型的前瞻成绩见上方对照区。</p>}
       {target.probabilitySource === 'HISTORICAL_BASELINE' && <p>未采用的模型概率 {percent(target.modelUpProbability)}；以下诊断评价原模型，主参考值使用当时冻结的历史基线。</p>}
       <dl>
         <div><dt>概率误差改善</dt><dd>{percent(evidence.brierSkill)}</dd></div>

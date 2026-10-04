@@ -5,6 +5,7 @@ import type { OvernightMode, OvernightPosition, OvernightReport } from './overni
 import './OvernightStrategyPanel.css';
 import { OvernightAuditPanel } from './OvernightAuditPanel';
 import { OvernightTargetEvidence } from './OvernightTargetEvidence';
+import { OvernightJointEvidence } from './OvernightJointPanel';
 import { OvernightAutomationPanel } from './OvernightAutomationPanel';
 
 const modeLabels = { TAIL_ENTRY: '尾盘入场', AFTER_CLOSE_HOLDING: '盘后持仓' };
@@ -158,12 +159,15 @@ export function ResearchResult({ report }: { report: OvernightReport }) {
   return <article><header className="overnight-result-head"><div><span>{modeLabels[report.mode]} · {report.instrumentCode}</span><h4>{statusLabels[report.status] ?? report.status}</h4></div><b className="overnight-badge">{report.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</b></header>
     <dl className="overnight-evidence"><div><dt>数据截止</dt><dd>{report.dataThrough.replace('T', ' ')}</dd></div><div><dt>预测对应日期</dt><dd>{report.targetDate ?? '日历未覆盖'}</dd></div><div><dt>截止时点参考价</dt><dd>{report.referencePrice ? `¥${report.referencePrice.toFixed(2)}` : '暂无完整行情'}</dd></div><div><dt>费用假设</dt><dd>{report.costBps} 基点</dd></div></dl>
     <p className="overnight-note">{report.mode === 'TAIL_ENTRY' ? '参考价不是承诺买入价；收益目标对应决策后 5 分钟的入场价格代理。' : `持仓成本 ¥${report.costBasis?.toFixed(2)}；预期收益相对当日收盘，另列相对成本的收益。`}</p>
+    {report.jointResearch && <p className="overnight-note">联合预测：{report.jointResearch.reason}</p>}
     <div className="overnight-targets">{report.targets.map(target => {
       const actual = report.outcome?.targets.find(item => item.target === target.target);
       const baseline = target.probabilitySource === 'HISTORICAL_BASELINE';
-      return <section key={target.target}><h5>{targetLabels[target.target]}</h5><strong>{pct(target.upProbability)}</strong><span>{baseline ? '历史基线参考 · 已扣假设成本' : target.calibrationStatus === 'FITTED' ? '校准后盈利概率 · 已扣假设成本' : '扣除假设成本后盈利的概率'}</span>
+      const joint = target.probabilitySource === 'JOINT_MODEL';
+      return <section key={target.target}><h5>{targetLabels[target.target]}</h5><strong>{pct(target.upProbability)}</strong><span>{joint ? '联合模型盈利概率 · 前瞻对照通过' : baseline ? '历史基线参考 · 已扣假设成本' : target.calibrationStatus === 'FITTED' ? '校准后盈利概率 · 已扣假设成本' : '扣除假设成本后盈利的概率'}</span>
         {baseline && <p>模型尚未通过历史对照，当前采用过去的盈利比例，不代表已发现上涨优势。</p>}
-        {target.status === 'INSUFFICIENT_DATA' ? <><p>可用历史 {target.sampleCount} 例，至少需要 {target.minimumSamples ?? 60} 例</p>{target.missingSamples != null && <p>还需积累 {target.missingSamples} 个有效收益样本。</p>}{target.missingValidationSamples != null && <p>独立验证还缺 {target.missingValidationSamples} 例，暂不输出概率。</p>}</> : <><dl><div><dt>{baseline ? '历史平均净收益' : '预期净收益'}</dt><dd>{pct(target.expectedNetReturn)}</dd></div>{!baseline && <div><dt>{target.reliability ? '80% 校准误差范围' : '历史验证误差区间'}</dt><dd>{pct(target.lowerNetReturn)} ～ {pct(target.upperNetReturn)}</dd></div>}{target.costBasisReturn != null && <div><dt>{baseline ? '历史均值对应成本收益' : '相对持仓成本'}</dt><dd>{pct(target.costBasisReturn)}</dd></div>}</dl><small>历史 {target.sampleCount} 例 · 顺序验证 {target.validationCount} 例</small><small>模型概率误差 Brier {target.brierScore?.toFixed(3)} / 基线 {target.baselineBrier?.toFixed(3)}（越低越好）</small><OvernightTargetEvidence target={target} /></>}
+        {target.status === 'INSUFFICIENT_DATA' ? <><p>可用历史 {target.sampleCount} 例，至少需要 {target.minimumSamples ?? 60} 例</p>{target.missingSamples != null && <p>还需积累 {target.missingSamples} 个有效收益样本。</p>}{target.missingValidationSamples != null && <p>独立验证还缺 {target.missingValidationSamples} 例，暂不输出概率。</p>}</> : <><dl><div><dt>{baseline ? '历史平均净收益' : '预期净收益'}</dt><dd>{pct(target.expectedNetReturn)}</dd></div>{!baseline && <div><dt>{joint ? '80% 校准残差范围' : target.reliability ? '80% 校准误差范围' : '历史验证误差区间'}</dt><dd>{pct(target.lowerNetReturn)} ～ {pct(target.upperNetReturn)}</dd></div>}{target.costBasisReturn != null && <div><dt>{baseline ? '历史均值对应成本收益' : '相对持仓成本'}</dt><dd>{pct(target.costBasisReturn)}</dd></div>}</dl>{!joint && <><small>历史 {target.sampleCount} 例 · 顺序验证 {target.validationCount} 例</small><small>模型概率误差 Brier {target.brierScore?.toFixed(3)} / 基线 {target.baselineBrier?.toFixed(3)}（越低越好）</small></>}<OvernightTargetEvidence target={target} /></>}
+        <OvernightJointEvidence target={target} />
         {actual && <p className="overnight-actual">实际价格路径净收益 {pct(actual.actualNetReturn)}</p>}
       </section>;
     })}</div>

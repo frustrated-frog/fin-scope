@@ -1,4 +1,4 @@
-.overnight-auto { border: 1px solid var(--line); border-radius: 16px; background: transparent; padding: 26px; }
+.overnight-auto { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: transparent; padding: 26px; }
 .overnight-auto-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .overnight-auto-kicker { color: var(--overnight-blue); font-size: 10px; font-weight: 650; letter-spacing: .13em; }
 .overnight-auto-heading h4 { margin: 8px 0 !important; font-size: 23px !important; letter-spacing: -.03em; }

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../shared/api/client';
 import type { OvernightAutomationState, OvernightMode, OvernightReport } from './overnightTypes';
 import { OvernightHistoryStatus } from './OvernightHistoryStatus';
+import { OvernightJointPanel, OvernightJointRanking } from './OvernightJointPanel';
 import './OvernightAutomationPanel.css';
 
 const states: Record<string, string> = {
@@ -63,13 +64,14 @@ export function OvernightAutomationPanel({ mode, records, renderReport }: {
 
   return <section className="overnight-auto" aria-label="自动发现与持仓研判">
     <header className="overnight-auto-heading"><div><span className="overnight-auto-kicker">自动发现 · 独立留档</span><h4>{headline}</h4>
-      <p>{mode === 'TAIL_ENTRY' ? '从当日成交活跃、走势较强的股票中自动筛选，到点生成隔夜研究。' : '收盘后自动读取真实持仓，比较次日开盘、10:00、14:30 与收盘四个退出时点。'}</p></div>
+      <p>{mode === 'TAIL_ENTRY' ? '自动扫描活跃股票，兼顾强势走势与不同涨跌状态，到点生成隔夜研究。' : '收盘后自动读取真实持仓，比较次日开盘、10:00、14:30 与收盘四个退出时点。'}</p></div>
       <span className="overnight-auto-status" data-active={!!state?.enabled && healthy && !error}>{state?.enabled && healthy && !error ? '后台运行' : '待就绪'}</span></header>
     <div className="overnight-auto-facts">
       <div><span>{mode === 'TAIL_ENTRY' ? '下一次尾盘判断' : '账本同步状态'}</span><strong>{mode === 'TAIL_ENTRY' ? formatTime(state?.nextTailAt) : state?.ledgerFresh ? `${state.positionCount} 只真实持仓` : '等待账本同步'}</strong></div>
       <div><span>{mode === 'TAIL_ENTRY' ? '每个窗口研究上限' : '盘后研判窗口'}</span><strong>{mode === 'TAIL_ENTRY' ? `${state?.candidateLimit ?? '—'} 只` : '15:10—18:00'}</strong></div>
       <div><span>次日结果核验</span><strong>自动轮换更新</strong></div>
     </div>
+    <OvernightJointPanel state={state?.joint} mode={mode} />
     <OvernightHistoryStatus history={state?.history} />
     {error && <p role="alert" className="overnight-auto-notice">{error}。连接恢复后自动刷新；下方保留上次读取的记录。</p>}
     {state && !state.calendarAvailable && <p className="overnight-auto-notice">已核验的交易日历未覆盖下一窗口，自动研究暂不推断日期。</p>}
@@ -78,6 +80,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport }: {
     {mode === 'AFTER_CLOSE_HOLDING' && state?.holdingStatus === 'EMPTY' && <p className="overnight-auto-empty">账本当前没有未平仓股票。记入真实买入后，盘后会自动纳入研判。</p>}
     {mode === 'AFTER_CLOSE_HOLDING' && state?.holdingStatus === 'WINDOW_CLOSED' && <p className="overnight-auto-notice">今日盘后自动窗口已结束；未完成的持仓等待下个交易日，历史补充研究可在下方进行。</p>}
     <div className="overnight-auto-section-title"><h5>{mode === 'TAIL_ENTRY' ? '自动发现的隔夜候选' : '自动生成的持仓研判'}</h5><span>{latestDay ? `最近记录 · ${latestDay}` : '等待首个交易窗口'}</span></div>
+    {mode === 'TAIL_ENTRY' && research.map(job => <OvernightJointRanking key={job.key} job={job} />)}
     {!results.length && problem && <p className="overnight-auto-notice">{problem.cutoff} {states[problem.status]}：{problem.reason ?? '查看运行记录了解详情'}</p>}
     {!results.length && <div className="overnight-auto-empty"><b>{pool?.candidates?.length ? `已准备 ${pool.candidates.length} 只候选，等待 ${pool.cutoff} 判断` : '暂未形成自动研究结果'}</b>
       <p>{mode === 'TAIL_ENTRY' ? '14:20 / 14:40 扫描候选，14:30 / 14:45 截断分钟数据并冻结研究。无需手动填写名单。' : '交易日 15:10 起处理真实持仓。成本、数量和建仓日直接来自账本。'}</p>
@@ -88,7 +91,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport }: {
       return <details key={`${job.key}-${result.instrumentCode}`} className="overnight-auto-stock">
         <summary><div><b>{candidate?.instrumentName ?? job.instrumentName ?? result.instrumentCode}</b><small>{result.instrumentCode} · {job.cutoff}</small></div>
           <span data-state={result.status}>{states[result.status] ?? result.status}</span><span className="overnight-auto-detail-hint">查看依据</span></summary>
-        {candidate?.changePct != null && <p className="overnight-auto-detail-note">筛选时涨幅 {candidate.changePct.toFixed(2)}% · 量比 {candidate.volumeRatio?.toFixed(2) ?? '—'}。筛选顺序不代表上涨概率。</p>}
+        {candidate?.changePct != null && <p className="overnight-auto-detail-note">{candidate.selectionLane === 'BROAD_RESEARCH' ? '扩展观察样本' : '强势走势样本'} · 筛选时涨幅 {candidate.changePct.toFixed(2)}% · 量比 {candidate.volumeRatio?.toFixed(2) ?? '—'}。入选观察不等于看涨。</p>}
         {result.reason && <p className="overnight-auto-detail-note">{result.reason}</p>}
         {report ? renderReport(report) : <p className="overnight-auto-detail-note">{result.warnings?.join('；') || '完整档案尚未出现在最近记录中，页面将自动刷新。'}</p>}
       </details>;

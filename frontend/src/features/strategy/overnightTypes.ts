@@ -1,8 +1,11 @@
+import type { OvernightJointPrediction, OvernightJointState } from './overnightJointTypes';
+
 export type OvernightMode = 'TAIL_ENTRY' | 'AFTER_CLOSE_HOLDING';
 export interface OvernightTarget {
   target: 'OPEN' | '10:00' | '14:30' | 'CLOSE'; status: string; sampleCount: number;
   upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number | null; upperNetReturn?: number | null;
-  probabilitySource?: 'CALIBRATED_MODEL' | 'HISTORICAL_BASELINE'; selectionReason?: string;
+  probabilitySource?: 'CALIBRATED_MODEL' | 'HISTORICAL_BASELINE' | 'JOINT_MODEL'; selectionReason?: string;
+  joint?: OvernightJointPrediction;
   modelUpProbability?: number; modelExpectedNetReturn?: number;
   validationCount?: number; brierScore?: number; baselineBrier?: number; directionAccuracy?: number;
   trainingThrough?: string; costBasisReturn?: number;
@@ -22,6 +25,7 @@ export interface OvernightReport {
   referencePrice?: number; costBps: number; costBasis?: number; quantity?: number;
   evidenceKind: 'FORWARD' | 'RETROSPECTIVE'; inputFingerprint: string; modelVersion: string;
   targets: OvernightTarget[]; warnings: string[];
+  jointResearch?: { protocol?: string; status: string; reason: string; symbolCount?: number; trainedAt?: string };
   outcome?: { status: string; warnings?: string[]; targets: Array<{ target: string; actualNetReturn: number; brierScore?: number }> };
 }
 export interface OvernightPosition {
@@ -33,7 +37,9 @@ export interface OvernightAutomationJob {
   status: string; reason?: string; startedAt: string; finishedAt?: string; attempts: number;
   instrumentCode?: string; instrumentName?: string; snapshotAt?: string; scope?: string;
   observedCount?: number; freshCount?: number;
-  candidates?: Array<{ instrumentCode: string; instrumentName: string; changePct?: number; volumeRatio?: number }>;
+  candidates?: Array<{ instrumentCode: string; instrumentName: string; changePct?: number; volumeRatio?: number; selectionLane?: string }>;
+  ranking?: { status: string; target: string; opportunityStatus: string; evaluatedCount: number;
+    candidates: Array<OvernightJointPrediction & { instrumentCode: string; reportId: string }> };
   results?: Array<{ instrumentCode: string; status: string; reportId?: string; reason?: string;
     evidenceKind?: string; warnings?: string[] }>;
 }
@@ -42,6 +48,7 @@ export interface OvernightAutomationState {
   nextTailAt?: string; ledgerReceivedAt?: string; ledgerFresh: boolean; positionCount: number;
   holdingStatus: string; heartbeat?: { lastTickAt: string; error?: string };
   jobs: OvernightAutomationJob[];
+  joint?: OvernightJointState;
   history?: {
     desiredDays: number;
     coverage: Array<{ instrumentCode: string; firstDate: string; lastDate: string; completeDays: number; barCount: number }>;
