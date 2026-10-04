@@ -656,9 +656,9 @@
 .ic-stage-section > .ic-research-heading,
 .ic-company-section > .ic-research-heading { padding-bottom: 12px; border-bottom: 1px solid #263a44; }
 .ic-stage-profiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 13px; }
-.ic-stage-profile { display: grid; grid-template-columns: minmax(180px, .72fr) minmax(0, 1fr); border: 1px solid #223741; background: #0c1820; transition: transform .2s ease, border-color .2s ease; }
+.ic-stage-profile { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; border: 1px solid #223741; background: #0c1820; transition: transform .2s ease, border-color .2s ease; }
 .ic-stage-profile:hover { transform: translateY(-2px); border-color: #355460; }
-.ic-stage-profile > header { grid-row: 1 / span 2; padding: 20px; border-right: 1px solid #223741; background: #101e26; }
+.ic-stage-profile > header { padding: 20px; border-bottom: 1px solid #223741; background: #101e26; }
 .ic-stage-profile > header > span { color: var(--ic-cyan); font: 600 12px/1.35 "IBM Plex Mono", monospace; letter-spacing: .13em; }
 .ic-stage-profile h5 { margin: 10px 0 7px; font: 620 22px/1.35 "Noto Sans SC", sans-serif; letter-spacing: -.025em; }
 .ic-stage-profile header p { margin: 0; color: #8399a2; font-size: 14px; line-height: 1.7; }
@@ -785,8 +785,6 @@
   .ic-state-cell:nth-last-child(-n + 2) { border-bottom: 0; }
   .ic-driver-columns,
   .ic-constraint-columns { grid-template-columns: 1fr; }
-  .ic-stage-profile { grid-template-columns: 1fr; }
-  .ic-stage-profile > header { grid-row: auto; border-right: 0; border-bottom: 1px solid #223741; }
   .ic-profile-facts { grid-template-columns: 1fr; }
   .ic-profile-facts > div { border-right: 0; }
   .ic-profile-lists { grid-template-columns: 1fr; }
