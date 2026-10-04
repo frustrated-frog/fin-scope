@@ -118,6 +118,11 @@ finscope:
     market-data-sync-cron: 0 30 18 * * MON-FRI
   next-session-prediction:
     retry-delay-minutes: 15
+  overnight-automation:
+    enabled: true
+    candidate-limit: 6
+    tail-cost-bps: 20
+    holding-cost-bps: 10
   stock-discovery:
     max-attempts: 3
     cron: 0 30 15 * * MON-FRI

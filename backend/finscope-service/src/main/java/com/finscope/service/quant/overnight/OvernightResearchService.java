@@ -2,6 +2,7 @@ package com.finscope.service.quant.overnight;
 
 import com.finscope.common.enums.overnight.OvernightMode;
 import com.finscope.domain.quant.overnight.OvernightCapturePlan;
+import com.finscope.domain.quant.overnight.OvernightAutomationState;
 import com.finscope.domain.quant.overnight.OvernightCaptureState;
 import com.finscope.domain.quant.overnight.OvernightResearchInput;
 import com.finscope.domain.quant.overnight.OvernightResearchReport;
@@ -55,6 +56,10 @@ public class OvernightResearchService {
 
     public OvernightCaptureState captureState() {
         return client.captureState();
+    }
+
+    public OvernightAutomationState automationState() {
+        return client.automationState();
     }
 
     public OvernightValidationSummary validation() {

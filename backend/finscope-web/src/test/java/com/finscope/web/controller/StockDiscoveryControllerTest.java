@@ -4,10 +4,12 @@ import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.domain.quant.discovery.StockDiscoveryAccuracyReport;
 import com.finscope.service.quant.discovery.StockDiscoveryOutcomeService;
 import com.finscope.service.quant.discovery.StockDiscoveryService;
+import com.finscope.service.quant.discovery.StockDiscoveryCalendarService;
 import com.finscope.web.config.CorsConfig;
 import com.finscope.web.config.FinScopeProperties;
 import com.finscope.web.handler.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -33,6 +35,13 @@ class StockDiscoveryControllerTest {
     private StockDiscoveryService service;
     @MockBean
     private StockDiscoveryOutcomeService outcomeService;
+    @MockBean
+    private StockDiscoveryCalendarService calendar;
+
+    @BeforeEach
+    void verifiedSchedule() {
+        when(calendar.nextScheduledAt(org.mockito.ArgumentMatchers.any())).thenReturn("2026-10-08T15:30+08:00");
+    }
 
     @Test
     void exhaustedRunDoesNotAdvertiseAnotherRetry() throws Exception {

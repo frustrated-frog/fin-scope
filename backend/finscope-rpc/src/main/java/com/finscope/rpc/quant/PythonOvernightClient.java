@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.domain.quant.overnight.OvernightCapturePlan;
+import com.finscope.domain.quant.overnight.OvernightAutomationContext;
+import com.finscope.domain.quant.overnight.OvernightAutomationState;
 import com.finscope.domain.quant.overnight.OvernightCaptureState;
 import com.finscope.domain.quant.overnight.OvernightResearchInput;
 import com.finscope.domain.quant.overnight.OvernightResearchReport;
@@ -72,6 +74,24 @@ public class PythonOvernightClient {
 
     public OvernightCaptureState captureState() {
         return readAudit("capture", OvernightCaptureState.class);
+    }
+
+    public OvernightAutomationState automationState() {
+        return readAudit("automation", OvernightAutomationState.class);
+    }
+
+    public void syncAutomationContext(OvernightAutomationContext context) {
+        try {
+            FinanceHttpResponse response = http.postJson("PYTHON_OVERNIGHT", endpoint("automation/context"),
+                    json.writeValueAsString(context), Collections.emptyMap(), 3000);
+            if (response.getStatus() != 200 || !json.readTree(response.getBody()).hasNonNull("receivedAt")) {
+                throw new ProviderContractException("UPSTREAM_UNAVAILABLE", "隔夜账本同步未确认", true);
+            }
+        } catch (ProviderContractException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new ProviderContractException("SCHEMA_DRIFT", "隔夜账本同步响应不符合契约", false, error);
+        }
     }
 
     public OvernightValidationSummary validation() {

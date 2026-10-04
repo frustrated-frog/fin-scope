@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.quant.overnight.OvernightCapturePlan;
+import com.finscope.domain.quant.overnight.OvernightAutomationState;
 import com.finscope.domain.quant.overnight.OvernightCaptureState;
 import com.finscope.domain.quant.overnight.OvernightResearchReport;
 import com.finscope.domain.quant.overnight.OvernightValidationSummary;
@@ -28,6 +29,11 @@ public class OvernightResearchController {
     @GetMapping("/capture")
     public ApiResponse<OvernightCaptureState> captureState() {
         return ApiResponses.success(service.captureState());
+    }
+
+    @GetMapping("/automation")
+    public ApiResponse<OvernightAutomationState> automationState() {
+        return ApiResponses.success(service.automationState());
     }
 
     @PostMapping("/capture")

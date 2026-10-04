@@ -57,17 +57,27 @@ public class PythonTradingCalendarClient {
     }
 
     public LocalDate previousSession(LocalDate before) {
+        return adjacentSession(before, false);
+    }
+
+    public LocalDate nextSession(LocalDate after) {
+        return adjacentSession(after, true);
+    }
+
+    private LocalDate adjacentSession(LocalDate reference, boolean next) {
         try {
-            URI uri = URI.create(baseUrl.replaceAll("/+$", "") + "/v1/calendar/previous-session?before=" + before);
+            String path = next ? "/v1/calendar/next-session?after=" : "/v1/calendar/previous-session?before=";
+            URI uri = URI.create(baseUrl.replaceAll("/+$", "") + path + reference);
             FinanceHttpResponse response = http.get("PYTHON_TRADING_CALENDAR", uri, Collections.emptyMap(), 4096, 3000);
             if (response.getStatus() != 200) {
                 throw new ProviderContractException("UPSTREAM_UNAVAILABLE", "交易日历暂不可用", true);
             }
-            LocalDate previous = LocalDate.parse(json.readTree(response.getBody()).path("previous_session").asText());
-            if (!previous.isBefore(before)) {
-                throw new ProviderContractException("SCHEMA_DRIFT", "上一交易日必须早于目标日期", false);
+            String field = next ? "next_session" : "previous_session";
+            LocalDate session = LocalDate.parse(json.readTree(response.getBody()).path(field).asText());
+            if (next ? !session.isAfter(reference) : !session.isBefore(reference)) {
+                throw new ProviderContractException("SCHEMA_DRIFT", "交易日偏移方向与请求不匹配", false);
             }
-            return previous;
+            return session;
         } catch (ProviderContractException ex) {
             throw ex;
         } catch (Exception ex) {

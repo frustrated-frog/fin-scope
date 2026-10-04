@@ -11,13 +11,16 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from finscope_market_data.forecast.trading_calendar import previous_session, event_window
+from finscope_market_data.forecast.trading_calendar import previous_session, next_session, event_window
 from finscope_market_data.forecast.schemas import SingleStockForecastRequest
 from finscope_market_data.forecast.service import build_forecast
 from finscope_market_data.forecast.panel import PanelArtifactStore
 from finscope_market_data.forecast.peer_context import research_context
 from finscope_market_data.overnight.models import OvernightRequest, CapturePlan
 from finscope_market_data.overnight.capture import OvernightCapture
+from finscope_market_data.overnight.automation import OvernightAutomation
+from finscope_market_data.overnight.automation_models import AutomationContext
+from finscope_market_data.overnight.scanner import OvernightCandidateScanner
 from finscope_market_data.overnight.validation import summarize as summarize_overnight
 from finscope_market_data.overnight.provider import OvernightMinuteProvider
 from finscope_market_data.overnight.store import OvernightStore
@@ -133,6 +136,7 @@ def create_app(
     overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
     capture = OvernightCapture(overnight)
+    automation = OvernightAutomation(overnight, OvernightCandidateScanner())
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -193,11 +197,13 @@ def create_app(
             )
         capture_stop = asyncio.Event()
         capture_task = asyncio.create_task(capture.run(capture_stop))
+        automation_task = asyncio.create_task(automation.run(capture_stop))
         try:
             yield
         finally:
             capture_stop.set()
             await capture_task
+            await automation_task
             close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):
@@ -403,6 +409,14 @@ def create_app(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json", by_alias=True)),
         )
+
+    @application.get("/v1/quant/overnight/automation")
+    async def automation_status():
+        return await asyncio.to_thread(automation.status)
+
+    @application.post("/v1/quant/overnight/automation/context")
+    async def automation_context(context: AutomationContext):
+        return await asyncio.to_thread(automation.sync_context, context)
 
     @application.get("/v1/quant/overnight/capture")
     async def capture_status():
@@ -646,6 +660,13 @@ def create_app(
         if previous is None:
             raise HTTPException(status_code=503, detail="Verified exchange calendar unavailable for this date")
         return {"previous_session": previous.isoformat()}
+
+    @application.get("/v1/calendar/next-session")
+    def calendar_next_session(after: date):
+        following = next_session(after)
+        if following is None:
+            raise HTTPException(status_code=503, detail="Verified exchange calendar unavailable for this date")
+        return {"next_session": following.isoformat()}
 
     @application.get("/v1/calendar/event-window")
     def calendar_event_window(on_or_after: date):

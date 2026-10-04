@@ -1,0 +1,77 @@
+"""A bounded live universe, independent of the expensive after-close discovery run."""
+import asyncio
+import math
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from finscope_market_data.providers.http import ProviderHttpClient
+
+
+class OvernightCandidateScanner:
+    async def _quotes(self):
+        http = ProviderHttpClient(timeout_seconds=8)
+        rows = []
+        try:
+            # Two liquid/strong cohorts, up to 400 observations before de-duplication.
+            for order in ('f6', 'f3'):
+                for page in (1, 2):
+                    payload = await http.get_json('EASTMONEY_TAIL_SCAN',
+                        'https://82.push2.eastmoney.com/api/qt/clist/get', params={
+                            'pn': page, 'pz': 100, 'po': 1, 'np': 1, 'fltt': 2, 'invt': 2,
+                            'fid': order, 'fs': 'm:0 t:6,m:0 t:80,m:1 t:2',
+                            'fields': 'f2,f3,f6,f10,f12,f13,f14,f15,f16,f17,f18,f124'})
+                    data = (payload.get('data') or {}).get('diff')
+                    if not isinstance(data, list) or not data:
+                        raise ValueError('候选行情缺少完整分页，稍后重试')
+                    rows.extend(data)
+            return rows
+        finally:
+            await http.aclose()
+
+    def scan(self, now, limit):
+        rows = asyncio.run(self._quotes())
+        return self.select(rows, now, limit)
+
+    @staticmethod
+    def select(rows, now, limit):
+        candidates = {}
+        fresh = set()
+        for row in rows:
+            code = str(row.get('f12', ''))
+            name = str(row.get('f14', ''))
+            if not re.fullmatch(r'(?:600|601|603|605|000|001|002|003|300|301)\d{3}', code):
+                continue
+            if not name or any(flag in name.upper() for flag in ('ST', '退', 'N', 'C')):
+                continue
+            try:
+                price, change, amount, ratio, high, low, opening = [float(row[key])
+                    for key in ('f2', 'f3', 'f6', 'f10', 'f15', 'f16', 'f17')]
+                observed = datetime.fromtimestamp(float(row['f124']), ZoneInfo('Asia/Shanghai')).replace(tzinfo=None)
+                if not all(math.isfinite(v) for v in (price, change, amount, ratio, high, low, opening)):
+                    continue
+            except (KeyError, TypeError, ValueError, OverflowError, OSError):
+                continue
+            # A response receipt timestamp alone cannot prove a quote belongs to today.
+            if observed.date() != now.date() or not -30 <= (now - observed).total_seconds() <= 600:
+                continue
+            fresh.add(code)
+            board_limit = 19 if code.startswith(('300', '301')) else 9
+            if amount < 100_000_000 or not .5 <= change < board_limit or ratio < 1 or low <= 0 or high <= low:
+                continue
+            if not low <= price <= high or opening <= 0:
+                continue
+            location = (price - low) / (high - low)
+            if location < .65 or price < opening:
+                continue
+            # Ranking is an acquisition priority, never presented as an up probability.
+            score = 30 * location + 8 * min(ratio, 4) + 2 * min(change, 8)
+            symbol = code + ('.SH' if code.startswith('6') else '.SZ')
+            candidates[symbol] = {'instrumentCode': symbol, 'instrumentName': name,
+                'changePct': change, 'amount': amount, 'volumeRatio': ratio,
+                'quoteAt': observed.isoformat(), 'priorityScore': round(score, 2)}
+        if not fresh:
+            raise ValueError('行情缺少可核验的当日时间戳，未使用旧行情生成候选')
+        return {'candidates': sorted(candidates.values(), key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit],
+                'observedCount': len({str(row.get('f12')) for row in rows}), 'freshCount': len(fresh),
+                'scope': '成交额与涨幅各前 200 条合并去重；非全市场覆盖', 'sourceCode': 'EASTMONEY_LIVE'}

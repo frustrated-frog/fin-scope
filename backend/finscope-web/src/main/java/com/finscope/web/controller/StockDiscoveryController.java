@@ -7,6 +7,7 @@ import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.domain.quant.discovery.StockDiscoveryAccuracyReport;
 import com.finscope.service.quant.discovery.StockDiscoveryOutcomeService;
 import com.finscope.service.quant.discovery.StockDiscoveryService;
+import com.finscope.service.quant.discovery.StockDiscoveryCalendarService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,8 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Collections;
@@ -31,6 +30,8 @@ public class StockDiscoveryController {
     private StockDiscoveryService service;
     @Resource
     private StockDiscoveryOutcomeService outcomeService;
+    @Resource
+    private StockDiscoveryCalendarService calendar;
     @Resource
     private ObjectMapper json;
 
@@ -93,16 +94,10 @@ public class StockDiscoveryController {
     }
 
     private String nextScheduledAt() {
-        ZoneId zone = ZoneId.of("Asia/Shanghai");
-        ZonedDateTime now = ZonedDateTime.now(zone);
-        ZonedDateTime next = now.toLocalDate().atTime(LocalTime.of(15, 30)).atZone(zone);
-        if (!next.isAfter(now)) {
-            next = next.plusDays(1);
+        try {
+            return calendar.nextScheduledAt(ZonedDateTime.now(ZoneId.of("Asia/Shanghai")));
+        } catch (RuntimeException error) {
+            return "";
         }
-        while (next.getDayOfWeek() == DayOfWeek.SATURDAY
-                || next.getDayOfWeek() == DayOfWeek.SUNDAY) {
-            next = next.plusDays(1);
-        }
-        return next.toOffsetDateTime().toString();
     }
 }

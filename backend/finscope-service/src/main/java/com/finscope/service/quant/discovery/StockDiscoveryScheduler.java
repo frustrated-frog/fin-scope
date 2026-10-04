@@ -5,9 +5,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
@@ -18,22 +16,30 @@ public class StockDiscoveryScheduler {
     private StockDiscoveryService service;
     @Resource
     private StockDiscoveryOutcomeService outcomeService;
+    @Resource
+    private StockDiscoveryCalendarService calendar;
 
     @Scheduled(cron = "${finscope.stock-discovery.cron:0 30 15 * * MON-FRI}", zone = "Asia/Shanghai")
     public void scheduleAfterClose() {
-        service.schedule(LocalDate.now(ZoneId.of("Asia/Shanghai")), "SCHEDULED");
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        try {
+            if (calendar.isSession(date)) {
+                service.schedule(date, "SCHEDULED");
+            }
+        } catch (RuntimeException error) {
+            log.warn("股票发现交易日历暂不可用，等待恢复任务重试：{}", error.getClass().getSimpleName());
+        }
     }
 
     @Scheduled(initialDelay = 20000L, fixedDelay = 60000L)
     public void recoverMissedRun() {
         service.recoverExpiredRuns();
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Shanghai"));
-        LocalDate candidate = now.toLocalDate();
-        if (now.toLocalTime().isBefore(LocalTime.of(15, 30))) {
-            candidate = candidate.minusDays(1);
+        try {
+            service.schedule(calendar.latestCompletedSession(now), "RECOVERY");
+        } catch (RuntimeException error) {
+            log.warn("股票发现补跑等待有效交易日历：{}", error.getClass().getSimpleName());
         }
-        LocalDate date = previousWeekday(candidate);
-        service.schedule(date, "RECOVERY");
     }
 
     @Scheduled(initialDelay = 45000L,
@@ -46,12 +52,4 @@ public class StockDiscoveryScheduler {
         }
     }
 
-    private LocalDate previousWeekday(LocalDate today) {
-        LocalDate value = today;
-        while (value.getDayOfWeek() == DayOfWeek.SATURDAY
-                || value.getDayOfWeek() == DayOfWeek.SUNDAY) {
-            value = value.minusDays(1);
-        }
-        return value;
-    }
 }
