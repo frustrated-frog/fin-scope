@@ -65,4 +65,25 @@ class DailyResearchControllerTest {
                 .andExpect(jsonPath("$.data.validBars").value(12));
     }
 
+    @Test
+    void preservesOpportunityStatesInWebResponse() throws Exception {
+        var service = mock(DailyResearchService.class);
+        var controller = new DailyResearchController();
+        ReflectionTestUtils.setField(controller, "service", service);
+        var mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        var stock = new com.finscope.domain.marketpulse.DailyResearchStock();
+        stock.setInstrumentCode("600519.SH");
+        stock.setOpportunityState(com.finscope.common.enums.marketpulse.MarketOpportunityState.EMERGING);
+        stock.setPreviousOpportunityState(com.finscope.common.enums.marketpulse.MarketOpportunityState.REPAIRING);
+        var snapshot = new DailyResearchSnapshot();
+        snapshot.setBusinessDate(LocalDate.of(2026, 9, 11));
+        snapshot.setStocks(List.of(stock));
+        snapshot.setGroups(List.of());
+        when(service.query(snapshot.getBusinessDate())).thenReturn(snapshot);
+        mvc.perform(get("/api/market-pulse/research/2026-09-11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.stocks[0].opportunityState").value("EMERGING"))
+                .andExpect(jsonPath("$.data.stocks[0].previousOpportunityState").value("REPAIRING"));
+    }
+
 }

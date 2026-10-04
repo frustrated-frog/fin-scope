@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.marketpulse.MarketPulseQualityStatus;
 import com.finscope.common.enums.marketpulse.MarketResearchGroup;
+import com.finscope.common.enums.marketpulse.MarketOpportunityState;
 import com.finscope.domain.marketpulse.DailyResearchGroup;
 import com.finscope.domain.marketpulse.DailyResearchSnapshot;
 import com.finscope.domain.marketpulse.DailyResearchStock;
@@ -124,6 +125,12 @@ public class PythonDailyResearchSource {
                 throw invalid("成交额不能为负数");
             }
             value.setGroupCodes(strings(row.path("group_codes"), 3).stream().map(MarketResearchGroup::valueOf).toList());
+            if (row.hasNonNull("opportunity_state")) {
+                value.setOpportunityState(MarketOpportunityState.valueOf(text(row, "opportunity_state")));
+            }
+            if (row.hasNonNull("previous_opportunity_state")) {
+                value.setPreviousOpportunityState(MarketOpportunityState.valueOf(text(row, "previous_opportunity_state")));
+            }
             if (new HashSet<>(value.getGroupCodes()).size() != value.getGroupCodes().size()) {
                 throw invalid("股票组重复");
             }

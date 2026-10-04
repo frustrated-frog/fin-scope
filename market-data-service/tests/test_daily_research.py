@@ -201,3 +201,55 @@ def test_invalid_current_bar_preserves_history_and_other_stocks(store, invalid_c
     assert stocks["600002.SH"].return_1d is not None
     assert all(group.member_count == 2 and group.valid_count == 1 for group in result.groups)
     assert any("无效" in warning for warning in result.warnings)
+
+
+@pytest.mark.parametrize(('prices', 'expected'), [
+    ([100] * 21 + [110], 'EMERGING'),
+    (list(range(100, 122)), 'CONTINUING'),
+    (list(range(100, 121)) + [80], 'WEAKENING'),
+    (list(range(130, 109, -1)) + [111], 'REPAIRING'),
+    (list(range(130, 108, -1)), 'OTHER'),
+])
+def test_opportunity_states_compare_adjacent_sessions(store, prices, expected):
+    save(store)
+    symbol = StockSymbol(market='SH', code='600001')
+    envelope = store.load(DataCapability.DAILY_BARS, symbol)
+    for bar, price in zip(envelope.data, prices):
+        bar.close = price
+        bar.change_pct = None
+    store.save(envelope)
+    stock = fetch(store).stocks[0]
+    assert stock.opportunity_state == expected
+    assert stock.previous_opportunity_state is not None
+    assert fetch(store).cache_hit
+    assert fetch(store).stocks[0].opportunity_state == expected
+
+
+def test_current_price_does_not_rewrite_previous_opportunity(store):
+    save(store)
+    first = fetch(store).stocks[0]
+    save(store, jump=80)
+    second = fetch(store).stocks[0]
+    assert first.opportunity_state == 'CONTINUING'
+    assert second.opportunity_state == 'WEAKENING'
+    assert first.previous_opportunity_state == second.previous_opportunity_state
+
+
+@pytest.mark.parametrize('options', [{'gap': True}, {'adjustment': 'NONE'}, {'missing': True}])
+def test_opportunity_does_not_infer_a_state_from_missing_history(store, options):
+    save(store, **options)
+    stock = fetch(store).stocks[0]
+    assert stock.opportunity_state is None
+    if not options.get('missing'):
+        assert stock.previous_opportunity_state is None
+
+
+def test_previous_opportunity_requires_its_own_complete_history(store):
+    save(store)
+    symbol = StockSymbol(market='SH', code='600001')
+    envelope = store.load(DataCapability.DAILY_BARS, symbol)
+    envelope.data = envelope.data[1:]
+    store.save(envelope)
+    stock = fetch(store).stocks[0]
+    assert stock.opportunity_state == 'CONTINUING'
+    assert stock.previous_opportunity_state is None

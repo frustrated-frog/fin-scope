@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
+from enum import Enum
 from functools import lru_cache
 import json
 from pathlib import Path
@@ -22,6 +23,14 @@ class ResearchModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+class OpportunityState(str, Enum):
+    EMERGING = "EMERGING"
+    CONTINUING = "CONTINUING"
+    REPAIRING = "REPAIRING"
+    WEAKENING = "WEAKENING"
+    OTHER = "OTHER"
+
+
 class ResearchStock(ResearchModel):
     instrument_code: str
     instrument_name: str | None = None
@@ -32,6 +41,8 @@ class ResearchStock(ResearchModel):
     return_20d: float | None = None
     amount: float | None = Field(default=None, ge=0)
     group_codes: list[str] = Field(default_factory=list)
+    opportunity_state: OpportunityState | None = None
+    previous_opportunity_state: OpportunityState | None = None
 
 
 class ResearchGroup(ResearchModel):
@@ -126,6 +137,30 @@ def _return(bars: dict[date, DailyBar], day: date, sessions: int) -> float | Non
     return result if isfinite(result) else None
 
 
+def _trend(bars: dict[date, DailyBar], day: date) -> bool | None:
+    window = _window(bars, day, 20)
+    five_day_return = _return(bars, day, 5)
+    if window is None or five_day_return is None:
+        return None
+    return window[-1].close > sum(bar.close for bar in window) / 20 and five_day_return > 0
+
+
+def _opportunity_state(bars: dict[date, DailyBar], day: date) -> OpportunityState | None:
+    previous = _previous_session(day)
+    if previous is None:
+        return None
+    current_trend = _trend(bars, day)
+    previous_trend = _trend(bars, previous)
+    daily_return = _return(bars, day, 1)
+    if current_trend is None or previous_trend is None or daily_return is None:
+        return None
+    if current_trend:
+        return OpportunityState.CONTINUING if previous_trend else OpportunityState.EMERGING
+    if previous_trend:
+        return OpportunityState.WEAKENING
+    return OpportunityState.REPAIRING if daily_return > 0 else OpportunityState.OTHER
+
+
 def is_closed_research_date(business_date: date, now: datetime) -> bool:
     local = now.astimezone(ZoneInfo("Asia/Shanghai"))
     return (business_date != date.min and business_date <= local.date()
@@ -134,7 +169,7 @@ def is_closed_research_date(business_date: date, now: datetime) -> bool:
 
 
 class DailyResearchService:
-    ALGORITHM_VERSION = "daily-research-v1.1"
+    ALGORITHM_VERSION = "daily-research-v1.2"
 
     def __init__(self, snapshots: SnapshotStore, now: Callable[[], datetime] | None = None,
                  name_snapshot_path: str | Path | None = None):
@@ -225,13 +260,10 @@ class DailyResearchService:
                 bars.pop(day, None)
             instrument = key.split(":")[1] + "." + key.split(":")[0]
             prior_return = _return(bars, selection_date, 1)
-            trend_window = _window(bars, selection_date, 20)
-            prior_five = _return(bars, selection_date, 5)
             breakout_window = _window(bars, selection_date, 21)
             decisions = [
                 None if prior_return is None else prior_return >= 3,
-                None if trend_window is None or prior_five is None else (
-                    trend_window[-1].close > sum(bar.close for bar in trend_window) / 20 and prior_five > 0),
+                _trend(bars, selection_date),
                 None if breakout_window is None else (
                     breakout_window[-1].close > max(bar.close for bar in breakout_window[:-1])),
             ]
@@ -253,6 +285,8 @@ class DailyResearchService:
                 return_20d=_return(bars, business_date, 20),
                 amount=current.amount if valid_current and _finite(current.amount) and current.amount >= 0 else None,
                 group_codes=memberships,
+                opportunity_state=_opportunity_state(bars, business_date),
+                previous_opportunity_state=_opportunity_state(bars, selection_date),
             ))
         for group in groups:
             values = [stock.return_1d for stock in result.stocks

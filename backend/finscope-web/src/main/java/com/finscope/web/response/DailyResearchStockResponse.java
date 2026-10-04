@@ -4,6 +4,7 @@ import com.finscope.domain.marketpulse.DailyResearchStock;
 import lombok.Data;
 import java.util.List;
 import com.finscope.common.enums.marketpulse.MarketResearchGroup;
+import com.finscope.common.enums.marketpulse.MarketOpportunityState;
 
 /** 日频研究的 Web 契约，日期统一为 ISO 字符串。 */
 @Data
@@ -17,6 +18,8 @@ public class DailyResearchStockResponse {
     private Double return20d;
     private Double amount;
     private List<MarketResearchGroup> groupCodes;
+    private MarketOpportunityState opportunityState;
+    private MarketOpportunityState previousOpportunityState;
 
     public static DailyResearchStockResponse of(DailyResearchStock source) {
         DailyResearchStockResponse value = new DailyResearchStockResponse();
@@ -29,6 +32,8 @@ public class DailyResearchStockResponse {
         value.setReturn20d(source.getReturn20d());
         value.setAmount(source.getAmount());
         value.setGroupCodes(source.getGroupCodes());
+        value.setOpportunityState(source.getOpportunityState());
+        value.setPreviousOpportunityState(source.getPreviousOpportunityState());
         return value;
     }
 }

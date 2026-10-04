@@ -69,6 +69,18 @@ class PythonDailyResearchSourceTest {
         }
     }
 
+    @Test
+    void readsOpportunityStatesAndKeepsOlderPayloadsCompatible() {
+        var stock = source(PAYLOAD.replace("\"amount\":100", """
+                "amount":100,"opportunity_state":"WEAKENING","previous_opportunity_state":"CONTINUING"
+                """)).fetch(DATE).getStocks().get(0);
+        assertEquals(com.finscope.common.enums.marketpulse.MarketOpportunityState.WEAKENING, stock.getOpportunityState());
+        assertEquals(com.finscope.common.enums.marketpulse.MarketOpportunityState.CONTINUING, stock.getPreviousOpportunityState());
+        assertNull(source(PAYLOAD).fetch(DATE).getStocks().get(0).getOpportunityState());
+        assertThrows(ProviderContractException.class, () -> source(PAYLOAD.replace("\"amount\":100",
+                "\"amount\":100,\"opportunity_state\":\"UNKNOWN\"")).fetch(DATE));
+    }
+
     private PythonDailyResearchSource source(String payload) {
         var source = new PythonDailyResearchSource();
         ReflectionTestUtils.setField(source, "baseUrl", "http://127.0.0.1:8000/");
