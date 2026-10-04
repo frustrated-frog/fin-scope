@@ -9,6 +9,13 @@ from finscope_market_data.overnight.engine import predict, settle
 logger = logging.getLogger(__name__)
 
 
+def needs_settlement(report):
+    outcome = report.get('outcome') or {}
+    direction_pending = (report.get('closeDirection', {}).get('upProbability') is not None
+                         and outcome.get('closeDirection', {}).get('status') != 'SETTLED')
+    return outcome.get('status') != 'SETTLED' or direction_pending
+
+
 class OvernightService:
     def __init__(self, store, provider, clock=None, joint=None):
         self.store = store
@@ -55,7 +62,7 @@ class OvernightService:
             if not history.get('verifiedCompleteDays', 0):
                 report['warnings'].append('暂无完整重叠日可核验跨源一致性；历史补数只供研究。')
         report['warnings'].extend(warnings)
-        if report['status'] == 'WATCH' or freeze_all:
+        if report['status'] == 'WATCH' or freeze_all or report.get('closeDirection', {}).get('upProbability') is not None:
             report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])
         if settle_cached:
             self._settle_cached(now)
@@ -63,7 +70,7 @@ class OvernightService:
 
     def _settle_cached(self, now):
         for report in self.store.iter_history():
-            if (report.get('outcome') or {}).get('status') == 'SETTLED':
+            if not needs_settlement(report):
                 continue
             bars = self.store.bars(report['instrumentCode'], now)
             result = settle(report, bars, now)
@@ -71,8 +78,7 @@ class OvernightService:
 
     def refresh_outcomes(self):
         now = self.clock()
-        pending = [r for r in self.store.iter_history()
-                   if (r.get('outcome') or {}).get('status') != 'SETTLED']
+        pending = [r for r in self.store.iter_history() if needs_settlement(r)]
         pending.sort(key=lambda r: (r.get('outcome') or {}).get('quoteRefreshAt', ''))
         codes = list(dict.fromkeys(r['instrumentCode'] for r in pending))[:3]
         failures = {}

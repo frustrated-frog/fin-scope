@@ -130,6 +130,14 @@ def settle(report, bars, now):
     target_date = next_session(request.signal_date)
     entry, field = entry_bar(grouped.get(request.signal_date, {}), request)
     result = {'status': 'PENDING', 'targets': [], 'executionStatus': 'UNVERIFIED', 'missingReasons': []}
+    if report.get('closeDirection', {}).get('upProbability') is not None:
+        from finscope_market_data.overnight.direction_dataset import close_outcome
+        direction = close_outcome(grouped, request.signal_date, now)
+        if direction['status'] == 'SETTLED':
+            p = report['closeDirection']['upProbability']
+            direction.update(brierScore=(p - direction['actualUp']) ** 2,
+                             correct=(p >= .5) == direction['actualUp'])
+        result['closeDirection'] = direction
     if entry is None or not target_date:
         result['missingReasons'].append('ENTRY_DATA_MISSING' if target_date else 'CALENDAR_UNAVAILABLE')
         return result

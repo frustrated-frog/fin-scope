@@ -5,6 +5,9 @@ import logging
 
 from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.engine import TARGETS
+from finscope_market_data.overnight.direction_dataset import PROTOCOL as DIRECTION_PROTOCOL, FEATURES as DIRECTION_FEATURES, build_direction_panel
+from finscope_market_data.overnight.direction_learning import fit_direction
+from finscope_market_data.overnight.direction_validation import summarize_direction
 from finscope_market_data.overnight.joint_dataset import (
     PROTOCOL, FEATURES, MIN_SYMBOLS, build_panel, profiles,
 )
@@ -28,6 +31,7 @@ class OvernightJointWorker:
         if not context['enabled'] or '13:00' <= now.strftime('%H:%M') < '18:00':
             return
         meta.put('jointForward', summarize_forward(self.automation.service.store, now, meta))
+        meta.put('closeDirectionForward', summarize_direction(self.automation.service.store, now, meta))
         for previous in meta.jobs(phase='JOINT'):
             if previous['status'] == 'RUNNING' and now - datetime.fromisoformat(previous['startedAt']) >= timedelta(minutes=10):
                 identifier = self.research.models.for_job(previous['key'])
@@ -42,7 +46,7 @@ class OvernightJointWorker:
         if len(ready) < MIN_SYMBOLS:
             return
         for profile in profiles(context):
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{profile.key}'
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue
@@ -54,15 +58,23 @@ class OvernightJointWorker:
                     fitted = fit_target([row for row in panel if row['target'] == target], now.isoformat(), profile.cutoff)
                     if fitted is not None:
                         targets[target] = fitted
+                direction_rows, direction_data = build_direction_panel(self.automation.service.store, codes, profile.cutoff, now)
+                direction = fit_direction(direction_rows, now.isoformat(), profile.cutoff)
                 if len(targets) != len(TARGETS):
+                    targets = {}
+                if not targets and direction is None:
                     meta.finish(job, self.clock(), status='INSUFFICIENT_DATA', **data_audit,
-                                reason='各退出时点都需要至少 80 日训练、20 日校准、20 日检验及边界隔离')
+                                reason='有效训练日期不足；涨跌模型另需选择区，分钟覆盖数量不等于可学习样本')
                     return
+                if direction:
+                    direction['data'] = direction_data
+                    direction['features'] = list(DIRECTION_FEATURES)
                 artifact = self.research.models.publish({'protocol': PROTOCOL, 'profile': profile.dump(),
-                    'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel),
+                    'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows),
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
-                    'trainingJobKey': job['key']}, panel, claim=job)
+                    'closeDirection': direction, 'trainingJobKey': job['key']},
+                    {'tradeRows': panel, 'directionRows': direction_rows}, claim=job)
                 meta.finish(job, self.clock(), status='COMPLETED', artifactId=artifact['id'], **data_audit)
             except Exception as error:
                 logger.exception('Shared overnight training failed for %s', profile.key)

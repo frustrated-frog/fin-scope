@@ -2,6 +2,8 @@
 from datetime import datetime
 
 from finscope_market_data.overnight.engine import group_bars
+from finscope_market_data.overnight.direction_dataset import PROTOCOL as DIRECTION_PROTOCOL, TARGET as DIRECTION_TARGET, direction_features
+from finscope_market_data.overnight.direction_learning import direction_prediction
 from finscope_market_data.overnight.joint_dataset import JointProfile, PROTOCOL, current_features
 from finscope_market_data.overnight.joint_learning import prediction
 from finscope_market_data.overnight.joint_store import OvernightJointStore
@@ -20,6 +22,8 @@ class OvernightJointResearch:
         cohort = (report.get('jointResearch') or {}).get('cohort', 'CUSTOM')
         report['jointResearch'] = {'protocol': PROTOCOL, 'status': 'WAITING_MODEL',
                                    'cohort': cohort, 'reason': '公共样本库积累中；后台自动训练后开始对照'}
+        report['closeDirection'] = {'protocol': DIRECTION_PROTOCOL, 'target': DIRECTION_TARGET,
+                                    'status': 'WAITING_MODEL', 'reason': '次日涨跌模型由后台自动训练，当前样本尚未就绪'}
         if not artifact or artifact['protocol'] != PROTOCOL:
             return
         research = report['jointResearch']
@@ -28,6 +32,7 @@ class OvernightJointResearch:
                          'symbolCount': artifact['data']['symbolCount'], 'status': 'MISSING_CONTEXT',
                          'reason': '决策前分钟或前一交易日公共样本环境不足'})
         grouped = group_bars([bar for bar in bars if bar.ended_at <= cutoff])
+        self.attach_direction(report, request, grouped, artifact)
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return
@@ -56,6 +61,24 @@ class OvernightJointResearch:
                     / request.cost_basis - 1) if request.cost_basis else None
                 research.update({'status': 'ACTIVE', 'reason': '已通过固定前瞻对照；持续监控退化'})
 
+    def attach_direction(self, report, request, grouped, artifact):
+        fitted = artifact.get('closeDirection')
+        if not fitted or fitted.get('protocol') != DIRECTION_PROTOCOL:
+            return
+        x = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
+        if x is None:
+            report['closeDirection'].update(status='MISSING_FEATURES', reason='截止时点及过去交易日分钟数据不足')
+            return
+        monitor = self.meta.get('closeDirectionForward') or {}
+        key = f'{request.mode}|{request.cutoff}'
+        gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if monitor.get('computedAt', '9999') < report['dataThrough'] else {}
+        forecast = direction_prediction(fitted, x, gate.get('calibrationGate'))
+        report['closeDirection'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
+            'dataFingerprint': fitted['data']['fingerprint'], 'forwardDays': gate.get('dayCount', 0),
+            'forwardStatus': gate.get('status', 'ACCUMULATING'),
+            'validated': bool((report.get('jointResearch') or {}).get('cohort') == 'AUTOMATIC' and gate.get('eligible')),
+            'reason': '预测次日未复权收盘价是否高于当日收盘价；涨跌目标不扣交易成本，持平计入未上涨'}
+
     def status(self, now):
         universe = self.meta.get(POOL_KEY) or {}
         coverage = self.meta.get('jointCoverage') or {}
@@ -64,4 +87,5 @@ class OvernightJointResearch:
                 'minimumSymbols': coverage.get('minimumSymbols', 20), 'coverageAt': coverage.get('updatedAt'),
                 'scope': universe.get('scope'), 'limitation': universe.get('limitation'),
                 'models': self.models.summaries(now), 'forward': self.meta.get('jointForward'),
+                'closeDirectionForward': self.meta.get('closeDirectionForward'),
                 'jobs': [{k: v for k, v in row.items() if k != 'token'} for row in self.meta.jobs(limit=6, phase='JOINT')]}

@@ -20,7 +20,10 @@ class OvernightJointStore:
     def publish(self, artifact, panel, claim=None):
         if artifact['labelsThrough'] >= artifact['createdAt']:
             raise ValueError('训练标签尚未到期')
-        for target in artifact['targets'].values():
+        fitted_models = list(artifact['targets'].values())
+        if artifact.get('closeDirection'):
+            fitted_models.append(artifact['closeDirection'])
+        for target in fitted_models:
             if any(target['audit'][key] > artifact['labelsThrough']
                    for key in ('trainingThrough', 'calibrationThrough', 'testThrough')):
                 raise ValueError('模型标签时点与清单不一致')
@@ -62,6 +65,8 @@ class OvernightJointStore:
         for key in keys:
             artifact = self.latest(key, now)
             if artifact:
-                result.append({key: value for key, value in artifact.items() if key not in ('targets', 'context')} | {
-                    'targets': [{'target': target, **value['audit']} for target, value in artifact['targets'].items()]})
+                direction = artifact.get('closeDirection')
+                result.append({key: value for key, value in artifact.items() if key not in ('targets', 'context', 'closeDirection')} | {
+                    'targets': [{'target': target, **value['audit']} for target, value in artifact['targets'].items()],
+                    'closeDirection': {key: value for key, value in direction.items() if key != 'model'} if direction else None})
         return result
