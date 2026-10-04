@@ -178,3 +178,17 @@ def test_adoption_requires_past_forward_approval_and_reverts_without_it(tmp_path
     attach_context_direction(reverted, request(day), group_bars(bars), artifact, contexts, meta)
     assert reverted['closeDirection']['upProbability'] == .4
     assert reverted['closeDirection']['challenger']['upProbability'] == .7
+
+
+def test_adopted_report_still_evaluates_the_frozen_incumbent_separately():
+    from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
+    from finscope_market_data.overnight.direction_validation import summarize_direction
+    report = {'id': 'adopted', 'generatedAt': '2026-09-21T14:31:00', 'signalDate': '2026-09-21',
+        'targetDate': '2026-09-22', 'instrumentCode': '600000.SH', 'mode': 'TAIL_ENTRY', 'cutoff': '14:30',
+        'evidenceKind': 'FORWARD', 'jointResearch': {'cohort': 'AUTOMATIC'},
+        'closeDirection': {'protocol': 'overnight-context-direction-v2', 'upProbability': .8,
+            'incumbentPrediction': {'protocol': PROTOCOL, 'target': TARGET, 'artifactId': 'old',
+                'upProbability': .2, 'baselineProbability': .5}},
+        'outcome': {'closeDirection': {'status': 'SETTLED', 'actualUp': True, 'correct': True}}}
+    result = summarize_direction(SimpleNamespace(iter_history=lambda: iter([report])), datetime(2026, 9, 23))
+    assert result['groups'][0]['metrics']['accuracy'] == 0

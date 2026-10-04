@@ -64,22 +64,29 @@ def context_features(code, own, snapshot, memberships=()):
 
 def build_context_panel(store, members, cutoff, through, *, contexts=None, memberships=()):
     base, audit = build_direction_panel(store, members, cutoff, through)
-    grouped = {code: group_bars(store.bars(code, through)) for code in sorted(set(members))}
+    days = sorted({row['signalDate'] for row in base})
+    pool_by_day = {day: {} for day in days}
+    # Keep compact per-stock/day observations, not 120 full minute histories
+    # resident at once. A long-lived sample library must remain bounded in RAM.
+    for code in sorted(set(members)):
+        grouped = group_bars(store.bars(code, through))
+        for day in days:
+            value = stock_context(grouped, datetime.fromisoformat(day).date(), cutoff)
+            if value is not None:
+                pool_by_day[day][code] = value
     snapshots = {}
     historical_reconstruction = 0
-    for day in sorted({row['signalDate'] for row in base}):
+    for day in days:
         decision = datetime.fromisoformat(f'{day}T{cutoff}:00')
         snapshot = contexts.at(day, cutoff, decision) if contexts else None
         if snapshot is None:
-            pool = {code: value for code, bars in grouped.items()
-                    if (value := stock_context(bars, decision.date(), cutoff)) is not None}
-            snapshot = {'signalDate': day, 'pool': pool, 'expectedSymbols': len(members), 'indices': {}}
+            snapshot = {'signalDate': day, 'pool': pool_by_day[day], 'expectedSymbols': len(members), 'indices': {}}
             historical_reconstruction += 1
         snapshots[day] = snapshot
     rows = []
     for row in base:
         code, day = row['instrumentCode'], row['signalDate']
-        own = stock_context(grouped[code], datetime.fromisoformat(day).date(), cutoff)
+        own = pool_by_day[day].get(code)
         x = context_features(code, own, snapshots[day], memberships)
         if x is not None:
             rows.append({**row, 'features': row['features'] + x})

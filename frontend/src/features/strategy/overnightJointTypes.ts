@@ -28,5 +28,8 @@ export interface OvernightJointState {
     closeDirection?: { data: { symbolCount: number }; audit: { historical: OvernightDirectionMetrics } } | null }>;
   forward?: { requiredDays: number; computedAt: string; groups: OvernightJointGroup[] };
   closeDirectionForward?: OvernightDirectionForward;
+  contextDirectionForward?: OvernightDirectionForward;
+  contextSnapshots?: Array<{ signalDate: string; cutoff: string; observedAt: string;
+    receivedAt: string; capturedSymbols: number; expectedSymbols: number }>;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;
 }

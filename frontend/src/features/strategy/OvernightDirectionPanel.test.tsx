@@ -73,3 +73,32 @@ test('a ready direction forecast is visible while trading return samples are ins
   expect(screen.getByRole('heading', { name: '涨跌预测已生成 · 收益样本不足' })).toBeVisible();
   expect(screen.getByRole('region', { name: '次日收盘涨跌预测' })).toBeVisible();
 });
+
+test('keeps an unverified challenger separate and discloses missing context', async () => {
+  const { rerender } = render(<OvernightDirectionPanel report={{ ...report, closeDirection: {
+    ...report.closeDirection!, challenger: { protocol: 'v2', target: 'test', status: 'SHADOW',
+      reason: '与现有方案逐日比较', upProbability: .62, contextAt: '2026-09-21T14:20:00',
+      contextReceivedAt: '2026-09-21T14:21:03', contextSymbols: 100, indexCount: 2,
+      industryAvailable: false, selectedModel: 'PRIOR' } } }} />);
+  expect(screen.getByText('58.0%')).toBeVisible();
+  expect(screen.getByText('58.0% / 62.0%')).not.toBeVisible();
+  await userEvent.click(screen.getByText('环境增强对照'));
+  expect(screen.getByText('58.0% / 62.0%')).toBeVisible();
+  expect(screen.getByText('14:20 / 14:21:03')).toBeVisible();
+  expect(screen.getByText('覆盖不足，未使用')).toBeVisible();
+  expect(screen.getByText(/尚未发现学习优势/)).toBeVisible();
+  rerender(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
+    challenger: { protocol: 'v2', target: 'test', status: 'MISSING_CONTEXT', reason: '截止前缺少环境快照' } } }} />);
+  expect(screen.getByText('截止前缺少环境快照')).toBeVisible();
+  expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+});
+
+test('shows adoption while preserving the incumbent in the comparison', async () => {
+  render(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
+    upProbability: .62, validated: true, activeSource: 'CONTEXT_DIRECTION',
+    challenger: { protocol: 'v2', target: 'test', status: 'SHADOW', reason: '已验证',
+      upProbability: .62, incumbentProbability: .58, validated: true } } }} />);
+  expect(screen.getByText(/已采用通过前瞻对照的环境增强方案/)).toBeVisible();
+  await userEvent.click(screen.getByText('环境增强对照'));
+  expect(screen.getByText('58.0% / 62.0%')).toBeVisible();
+});

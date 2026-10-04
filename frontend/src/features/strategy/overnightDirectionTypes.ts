@@ -10,6 +10,13 @@ export interface OvernightCloseDirection {
   rawUpProbability?: number; calibratedUpProbability?: number; probabilitySource?: string;
   selectedModel?: string; baselineProbability?: number; historical?: OvernightDirectionMetrics;
   forwardDays?: number; forwardStatus?: string; validated?: boolean; artifactId?: string;
+  challenger?: OvernightContextDirection;
+  activeSource?: string;
+}
+
+export interface OvernightContextDirection extends Omit<OvernightCloseDirection, 'challenger'> {
+  incumbentProbability?: number; contextAt?: string; contextReceivedAt?: string;
+  contextSymbols?: number; industryAvailable?: boolean; indexCount?: number;
 }
 
 export interface OvernightDirectionOutcome {
