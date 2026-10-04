@@ -37,6 +37,7 @@ class OvernightCandidateScanner:
     @staticmethod
     def select(rows, now, limit):
         candidates = {}
+        observations = {}
         fresh = set()
         for row in rows:
             code = str(row.get('f12', ''))
@@ -58,21 +59,35 @@ class OvernightCandidateScanner:
                 continue
             fresh.add(code)
             board_limit = 19 if code.startswith(('300', '301')) else 9
-            if amount < 100_000_000 or not .5 <= change < board_limit or ratio < 1 or low <= 0 or high <= low:
+            if low <= 0 or high < low or not low <= price <= high or opening <= 0:
                 continue
-            if not low <= price <= high or opening <= 0:
-                continue
-            location = (price - low) / (high - low)
-            if location < .65 or price < opening:
-                continue
+            location = (price - low) / (high - low) if high > low else 0
+            reasons = []
+            if amount < 100_000_000:
+                reasons.append('LOW_LIQUIDITY')
+            if not .5 <= change < board_limit:
+                reasons.append('CHANGE_OUTSIDE_RULE')
+            if ratio < 1:
+                reasons.append('LOW_VOLUME_RATIO')
+            if location < .65 or price < opening or high == low:
+                reasons.append('WEAK_OR_ONE_PRICE')
             # Ranking is an acquisition priority, never presented as an up probability.
             score = 30 * location + 8 * min(ratio, 4) + 2 * min(change, 8)
             symbol = code + ('.SH' if code.startswith('6') else '.SZ')
-            candidates[symbol] = {'instrumentCode': symbol, 'instrumentName': name,
+            observation = {'instrumentCode': symbol, 'instrumentName': name,
                 'changePct': change, 'amount': amount, 'volumeRatio': ratio,
                 'quoteAt': observed.isoformat(), 'priorityScore': round(score, 2)}
+            observations[symbol] = {**observation, 'rejectionReasons': reasons}
+            if not reasons:
+                candidates[symbol] = observation
         if not fresh:
             raise ValueError('行情缺少可核验的当日时间戳，未使用旧行情生成候选')
-        return {'candidates': sorted(candidates.values(), key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit],
+        selected = sorted(candidates.values(), key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit]
+        selected_codes = {row['instrumentCode'] for row in selected}
+        for code, row in observations.items():
+            row['selected'] = code in selected_codes
+            if not row['selected'] and not row['rejectionReasons']:
+                row['rejectionReasons'] = ['ACQUISITION_LIMIT']
+        return {'candidates': selected, 'observations': list(observations.values()),
                 'observedCount': len({str(row.get('f12')) for row in rows}), 'freshCount': len(fresh),
                 'scope': '成交额与涨幅各前 200 条合并去重；非全市场覆盖', 'sourceCode': 'EASTMONEY_LIVE'}

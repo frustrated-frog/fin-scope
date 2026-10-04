@@ -139,7 +139,8 @@ def create_app(
 
     capture = OvernightCapture(overnight)
     automation = OvernightAutomation(overnight, OvernightCandidateScanner())
-    history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider())
+    history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),
+        SnapshotStore(config.data_dir / "market-data-snapshots.db"))
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):

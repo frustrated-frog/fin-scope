@@ -16,10 +16,12 @@ MAX_BARS = 18000
 class BaostockMinuteHistoryProvider:
     source = SOURCE
 
-    def fetch(self, code: str, through: datetime):
+    def fetch(self, code: str, through: datetime, *, start=None):
         if not re.fullmatch(r'(?:60\d{4}\.SH|(?:00|30)\d{4}\.SZ)', code):
             raise ValueError('不支持的分钟历史代码')
-        start = (through - timedelta(days=365)).date()
+        start = max(start or (through - timedelta(days=365)).date(), (through - timedelta(days=365)).date())
+        if start > through.date():
+            raise ValueError('历史分钟起止日期无效')
         # The SDK owns a process-global socket and has no cancellation API.
         # Isolate it from live acquisition; timeout kills/reaps the whole worker.
         try:

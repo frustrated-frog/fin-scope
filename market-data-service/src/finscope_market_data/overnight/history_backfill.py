@@ -5,18 +5,21 @@ import logging
 
 from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.models import OvernightRequest
+from finscope_market_data.overnight.universe import POOL_KEY, POOL_SIZE, extend_universe
+from finscope_market_data.forecast.trading_calendar import previous_session
 
 logger = logging.getLogger(__name__)
 DESIRED_DAYS = 140
 
 
 class OvernightHistoryBackfill:
-    def __init__(self, automation, provider):
+    def __init__(self, automation, provider, snapshots=None):
         self.automation = automation
         self.store = automation.store
         self.minutes = automation.service.store
         self.clock = automation.clock
         self.provider = provider
+        self.snapshots = snapshots
 
     def tick(self):
         now = self.clock()
@@ -28,13 +31,23 @@ class OvernightHistoryBackfill:
             return
         coverage = {row['instrumentCode']: row for row in self.minutes.coverage(now)}
         self._recover_interrupted(coverage, now)
+        universe = self.store.get(POOL_KEY)
+        if self.snapshots is not None and len((universe or {}).get('members', [])) < POOL_SIZE:
+            universe = extend_universe(universe, self.snapshots.daily_bar_symbols(), now)
+            self.store.put(POOL_KEY, universe)
+        pool = [row['instrumentCode'] for row in (universe or {}).get('members', [])]
+        latest_session = previous_session(now.date())
         codes = [position['instrumentCode'] for position in context['positions']]
-        for job in self.store.jobs():
-            if job.get('phase') == 'DISCOVER' and job['status'] == 'COMPLETED':
-                codes.extend(row['instrumentCode'] for row in job.get('candidates', []))
+        scans = [job for job in self.store.jobs() if job.get('phase') == 'DISCOVER' and job['status'] == 'COMPLETED']
+        for job in scans[:2]:
+            codes.extend(row['instrumentCode'] for row in job.get('candidates', []))
+        codes.extend(pool)
         codes.extend(coverage)
         for code in list(dict.fromkeys(codes))[:200]:
-            if coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS:
+            enough = coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS
+            imported = self.minutes.history_import(code)
+            current = latest_session and (imported or {}).get('lastDate', '') >= str(latest_session)
+            if enough and (code not in pool or current):
                 continue
             try:
                 OvernightRequest(instrument_code=code, signal_date=now.date(), mode='TAIL_ENTRY', cutoff='14:30')
@@ -48,7 +61,11 @@ class OvernightHistoryBackfill:
             try:
                 # Today remains the live provider's responsibility, even after close.
                 through = datetime.combine(now.date() - timedelta(days=1), datetime.min.time()).replace(hour=15)
-                bars = self.provider.fetch(code, through)
+                if enough and imported and code in pool:
+                    start = datetime.fromisoformat(imported['lastDate']) - timedelta(days=5)
+                    bars = self.provider.fetch(code, through, start=start.date())
+                else:
+                    bars = self.provider.fetch(code, through)
                 result = self.minutes.import_history(code, bars, self.provider.source, self.clock())
                 self.store.finish(job, self.clock(), status='COMPLETED', **result)
             except Exception as error:

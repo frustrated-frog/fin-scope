@@ -196,6 +196,16 @@ def test_candidate_filter_rejects_stale_halted_limit_up_and_unsupported_rows():
         OvernightCandidateScanner.select([quote(f124=1)], now, 6)
 
 
+def test_scan_retains_losers_and_capacity_rejections_for_cohort_audits():
+    result = OvernightCandidateScanner.select([quote(), quote('600001'), quote('600002', f3=-2)],
+        datetime(2026, 9, 21, 14, 20), 1)
+    observed = {row['instrumentCode']: row for row in result['observations']}
+    assert len(observed) == 3
+    assert sum(row['selected'] for row in observed.values()) == 1
+    assert observed['600002.SH']['rejectionReasons'] == ['CHANGE_OUTSIDE_RULE']
+    assert observed['605058.SH']['rejectionReasons'] == ['ACQUISITION_LIMIT']
+
+
 def test_automation_routes_are_read_only_until_worker_runs(tmp_path):
     from finscope_market_data.app import create_app
     from finscope_market_data.settings import Settings
