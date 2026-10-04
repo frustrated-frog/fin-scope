@@ -28,7 +28,7 @@ def probability_diagnostics(probabilities, labels, dates):
         logLoss=float(-weights @ (y * np.log(bounded) + (1-y) * np.log1p(-bounded))))
 
 
-def evaluate_direction(probabilities, labels, dates, baselines, regimes=None):
+def evaluate_direction(probabilities, labels, dates, baselines, regimes=None, *, family_size=1):
     p, y, dates = np.asarray(probabilities, dtype=float), np.asarray(labels, dtype=float), np.asarray(dates)
     if not len(p) or len(p) != len(y) or len(p) != len(dates) or not baselines:
         raise ValueError('方向评价需要等长非空的概率、标签、日期和基准')
@@ -49,7 +49,9 @@ def evaluate_direction(probabilities, labels, dates, baselines, regimes=None):
     starts = rng.integers(0, len(days), size=(2000, int(np.ceil(len(days) / block))))
     bootstrap = ((starts[:, :, None] + np.arange(block)) % len(days)).reshape(2000, -1)[:, :len(days)]
     comparisons = {}
-    alpha = .05 / len(baselines)
+    if not isinstance(family_size, int) or family_size < 1:
+        raise ValueError('比较组数必须为正整数')
+    alpha = .05 / len(baselines) / family_size
     for code, values in baselines.items():
         baseline = np.asarray(values, dtype=float)
         if baseline.shape != p.shape or not np.all(np.isfinite(baseline)) or np.any((baseline < 0) | (baseline > 1)):

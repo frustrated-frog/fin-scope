@@ -8,7 +8,7 @@ import numpy as np
 from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.overnight.learning import forecast_target
 
-VERSION = 'overnight-local-v4-evidence-gated'
+VERSION = 'overnight-v5-shared-evidence'
 TARGETS = ('OPEN', '10:00', '14:30', 'CLOSE')
 
 
@@ -138,7 +138,8 @@ def settle(report, bars, now):
         if bar is None or bar.amount <= 0:
             result['missingReasons'].append(f'{target}:DATA_MISSING_OR_NOT_DUE')
             continue
-        if report.get('modelVersion') in ('overnight-local-v2', 'overnight-local-v3-calibrated', VERSION) and bar.high == bar.low:
+        if report.get('modelVersion') in ('overnight-local-v2', 'overnight-local-v3-calibrated',
+                'overnight-local-v4-evidence-gated', VERSION) and bar.high == bar.low:
             result['missingReasons'].append(f'{target}:EXIT_UNVERIFIED')
             continue
         net = getattr(bar, field) / price - 1 - request.cost_bps / 10000

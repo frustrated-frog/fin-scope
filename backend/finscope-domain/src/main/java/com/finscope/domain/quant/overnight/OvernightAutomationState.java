@@ -18,5 +18,6 @@ public class OvernightAutomationState {
     private String holdingStatus;
     private Map<String, Object> heartbeat;
     private Map<String, Object> history;
+    private Map<String, Object> joint;
     private List<Map<String, Object>> jobs;
 }

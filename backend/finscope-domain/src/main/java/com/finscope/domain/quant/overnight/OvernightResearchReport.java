@@ -32,4 +32,5 @@ public class OvernightResearchReport {
     private List<String> warnings;
     private Map<String, Object> request;
     private Map<String, Object> outcome;
+    private Map<String, Object> jointResearch;
 }

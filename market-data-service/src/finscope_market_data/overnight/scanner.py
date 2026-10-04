@@ -1,6 +1,7 @@
 """A bounded live universe, independent of the expensive after-close discovery run."""
 import asyncio
 import math
+import hashlib
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -38,6 +39,7 @@ class OvernightCandidateScanner:
     def select(rows, now, limit):
         candidates = {}
         observations = {}
+        broad = {}
         fresh = set()
         for row in rows:
             code = str(row.get('f12', ''))
@@ -80,12 +82,23 @@ class OvernightCandidateScanner:
             observations[symbol] = {**observation, 'rejectionReasons': reasons}
             if not reasons:
                 candidates[symbol] = observation
+            if amount >= 100_000_000 and -board_limit < change < board_limit and high > low:
+                broad[symbol] = observation
         if not fresh:
             raise ValueError('行情缺少可核验的当日时间戳，未使用旧行情生成候选')
-        selected = sorted(candidates.values(), key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit]
+        exploration = limit // 3
+        selected = [{**row, 'selectionLane': 'MOMENTUM'} for row in sorted(candidates.values(),
+            key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit - exploration]]
+        chosen = {row['instrumentCode'] for row in selected}
+        remainder = sorted((row for code, row in broad.items() if code not in chosen),
+            key=lambda row: hashlib.sha256(f"{now.date()}|{row['instrumentCode']}".encode()).hexdigest())
+        selected.extend({**row, 'selectionLane': 'BROAD_RESEARCH'} for row in remainder[:limit - len(selected)])
         selected_codes = {row['instrumentCode'] for row in selected}
         for code, row in observations.items():
             row['selected'] = code in selected_codes
+            row['ruleRejectionReasons'] = list(row['rejectionReasons'])
+            if row['selected']:
+                row['rejectionReasons'] = []
             if not row['selected'] and not row['rejectionReasons']:
                 row['rejectionReasons'] = ['ACQUISITION_LIMIT']
         return {'candidates': selected, 'observations': list(observations.values()),

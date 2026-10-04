@@ -56,10 +56,11 @@ class OvernightAutomation:
             'tradingDay': next_session(now.date() - timedelta(days=1)) == now.date(),
             'nextTailAt': next_tail, 'ledgerReceivedAt': received, 'ledgerFresh': fresh,
             'positionCount': len(context['positions']), 'holdingStatus': holding_status,
+            'joint': self.service.joint.status(now) if getattr(self.service, 'joint', None) is not None else None,
             'heartbeat': self.store.get('heartbeat'),
             'history': {'desiredDays': DESIRED_DAYS, 'coverage': self.service.store.coverage(now),
                 'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in self.store.jobs(history=True)]},
-            'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in jobs]}
+            'jobs': [{k: v for k, v in job.items() if k not in ('token', 'observations')} for job in jobs]}
 
     def tick(self):
         now = self.clock()
@@ -122,7 +123,8 @@ class OvernightAutomation:
             results = list(pool.map(self._generate, requests))
         incomplete = any(row['status'] in {'FAILED', 'MISSED'} or row.get('evidenceKind') == 'RETROSPECTIVE' for row in results)
         self.store.finish(job, self.clock(), status=('PARTIAL' if incomplete else 'COMPLETED') if requests else 'EMPTY',
-                          candidates=scan['candidates'], results=results, snapshotAt=scan['snapshotAt'])
+                          candidates=scan['candidates'], results=results, snapshotAt=scan['snapshotAt'],
+                          ranking=rank_candidates(results))
 
     def _generate(self, request):
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}')
@@ -132,8 +134,10 @@ class OvernightAutomation:
             # The independent settlement loop rotates old outcomes; do not rescan
             # every archive for every stock in the time-critical acquisition batch.
             report = self.service.generate(request, freeze_all=True, settle_cached=False)
+            primary = next((target.get('joint') for target in report.get('targets', []) if target['target'] == '10:00'), None)
             return {'instrumentCode': request.instrument_code, 'status': report['status'],
-                'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings']}
+                'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings'],
+                'joint': primary}
         except Exception as error:
             return {'instrumentCode': request.instrument_code, 'status': 'FAILED',
                     'reason': f'研究失败：{type(error).__name__}'}
@@ -181,3 +185,15 @@ class OvernightAutomation:
                 await asyncio.wait_for(stop.wait(), timeout=20)
             except TimeoutError:
                 pass
+
+
+def rank_candidates(results):
+    usable = [row for row in results if row.get('evidenceKind') == 'FORWARD'
+              and (row.get('joint') or {}).get('status') == 'AVAILABLE']
+    active = any(row['joint'].get('adopted') for row in usable)
+    selected = [row for row in usable if row['joint']['qualified'] and (not active or row['joint'].get('adopted'))]
+    selected.sort(key=lambda row: (-row['joint']['rankScore'], row['instrumentCode']))
+    return {'status': 'ACTIVE' if active else 'SHADOW' if usable else 'WAITING_MODEL', 'target': '10:00',
+            'opportunityStatus': 'QUALIFIED' if active and selected else 'NO_QUALIFIED' if active else 'RESEARCH_ONLY',
+            'evaluatedCount': len(usable), 'candidates': [{**row['joint'], 'instrumentCode': row['instrumentCode'],
+                'reportId': row['reportId']} for row in selected[:3]]}

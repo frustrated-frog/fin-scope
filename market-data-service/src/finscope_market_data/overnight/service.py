@@ -1,15 +1,20 @@
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import logging
 
 from finscope_market_data.overnight.engine import predict, settle
 
+logger = logging.getLogger(__name__)
+
 
 class OvernightService:
-    def __init__(self, store, provider, clock=None):
+    def __init__(self, store, provider, clock=None, joint=None):
         self.store = store
         self.provider = provider
         self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None))
+        self.joint = joint
 
     def generate(self, request, freeze_all=False, settle_cached=True):
         now = self.clock()
@@ -23,9 +28,21 @@ class OvernightService:
                 warnings.append(f'分钟源不可用：{type(error).__name__}；仅使用已有分钟缓存')
         bars = self.store.bars(request.instrument_code, min(cutoff, now))
         report = predict(request, bars, now)
+        if self.joint is not None:
+            joint_report = deepcopy(report)
+            try:
+                self.joint.attach(joint_report, request, bars)
+                report = joint_report
+            except Exception as error:
+                logger.exception('Shared overnight prediction failed for %s', request.instrument_code)
+                warnings.append(f'联合模型暂不可用：{type(error).__name__}；保留本地判断')
+                report['jointResearch'] = {**joint_report.get('jointResearch', {}),
+                    'status': 'FAILED', 'reason': '联合推断失败，等待后台恢复'}
         completed = self.clock()
         report['generatedAt'] = completed.isoformat()
         if request.mode == 'TAIL_ENTRY' and completed >= cutoff + timedelta(minutes=5):
+            report['evidenceKind'] = 'RETROSPECTIVE'
+        if request.mode == 'AFTER_CLOSE_HOLDING' and completed.date() != request.signal_date:
             report['evidenceKind'] = 'RETROSPECTIVE'
         report['sourceCode'] = self.provider.source
         history = self.store.history_import(request.instrument_code)

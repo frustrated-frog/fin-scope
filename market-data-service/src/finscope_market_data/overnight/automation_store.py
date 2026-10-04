@@ -25,11 +25,21 @@ class AutomationStore:
             db.execute('INSERT INTO overnight_automation_meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload',
                        (key, json.dumps(value)))
 
-    def jobs(self, limit=100, history=False):
+    def put_once(self, key, value):
         with self.store.connect() as db:
-            rows = db.execute('''SELECT payload FROM overnight_automation_job
-                WHERE (COALESCE(json_extract(payload, '$.phase'), '')='HISTORY')=?
-                ORDER BY key DESC LIMIT ?''', (int(history), limit)).fetchall()
+            db.execute('INSERT OR IGNORE INTO overnight_automation_meta VALUES(?,?)', (key, json.dumps(value)))
+            return json.loads(db.execute('SELECT payload FROM overnight_automation_meta WHERE key=?', (key,)).fetchone()[0])
+
+    def jobs(self, limit=100, history=False, phase=None):
+        with self.store.connect() as db:
+            if phase or history:
+                rows = db.execute('''SELECT payload FROM overnight_automation_job
+                    WHERE json_extract(payload, '$.phase')=? ORDER BY key DESC LIMIT ?''',
+                    (phase or 'HISTORY', limit)).fetchall()
+            else:
+                rows = db.execute('''SELECT payload FROM overnight_automation_job
+                    WHERE COALESCE(json_extract(payload, '$.phase'), '') NOT IN ('HISTORY','JOINT')
+                    ORDER BY key DESC LIMIT ?''', (limit,)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
     def job(self, key):
