@@ -18,39 +18,29 @@ const assessment: AttributionAssessment = {
       assumptions: [], revisionConditions: [], evidenceUrls: ['javascript:alert(1)'] }]
 };
 
-test('shows complete candidate cards with analysis, sources and revision conditions', () => {
+test('omits candidate explanations while retaining market context and research limitations', () => {
   render(<AttributionAssessmentView assessment={assessment} />);
   expect(screen.queryByText(assessment.researchFocus)).not.toBeInTheDocument();
-  expect(screen.getByText('候选解释与改判条件')).toBeVisible();
-  expect(screen.getAllByLabelText('候选解释解读')).toHaveLength(2);
-  expect(screen.getByText('订单取消则削弱判断')).toBeVisible();
-  expect(screen.getByText('缺少利润数据')).toBeVisible();
-  expect(screen.getAllByRole('link')).toHaveLength(1);
+  expect(screen.queryByLabelText('候选解释与改判条件')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('候选解释解读')).not.toBeInTheDocument();
+  expect(screen.queryByText('订单取消则削弱判断')).not.toBeInTheDocument();
+  expect(screen.queryByText('商业化推进')).not.toBeInTheDocument();
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
   expect(screen.getByText('+2.00 个百分点')).toBeVisible();
+  expect(screen.getByText('证据缺口与研究限制')).toBeVisible();
+  expect(screen.getByText('订单金额未披露')).toBeInTheDocument();
 });
 
-test('degraded report retains completed candidate analysis and market data', () => {
+test('degraded report retains warnings and market data without candidate cards', () => {
   render(<AttributionAssessmentView assessment={{ ...assessment, status: 'DEGRADED', warnings: ['模型调用失败'] }} />);
   expect(screen.getByText('研判未完成')).toBeVisible();
+  expect(screen.getByText('模型调用失败')).toBeVisible();
   expect(screen.queryByText(assessment.mainJudgment)).not.toBeInTheDocument();
-  expect(screen.getByText('候选解释与改判条件')).toBeVisible();
+  expect(screen.queryByText('候选解释与改判条件')).not.toBeInTheDocument();
   expect(screen.getByText('+6.00%')).toBeVisible();
 });
 
-test('separates a long historical explanation into a short heading and preserves all detail', () => {
-  const detail = '业绩高增的延续：' + '这是保留完整论据而不是用省略号截断的历史解释。'.repeat(10);
-  render(<AttributionAssessmentView assessment={{ ...assessment, hypotheses: [{ ...assessment.hypotheses[0], explanation: detail }] }} />);
-  expect(screen.getByRole('heading', { name: '业绩高增的延续' })).toBeVisible();
-  expect(screen.getByText(detail.split('：')[1])).toBeVisible();
-  expect(screen.getByText('当前更倾向')).toHaveClass('attribution-hypothesis-status');
-});
-
-test('keeps bullish direction separate from weak attribution and historical timing', () => {
-  render(<AttributionAssessmentView assessment={{ ...assessment, hypotheses: [{ ...assessment.hypotheses[0],
-    disposition: 'UNRESOLVED', impactDirection: 'POSITIVE', impactReason: '订单增加有利于收入', timeRelevance: '旧消息持续影响，并非当日新公告' }] }} />);
-  expect(screen.getByText('偏利好')).toBeVisible();
-  expect(screen.getByText('尚待区分')).toBeVisible();
-  expect(screen.getByText('订单增加有利于收入')).toBeVisible();
-  expect(screen.getByText('旧消息持续影响，并非当日新公告')).toBeVisible();
-  expect(screen.queryByText('影响中性')).not.toBeInTheDocument();
+test('does not leave an empty supplement when only candidate explanations are present', () => {
+  const { container } = render(<AttributionAssessmentView assessment={{ ...assessment, marketContext: undefined, missingInformation: [] }} />);
+  expect(container).toBeEmptyDOMElement();
 });
