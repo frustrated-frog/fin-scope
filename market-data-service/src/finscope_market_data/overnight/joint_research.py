@@ -8,12 +8,15 @@ from finscope_market_data.overnight.joint_dataset import JointProfile, PROTOCOL,
 from finscope_market_data.overnight.joint_learning import prediction
 from finscope_market_data.overnight.joint_store import OvernightJointStore
 from finscope_market_data.overnight.universe import POOL_KEY
+from finscope_market_data.overnight.context_store import OvernightContextStore
+from finscope_market_data.overnight.context_research import attach_context_direction
 
 
 class OvernightJointResearch:
     def __init__(self, store, meta):
         self.models = OvernightJointStore(store)
         self.meta = meta
+        self.contexts = OvernightContextStore(store)
 
     def attach(self, report, request, bars):
         cutoff = datetime.fromisoformat(report['dataThrough'])
@@ -33,6 +36,7 @@ class OvernightJointResearch:
                          'reason': '决策前分钟或前一交易日公共样本环境不足'})
         grouped = group_bars([bar for bar in bars if bar.ended_at <= cutoff])
         self.attach_direction(report, request, grouped, artifact)
+        attach_context_direction(report, request, grouped, artifact, self.contexts, self.meta)
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return
@@ -88,4 +92,6 @@ class OvernightJointResearch:
                 'scope': universe.get('scope'), 'limitation': universe.get('limitation'),
                 'models': self.models.summaries(now), 'forward': self.meta.get('jointForward'),
                 'closeDirectionForward': self.meta.get('closeDirectionForward'),
+                'contextDirectionForward': self.meta.get('contextDirectionForward'),
+                'contextSnapshots': self.contexts.recent(),
                 'jobs': [{k: v for k, v in row.items() if k != 'token'} for row in self.meta.jobs(limit=6, phase='JOINT')]}

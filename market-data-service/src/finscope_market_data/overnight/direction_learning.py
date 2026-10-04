@@ -25,7 +25,8 @@ def temporal_parts(rows, through):
     if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + 2:
         return None
     selection_start, calibration_start = days[-40], days[-20]
-    training = [r for r in matured if days[0] <= r['signalDate'] < selection_start and r['exitAt'][:10] < selection_start]
+    training = [r for r in matured if days[0] <= r['signalDate'] < selection_start
+                and r['exitAt'][:10] < selection_start and r.get('trainingEligible', True)]
     selection = [r for r in matured if selection_start <= r['signalDate'] < calibration_start and r['exitAt'][:10] < calibration_start]
     calibration = [r for r in matured if r['signalDate'] >= calibration_start]
     if (len({r['signalDate'] for r in training}) < TRAIN_DAYS
@@ -35,6 +36,7 @@ def temporal_parts(rows, through):
 
 
 def fit_candidates(rows):
+    rows = [row for row in rows if row.get('trainingEligible', True)]
     raw = np.array([r['features'] for r in rows])
     # Equal dates, mean-one row weights: regularization has the declared sample scale.
     weights = date_weights(rows)
@@ -110,7 +112,7 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER'):
         'selectionDays': len({r['signalDate'] for r in selection}), 'calibrationDays': len({r['signalDate'] for r in calibration})}}
 
 
-def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=TEST_DAYS):
+def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=TEST_DAYS, include_checks=False):
     if test_days < TEST_DAYS:
         raise ValueError('测试区间不得少于 20 个交易日')
     matured = [r for r in rows if r['exitAt'] < through]
@@ -143,9 +145,12 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=
                       raw={key: raw[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')},
                       calibrated={key: calibrated_audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')})
     protocol = CONTEXT_PROTOCOL if selection_policy == POLICY else PROTOCOL
-    return {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
+    result = {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
         'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in checks),
         'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD'}}
+    if include_checks:
+        result['checks'] = checks
+    return result
 
 
 def direction_prediction(fitted, features, live_gate=None):

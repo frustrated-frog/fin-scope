@@ -38,7 +38,7 @@ class AutomationStore:
                     (phase or 'HISTORY', limit)).fetchall()
             else:
                 rows = db.execute('''SELECT payload FROM overnight_automation_job
-                    WHERE COALESCE(json_extract(payload, '$.phase'), '') NOT IN ('HISTORY','JOINT')
+                    WHERE COALESCE(json_extract(payload, '$.phase'), '') NOT IN ('HISTORY','JOINT','ACTIONS','CONTEXT')
                     ORDER BY key DESC LIMIT ?''', (limit,)).fetchall()
         return [json.loads(row[0]) for row in rows]
 

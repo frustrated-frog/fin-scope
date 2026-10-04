@@ -28,6 +28,9 @@ from finscope_market_data.overnight.service import OvernightService
 from finscope_market_data.overnight.history_backfill import OvernightHistoryBackfill
 from finscope_market_data.overnight.joint_research import OvernightJointResearch
 from finscope_market_data.overnight.joint_worker import OvernightJointWorker
+from finscope_market_data.overnight.context_capture import OvernightContextCapture
+from finscope_market_data.overnight.action_verification import OvernightActionVerification
+from finscope_market_data.providers.baostock_actions import BaostockActionProvider
 from finscope_market_data.providers.baostock_minutes import BaostockMinuteHistoryProvider
 from finscope_market_data.discovery.event_provider import MarketEventProvider
 from finscope_market_data.discovery.recall_archive import DiscoveryRecallArchive
@@ -208,6 +211,10 @@ def create_app(
         automation_task = asyncio.create_task(automation.run(capture_stop))
         history_task = asyncio.create_task(history_backfill.run(capture_stop))
         joint_task = asyncio.create_task(joint_worker.run(capture_stop))
+        context_capture = OvernightContextCapture(automation, application.state.router,
+            config.data_dir / 'stock-discovery-constituents.json', config.data_dir / 'quant' / 'industry-membership-history.json')
+        context_task = asyncio.create_task(context_capture.run(capture_stop))
+        action_task = asyncio.create_task(OvernightActionVerification(automation, BaostockActionProvider()).run(capture_stop))
         try:
             yield
         finally:
@@ -216,6 +223,8 @@ def create_app(
             await automation_task
             await history_task
             await joint_task
+            await context_task
+            await action_task
             close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):

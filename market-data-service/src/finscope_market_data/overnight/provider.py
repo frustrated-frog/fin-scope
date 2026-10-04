@@ -9,7 +9,10 @@ class OvernightMinuteProvider:
     source = 'EASTMONEY_5M_RAW'
 
     def fetch(self, code: str, through: datetime):
-        return asyncio.run(self._fetch(code, through))
+        return asyncio.run(self.fetch_async(code, through))
+
+    async def fetch_async(self, code: str, through: datetime):
+        return await self._fetch(code, through)
 
     async def _fetch(self, code, through):
         http = ProviderHttpClient(timeout_seconds=12)

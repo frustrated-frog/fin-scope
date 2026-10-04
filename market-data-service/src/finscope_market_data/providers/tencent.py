@@ -80,5 +80,4 @@ def _parse_time(value: str) -> datetime:
             return datetime.strptime(value, "%Y%m%d%H%M%S").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
         except ValueError:
             pass
-    return datetime.now(ZoneInfo("Asia/Shanghai"))
-
+    raise ProviderError("SCHEMA_DRIFT", "腾讯行情缺少有效行情时间", False)
