@@ -12,6 +12,7 @@ from finscope_market_data.forecast.direction_evaluation import evaluate_directio
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
 from finscope_market_data.overnight.joint_dataset import CALIBRATION_DAYS, MAX_DAYS, MIN_SYMBOLS, TRAIN_DAYS, date_weights
 from finscope_market_data.overnight.joint_learning import TREE_PARAMETERS, booster, sigmoid
+from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, select_direction
 
 SELECTION_DAYS = 20
 TEST_DAYS = 20
@@ -75,7 +76,9 @@ def predict_direction(model, features):
     return raw, apply_calibration(raw, model['calibration'])
 
 
-def fit_direction_before(rows, through):
+def fit_direction_before(rows, through, *, selection_policy='BRIER'):
+    if selection_policy not in ('BRIER', POLICY):
+        raise ValueError('未知方向模型选择协议')
     parts = temporal_parts(rows, through)
     if parts is None:
         return None
@@ -83,9 +86,12 @@ def fit_direction_before(rows, through):
     candidates = fit_candidates(training)
     sy = np.array([r['actualReturn'] > 0 for r in selection])
     weights = date_weights(selection)
-    scores = {name: float(np.average((p - sy) ** 2, weights=weights)) for name, p in
-              candidate_probabilities(candidates, [r['features'] for r in selection]).items()}
+    probabilities = candidate_probabilities(candidates, [r['features'] for r in selection])
+    scores = {name: float(np.average((p - sy) ** 2, weights=weights)) for name, p in probabilities.items()}
     selected = min(CANDIDATES, key=lambda name: (scores[name], CANDIDATES.index(name)))
+    selection_audit = {'policy': 'BRIER'}
+    if selection_policy == POLICY:
+        selected, selection_audit = select_direction(probabilities, selection)
     # Selection labels may now train the chosen recipe; calibration remains separate.
     model = fit_candidates(training + selection)
     model['selected'] = selected
@@ -96,7 +102,7 @@ def fit_direction_before(rows, through):
     model['calibration'] = asdict(fit_direction_calibration(raw, cy, date_weights(calibration), mode))
     model['baselineProbability'] = float(np.average([r['actualReturn'] > 0 for r in training + selection + calibration],
                                                    weights=date_weights(training + selection + calibration)))
-    return {'model': model, 'audit': {'selected': selected, 'selectionBrier': scores,
+    return {'model': model, 'audit': {'selected': selected, 'selectionBrier': scores, 'selection': selection_audit,
         'trainingThrough': max(r['exitAt'] for r in training), 'selectionStart': min(r['signalDate'] for r in selection),
         'selectionThrough': max(r['exitAt'] for r in selection), 'calibrationStart': min(r['signalDate'] for r in calibration),
         'calibrationThrough': max(r['exitAt'] for r in calibration),
@@ -104,15 +110,17 @@ def fit_direction_before(rows, through):
         'selectionDays': len({r['signalDate'] for r in selection}), 'calibrationDays': len({r['signalDate'] for r in calibration})}}
 
 
-def fit_direction(rows, through, cutoff):
+def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=TEST_DAYS):
+    if test_days < TEST_DAYS:
+        raise ValueError('测试区间不得少于 20 个交易日')
     matured = [r for r in rows if r['exitAt'] < through]
     days = sorted({r['signalDate'] for r in matured})
-    if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + TEST_DAYS + 3:
+    if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + test_days + 3:
         return None
     checks, folds = [], []
-    for day in days[-TEST_DAYS:]:
+    for day in days[-test_days:]:
         decision_at = f'{day}T{cutoff}:00'
-        fitted = fit_direction_before(matured, decision_at)
+        fitted = fit_direction_before(matured, decision_at, selection_policy=selection_policy)
         if fitted is None:
             return None
         test = [r for r in matured if r['signalDate'] == day]
@@ -122,7 +130,7 @@ def fit_direction(rows, through, cutoff):
         checks.extend({**r, 'probability': float(value), 'raw': float(unadjusted), 'calibrated': float(adjusted),
                        'baseline': fitted['model']['baselineProbability']} for r, value, unadjusted, adjusted in zip(test, p, raw, calibrated))
         folds.append({'signalDate': day, 'cutoff': decision_at, **fitted['audit']})
-    current = fit_direction_before(matured, through)
+    current = fit_direction_before(matured, through, selection_policy=selection_policy)
     if current is None:
         return None
     labels, dates = [r['actualReturn'] > 0 for r in checks], [r['signalDate'] for r in checks]
@@ -134,7 +142,8 @@ def fit_direction(rows, through, cutoff):
     historical.update(task=TARGET, eligible=False, reason='历史开发诊断；次日涨跌需单独积累真实前瞻记录',
                       raw={key: raw[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')},
                       calibrated={key: calibrated_audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')})
-    return {'protocol': PROTOCOL, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
+    protocol = CONTEXT_PROTOCOL if selection_policy == POLICY else PROTOCOL
+    return {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
         'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in checks),
         'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD'}}
 
@@ -144,7 +153,7 @@ def direction_prediction(fitted, features, live_gate=None):
     gate = live_gate if live_gate is not None else fitted['model'].get('calibrationGate', {})
     source = calibration_source(gate)
     p = float(adjusted[0] if source == 'INTERCEPT' else raw[0])
-    return {'protocol': PROTOCOL, 'target': TARGET, 'status': 'SHADOW', 'upProbability': p,
+    return {'protocol': fitted.get('protocol', PROTOCOL), 'target': TARGET, 'status': 'SHADOW', 'upProbability': p,
             'notUpProbability': 1 - p, 'rawUpProbability': float(raw[0]),
             'calibratedUpProbability': float(adjusted[0]), 'probabilitySource': source,
             'direction': 'UP' if p >= .5 else 'NOT_UP', 'selectedModel': fitted['model']['selected'],
