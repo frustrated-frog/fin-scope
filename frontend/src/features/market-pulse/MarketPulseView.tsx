@@ -10,6 +10,8 @@ import './MarketPulsePolish.css';
 import { MarketPanorama } from './MarketPanorama';
 import { PersonalMarketPanel } from './PersonalMarketPanel';
 import type { PersonalChange } from './personalMarket';
+import { RadarOverview } from './RadarOverview';
+import './RadarWorkspace.css';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -579,7 +581,9 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }
 
   return (
-    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : ''}`}>
+    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : view === 'review' ? ' is-radar' : ''}`}
+      onKeyDownCapture={event => { event.currentTarget.dataset.interaction = 'keyboard'; }}
+      onPointerDownCapture={event => { event.currentTarget.dataset.interaction = 'pointer'; }}>
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
         <button type="button" role="tab" aria-selected={view === 'panorama'} onClick={() => setView('panorama')}>市场全景</button>
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
@@ -588,7 +592,10 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
         <button type="button" role="tab" aria-selected={view === 'rotation'} onClick={() => setView('rotation')}>行业轮动</button>
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
-      {view !== 'panorama' && <header className="market-pulse-hero">
+      {view === 'review' && <RadarOverview workspace={workspace} stage={stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}
+        dimensions={[{ name: '趋势', value: label(regime?.trendState) }, { name: '流动性', value: label(regime?.liquidityState) }, { name: '风险偏好', value: label(regime?.riskAppetiteState) }, { name: '轮动速度', value: label(regime?.rotationState) }]}
+        dates={dates} refreshing={refreshing} onLoad={date => void load(date)} onRefresh={() => void refresh()} />}
+      {view !== 'panorama' && view !== 'review' && <header className="market-pulse-hero">
         <div className="market-pulse-hero-main">
           <p className="market-pulse-kicker">MARKET REGIME · {workspace.businessDate ?? 'LATEST'}</p>
           <h3>{stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}</h3>
@@ -630,11 +637,12 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       <MarketPulseWarnings warnings={workspace.warnings} />
 
       {view === 'review' && <>
-        <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />
-        {workspace.businessDate && <PersonalMarketPanel key={workspace.businessDate} businessDate={workspace.businessDate} sectors={sectors}
-          refreshKey={workspace.generatedAt} addToast={addToast} onOpenWatchlist={onOpenWatchlist} onOpenEvent={onOpenEvent} onOpenStockDiscovery={onOpenStockDiscovery} />}
         {workspace.businessDate && <DailyResearchPanel businessDate={workspace.businessDate} sectors={sectors}
-          refreshKey={workspace.generatedAt} onOpenStockDiscovery={onOpenStockDiscovery} onOpenStock={onOpenStock} />}
+          refreshKey={workspace.generatedAt} onOpenStockDiscovery={onOpenStockDiscovery} onOpenStock={onOpenStock}>
+          <DailyReviewPanel review={workspace.dailyReview} breadth={workspace.breadth} />
+          <PersonalMarketPanel key={workspace.businessDate} businessDate={workspace.businessDate} sectors={sectors}
+            refreshKey={workspace.generatedAt} addToast={addToast} onOpenWatchlist={onOpenWatchlist} onOpenEvent={onOpenEvent} onOpenStockDiscovery={onOpenStockDiscovery} />
+        </DailyResearchPanel>}
       </>}
 
       {view === 'transition' && transitionDecision && <MarketTransitionPanel decision={transitionDecision}
