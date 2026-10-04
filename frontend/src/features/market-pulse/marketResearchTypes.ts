@@ -1,4 +1,5 @@
 export type ResearchGroupCode = 'STRONG' | 'TREND' | 'BREAKOUT';
+export type OpportunityState = 'EMERGING' | 'CONTINUING' | 'REPAIRING' | 'WEAKENING' | 'OTHER';
 export type ResearchStock = {
   instrumentCode: string;
   instrumentName?: string | null;
@@ -9,6 +10,8 @@ export type ResearchStock = {
   return20d?: number | null;
   amount?: number | null;
   groupCodes: ResearchGroupCode[];
+  opportunityState?: OpportunityState | null;
+  previousOpportunityState?: OpportunityState | null;
 };
 export type ResearchGroup = {
   code: ResearchGroupCode;

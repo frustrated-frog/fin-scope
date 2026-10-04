@@ -212,16 +212,11 @@
 .market-pulse-page .mp-research-table-wrap td.is-negative { color: var(--mp-green); }
 .market-pulse-page .mp-research-compare { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
 .market-pulse-page .mp-research-comparison article,
-.market-pulse-page .mp-theme-card,
-.market-pulse-page .mp-cohort-card { border-color: #38526a; border-radius: 13px; background: #1b2e43; padding: 20px; }
+.market-pulse-page .mp-theme-card { border-color: #38526a; border-radius: 13px; background: #1b2e43; padding: 20px; }
 .market-pulse-page .mp-theme-card { border-top: 3px solid var(--mp-blue); }
-.market-pulse-page .mp-cohort-card:nth-child(1) { border-top: 3px solid var(--mp-red); }
-.market-pulse-page .mp-cohort-card:nth-child(2) { border-top: 3px solid var(--mp-blue); }
-.market-pulse-page .mp-cohort-card:nth-child(3) { border-top: 3px solid var(--mp-amber); }
 .market-pulse-page .mp-daily-research dl { gap: 26px; }
 .market-pulse-page .mp-daily-research dd { color: #f0f7fa; font-size: 23px; }
 .market-pulse-page .mp-theme-editor { background: #12253a; }
-.market-pulse-page .mp-return-distribution meter { accent-color: var(--mp-blue); }
 .market-pulse-page .mp-research-members li { border-color: var(--line); }
 .market-pulse-page .mp-research-members strong { color: #edf6f9; }
 
