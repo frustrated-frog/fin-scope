@@ -5,6 +5,7 @@ export interface OvernightJointPrediction {
   upProbability: number; expectedNetReturn: number; downsideProbability: number;
   lowerNetReturn: number; upperNetReturn: number; rankScore: number;
   forwardStatus: string; forwardDays: number;
+  downsideCalibrationStatus?: string;
   incumbentProbability?: number; incumbentExpectedNetReturn?: number;
 }
 

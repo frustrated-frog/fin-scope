@@ -72,7 +72,7 @@ export function OvernightJointEvidence({ target }: { target: OvernightTarget }) 
   return <details className="overnight-joint-evidence"><summary>{joint.adopted ? '联合模型 · 已通过前瞻对照' : '联合模型 · 并行观察'}</summary>
     <dl><div><dt>联合模型盈利概率</dt><dd>{percent(joint.upProbability)}</dd></div>
       <div><dt>预测净收益</dt><dd>{percent(joint.expectedNetReturn)}</dd></div>
-      <div><dt>净收益低于 -2% 的概率</dt><dd>{percent(joint.downsideProbability)}</dd></div>
+      <div><dt>净收益低于 -2% 的概率</dt><dd>{joint.downsideCalibrationStatus === 'FITTED' ? percent(joint.downsideProbability) : '风险样本不足'}</dd></div>
       <div><dt>前瞻对照</dt><dd>{joint.forwardDays} / 60 个交易日</dd></div></dl>
     <p>{labels[joint.forwardStatus] ?? '等待对照'}。{joint.adopted ? '当前主参考值来自联合模型。' : '当前主参考值仍沿用原有判断。'}</p>
   </details>;

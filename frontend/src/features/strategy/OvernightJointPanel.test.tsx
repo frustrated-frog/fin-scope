@@ -55,7 +55,8 @@ test('labels the individual challenger and downside estimates without replacing 
   render(<OvernightJointEvidence target={{ target: '10:00', status: 'WATCH', sampleCount: 140,
     upProbability: .4, joint: { status: 'AVAILABLE', adopted: false, qualified: true, artifactId: 'test',
       upProbability: .6, expectedNetReturn: .005, downsideProbability: .12, lowerNetReturn: -.02,
-      upperNetReturn: .03, rankScore: .0038, forwardStatus: 'ACCUMULATING', forwardDays: 4 } }} />);
+      upperNetReturn: .03, rankScore: .0038, forwardStatus: 'ACCUMULATING', forwardDays: 4,
+      downsideCalibrationStatus: 'FITTED' } }} />);
   expect(screen.getByText('联合模型 · 并行观察')).toBeVisible();
   expect(screen.getByText('60.0%')).not.toBeVisible();
   await userEvent.click(screen.getByText('联合模型 · 并行观察'));
