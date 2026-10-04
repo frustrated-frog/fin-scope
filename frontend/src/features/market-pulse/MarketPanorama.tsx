@@ -7,6 +7,7 @@ import { PanoramaTrend } from './PanoramaTrend';
 import { PanoramaMap } from './PanoramaMap';
 import { PanoramaMatrix } from './PanoramaMatrix';
 import { PanoramaRotation } from './PanoramaRotation';
+import { PanoramaCatalysts } from './PanoramaCatalysts';
 import { amount, buildFrames, indexColors, pct, ratio, type PanoramaFrame, type PanoramaMetric } from './panoramaModel';
 import './MarketPanorama.css';
 
@@ -112,6 +113,8 @@ export function MarketPanorama({ workspace, dates, refreshing, onLoad, onRefresh
     <div className="mpa-style-strip" aria-label="宽基指数风格对照"><div><strong>宽基表现</strong><span>当日 / 近20日</span></div>{(active?.indices ?? []).map((index, i) => <div key={index.code}><i style={{ background: indexColors[i % indexColors.length] }} /><span>{index.name}</span><strong>{pct(index.return1d)}</strong><small>{pct(index.return20d)}</small></div>)}</div>
     <PanoramaMap sectors={active?.sectors ?? []} selectedCode={selectedCode} onSelect={setSelectedCode} metric={metric} onMetric={setMetric} stocks={research && research.businessDate === date ? research.stocks : []} stocksLoading={stockState === 'loading'} stocksError={stockState === 'error'} businessDate={date} watchedCodes={watchedCodes} onOpenStock={onOpenStock} onOpenStockDiscovery={onOpenStockDiscovery} />
     <div className="mpa-evolution"><PanoramaMatrix frames={frames} selectedDate={date} selectedCode={selectedCode} metric={metric} onSelect={choose} /><PanoramaRotation sectors={active?.sectors ?? []} selectedCode={selectedCode} onSelect={setSelectedCode} businessDate={date} /></div>
+    <PanoramaCatalysts workspace={workspace} businessDate={date} sectors={active?.sectors ?? []} selectedCode={selectedCode} onSelect={setSelectedCode}
+      hasSnapshot={date === workspace.businessDate || (history?.date === workspace.businessDate && !!history?.frames.some(frame => frame.businessDate === date))} />
     <div className="mpa-timeline" aria-label="全景时间轴">
       <button type="button" aria-label="前一个观测日" disabled={position === 0} onClick={() => choose(frames[position - 1].businessDate)}>←</button>
       <div><div className="mpa-timeline-labels"><time>{frames[0]?.businessDate}</time><strong>{date}</strong><time>{frames[frames.length - 1]?.businessDate}</time></div><input type="range" aria-label="全景观察日期" aria-valuetext={date} min={0} max={Math.max(0, frames.length - 1)} value={position} onChange={event => choose(frames[Number(event.target.value)].businessDate)} /></div>

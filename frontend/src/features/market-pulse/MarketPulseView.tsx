@@ -4,8 +4,7 @@ import { api } from '../../shared/api/client';
 import { buildMarketTransitionDecision } from './marketPulseDecision';
 import { MarketTransitionPanel } from './MarketTransitionPanel';
 import { DailyResearchPanel } from './DailyResearchPanel';
-import { SectorOpportunityMap } from './SectorOpportunityMap';
-import type { DailyMarketReview, MarketBreadth, MarketEventConfirmation, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
+import type { DailyMarketReview, MarketBreadth, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 import './MarketPulsePolish.css';
 import { MarketPanorama } from './MarketPanorama';
 import { PersonalMarketPanel } from './PersonalMarketPanel';
@@ -296,25 +295,6 @@ function signedInteger(value?: number) {
   return `${value > 0 ? '+' : ''}${Math.round(value).toLocaleString('zh-CN')}`;
 }
 
-function EventRow({ item }: { item: MarketEventConfirmation }) {
-  return (
-    <article className="market-pulse-event-row">
-      <div className="market-pulse-event-axis" aria-hidden="true">
-        <i style={{ left: `${Math.min(100, item.eventScore)}%`, bottom: `${Math.min(100, item.marketReactionScore)}%` }} />
-      </div>
-      <div>
-        <span>{item.sectorName ?? '未映射行业'} · {label(item.confirmationState)}</span>
-        <h4>{item.title}</h4>
-        <p>{item.evidence?.[0] ?? '正在等待更多独立证据'}</p>
-      </div>
-      <dl>
-        <div><dt>事件</dt><dd>{item.eventScore}</dd></div>
-        <div><dt>行情</dt><dd>{item.marketReactionScore}</dd></div>
-      </dl>
-    </article>
-  );
-}
-
 function ReviewList({ title, items, tone }: { title: string; items?: string[]; tone?: 'risk' | 'watch' }) {
   return (
     <section className={`market-pulse-review-list ${tone ? `is-${tone}` : ''}`}>
@@ -474,7 +454,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const [view, setView] = useState<'panorama' | 'review' | 'transition' | 'breadth' | 'rotation' | 'history'>('panorama');
+  const [view, setView] = useState<'panorama' | 'review' | 'transition' | 'breadth' | 'history'>('panorama');
   const loadRequest = useRef(0);
 
   const load = async (date?: string) => {
@@ -589,7 +569,6 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
         <button type="button" role="tab" aria-selected={view === 'transition'} onClick={() => setView('transition')}>转折与情景</button>
         <button type="button" role="tab" aria-selected={view === 'breadth'} onClick={() => setView('breadth')}>市场宽度</button>
-        <button type="button" role="tab" aria-selected={view === 'rotation'} onClick={() => setView('rotation')}>行业轮动</button>
         <button type="button" role="tab" aria-selected={view === 'history'} onClick={() => setView('history')}>历史演变</button>
       </nav>
       {view === 'review' && <RadarOverview workspace={workspace} stage={stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}
@@ -655,21 +634,6 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       <MarketBreadthPanel breadth={workspace.breadth} />
 
       <MarketTape regimes={workspace.recentRegimes ?? []} />
-      </>}
-
-      {view === 'rotation' && <>
-
-      <SectorOpportunityMap sectors={sectors} onOpenStockDiscovery={onOpenStockDiscovery} />
-
-      <section className="market-pulse-events">
-        <header><div><span>CATALYST WATCH</span><h3>事件与行情确认</h3></div><p>把行业催化与盘面反应放在一起，帮助区分突发异动和持续主线。</p></header>
-        <div>{(workspace.eventConfirmations ?? []).length ? workspace.eventConfirmations?.slice(0, 6).map(item => <EventRow item={item} key={`${item.radarEventId}-${item.title}`} />) : <p className="market-pulse-inline-empty">近 48 小时没有新的行业催化。</p>}</div>
-      </section>
-
-      <section className="market-pulse-discovery-handoff" aria-label="股票发现入口">
-        <div><span>NEXT / STOCK DISCOVERY</span><h3>行业方向已经看清，个股筛选去股票发现</h3><p>Market Pulse 保留市场与行业视角；候选池、模型排序和单股研究继续由现有股票发现页面负责。</p></div>
-        <button type="button" onClick={() => onOpenStockDiscovery?.()}>进入股票发现</button>
-      </section>
       </>}
 
       <footer className="market-pulse-disclaimer"><span>研究边界</span><p>研究候选不是买入指令。页面用于提高研究优先级，最终决策仍需核验公司基本面、估值、流动性与个人风险承受能力。</p><time>{workspace.generatedAt ? `生成于 ${workspace.generatedAt.replace('T', ' ').slice(0, 16)}` : ''}</time></footer>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ResearchStock } from './marketResearchTypes';
 import type { SectorRotation, StockDiscoveryMarketContext } from './marketPulseTypes';
 import { buildResearchContext } from './marketResearch';
+import { sectorStageLabels } from './sectorObservation';
 import { amount, finite, heatLevel, metricLabels, pct, ratio, sectorMembers, turnoverTiles, type PanoramaMetric } from './panoramaModel';
 
 type Props = {
@@ -15,6 +16,10 @@ export function PanoramaMap({ sectors, selectedCode, onSelect, metric, onMetric,
   const [query, setQuery] = useState('');
   const [drillCode, setDrillCode] = useState('');
   const [sizing, setSizing] = useState<'equal' | 'amount'>('equal');
+  useEffect(() => {
+    setQuery('');
+    setDrillCode('');
+  }, [selectedCode]);
   const selected = sectors.find(sector => sector.sectorCode === selectedCode);
   const drill = drillCode === selectedCode && selected;
   const matches = [...sectors].sort((a, b) => a.sectorCode.localeCompare(b.sectorCode))
@@ -26,10 +31,11 @@ export function PanoramaMap({ sectors, selectedCode, onSelect, metric, onMetric,
     ? members.reduce((sum, stock) => sum + (stock.amount ?? 0), 0) : undefined;
   const tiles = turnoverTiles(members);
   const leaders = [...sectors].filter(sector => finite(sector[metric])).sort((a, b) => (b[metric] ?? 0) - (a[metric] ?? 0));
+  const clearSelection = () => { setDrillCode(''); setQuery(''); onSelect(''); };
   return <section className="mpa-panel mpa-map" aria-label="全市场分层地图">
     <header className="mpa-section-head"><div><span className="mpa-eyebrow">市场结构 · {businessDate}</span><h3>{drill ? drill.sectorName : '全行业强弱地图'} <small>{drill ? `${members.length} 只样本` : `${sectors.length} 个行业`}</small></h3></div><label className="mpa-select">颜色<select aria-label="地图颜色指标" value={metric} onChange={event => onMetric(event.target.value as PanoramaMetric)}>{Object.entries(metricLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></header>
     <div className="mpa-map-toolbar">
-      <div className="mpa-breadcrumb"><button type="button" onClick={() => setDrillCode('')}>全市场</button>{drill && <><span>/</span><strong>{drill.sectorName}</strong></>}</div>
+      <div className="mpa-breadcrumb"><button type="button" onClick={clearSelection}>全市场</button>{drill && <><span>/</span><strong>{drill.sectorName}</strong></>}</div>
       {drill ? <label className="mpa-select">面积<select aria-label="个股面积" value={sizing} onChange={event => setSizing(event.target.value as 'equal' | 'amount')}><option value="equal">等面积</option><option value="amount">成交额</option></select></label> : <input className="mpa-search" aria-label="查找行业" placeholder="查找行业…" value={query} onChange={event => setQuery(event.target.value)} />}
       <div className="mpa-color-key"><span>{metric === 'breadthRatio' && !drill ? '低于50%' : '下跌'}</span><i /><span>{metric === 'breadthRatio' && !drill ? '高于50%' : '上涨'}</span></div>
     </div>
@@ -59,9 +65,15 @@ export function PanoramaMap({ sectors, selectedCode, onSelect, metric, onMetric,
       </div>
       <aside className="mpa-sector-inspector" aria-label="选中行业详情">
         {selected ? <>
-          <span className="mpa-eyebrow">选中行业</span><h4>{selected.sectorName}</h4><div className={`mpa-inspector-return heat-text-${heatLevel(selected[metric], metric)}`}>{metric === 'breadthRatio' ? ratio(selected[metric]) : pct(selected[metric])}<small>{metricLabels[metric]}</small></div>
-          <dl><div><dt>当日</dt><dd>{pct(selected.return1d)}</dd></div><div><dt>近5日</dt><dd>{pct(selected.return5d)}</dd></div><div><dt>近20日</dt><dd>{pct(selected.return20d)}</dd></div><div><dt>上涨占比</dt><dd>{ratio(selected.breadthRatio)}</dd></div><div><dt>本地成员样本</dt><dd>{stocksLoading ? '读取中' : members.length}</dd></div><div><dt>样本成交额</dt><dd>{members.length ? amount(totalAmount) : '—'}</dd></div></dl>
-          <p>{selected.explanations?.[0] ?? '结合历史矩阵观察强弱是否持续。'}</p>
+          <div className="mpa-inspector-heading"><span className="mpa-eyebrow">行业观察</span><button type="button" onClick={clearSelection}>清除选择</button></div>
+          <div className="mpa-inspector-title"><h4>{selected.sectorName}</h4><span className="mpa-sector-stage" data-stage={selected.stage}>{sectorStageLabels[selected.stage ?? ''] ?? '待观察'}</span></div>
+          <div className={`mpa-inspector-return heat-text-${heatLevel(selected[metric], metric)}`}>{metric === 'breadthRatio' ? ratio(selected[metric]) : pct(selected[metric])}<small>{metricLabels[metric]}</small></div>
+          <dl className="mpa-inspector-metrics"><div><dt>当日</dt><dd>{pct(selected.return1d)}</dd></div><div><dt>近5日</dt><dd>{pct(selected.return5d)}</dd></div><div><dt>近20日</dt><dd>{pct(selected.return20d)}</dd></div><div><dt>上涨占比</dt><dd>{ratio(selected.breadthRatio)}</dd></div><div><dt>持续天数</dt><dd>{finite(selected.persistenceDays) ? `${selected.persistenceDays} 天` : '—'}</dd></div><div><dt>拥挤度 / 100</dt><dd>{finite(selected.crowdingScore) ? selected.crowdingScore : '—'}</dd></div></dl>
+          <p className="mpa-sector-explanation">{selected.explanations?.[0] ?? '结合历史矩阵观察强弱是否持续。'}</p>
+          <details className="mpa-inspector-details" key={`${businessDate}-${selected.sectorCode}`}><summary>资金与更多指标</summary>
+            <dl><div><dt>资金净流入</dt><dd>{finite(selected.mainNetInflow) ? `${selected.mainNetInflow > 0 ? '+' : ''}${(selected.mainNetInflow / 1e8).toFixed(1)} 亿` : '—'}</dd></div><div><dt>轮动分 / 100</dt><dd>{finite(selected.rotationScore) ? selected.rotationScore : '—'}</dd></div><div><dt>本地成员样本</dt><dd>{stocksLoading ? '读取中' : stocksError ? '加载失败' : members.length}</dd></div><div><dt>样本成交额</dt><dd>{!stocksLoading && !stocksError && members.length ? amount(totalAmount) : '—'}</dd></div></dl>
+            {(selected.explanations?.length ?? 0) > 1 && <ul>{selected.explanations!.slice(1, 4).map((text, i) => <li key={i}>{text}</li>)}</ul>}
+          </details>
           <button className="mpa-primary" type="button" onClick={() => setDrillCode(drill ? '' : selectedCode)}>{drill ? '返回全行业地图' : '展开行业个股'} <span>↗</span></button>
           {onOpenStockDiscovery && <button className="mpa-secondary" type="button" onClick={() => onOpenStockDiscovery(buildResearchContext([selected], businessDate))}>进入行业研究 →</button>}
         </> : <>

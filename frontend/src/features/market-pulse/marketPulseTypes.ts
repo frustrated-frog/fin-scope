@@ -59,6 +59,7 @@ export type SectorRotationPoint = {
 export type MarketEventConfirmation = {
   radarEventId?: number;
   title: string;
+  sectorCode?: string;
   sectorName?: string;
   eventScore: number;
   marketReactionScore: number;

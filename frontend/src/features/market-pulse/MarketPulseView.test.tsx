@@ -174,20 +174,20 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.getByText('+42.5')).toBeInTheDocument();
   expect(screen.getByText('参与修复')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('tab', { name: '行业轮动' }));
+  fireEvent.click(screen.getByRole('tab', { name: '市场全景' }));
 
-  expect(screen.getByRole('heading', { name: '行业机会地图' })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: '行业轮动' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /全行业强弱地图/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '选择行业创新药' }));
   expect(screen.getByRole('heading', { name: '创新药' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '轮动地图' }));
-  expect(screen.getByRole('img', { name: '行业十日轮动尾迹' })).toBeInTheDocument();
-  expect(document.querySelectorAll('.market-pulse-rotation-trail')).toHaveLength(2);
-  expect(screen.getByText('10日尾迹')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '行业相对强度与动量轮动尾迹' })).toBeInTheDocument();
+  expect(document.querySelectorAll('.mpa-rotation-point')).toHaveLength(2);
   expect(screen.getByText('领先 · 轮动加速')).toBeInTheDocument();
-  expect(screen.getByText('事件与行情确认')).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '行业催化' })).toHaveTextContent('mRNA 肿瘤疫苗临床数据更新');
   expect(screen.queryByRole('heading', { name: '示例医药' })).not.toBeInTheDocument();
   expect(screen.queryByText('股票研究候选')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '进入股票发现' }));
-  expect(onOpenStockDiscovery).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '进入行业研究 →' }));
+  expect(onOpenStockDiscovery).toHaveBeenCalledWith(expect.objectContaining({ businessDate: '2026-08-21', preferredSectors: ['创新药'] }));
   expect(screen.getByText(/研究候选不是买入指令/)).toBeInTheDocument();
 });
 
