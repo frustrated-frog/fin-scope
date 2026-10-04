@@ -16,8 +16,9 @@ def flow(tmp_path):
     now = [datetime(2026, 9, 21, 14, 20)]
     calls = []
     scans = []
-    def generate(request, freeze_all, settle_cached):
+    def generate(request, freeze_all, settle_cached, cohort):
         assert not settle_cached
+        assert cohort == 'AUTOMATIC'
         calls.append(request)
         return {'id': request.instrument_code, 'status': 'INSUFFICIENT_DATA',
                 'evidenceKind': 'FORWARD', 'warnings': ['样本不足']}

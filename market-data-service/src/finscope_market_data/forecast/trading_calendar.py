@@ -4,6 +4,7 @@ Source: https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_1080
 Unknown years fail closed until the exchange publishes and we verify their calendar.
 """
 from datetime import date, timedelta
+from functools import lru_cache
 
 
 _CLOSURES = {
@@ -12,21 +13,25 @@ _CLOSURES = {
 }
 
 
+@lru_cache(maxsize=4096)
 def next_session(after: date) -> date | None:
     current = after + timedelta(days=1)
     while current.year in _CLOSURES:
-        closed = any(start <= current.strftime("%m-%d") <= end for start, end in _CLOSURES[current.year])
+        month_day = f'{current.month:02d}-{current.day:02d}'
+        closed = any(start <= month_day <= end for start, end in _CLOSURES[current.year])
         if current.weekday() < 5 and not closed:
             return current
         current += timedelta(days=1)
     return None
 
 
+@lru_cache(maxsize=4096)
 def previous_session(before: date) -> date | None:
     """Last exchange session strictly before the supplied date; unknown years fail closed."""
     current = before - timedelta(days=1)
     while current.year in _CLOSURES:
-        closed = any(start <= current.strftime("%m-%d") <= end for start, end in _CLOSURES[current.year])
+        month_day = f'{current.month:02d}-{current.day:02d}'
+        closed = any(start <= month_day <= end for start, end in _CLOSURES[current.year])
         if current.weekday() < 5 and not closed:
             return current
         current -= timedelta(days=1)

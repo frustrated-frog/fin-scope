@@ -1,5 +1,6 @@
 """Fixed local models, strictly past-only features and next-session executable proxies."""
 from datetime import datetime, timedelta
+from functools import lru_cache
 import hashlib
 import json
 
@@ -15,10 +16,12 @@ TARGETS = ('OPEN', '10:00', '14:30', 'CLOSE')
 def group_bars(bars):
     grouped = {}
     for bar in sorted(bars, key=lambda x: x.ended_at):
-        grouped.setdefault(bar.ended_at.date(), {})[bar.ended_at.strftime('%H:%M')] = bar
+        stamp = f'{bar.ended_at.hour:02d}:{bar.ended_at.minute:02d}'
+        grouped.setdefault(bar.ended_at.date(), {})[stamp] = bar
     return grouped
 
 
+@lru_cache(maxsize=16)
 def expected_times(cutoff):
     # Vendor 5-minute bars are labelled by their interval end; auction is not used.
     start = datetime(2026, 1, 1, 9, 35)
@@ -27,7 +30,7 @@ def expected_times(cutoff):
         stamp = (start + timedelta(minutes=5 * offset)).strftime('%H:%M')
         if ('09:35' <= stamp <= '11:30' or '13:05' <= stamp <= '15:00') and stamp <= cutoff:
             result.append(stamp)
-    return result
+    return tuple(result)
 
 
 def features(day, cutoff):

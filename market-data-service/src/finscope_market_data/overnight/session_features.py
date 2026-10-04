@@ -12,7 +12,7 @@ FEATURE_CODES = ('OPEN_GAP', 'PREVIOUS_OVERNIGHT', 'PREVIOUS_INTRADAY',
                  'MEAN_OVERNIGHT_5', 'MEAN_INTRADAY_5', 'RELATIVE_AMOUNT_5')
 
 
-def session_features(grouped, day, cutoff):
+def session_features(grouped, day, cutoff, *, complete_dates=None):
     current = features(grouped.get(day, {}), cutoff)
     if current is None:
         return None
@@ -20,7 +20,8 @@ def session_features(grouped, day, cutoff):
     cursor = day
     for _ in range(6):
         cursor = previous_session(cursor)
-        if cursor is None or features(grouped.get(cursor, {}), '15:00') is None:
+        complete = cursor in complete_dates if complete_dates is not None else features(grouped.get(cursor, {}), '15:00') is not None
+        if cursor is None or not complete:
             return None
         previous.append(grouped[cursor])
     overnight = [previous[i]['09:35'].open / previous[i + 1]['15:00'].close - 1 for i in range(5)]

@@ -4,7 +4,6 @@ Never repeatedly retest growing windows until they happen to pass. A failed
 protocol needs a new declared experiment and new future observations.
 """
 from collections import defaultdict
-from datetime import datetime
 
 import numpy as np
 
@@ -79,7 +78,7 @@ def summarize_forward(store, now, meta=None):
     for report in reports:
         research = report.get('jointResearch') or {}
         if (report.get('evidenceKind') != 'FORWARD' or research.get('protocol') != PROTOCOL
-                or not research.get('artifactId')):
+                or research.get('cohort') != 'AUTOMATIC' or not research.get('artifactId')):
             continue
         # Wait for the whole next session. Partial morning labels do not close a day early.
         if not report.get('targetDate') or report['targetDate'] >= str(now.date()):

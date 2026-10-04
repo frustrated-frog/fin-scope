@@ -7,7 +7,9 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.preprocessing import StandardScaler
 
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
-from finscope_market_data.overnight.joint_dataset import date_weights, split_dates
+from finscope_market_data.overnight.joint_dataset import (
+    CALIBRATION_DAYS, MAX_DAYS, MIN_SYMBOLS, TRAIN_DAYS, date_weights, split_dates,
+)
 
 TREE_PARAMETERS = dict(n_estimators=80, learning_rate=.035, num_leaves=7, max_depth=3,
     min_child_samples=60, reg_lambda=10, random_state=42, n_jobs=2, verbosity=-1,
@@ -79,18 +81,28 @@ def prediction(model, features):
     p, expected, downside = (float(values[0]) for values in predict_many(model, [features]))
     lower, upper = expected + model['residualLow'], expected + model['residualHigh']
     # Fixed before forward evaluation; the model may abstain on every stock.
-    qualified = p >= .55 and expected > 0 and downside <= .25 and lower >= -.04
+    qualified = (p >= .55 and expected > 0 and downside <= .25 and lower >= -.04
+                 and model['calibration']['status'] == 'FITTED'
+                 and model['downsideCalibration']['status'] == 'FITTED')
     return {'upProbability': p, 'expectedNetReturn': expected, 'downsideProbability': downside,
             'lowerNetReturn': lower, 'upperNetReturn': upper, 'qualified': qualified,
             'rankScore': expected - .01 * downside, 'baselineProbability': model['baselineProbability'],
-            'calibrationStatus': model['calibration']['status']}
+            'calibrationStatus': model['calibration']['status'],
+            'downsideCalibrationStatus': model['downsideCalibration']['status']}
 
 
-def fit_target(rows, through):
-    split = split_dates(rows, through)
-    if split is None:
+def fit_before(rows, through):
+    matured = [row for row in rows if row['exitAt'] < through]
+    dates = sorted({row['signalDate'] for row in matured})[-MAX_DAYS:]
+    if len(dates) < TRAIN_DAYS + CALIBRATION_DAYS + 1:
         return None
-    training, calibration, test = split
+    calibration_start = dates[-CALIBRATION_DAYS]
+    training = [row for row in matured if dates[0] <= row['signalDate'] < calibration_start
+                and row['exitAt'][:10] < calibration_start]
+    calibration = [row for row in matured if row['signalDate'] >= calibration_start]
+    if (len({row['signalDate'] for row in training}) < TRAIN_DAYS
+            or min(len({row['instrumentCode'] for row in part}) for part in (training, calibration)) < MIN_SYMBOLS):
+        return None
     raw_x = np.asarray([row['features'] for row in training])
     weights = date_weights(training)
     clip_low, clip_high = np.quantile(raw_x, [.01, .99], axis=0)
@@ -119,21 +131,50 @@ def fit_target(rows, through):
     baseline_rows = training + calibration
     model['baselineProbability'] = float(np.average([row['actualNetReturn'] > 0 for row in baseline_rows],
                                                     weights=date_weights(baseline_rows)))
-    p, estimate, _ = predict_many(model, [row['features'] for row in test])
-    dates = [row['signalDate'] for row in test]
-    actual = np.asarray([row['actualNetReturn'] for row in test])
-    diagnostics = evaluate_direction(p, actual > 0, dates, {'HISTORICAL_PRIOR': [model['baselineProbability']] * len(test)})
-    # This held-out interval diagnoses a fixed model. It never selects weights or promotes it.
+    return {'model': model, 'audit': {
+        'trainingDays': len({r['signalDate'] for r in training}), 'trainingRows': len(training),
+        'calibrationDays': len({r['signalDate'] for r in calibration}),
+        'trainingThrough': max(r['exitAt'] for r in training), 'calibrationStart': calibration_start,
+        'calibrationThrough': max(r['exitAt'] for r in calibration),
+        'calibrationStatus': model['calibration']['status']}}
+
+
+def fit_target(rows, through, decision_time='14:30'):
+    split = split_dates(rows, through)
+    if split is None:
+        return None
+    test = split[2]
+    checks, folds = [], []
+    for day in sorted({row['signalDate'] for row in test}):
+        cutoff = f'{day}T{decision_time}:00'
+        past = fit_before(rows, cutoff)
+        if past is None:
+            return None
+        fold_rows = [row for row in test if row['signalDate'] == day]
+        model = past['model']
+        p, estimate, _ = predict_many(model, [row['features'] for row in fold_rows])
+        for row, probability, expected in zip(fold_rows, p, estimate):
+            checks.append({**row, 'probability': float(probability), 'expected': float(expected),
+                'lower': float(expected + model['residualLow']), 'upper': float(expected + model['residualHigh']),
+                'baseline': model['baselineProbability']})
+        folds.append({'signalDate': day, 'cutoff': cutoff, **past['audit']})
+    # Refit for the next live decision using ALL already-matured labels. Historical
+    # diagnostic rows can enter later training, never an earlier day's prediction.
+    current = fit_before(rows, through)
+    if current is None:
+        return None
+    p = [row['probability'] for row in checks]
+    actual = np.asarray([row['actualNetReturn'] for row in checks])
+    estimate = np.asarray([row['expected'] for row in checks])
+    dates = [row['signalDate'] for row in checks]
+    diagnostics = evaluate_direction(p, actual > 0, dates, {'HISTORICAL_PRIOR': [row['baseline'] for row in checks]})
+    # Fixed daily walk-forward policy. No parameters are selected from these results.
     diagnostics['eligible'] = False
     diagnostics['reason'] = '历史样本诊断；启用需要另行积累固定协议下的真实前瞻对照'
-    diagnostics['expectedReturnMae'] = float(np.average(np.abs(actual - estimate), weights=date_weights(test)))
-    diagnostics['intervalCoverage'] = float(np.average((actual >= estimate + model['residualLow']) &
-        (actual <= estimate + model['residualHigh']), weights=date_weights(test)))
-    audit = {'trainingDays': len({r['signalDate'] for r in training}), 'trainingRows': len(training),
-             'calibrationDays': len({r['signalDate'] for r in calibration}),
-             'trainingThrough': max(r['exitAt'] for r in training),
-             'calibrationStart': min(r['signalDate'] for r in calibration),
-             'calibrationThrough': max(r['exitAt'] for r in calibration),
+    diagnostics['expectedReturnMae'] = float(np.average(np.abs(actual - estimate), weights=date_weights(checks)))
+    diagnostics['intervalCoverage'] = float(np.average((actual >= [row['lower'] for row in checks]) &
+        (actual <= [row['upper'] for row in checks]), weights=date_weights(checks)))
+    audit = {**current['audit'],
              'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in test),
-             'calibrationStatus': model['calibration']['status'], 'historical': diagnostics}
-    return {'model': model, 'audit': audit}
+             'historical': diagnostics, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD'}
+    return {'model': current['model'], 'audit': audit}

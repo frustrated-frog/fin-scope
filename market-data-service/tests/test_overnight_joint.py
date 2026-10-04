@@ -11,7 +11,7 @@ from finscope_market_data.overnight.automation import rank_candidates
 from finscope_market_data.overnight.automation_store import AutomationStore
 from finscope_market_data.overnight.joint_dataset import (FEATURES, PROTOCOL, JointProfile,
     build_panel, current_features, date_weights, split_dates)
-from finscope_market_data.overnight.joint_learning import fit_target, prediction
+from finscope_market_data.overnight.joint_learning import fit_before, fit_target, prediction
 from finscope_market_data.overnight.joint_research import OvernightJointResearch
 from finscope_market_data.overnight.joint_store import OvernightJointStore
 from finscope_market_data.overnight.joint_validation import assess, summarize_forward
@@ -56,8 +56,12 @@ def test_future_test_outcomes_never_select_coefficients_or_calibration(panel_row
     for row in changed:
         if row['signalDate'] >= fitted['audit']['testStart']:
             row['actualNetReturn'] = -row['actualNetReturn'] * 2
-    other = fit_target(changed, '2026-06-01T14:30:00')
-    assert other['model'] == fitted['model']
+    cutoff = fitted['audit']['testStart'] + 'T14:30:00'
+    assert fit_before(changed, cutoff) == fit_before(panel_rows, cutoff)
+    assert fitted['audit']['calibrationThrough'] == max(row['exitAt'] for row in panel_rows)
+    for fold in fitted['audit']['folds']:
+        assert fold['trainingThrough'][:10] < fold['calibrationStart']
+        assert fold['calibrationThrough'] < fold['cutoff']
     assert not fitted['audit']['historical']['eligible']
     result = prediction(json.loads(json.dumps(fitted['model'])), panel_rows[0]['features'])
     assert 0 < result['upProbability'] < 1
@@ -138,9 +142,18 @@ def test_ranker_keeps_shadow_separate_and_allows_zero_qualified_opportunities():
     assert rank_candidates(rows)['evaluatedCount'] == 0
 
 
+def test_insufficient_tail_risk_calibration_cannot_qualify_a_stock(monkeypatch):
+    monkeypatch.setattr('finscope_market_data.overnight.joint_learning.predict_many',
+                        lambda *args: (np.array([.8]), np.array([.01]), np.array([.1])))
+    model = {'residualLow': -.02, 'residualHigh': .02, 'baselineProbability': .5,
+             'calibration': {'status': 'FITTED'}, 'downsideCalibration': {'status': 'UNAVAILABLE'}}
+    assert not prediction(model, [0])['qualified']
+    model['downsideCalibration']['status'] = 'FITTED'
+    assert prediction(model, [0])['qualified']
+
+
 def test_frozen_shadow_adopts_only_a_past_gate_and_does_not_refit(tmp_path, fitted):
     from test_overnight import history, request
-    from finscope_market_data.overnight.engine import group_bars
     from finscope_market_data.forecast.trading_calendar import previous_session
     bars = history(145)
     day = bars[-1].ended_at.date()
@@ -155,7 +168,7 @@ def test_frozen_shadow_adopts_only_a_past_gate_and_does_not_refit(tmp_path, fitt
         'createdAt': f'{day}T12:00:00', 'labelsThrough': f'{previous}T15:00:00',
         'context': {str(previous): {'mean': .01, 'upShare': .6, 'dispersion': .02}},
         'data': {'fingerprint': 'test', 'symbolCount': 20}, 'targets': {'10:00': fitted}}, [])
-    report = {'dataThrough': cutoff.isoformat(), 'referencePrice': 20, 'targets': [
+    report = {'dataThrough': cutoff.isoformat(), 'referencePrice': 20, 'jointResearch': {'cohort': 'AUTOMATIC'}, 'targets': [
         {'target': '10:00', 'status': 'WATCH', 'upProbability': .4, 'expectedNetReturn': -.001}]}
     shadow = deepcopy(report)
     research.attach(shadow, req, bars)
@@ -186,10 +199,13 @@ def test_duplicate_holdings_revisions_and_retrospective_runs_never_inflate_forwa
         report = {'id': str(index), 'generatedAt': f'{signal}T14:31:00', 'signalDate': str(signal),
             'targetDate': str(signal + timedelta(days=1)), 'instrumentCode': row['instrumentCode'],
             'mode': 'TAIL_ENTRY', 'cutoff': '14:30', 'costBps': 20, 'evidenceKind': 'FORWARD',
-            'jointResearch': {'protocol': PROTOCOL, 'artifactId': 'one'},
+            'jointResearch': {'protocol': PROTOCOL, 'artifactId': 'one', 'cohort': 'AUTOMATIC'},
             'targets': [{'target': target, 'joint': {**row, 'status': 'AVAILABLE'}} for target in TARGETS],
             'outcome': {'targets': [{'target': target, 'actualNetReturn': row['actualNetReturn']} for target in TARGETS]}}
-        reports.extend([report, {**report, 'id': f'{index}-revision'}, {**report, 'id': f'{index}-retro', 'evidenceKind': 'RETROSPECTIVE'}])
+        reports.extend([report, {**report, 'id': f'{index}-revision'},
+            {**report, 'id': f'{index}-custom', 'instrumentCode': '600000.SH',
+             'jointResearch': {**report['jointResearch'], 'cohort': 'CUSTOM'}},
+            {**report, 'id': f'{index}-retro', 'evidenceKind': 'RETROSPECTIVE'}])
     fake_store = SimpleNamespace(iter_history=lambda: iter(reports))
     summary = summarize_forward(fake_store, datetime(2026, 4, 1), meta)
     assert len(summary['groups']) == 4

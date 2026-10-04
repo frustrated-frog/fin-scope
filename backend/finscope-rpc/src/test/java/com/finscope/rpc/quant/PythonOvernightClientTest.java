@@ -69,6 +69,22 @@ class PythonOvernightClientTest {
     }
 
     @Test
+    void preservesSharedTrainingAndForwardValidationState() throws Exception {
+        var http = mock(FinanceHttpClient.class);
+        when(http.get(anyString(), any(), anyMap())).thenReturn(new FinanceHttpResponse(200,
+                "{\"enabled\":true,\"jobs\":[],\"joint\":{\"protocol\":\"overnight-joint-v1\","
+                    + "\"poolSize\":120,\"readySymbols\":23,\"forward\":{\"requiredDays\":60,\"groups\":[]}}}",
+                Instant.now(), "test"));
+        var client = new PythonOvernightClient();
+        ReflectionTestUtils.setField(client, "http", http);
+        ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:8000");
+        var state = client.automationState();
+        assertEquals("overnight-joint-v1", state.getJoint().get("protocol"));
+        assertEquals(120, state.getJoint().get("poolSize"));
+        assertEquals(Map.of("requiredDays", 60, "groups", List.of()), state.getJoint().get("forward"));
+    }
+
+    @Test
     void acceptsCalibratedVersionAndPreservesItsEvidenceButRejectsUnknownVersions() {
         var input = new OvernightResearchInput();
         input.setMode(OvernightMode.TAIL_ENTRY);
@@ -83,6 +99,7 @@ class PythonOvernightClientTest {
                 client("TAIL_ENTRY", "overnight-v5-shared-evidence").generate(input).getModelVersion());
         assertEquals(20, report.getTargets().get(0).get("calibrationCount"));
         assertEquals(Map.of("status", "BASELINE_NOT_BEATEN"), report.getTargets().get(0).get("reliability"));
+        assertEquals("SHADOW", report.getJointResearch().get("status"));
         assertThrows(ProviderContractException.class, () -> client("TAIL_ENTRY", "unknown").generate(input));
     }
 
@@ -103,7 +120,8 @@ class PythonOvernightClientTest {
                         + "\"modelVersion\":\"" + version + "\",\"dataThrough\":\"2026-09-16T14:30:00\","
                         + "\"inputFingerprint\":\"" + "a".repeat(64) + "\",\"evidenceKind\":\"RETROSPECTIVE\","
                         + "\"targets\":[{\"target\":\"OPEN\",\"calibrationCount\":20,"
-                        + "\"reliability\":{\"status\":\"BASELINE_NOT_BEATEN\"}}],\"warnings\":[]}";
+                        + "\"reliability\":{\"status\":\"BASELINE_NOT_BEATEN\"}}],\"warnings\":[],"
+                        + "\"jointResearch\":{\"status\":\"SHADOW\",\"protocol\":\"overnight-joint-v1\"}}";
                 return new FinanceHttpResponse(200, response, Instant.now(), "test");
             }
         };

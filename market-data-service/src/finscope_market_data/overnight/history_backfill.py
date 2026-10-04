@@ -80,7 +80,8 @@ class OvernightHistoryBackfill:
                 continue
             code = job['instrumentCode']
             imported = self.minutes.history_import(code)
-            if imported and coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS:
+            if (imported and imported.get('importedAt', '') >= job['startedAt']
+                    and coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS):
                 self.store.finish(job, now, status='COMPLETED', reason='任务中断后已核实历史数据落库', **imported)
             else:
                 self.store.finish(job, now, status='FAILED', reason='上次补数任务中断，后台将有限重试')

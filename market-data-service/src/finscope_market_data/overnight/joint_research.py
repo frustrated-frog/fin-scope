@@ -17,8 +17,9 @@ class OvernightJointResearch:
         cutoff = datetime.fromisoformat(report['dataThrough'])
         profile = JointProfile(request.mode, request.cutoff, request.cost_bps)
         artifact = self.models.latest(profile.key, cutoff)
+        cohort = (report.get('jointResearch') or {}).get('cohort', 'CUSTOM')
         report['jointResearch'] = {'protocol': PROTOCOL, 'status': 'WAITING_MODEL',
-                                   'reason': '公共样本库积累中；后台自动训练后开始对照'}
+                                   'cohort': cohort, 'reason': '公共样本库积累中；后台自动训练后开始对照'}
         if not artifact or artifact['protocol'] != PROTOCOL:
             return
         research = report['jointResearch']
@@ -41,7 +42,7 @@ class OvernightJointResearch:
                 continue
             forecast = prediction(fitted['model'], x)
             gate = gates.get(f"{profile.key}|{target['target']}", {})
-            adopted = bool(gate.get('eligible') and target['status'] == 'WATCH'
+            adopted = bool(cohort == 'AUTOMATIC' and gate.get('eligible') and target['status'] == 'WATCH'
                            and forecast['calibrationStatus'] == 'FITTED')
             target['joint'] = {**forecast, 'status': 'AVAILABLE', 'adopted': adopted,
                 'artifactId': artifact['id'], 'protocol': PROTOCOL, 'forwardStatus': gate.get('status', 'ACCUMULATING'),

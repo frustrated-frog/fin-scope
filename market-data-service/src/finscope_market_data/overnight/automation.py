@@ -133,7 +133,7 @@ class OvernightAutomation:
         try:
             # The independent settlement loop rotates old outcomes; do not rescan
             # every archive for every stock in the time-critical acquisition batch.
-            report = self.service.generate(request, freeze_all=True, settle_cached=False)
+            report = self.service.generate(request, freeze_all=True, settle_cached=False, cohort='AUTOMATIC')
             primary = next((target.get('joint') for target in report.get('targets', []) if target['target'] == '10:00'), None)
             return {'instrumentCode': request.instrument_code, 'status': report['status'],
                 'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings'],

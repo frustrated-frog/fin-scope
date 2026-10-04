@@ -68,13 +68,16 @@ def build_panel(store, members, profile, through):
     # Process one stock at a time; do not hold 120 years of minute objects in RAM.
     for code in sorted(set(members)):
         grouped = group_bars(store.bars(code, through))
+        complete_dates = set()
         for day, bars in grouped.items():
             value = features(bars, '15:00')
+            if value is not None:
+                complete_dates.add(day)
             if value is not None and day < through.date():
                 daily[str(day)].append(value[0])
         local = {}
         for day in grouped:
-            value = session_features(grouped, day, profile.cutoff)
+            value = session_features(grouped, day, profile.cutoff, complete_dates=complete_dates)
             if value is not None:
                 local[str(day)] = value
         samples = build_samples(grouped, profile, through)

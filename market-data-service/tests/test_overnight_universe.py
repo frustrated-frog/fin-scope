@@ -44,3 +44,14 @@ def test_ready_pool_keeps_updating_and_uses_incremental_history(flow):
     assert len(intervals) == 1
     assert intervals[0][0] < bars[-1].ended_at.date()
     assert intervals[0][1] == datetime(2026, 9, 22, 15)
+
+
+def test_old_coverage_does_not_disguise_an_interrupted_incremental_refresh(flow):
+    from datetime import timedelta
+    from test_overnight import history
+    task, auto, now, _ = flow
+    task.minutes.import_history('605058.SH', history(145), 'TEST', now[0] - timedelta(days=1))
+    job = auto.store.claim('refresh', now[0] - timedelta(minutes=11), {'phase': 'HISTORY', 'instrumentCode': '605058.SH'})
+    coverage = {'605058.SH': {'completeDays': 145}}
+    task._recover_interrupted(coverage, now[0])
+    assert auto.store.job(job['key'])['status'] == 'FAILED'

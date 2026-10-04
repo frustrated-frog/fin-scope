@@ -51,7 +51,7 @@ class OvernightJointWorker:
                 panel, pool_context, data_audit = build_panel(self.automation.service.store, codes, profile, now)
                 targets = {}
                 for target in TARGETS:
-                    fitted = fit_target([row for row in panel if row['target'] == target], now.isoformat())
+                    fitted = fit_target([row for row in panel if row['target'] == target], now.isoformat(), profile.cutoff)
                     if fitted is not None:
                         targets[target] = fitted
                 if len(targets) != len(TARGETS):

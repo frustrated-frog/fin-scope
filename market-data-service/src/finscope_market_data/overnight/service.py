@@ -16,7 +16,7 @@ class OvernightService:
         self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None))
         self.joint = joint
 
-    def generate(self, request, freeze_all=False, settle_cached=True):
+    def generate(self, request, freeze_all=False, settle_cached=True, cohort='CUSTOM'):
         now = self.clock()
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
         warnings = []
@@ -30,6 +30,7 @@ class OvernightService:
         report = predict(request, bars, now)
         if self.joint is not None:
             joint_report = deepcopy(report)
+            joint_report['jointResearch'] = {'cohort': cohort}
             try:
                 self.joint.attach(joint_report, request, bars)
                 report = joint_report
