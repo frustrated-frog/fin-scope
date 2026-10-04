@@ -14,6 +14,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PythonTradingCalendarClientTest {
     @Test
+    void requestsNextVerifiedSessionAndRejectsAReversedDate() {
+        PythonTradingCalendarClient valid = client((provider, uri, headers) -> {
+            assertEquals("/v1/calendar/next-session", uri.getPath());
+            assertEquals("after=2026-09-30", uri.getQuery());
+            return new FinanceHttpResponse(200, "{\"next_session\":\"2026-10-08\"}", Instant.now(), "hash");
+        });
+        assertEquals(LocalDate.parse("2026-10-08"), valid.nextSession(LocalDate.parse("2026-09-30")));
+        PythonTradingCalendarClient reversed = client((provider, uri, headers) ->
+                new FinanceHttpResponse(200, "{\"next_session\":\"2026-09-29\"}", Instant.now(), "hash"));
+        assertThrows(ProviderContractException.class, () -> reversed.nextSession(LocalDate.parse("2026-09-30")));
+    }
+
+    @Test
     void requestsPreviousSessionAndMapsDate() {
         PythonTradingCalendarClient client = client((provider, uri, headers) -> {
             assertEquals("/v1/calendar/previous-session", uri.getPath());

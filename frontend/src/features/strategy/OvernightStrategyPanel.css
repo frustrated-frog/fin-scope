@@ -11,9 +11,9 @@
 .overnight-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .overnight-workbench button { cursor: pointer; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); padding: 10px 14px; }
 .overnight-workbench button:disabled { opacity: .55; cursor: not-allowed; }
-.overnight-mode button { text-align: left; padding: 18px 22px; border-left: 4px solid transparent; }
-.overnight-mode button[aria-pressed=true] { border-left-color: var(--overnight-blue); background: color-mix(in srgb, var(--overnight-blue) 9%, var(--surface)); }
-.overnight-mode button:nth-child(2)[aria-pressed=true] { border-left-color: var(--overnight-amber); background: color-mix(in srgb, var(--overnight-amber) 9%, var(--surface)); }
+.overnight-mode button { text-align: left; padding: 18px 22px; border-left: 4px solid transparent; background: transparent; }
+.overnight-mode button[aria-pressed=true] { border-left-color: var(--overnight-blue); background: color-mix(in srgb, var(--overnight-blue) 9%, transparent); }
+.overnight-mode button:nth-child(2)[aria-pressed=true] { border-left-color: var(--overnight-amber); background: color-mix(in srgb, var(--overnight-amber) 9%, transparent); }
 .overnight-mode b, .overnight-mode span { display: block; }
 .overnight-mode b { font-size: 17px; margin-bottom: 4px; }
 .overnight-mode span { color: var(--muted); font-size: 13px; }
@@ -82,7 +82,10 @@
 @media (max-width: 620px) {
   .overnight-title, .overnight-history > header { display: block; }
   .overnight-title > small { display: block; max-width: none; }
-  .overnight-mode { grid-template-columns: 1fr; }
+  .overnight-mode { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overnight-mode button { padding: 14px; }
+  .overnight-mode b { font-size: 15px; margin: 0; }
+  .overnight-mode span { display: none; }
   .overnight-clock li { padding-left: 8px; padding-right: 8px; }
   .overnight-clock time { font-size: 23px; }
   .overnight-clock li::after { left: 8px; }

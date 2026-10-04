@@ -31,7 +31,8 @@ class OvernightCandidateScanner:
 
     def scan(self, now, limit):
         rows = asyncio.run(self._quotes())
-        return self.select(rows, now, limit)
+        received = datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None)
+        return self.select(rows, received, limit)
 
     @staticmethod
     def select(rows, now, limit):
@@ -53,7 +54,7 @@ class OvernightCandidateScanner:
             except (KeyError, TypeError, ValueError, OverflowError, OSError):
                 continue
             # A response receipt timestamp alone cannot prove a quote belongs to today.
-            if observed.date() != now.date() or not -30 <= (now - observed).total_seconds() <= 600:
+            if observed.date() != now.date() or not 0 <= (now - observed).total_seconds() <= 600:
                 continue
             fresh.add(code)
             board_limit = 19 if code.startswith(('300', '301')) else 9

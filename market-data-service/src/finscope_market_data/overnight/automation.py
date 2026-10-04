@@ -34,7 +34,7 @@ class OvernightAutomation:
         next_day = next_session(now.date() - timedelta(days=1))
         next_tail = None
         for _, slot in SLOTS:
-            if next_day == now.date() and now < datetime.fromisoformat(f'{next_day}T{slot}') + timedelta(minutes=5):
+            if next_day == now.date() and now < datetime.fromisoformat(f'{next_day}T{slot}'):
                 next_tail = f'{next_day}T{slot}:00'
                 break
         if not next_tail and next_day:
@@ -51,6 +51,7 @@ class OvernightAutomation:
             holding_status = 'ACTIVE'
         return {'enabled': context['enabled'], 'candidateLimit': context['candidateLimit'],
             'serverTime': now.isoformat(), 'calendarAvailable': next_day is not None,
+            'tradingDay': next_session(now.date() - timedelta(days=1)) == now.date(),
             'nextTailAt': next_tail, 'ledgerReceivedAt': received, 'ledgerFresh': fresh,
             'positionCount': len(context['positions']), 'holdingStatus': holding_status,
             'heartbeat': self.store.get('heartbeat'),
@@ -63,6 +64,9 @@ class OvernightAutomation:
         context = self.store.get('context') or AutomationContext().model_dump(mode='json', by_alias=True)
         if not context['enabled']:
             return
+        for job in self.store.jobs():
+            if job['status'] == 'RUNNING' and now - datetime.fromisoformat(job['startedAt']) >= timedelta(minutes=10):
+                self.store.finish(job, now, status='FAILED', reason='任务租约到期；仅在原有效窗口内重试')
         # Materialize downtime once. The UI retains the latest 100 jobs, without inventing signals.
         start = datetime.fromisoformat(old_heartbeat['lastTickAt']).date() if old_heartbeat else now.date()
         day = max(start, now.date() - timedelta(days=30))
@@ -121,7 +125,9 @@ class OvernightAutomation:
         if request.mode == 'TAIL_ENTRY' and self.clock() >= cutoff + timedelta(minutes=5):
             return {'instrumentCode': request.instrument_code, 'status': 'MISSED', 'reason': '队列等待超过尾盘窗口'}
         try:
-            report = self.service.generate(request, freeze_all=True)
+            # The independent settlement loop rotates old outcomes; do not rescan
+            # every archive for every stock in the time-critical acquisition batch.
+            report = self.service.generate(request, freeze_all=True, settle_cached=False)
             return {'instrumentCode': request.instrument_code, 'status': report['status'],
                 'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings']}
         except Exception as error:

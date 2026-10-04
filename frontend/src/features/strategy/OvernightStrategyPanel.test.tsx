@@ -12,6 +12,9 @@ const blocked = { mode: 'TAIL_ENTRY', instrumentCode: '605058.SH', signalDate: '
 test('keeps entry cutoff separate from ledger holding research and never fabricates missing probabilities', async () => {
   const requests: Array<Record<string, unknown>> = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).endsWith('/automation')) {
+      return apiResponse({ enabled: true, candidateLimit: 6, serverTime: '2026-09-23T12:00:00', jobs: [], calendarAvailable: true });
+    }
     if (String(input).endsWith('/capture')) {
       return apiResponse({ plan: { enabled: false, instrumentCodes: [], costBps: 20 }, runs: [], slots: [], serverTime: '2026-09-23T12:00:00', calendarAvailable: true });
     }
@@ -30,6 +33,8 @@ test('keeps entry cutoff separate from ledger holding research and never fabrica
   }));
   const user = userEvent.setup();
   render(<OvernightStrategyPanel />);
+  expect(screen.getByLabelText('研究股票')).not.toBeVisible();
+  await user.click(screen.getByText('单股补充研究与历史复盘'));
   await user.type(screen.getByLabelText('研究股票'), '605058');
   await user.selectOptions(screen.getByLabelText('数据截止时刻'), '14:50');
   await user.click(screen.getByRole('button', { name: '生成尾盘入场研究' }));
@@ -58,6 +63,7 @@ test('shows both frozen modes and settles observations without generating anothe
   const user = userEvent.setup();
   render(<OvernightStrategyPanel />);
   await waitFor(() => expect(screen.getByLabelText('两类预测独立档案').querySelectorAll('details')).toHaveLength(2));
+  await user.click(screen.getByText('历史档案与次日复盘（2）'));
   await user.click(screen.getByRole('button', { name: '更新到期结果' }));
   await waitFor(() => expect(calls).toContain('/api/quant/overnight/settle'));
   expect(calls).not.toContain('/api/quant/overnight/generate');

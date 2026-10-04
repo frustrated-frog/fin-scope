@@ -18,6 +18,7 @@ test('saves explicit watchlist and shows missing windows without fabricating ret
   }));
   render(<OvernightAuditPanel mode="TAIL_ENTRY" revision={0} />);
   const user = userEvent.setup();
+  await user.click(screen.getByText('自定义观察名单（可选补充）'));
   expect(await screen.findByText('错过窗口')).toBeInTheDocument();
   await user.type(screen.getByLabelText('自动观察名单'), '605058, 000001');
   await user.click(screen.getByLabelText('启用自动留档'));

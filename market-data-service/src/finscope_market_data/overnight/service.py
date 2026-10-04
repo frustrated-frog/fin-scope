@@ -11,7 +11,7 @@ class OvernightService:
         self.provider = provider
         self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None))
 
-    def generate(self, request, freeze_all=False):
+    def generate(self, request, freeze_all=False, settle_cached=True):
         now = self.clock()
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
         warnings = []
@@ -31,7 +31,8 @@ class OvernightService:
         report['warnings'].extend(warnings)
         if report['status'] == 'WATCH' or freeze_all:
             report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])
-        self._settle_cached(now)
+        if settle_cached:
+            self._settle_cached(now)
         return report
 
     def _settle_cached(self, now):

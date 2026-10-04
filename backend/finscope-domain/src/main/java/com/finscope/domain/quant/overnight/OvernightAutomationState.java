@@ -10,6 +10,7 @@ public class OvernightAutomationState {
     private int candidateLimit;
     private String serverTime;
     private boolean calendarAvailable;
+    private boolean tradingDay;
     private String nextTailAt;
     private String ledgerReceivedAt;
     private boolean ledgerFresh;

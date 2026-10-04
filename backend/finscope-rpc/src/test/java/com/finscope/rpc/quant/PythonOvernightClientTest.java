@@ -3,6 +3,9 @@ package com.finscope.rpc.quant;
 import com.finscope.common.enums.overnight.OvernightMode;
 import com.finscope.common.enums.overnight.OvernightStatus;
 import com.finscope.domain.quant.overnight.OvernightResearchInput;
+import com.finscope.domain.quant.overnight.OvernightAutomationContext;
+import com.finscope.domain.quant.overnight.OvernightLedgerPosition;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -12,9 +15,43 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
+import java.math.BigDecimal;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class PythonOvernightClientTest {
+    @Test
+    void synchronizesLedgerDatesAndCostsWithoutSendingValuationFields() throws Exception {
+        var context = new OvernightAutomationContext();
+        context.setEnabled(true);
+        context.setCandidateLimit(6);
+        var position = new OvernightLedgerPosition();
+        position.setInstrumentCode("605058.SH");
+        position.setQuantity(new BigDecimal("100"));
+        position.setAverageCost(new BigDecimal("20.50"));
+        position.setOpenedOn(LocalDate.of(2026, 9, 21));
+        context.setPositions(List.of(position));
+        var http = mock(FinanceHttpClient.class);
+        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(3000)))
+                .thenAnswer(invocation -> {
+                    assertTrue(invocation.getArgument(1).toString().endsWith("/v1/quant/overnight/automation/context"));
+                    var body = new ObjectMapper().readTree((String) invocation.getArgument(2));
+                    assertEquals("2026-09-21", body.path("positions").get(0).path("openedOn").asText());
+                    assertEquals(20.5, body.path("positions").get(0).path("averageCost").asDouble());
+                    assertFalse(body.path("positions").get(0).has("lastPrice"));
+                    return new FinanceHttpResponse(200, "{\"receivedAt\":\"2026-09-21T15:10:00\"}", Instant.now(), "test");
+                });
+        var client = new PythonOvernightClient();
+        ReflectionTestUtils.setField(client, "http", http);
+        ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:8000");
+        client.syncAutomationContext(context);
+        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(3000)))
+                .thenReturn(new FinanceHttpResponse(503, "{}", Instant.now(), "test"));
+        assertThrows(ProviderContractException.class, () -> client.syncAutomationContext(context));
+    }
+
     @Test
     void mapsBlockedStateAndRejectsMismatchedMode() {
         var input = new OvernightResearchInput();

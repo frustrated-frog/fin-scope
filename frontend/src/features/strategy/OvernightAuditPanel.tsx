@@ -62,10 +62,10 @@ export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; r
   return <section className="overnight-audit" aria-label="自动留档与全历史验收">
     <header className="overnight-audit-heading"><div><span>记录当时，再看次日</span><h4>预测验证台</h4></div><button type="button" onClick={() => void load()}>刷新验收</button></header>
     {error && <p role="alert" className="overnight-error">{error}</p>}
-    {mode === 'TAIL_ENTRY' && <div className="overnight-capture-grid">
+    {mode === 'TAIL_ENTRY' && <details className="overnight-manual"><summary>自定义观察名单（可选补充）</summary><div className="overnight-capture-grid">
       <form className="overnight-capture-form" onSubmit={save}>
-        <h5>尾盘自动留档 <span>{capture?.plan.enabled ? '已启用' : '未启用'}</span></h5>
-        <p>交易日 <b>14:30 / 14:45</b> 采集观察名单。请保持 Python 服务运行；错过窗口只记漏跑。</p>
+        <h5>自定义名单留档 <span>{capture?.plan.enabled ? '已启用' : '未启用'}</span></h5>
+        <p>系统自动发现无需设置此处。需要额外跟踪指定股票时，可在交易日 <b>14:30 / 14:45</b> 同步采集。</p>
         <label>自动观察名单<textarea aria-label="自动观察名单" value={codes} onChange={event => setCodes(event.target.value)} placeholder="605058.SH, 000001.SZ" rows={2} disabled={saving || !capture} /><small>最多 10 只沪深股票，用逗号或换行分隔。与手动研究股票独立。</small></label>
         <div className="overnight-capture-controls"><label>自动留档成本（基点）<input type="number" min={0} max={200} step={1} value={cost} onChange={event => setCost(Number(event.target.value))} disabled={saving || !capture} required /></label><label className="overnight-capture-toggle"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={saving || !capture} />启用自动留档</label></div>
         <button type="submit" disabled={saving || !capture}>{saving ? '保存中…' : '保存留档计划'}</button>
@@ -80,7 +80,7 @@ export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; r
         </details>)}
         {capture && <small>服务时间 {capture.serverTime.slice(0, 19).replace('T', ' ')}（上海） · 每 30 秒刷新</small>}
       </section>
-    </div>}
+    </div></details>}
     <section className="overnight-validation" aria-label="隔夜全历史验收">
       <div className="overnight-validation-heading"><div><h5>{mode === 'TAIL_ENTRY' ? '尾盘入场' : '盘后持仓'} · 全历史验收</h5><p>共 {validation?.recordCount ?? '—'} 份冻结档案；按场景、时点、费用和模型版本分开统计。</p></div><label>验收记录范围<select value={evidence} onChange={event => setEvidence(event.target.value)}><option value="FORWARD">当时生成</option><option value="RETROSPECTIVE">历史回顾</option></select></label></div>
       {!groups.length && <p className="overnight-audit-empty">该场景尚无{evidence === 'FORWARD' ? '当时生成' : '历史回顾'}档案。概率、收益和命中率保持空缺，等待真实记录到期。</p>}

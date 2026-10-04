@@ -16,7 +16,8 @@ def flow(tmp_path):
     now = [datetime(2026, 9, 21, 14, 20)]
     calls = []
     scans = []
-    def generate(request, freeze_all):
+    def generate(request, freeze_all, settle_cached):
+        assert not settle_cached
         calls.append(request)
         return {'id': request.instrument_code, 'status': 'INSUFFICIENT_DATA',
                 'evidenceKind': 'FORWARD', 'warnings': ['样本不足']}
@@ -63,6 +64,15 @@ def test_starting_at_cutoff_does_not_use_a_later_market_scan(flow):
     auto.tick()
     assert not scans and not calls
     assert auto.store.job('2026-09-21|TAIL|14:30')['status'] == 'MISSED'
+    assert auto.status()['nextTailAt'] == '2026-09-21T14:45:00'
+
+
+def test_holiday_status_names_the_next_real_session(flow):
+    auto, now, _, _ = flow
+    now[0] = datetime(2026, 10, 4, 16)
+    state = auto.status()
+    assert state['calendarAvailable'] and not state['tradingDay']
+    assert state['nextTailAt'] == '2026-10-08T14:30:00'
 
 
 def test_slow_scan_cannot_be_promoted_to_a_predecision_snapshot(flow):
@@ -152,6 +162,23 @@ def test_failed_scan_retries_with_a_bounded_budget(flow):
     assert auto.store.job('2026-09-21|SCAN|14:30')['status'] == 'FAILED'
 
 
+def test_one_failed_stock_does_not_block_the_remaining_candidates(flow):
+    auto, now, _, _ = flow
+    auto.scanner.scan = lambda at, limit: {'candidates': [{'instrumentCode': '605058.SH'}, {'instrumentCode': '600001.SH'}]}
+    generate = auto.service.generate
+    def isolated(request, **kwargs):
+        if request.instrument_code == '605058.SH':
+            raise ValueError('bad upstream')
+        return generate(request, **kwargs)
+    auto.service.generate = isolated
+    auto.tick()
+    now[0] = now[0].replace(minute=30)
+    auto.tick()
+    job = auto.store.job('2026-09-21|TAIL|14:30')
+    assert job['status'] == 'PARTIAL'
+    assert [r['status'] for r in job['results']] == ['FAILED', 'INSUFFICIENT_DATA']
+
+
 def quote(code='605058', **kwargs):
     return {'f12': code, 'f14': '澳弘电子', 'f2': 23, 'f3': 5, 'f6': 200_000_000,
             'f10': 2, 'f15': 23.2, 'f16': 20, 'f17': 21,
@@ -161,7 +188,8 @@ def quote(code='605058', **kwargs):
 def test_candidate_filter_rejects_stale_halted_limit_up_and_unsupported_rows():
     now = datetime(2026, 9, 21, 14, 20)
     rows = [quote(), quote('600001', f3=9.8), quote('600002', f6=0), quote('600003', f14='ST测试'),
-            quote('688001'), quote('600004', f124=1), quote('600005', f124=None)]
+            quote('688001'), quote('600004', f124=1), quote('600005', f124=None),
+            quote('600006', f124=quote()['f124'] + 5)]
     result = OvernightCandidateScanner.select(rows, now, 6)
     assert [r['instrumentCode'] for r in result['candidates']] == ['605058.SH']
     with pytest.raises(ValueError, match='时间戳'):
