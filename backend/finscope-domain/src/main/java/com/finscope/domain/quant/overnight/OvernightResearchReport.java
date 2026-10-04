@@ -33,4 +33,5 @@ public class OvernightResearchReport {
     private Map<String, Object> request;
     private Map<String, Object> outcome;
     private Map<String, Object> jointResearch;
+    private Map<String, Object> closeDirection;
 }

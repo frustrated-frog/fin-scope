@@ -100,6 +100,8 @@ class PythonOvernightClientTest {
         assertEquals(20, report.getTargets().get(0).get("calibrationCount"));
         assertEquals(Map.of("status", "BASELINE_NOT_BEATEN"), report.getTargets().get(0).get("reliability"));
         assertEquals("SHADOW", report.getJointResearch().get("status"));
+        assertEquals("NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE", report.getCloseDirection().get("target"));
+        assertEquals(0.58, report.getCloseDirection().get("upProbability"));
         assertThrows(ProviderContractException.class, () -> client("TAIL_ENTRY", "unknown").generate(input));
     }
 
@@ -121,7 +123,9 @@ class PythonOvernightClientTest {
                         + "\"inputFingerprint\":\"" + "a".repeat(64) + "\",\"evidenceKind\":\"RETROSPECTIVE\","
                         + "\"targets\":[{\"target\":\"OPEN\",\"calibrationCount\":20,"
                         + "\"reliability\":{\"status\":\"BASELINE_NOT_BEATEN\"}}],\"warnings\":[],"
-                        + "\"jointResearch\":{\"status\":\"SHADOW\",\"protocol\":\"overnight-joint-v1\"}}";
+                        + "\"jointResearch\":{\"status\":\"SHADOW\",\"protocol\":\"overnight-joint-v1\"},"
+                        + "\"closeDirection\":{\"status\":\"SHADOW\",\"target\":\"NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE\","
+                        + "\"upProbability\":0.58}}";
                 return new FinanceHttpResponse(200, response, Instant.now(), "test");
             }
         };

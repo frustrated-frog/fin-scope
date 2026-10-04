@@ -1,0 +1,25 @@
+.overnight-direction { min-width: 0; background: transparent; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 20px 0; margin: 20px 0; }
+.overnight-direction > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.overnight-direction header span { color: var(--overnight-blue); font-size: 12px; }
+.overnight-direction h5 { margin: 8px 0 0; font: 600 clamp(18px, 2vw, 22px) ui-rounded, "PingFang SC", system-ui, sans-serif; }
+.overnight-direction header small { font-size: 11px; flex-shrink: 0; }
+.overnight-direction [data-validated=true] { color: var(--overnight-blue); }
+.overnight-direction .overnight-direction-probabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 20px 0 12px; }
+.overnight-direction-probabilities dt { color: var(--muted); font-size: 12px; }
+.overnight-direction-probabilities dt span { margin-left: 8px; font-size: 10px; }
+.overnight-direction .overnight-direction-probabilities dd { margin: 8px 0 0; font: 500 26px ui-monospace, "SFMono-Regular", monospace; font-variant-numeric: tabular-nums; }
+.overnight-direction p, .overnight-direction-summary p { font-size: 12px; line-height: 1.8; color: var(--muted); }
+.overnight-direction-status { padding-left: 10px; border-left: 2px solid var(--overnight-amber); }
+.overnight-direction-outcome { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 12px; margin: 16px 0; }
+.overnight-direction-outcome span { color: var(--muted); }
+.overnight-direction summary, .overnight-direction-summary > summary { cursor: pointer; font-size: 12px; padding: 8px 0; }
+.overnight-direction summary:focus-visible, .overnight-direction-summary > summary:focus-visible { outline: 2px solid var(--overnight-blue); outline-offset: 3px; }
+.overnight-direction-metrics { display: grid; gap: 10px; font-size: 12px; }
+.overnight-direction-metrics > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.overnight-direction-summary { border-top: 1px solid var(--line); padding-top: 8px; }
+.overnight-direction-summary-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 12px 0; font-size: 12px; border-bottom: 1px solid var(--line); }
+.overnight-direction-summary-row small { grid-column: 1 / -1; line-height: 1.8; }
+@media (max-width: 600px) {
+  .overnight-direction > header { flex-direction: column; gap: 8px; }
+  .overnight-direction-summary-row { grid-template-columns: minmax(0, 1fr); }
+}

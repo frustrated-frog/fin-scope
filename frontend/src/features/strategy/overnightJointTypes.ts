@@ -1,4 +1,5 @@
 import type { OvernightMode } from './overnightTypes';
+import type { OvernightDirectionForward, OvernightDirectionMetrics } from './overnightDirectionTypes';
 
 export interface OvernightJointPrediction {
   status: string; adopted: boolean; qualified: boolean; artifactId: string;
@@ -23,7 +24,9 @@ export interface OvernightJointState {
     profile: { key: string; mode: OvernightMode; cutoff: string; costBps: number };
     data: { symbolCount: number; dayCount: number; rows: number };
     targets: Array<{ target: string; trainingDays: number; calibrationDays: number;
-      historical: { dayCount: number; accuracy: number; brierScore: number } }> }>;
+      historical: { dayCount: number; accuracy: number; brierScore: number } }>;
+    closeDirection?: { audit: { historical: OvernightDirectionMetrics } } | null }>;
   forward?: { requiredDays: number; computedAt: string; groups: OvernightJointGroup[] };
+  closeDirectionForward?: OvernightDirectionForward;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;
 }

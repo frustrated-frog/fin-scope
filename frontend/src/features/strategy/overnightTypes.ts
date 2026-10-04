@@ -1,4 +1,5 @@
 import type { OvernightJointPrediction, OvernightJointState } from './overnightJointTypes';
+import type { OvernightCloseDirection, OvernightDirectionOutcome } from './overnightDirectionTypes';
 
 export type OvernightMode = 'TAIL_ENTRY' | 'AFTER_CLOSE_HOLDING';
 export interface OvernightTarget {
@@ -26,7 +27,9 @@ export interface OvernightReport {
   evidenceKind: 'FORWARD' | 'RETROSPECTIVE'; inputFingerprint: string; modelVersion: string;
   targets: OvernightTarget[]; warnings: string[];
   jointResearch?: { protocol?: string; status: string; reason: string; symbolCount?: number; trainedAt?: string };
-  outcome?: { status: string; warnings?: string[]; targets: Array<{ target: string; actualNetReturn: number; brierScore?: number }> };
+  closeDirection?: OvernightCloseDirection;
+  outcome?: { status: string; warnings?: string[]; closeDirection?: OvernightDirectionOutcome;
+    targets: Array<{ target: string; actualNetReturn: number; brierScore?: number }> };
 }
 export interface OvernightPosition {
   instrumentCode: string; instrumentName: string; averageCost: number; quantity: number; openedOn?: string;

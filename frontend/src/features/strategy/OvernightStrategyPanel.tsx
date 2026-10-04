@@ -6,6 +6,7 @@ import './OvernightStrategyPanel.css';
 import { OvernightAuditPanel } from './OvernightAuditPanel';
 import { OvernightTargetEvidence } from './OvernightTargetEvidence';
 import { OvernightJointEvidence } from './OvernightJointPanel';
+import { OvernightDirectionPanel } from './OvernightDirectionPanel';
 import { OvernightAutomationPanel } from './OvernightAutomationPanel';
 
 const modeLabels = { TAIL_ENTRY: '尾盘入场', AFTER_CLOSE_HOLDING: '盘后持仓' };
@@ -160,6 +161,7 @@ export function ResearchResult({ report }: { report: OvernightReport }) {
     <dl className="overnight-evidence"><div><dt>数据截止</dt><dd>{report.dataThrough.replace('T', ' ')}</dd></div><div><dt>预测对应日期</dt><dd>{report.targetDate ?? '日历未覆盖'}</dd></div><div><dt>截止时点参考价</dt><dd>{report.referencePrice ? `¥${report.referencePrice.toFixed(2)}` : '暂无完整行情'}</dd></div><div><dt>费用假设</dt><dd>{report.costBps} 基点</dd></div></dl>
     <p className="overnight-note">{report.mode === 'TAIL_ENTRY' ? '参考价不是承诺买入价；收益目标对应决策后 5 分钟的入场价格代理。' : `持仓成本 ¥${report.costBasis?.toFixed(2)}；预期收益相对当日收盘，另列相对成本的收益。`}</p>
     {report.jointResearch && <p className="overnight-note">联合预测：{report.jointResearch.reason}</p>}
+    <OvernightDirectionPanel report={report} />
     <div className="overnight-targets">{report.targets.map(target => {
       const actual = report.outcome?.targets.find(item => item.target === target.target);
       const baseline = target.probabilitySource === 'HISTORICAL_BASELINE';
