@@ -73,6 +73,36 @@ def test_import_is_atomic_keeps_captured_days_and_never_changes_frozen_records(t
     assert store.history()[0]['status'] == 'OLD'
 
 
+def test_minute_aggregation_differences_are_audited_and_sources_never_mix_within_a_day(tmp_path):
+    store = OvernightStore(tmp_path / 'sources.db')
+    now = datetime(2026, 9, 23, 16)
+    raw = bar('2026-09-22T09:35:00')
+    store.save_bars('605058.SH', [raw])
+    different = raw.model_copy(update={'high': 10.8, 'close': 10.1})
+    older = bar('2026-09-21T09:35:00')
+    result = store.import_history('605058.SH', [older, different, bar('2026-09-22T09:40:00')], 'TEST', now)
+    assert result['minuteDifferenceCount'] == 1 and result['verifiedPriceAnchors'] == 1
+    assert store.bars('605058.SH', now) == [older, raw]
+    # Once live data arrives for an older day, choose that entire source/day.
+    live = bar('2026-09-21T09:40:00')
+    store.save_bars('605058.SH', [live])
+    assert store.bars('605058.SH', now) == [live, raw]
+    assert store.coverage(now)[0]['barCount'] == 2
+
+
+def test_daily_amount_unit_conflicts_reject_the_entire_history_import(tmp_path):
+    from finscope_market_data.overnight.engine import expected_times
+    store = OvernightStore(tmp_path / 'amount.db')
+    now = datetime(2026, 9, 23, 16)
+    bars = [bar(f'2026-09-22T{stamp}:00') for stamp in expected_times('15:00')]
+    store.save_bars('605058.SH', bars)
+    wrong_units = [value.model_copy(update={'amount': value.amount * 100}) for value in bars]
+    with pytest.raises(ValueError, match='全天成交额口径冲突'):
+        store.import_history('605058.SH', [bar('2026-09-21T09:35:00'), *wrong_units], 'TEST', now)
+    assert store.bars('605058.SH', now) == bars
+    assert store.history_import('605058.SH') is None
+
+
 @pytest.fixture
 def flow(tmp_path):
     now = [datetime(2026, 9, 23, 13)]

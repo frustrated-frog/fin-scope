@@ -32,6 +32,10 @@ class OvernightService:
         if history:
             report['sourceCode'] += '+' + history['sourceCode']
             report['warnings'].append('包含事后获取的未复权分钟历史；历史重放不等于当时已留档的真实预测。')
+            if history.get('minuteDifferenceCount', 0):
+                report['warnings'].append('来源的分钟聚合存在差异；已核对开收盘价格和完整日成交额，按日期分源使用。')
+            if not history.get('verifiedCompleteDays', 0):
+                report['warnings'].append('暂无完整重叠日可核验跨源一致性；历史补数只供研究。')
         report['warnings'].extend(warnings)
         if report['status'] == 'WATCH' or freeze_all:
             report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])
