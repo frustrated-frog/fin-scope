@@ -1,7 +1,9 @@
 export type OvernightMode = 'TAIL_ENTRY' | 'AFTER_CLOSE_HOLDING';
 export interface OvernightTarget {
   target: 'OPEN' | '10:00' | '14:30' | 'CLOSE'; status: string; sampleCount: number;
-  upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number; upperNetReturn?: number;
+  upProbability?: number; expectedNetReturn?: number; lowerNetReturn?: number | null; upperNetReturn?: number | null;
+  probabilitySource?: 'CALIBRATED_MODEL' | 'HISTORICAL_BASELINE'; selectionReason?: string;
+  modelUpProbability?: number; modelExpectedNetReturn?: number;
   validationCount?: number; brierScore?: number; baselineBrier?: number; directionAccuracy?: number;
   trainingThrough?: string; costBasisReturn?: number;
   minimumSamples?: number; missingSamples?: number; missingValidationSamples?: number;

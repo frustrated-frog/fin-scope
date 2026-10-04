@@ -21,6 +21,7 @@ export function OvernightTargetEvidence({ target }: { target: OvernightTarget })
     </p>
     <p>历史基线盈利比例 {percent(target.baselineProbability)}</p>
     <details><summary>查看独立验证依据</summary>
+      {target.probabilitySource === 'HISTORICAL_BASELINE' && <p>未采用的模型概率 {percent(target.modelUpProbability)}；以下诊断评价原模型，主参考值使用当时冻结的历史基线。</p>}
       <dl>
         <div><dt>概率误差改善</dt><dd>{percent(evidence.brierSkill)}</dd></div>
         <div><dt>最近 {evidence.recentCount ?? 0} 次改善</dt><dd>{percent(evidence.recentBrierSkill)}</dd></div>

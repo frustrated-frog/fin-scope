@@ -59,7 +59,13 @@ def test_rolling_audit_freezes_baselines_and_intervals_before_each_test():
     assert result['validationCount'] == 60
     assert result['reliability']['count'] == 60
     assert 0 <= result['upProbability'] <= 1
-    assert result['lowerNetReturn'] <= result['expectedNetReturn'] <= result['upperNetReturn']
+    assert result['modelLowerNetReturn'] <= result['modelExpectedNetReturn'] <= result['modelUpperNetReturn']
+    if result['probabilitySource'] == 'HISTORICAL_BASELINE':
+        assert result['upProbability'] == result['baselineProbability']
+        assert result['expectedNetReturn'] == result['baselineExpectedNetReturn']
+        assert result['lowerNetReturn'] is None and result['upperNetReturn'] is None
+    else:
+        assert result['lowerNetReturn'] <= result['expectedNetReturn'] <= result['upperNetReturn']
     for check in result['validation']:
         assert check['trainingThrough'] < check['calibrationThrough'] < f"{check['signalDate']}T14:30:00"
         assert 0 <= check['prior'] <= 1
@@ -101,3 +107,31 @@ def test_narrow_intervals_are_flagged_using_held_out_outcomes():
     result = evaluate(rows, 'FITTED')
     assert result['intervalCoverage'] == 0
     assert result['status'] == 'INTERVAL_UNRELIABLE'
+
+
+@pytest.mark.parametrize('status', ['BASELINE_NOT_BEATEN', 'RECENT_DEGRADATION', 'CALIBRATION_UNAVAILABLE',
+                                   'INTERVAL_UNRELIABLE', 'INSUFFICIENT_VALIDATION', 'HISTORICAL_EDGE'])
+def test_unproven_model_cannot_publish_its_probability_or_interval_as_the_main_reference(status):
+    from types import SimpleNamespace
+    from finscope_market_data.overnight.learning import select_reference
+    fit = SimpleNamespace(baseline=.42, baseline_return=-.001)
+    result = select_reference(.85, .05, -.01, .11, fit, {'status': status})
+    assert result['modelUpProbability'] == .85
+    if status == 'HISTORICAL_EDGE':
+        assert result['probabilitySource'] == 'CALIBRATED_MODEL'
+        assert result['upProbability'] == .85 and result['lowerNetReturn'] == -.01
+    else:
+        assert result['probabilitySource'] == 'HISTORICAL_BASELINE'
+        assert result['upProbability'] == .42 and result['expectedNetReturn'] == -.001
+        assert result['lowerNetReturn'] is None and result['upperNetReturn'] is None
+
+
+def test_reference_selection_ignores_all_unmatured_labels_and_features():
+    rows = samples(160)
+    cutoff = f"{rows[-20]['signalDate']}T14:30:00"
+    first = forecast_target(rows, [.1] * 8, cutoff)
+    for row in rows:
+        if row['exitAt'] >= cutoff:
+            row['features'] = [999] * 8
+            row['actualNetReturn'] = 100
+    assert forecast_target(rows, [.1] * 8, cutoff) == first

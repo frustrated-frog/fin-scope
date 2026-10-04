@@ -117,7 +117,7 @@ def test_failed_scheduled_capture_freezes_inputs_and_first_attempt(tmp_path):
     assert summarize(store)['groups'][0]['missingReasons']['PREDICTION:DATA_UNAVAILABLE'] == 1
 
 
-@pytest.mark.parametrize('version', ['overnight-local-v2', 'overnight-local-v3-calibrated'])
+@pytest.mark.parametrize('version', ['overnight-local-v2', 'overnight-local-v3-calibrated', 'overnight-local-v4-evidence-gated'])
 def test_frozen_prior_and_invalid_exit_are_not_profitable_fills(tmp_path, version):
     bars = history()
     day = bars[-49].ended_at.date()

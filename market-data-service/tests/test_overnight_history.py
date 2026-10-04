@@ -154,3 +154,15 @@ def test_history_respects_pause_windows_disable_and_bounded_retries(flow):
         now[0] += timedelta(seconds=61)
     assert len(calls) == 3
     assert auto.status()['history']['jobs'][0]['reason'] == '历史分钟源暂不可用；后台将有限重试'
+
+
+def test_restart_recovers_a_committed_import_even_when_coverage_would_skip_the_stock(flow):
+    from test_overnight import history
+    task, auto, now, calls = flow
+    key = f'{now[0].date()}|HISTORY|605058.SH'
+    auto.store.claim(key, now[0] - timedelta(minutes=11), {'phase': 'HISTORY', 'instrumentCode': '605058.SH'})
+    task.minutes.import_history('605058.SH', history(145), 'TEST', now[0] - timedelta(minutes=10))
+    task.tick()
+    assert not calls
+    assert auto.store.job(key)['status'] == 'COMPLETED'
+    assert auto.store.job(key)['reason'] == '任务中断后已核实历史数据落库'

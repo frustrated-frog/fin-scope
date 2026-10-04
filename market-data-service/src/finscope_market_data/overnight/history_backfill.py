@@ -27,6 +27,7 @@ class OvernightHistoryBackfill:
         if '14:24' <= now.strftime('%H:%M') < '15:05':
             return
         coverage = {row['instrumentCode']: row for row in self.minutes.coverage(now)}
+        self._recover_interrupted(coverage, now)
         codes = [position['instrumentCode'] for position in context['positions']]
         for job in self.store.jobs():
             if job.get('phase') == 'DISCOVER' and job['status'] == 'COMPLETED':
@@ -55,6 +56,17 @@ class OvernightHistoryBackfill:
                 reason = str(error) if isinstance(error, ValueError) else '历史分钟源暂不可用；后台将有限重试'
                 self.store.finish(job, self.clock(), status='FAILED', reason=reason)
             return
+
+    def _recover_interrupted(self, coverage, now):
+        for job in self.store.jobs(history=True):
+            if job['status'] != 'RUNNING' or now - datetime.fromisoformat(job['startedAt']) < timedelta(minutes=10):
+                continue
+            code = job['instrumentCode']
+            imported = self.minutes.history_import(code)
+            if imported and coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS:
+                self.store.finish(job, now, status='COMPLETED', reason='任务中断后已核实历史数据落库', **imported)
+            else:
+                self.store.finish(job, now, status='FAILED', reason='上次补数任务中断，后台将有限重试')
 
     async def run(self, stop):
         while not stop.is_set():

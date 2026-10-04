@@ -77,6 +77,8 @@ class PythonOvernightClientTest {
         input.setCutoff("14:30");
         var report = client("TAIL_ENTRY", "overnight-local-v3-calibrated").generate(input);
         assertEquals("overnight-local-v3-calibrated", report.getModelVersion());
+        assertEquals("overnight-local-v4-evidence-gated",
+                client("TAIL_ENTRY", "overnight-local-v4-evidence-gated").generate(input).getModelVersion());
         assertEquals(20, report.getTargets().get(0).get("calibrationCount"));
         assertEquals(Map.of("status", "BASELINE_NOT_BEATEN"), report.getTargets().get(0).get("reliability"));
         assertThrows(ProviderContractException.class, () -> client("TAIL_ENTRY", "unknown").generate(input));

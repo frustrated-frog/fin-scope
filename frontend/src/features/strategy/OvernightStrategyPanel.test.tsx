@@ -95,6 +95,20 @@ test('shows calibrated probability alongside baseline failure and keeps detailed
   expect(screen.getByText(/这些是历史顺序验证/)).toBeVisible();
 });
 
+test('labels baseline fallback and never attaches the rejected model interval to the reference', async () => {
+  render(<ResearchResult report={{ ...calibrated, modelVersion: 'overnight-local-v4-evidence-gated', targets: [{
+    ...calibrated.targets[0], probabilitySource: 'HISTORICAL_BASELINE', modelUpProbability: .85,
+    upProbability: .53, expectedNetReturn: -.001, lowerNetReturn: null, upperNetReturn: null,
+  }] }} />);
+  expect(screen.getByText('历史基线参考 · 已扣假设成本')).toBeVisible();
+  expect(screen.getByText('53.0%')).toBeVisible();
+  expect(screen.getByText('历史平均净收益')).toBeVisible();
+  expect(screen.queryByText('校准后盈利概率 · 已扣假设成本')).not.toBeInTheDocument();
+  expect(screen.queryByText('80% 校准误差范围')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByText('查看独立验证依据'));
+  expect(screen.getByText(/未采用的模型概率 85.0%/)).toBeVisible();
+});
+
 test('uses the new required sample count and preserves old records without fabricating calibration', () => {
   const { rerender } = render(<ResearchResult report={{ ...calibrated, targets: [{ target: 'CLOSE',
     status: 'INSUFFICIENT_DATA', sampleCount: 60, minimumSamples: 82, missingSamples: 22 }] }} />);

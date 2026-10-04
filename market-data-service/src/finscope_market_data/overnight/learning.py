@@ -108,6 +108,7 @@ def evaluate(checks, calibration_status):
 
 
 def forecast_target(samples, features, cutoff):
+    samples = sorted((sample for sample in samples if sample['exitAt'] < cutoff), key=lambda sample: sample['signalDate'])
     if len(samples) < MIN_SAMPLES:
         return {'status': 'INSUFFICIENT_DATA', 'sampleCount': len(samples), 'minimumSamples': MIN_SAMPLES,
                 'missingSamples': MIN_SAMPLES - len(samples)}
@@ -129,10 +130,26 @@ def forecast_target(samples, features, cutoff):
                 'validationCount': len(checks), 'missingValidationSamples': max(0, MIN_VALIDATION - len(checks))}
     probability, raw, expected, lower, upper = fitted.predict(features)
     audit = evaluate(checks, fitted.calibration.status)
+    reference = select_reference(probability, expected, lower, upper, fitted, audit)
     return {'status': 'WATCH', 'sampleCount': len(samples), 'minimumSamples': MIN_SAMPLES,
-        'upProbability': probability, 'rawUpProbability': raw, 'expectedNetReturn': expected,
+        **reference, 'rawUpProbability': raw,
         'baselineProbability': fitted.baseline, 'baselineExpectedNetReturn': fitted.baseline_return,
-        'lowerNetReturn': lower, 'upperNetReturn': upper, 'validationCount': len(checks),
+        'validationCount': len(checks),
         'brierScore': audit['brier'], 'baselineBrier': audit['baselineBrier'],
         'directionAccuracy': float(np.mean([(s['probability'] >= .5) == (s['actual'] > 0) for s in checks])),
         **fitted.audit, 'reliability': audit, 'validation': checks}
+
+
+def select_reference(probability, expected, lower, upper, fitted, audit):
+    """Only already-matured rolling checks can promote a model over its prior.
+
+    Historical means are labelled as such. A rejected regression's interval
+    must never be attached to a different (baseline) expected return.
+    """
+    use_model = audit['status'] == 'HISTORICAL_EDGE'
+    return {'probabilitySource': 'CALIBRATED_MODEL' if use_model else 'HISTORICAL_BASELINE',
+        'selectionReason': audit['status'], 'modelUpProbability': probability,
+        'modelExpectedNetReturn': expected, 'modelLowerNetReturn': lower, 'modelUpperNetReturn': upper,
+        'upProbability': probability if use_model else fitted.baseline,
+        'expectedNetReturn': expected if use_model else fitted.baseline_return,
+        'lowerNetReturn': lower if use_model else None, 'upperNetReturn': upper if use_model else None}
