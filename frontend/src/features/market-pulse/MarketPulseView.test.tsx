@@ -155,24 +155,27 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
 
   fireEvent.click(screen.getByRole('tab', { name: '市场宽度' }));
 
-  expect(screen.getByText('市场节奏轨')).toBeInTheDocument();
+  expect(screen.queryByText('市场节奏轨')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '震荡轮动' })).not.toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '市场宽度' })).toBeInTheDocument();
-  expect(screen.queryByText('上证指数')).not.toBeInTheDocument();
-  expect(screen.queryByText('中证1000')).not.toBeInTheDocument();
-  expect(screen.getByText('3,200')).toBeInTheDocument();
-  expect(screen.getByText('2.30 万亿')).toBeInTheDocument();
-  expect(screen.getByText('主要指数与个股宽度共振走强')).toBeInTheDocument();
+  expect(screen.getByLabelText('宽度对照指数')).toHaveValue('000300.SH');
+  expect(screen.getByText('3,200 上涨')).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '指数与个股温差' })).toHaveTextContent('2.30 万亿');
   expect(screen.getByRole('heading', { name: '涨跌幅分布' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '趋势宽度' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '新高 / 新低' })).toBeInTheDocument();
   expect(screen.getByText('A-D Line')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: '买卖压力' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '参与与成交配合' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '宽度动量' })).toBeInTheDocument();
-  expect(screen.getByText('66.82%')).toBeInTheDocument();
-  expect(screen.getByText('+7,300.0 亿')).toBeInTheDocument();
-  expect(screen.getByText('TRIN 0.81')).toBeInTheDocument();
-  expect(screen.getByText('+42.5')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '结构变化排序' })).toBeInTheDocument();
+  expect(screen.getByText('66.8%')).toBeInTheDocument();
+  expect(screen.getByText('7300 亿')).toBeInTheDocument();
+  expect(screen.getByText('0.81')).toBeInTheDocument();
+  expect(screen.getByText('42.5')).toBeInTheDocument();
   expect(screen.getByText('参与修复')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
+  expect(screen.getByRole('region', { name: '市场节奏轨' })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('tab', { name: '市场全景' }));
 

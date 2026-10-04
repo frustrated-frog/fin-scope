@@ -10,6 +10,7 @@ import { MarketPanorama } from './MarketPanorama';
 import { PersonalMarketPanel } from './PersonalMarketPanel';
 import type { PersonalChange } from './personalMarket';
 import { RadarOverview } from './RadarOverview';
+import { BreadthWorkspace } from './BreadthWorkspace';
 import './RadarWorkspace.css';
 
 const stageLabels: Record<string, string> = {
@@ -59,24 +60,6 @@ function marketAmount(value?: number) {
   return `${(value / 1_000_000_000_000).toFixed(2)} 万亿`;
 }
 
-function amountText(value?: number) {
-  if (value == null || !Number.isFinite(value)) {
-    return '—';
-  }
-  if (Math.abs(value) >= 1_000_000_000_000) {
-    return `${(value / 1_000_000_000_000).toFixed(2)} 万亿`;
-  }
-  return `${(value / 100_000_000).toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} 亿`;
-}
-
-function signedAmountText(value?: number) {
-  if (value == null || !Number.isFinite(value)) {
-    return '—';
-  }
-  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-  return `${sign}${(Math.abs(value) / 100_000_000).toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} 亿`;
-}
-
 function ratioText(value?: number) {
   if (value == null || !Number.isFinite(value)) {
     return '—';
@@ -90,14 +73,6 @@ function signedDecimal(value?: number) {
   }
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
 }
-
-const breadthMomentumLabels: Record<string, string> = {
-  BULLISH_THRUST: '宽度冲击',
-  RECOVERING: '参与修复',
-  NEUTRAL: '中性震荡',
-  WEAKENING: '参与减弱',
-  UNAVAILABLE: '暂不可用'
-};
 
 function dateText(value?: string | number[]) {
   if (Array.isArray(value)) {
@@ -148,142 +123,6 @@ function MarketTape({ regimes }: { regimes: MarketRegime[] }) {
           );
         }) : <p className="market-pulse-inline-empty">积累每日快照后，这里会显示行情节奏。</p>}
       </div>
-    </section>
-  );
-}
-
-function MarketBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
-  const advance = breadth?.advanceCount ?? 0;
-  const decline = breadth?.declineCount ?? 0;
-  const flat = breadth?.flatCount ?? 0;
-  const total = Math.max(1, breadth?.validCount ?? advance + decline + flat);
-  const advanceWidth = advance / total * 100;
-  const flatWidth = flat / total * 100;
-  const declineWidth = Math.max(0, 100 - advanceWidth - flatWidth);
-  return (
-    <section className="market-pulse-breadth" aria-label="市场宽度">
-      <header>
-        <div><span>MARKET INTERNALS</span><h3>市场宽度</h3></div>
-        <p>{breadth?.interpretation ?? '尚未获得全市场涨跌分布。'}</p>
-        <small>{breadth?.businessDate ?? '—'} · {breadth?.sourceFamily ?? '来源不可用'} · {breadth?.qualityStatus ?? 'UNAVAILABLE'}</small>
-      </header>
-      <div className="market-pulse-breadth-lower">
-        <div className="market-pulse-distribution">
-          <div className="market-pulse-distribution-labels"><span><b>{advance.toLocaleString('zh-CN')}</b> 上涨</span><span><b>{flat.toLocaleString('zh-CN')}</b> 平盘</span><span><b>{decline.toLocaleString('zh-CN')}</b> 下跌</span></div>
-          <div className="market-pulse-distribution-bar" aria-label={`上涨 ${advance}，平盘 ${flat}，下跌 ${decline}`}><i className="advance" style={{ width: `${advanceWidth}%` }} /><i className="flat" style={{ width: `${flatWidth}%` }} /><i className="decline" style={{ width: `${declineWidth}%` }} /></div>
-          <small>上涨比例 {breadth?.advanceRatio == null ? '—' : percent(breadth.advanceRatio)}</small>
-        </div>
-        <dl className="market-pulse-breadth-stats">
-          <div><dt>两市成交</dt><dd>{marketAmount(breadth?.totalAmount)}</dd></div>
-          <div><dt>涨停 / 跌停</dt><dd>{breadth?.limitUpCount ?? '—'} / {breadth?.limitDownCount ?? '—'}</dd></div>
-          <div><dt>涨跌中位数</dt><dd className={(breadth?.medianChangePct ?? 0) < 0 ? 'negative' : 'positive'}>{percent(breadth?.medianChangePct, true)}</dd></div>
-        </dl>
-      </div>
-      <MarketPressureMomentumPanel breadth={breadth} />
-      <div className="market-pulse-internals-grid">
-        <ReturnDistributionPanel breadth={breadth} />
-        <TrendBreadthPanel breadth={breadth} />
-        <NewHighLowPanel breadth={breadth} />
-      </div>
-    </section>
-  );
-}
-
-function MarketPressureMomentumPanel({ breadth }: { breadth?: MarketBreadth }) {
-  const pressure = breadth?.volumePressure;
-  const momentum = breadth?.breadthMomentum;
-  const advanceShare = Math.max(0, Math.min(100, (pressure?.advanceAmountRatio ?? 0) * 100));
-  return (
-    <section className="market-pulse-pressure-momentum" aria-label="市场买卖压力与宽度动量">
-      <article className="market-pulse-pressure-card">
-        <header>
-          <div><span>VOLUME PRESSURE</span><h4>买卖压力</h4></div>
-          <strong>{ratioText(pressure?.advanceAmountRatio)}</strong>
-        </header>
-        <div className="market-pulse-pressure-bar" aria-label={`上涨成交额占比 ${ratioText(pressure?.advanceAmountRatio)}`}>
-          <i className="advance" style={{ width: `${advanceShare}%` }} />
-          <i className="decline" style={{ width: `${100 - advanceShare}%` }} />
-        </div>
-        <dl>
-          <div><dt>上涨成交额</dt><dd>{amountText(pressure?.advanceAmount)}</dd></div>
-          <div><dt>下跌成交额</dt><dd>{amountText(pressure?.declineAmount)}</dd></div>
-          <div><dt>净上涨成交额</dt><dd className={(pressure?.netAdvancingAmount ?? 0) < 0 ? 'negative' : 'positive'}>{signedAmountText(pressure?.netAdvancingAmount)}</dd></div>
-          <div><dt>量价广度</dt><dd>TRIN {pressure?.trin == null ? '—' : pressure.trin.toFixed(2)}</dd></div>
-        </dl>
-      </article>
-      <article className="market-pulse-momentum-card">
-        <header>
-          <div><span>BREADTH MOMENTUM</span><h4>宽度动量</h4></div>
-          <strong className={`status-${momentum?.status?.toLowerCase() ?? 'unavailable'}`}>{breadthMomentumLabels[momentum?.status ?? 'UNAVAILABLE'] ?? label(momentum?.status)}</strong>
-        </header>
-        <dl>
-          <div><dt>McClellan Oscillator</dt><dd className={(momentum?.mcclellanOscillator ?? 0) < 0 ? 'negative' : 'positive'}>{signedDecimal(momentum?.mcclellanOscillator)}</dd></div>
-          <div><dt>10 日参与率 EMA</dt><dd>{ratioText(momentum?.breadthThrustRatio)}</dd></div>
-        </dl>
-        <p>家数动量用于判断行情参与是否继续扩散；与成交额压力合看，可区分普涨修复和少数权重拉动。</p>
-      </article>
-    </section>
-  );
-}
-
-function ReturnDistributionPanel({ breadth }: { breadth?: MarketBreadth }) {
-  const buckets = breadth?.returnDistribution ?? [];
-  const maximum = Math.max(1, ...buckets.map(item => item.count));
-  return (
-    <section className="market-pulse-internal-card market-pulse-return-histogram">
-      <header><div><span>RETURN PROFILE</span><h4>涨跌幅分布</h4></div><small>观察尾部风险与赚钱效应是否同时扩散</small></header>
-      {buckets.length ? <div className="market-pulse-histogram-bars">
-        {buckets.map(item => <div key={item.code} className={item.code.startsWith('UP') ? 'positive' : item.code.startsWith('DOWN') ? 'negative' : 'flat'}>
-          <strong>{item.count.toLocaleString('zh-CN')}</strong>
-          <i aria-label={`${item.label} ${item.count} 家`}><b style={{ height: `${Math.max(4, item.count / maximum * 100)}%` }} /></i>
-          <small>{item.label}</small>
-        </div>)}
-      </div> : <p className="market-pulse-inline-empty">当日涨跌幅分档尚未生成。</p>}
-    </section>
-  );
-}
-
-function TrendBreadthPanel({ breadth }: { breadth?: MarketBreadth }) {
-  const trend = breadth?.trendBreadth;
-  const rows = [
-    ['MA20', trend?.ma20Ratio, trend?.ma20ValidCount],
-    ['MA60', trend?.ma60Ratio, trend?.ma60ValidCount],
-    ['MA120', trend?.ma120Ratio, trend?.ma120ValidCount],
-    ['MA250', trend?.ma250Ratio, trend?.ma250ValidCount]
-  ] as const;
-  return (
-    <section className="market-pulse-internal-card market-pulse-trend-breadth">
-      <header><div><span>TREND PARTICIPATION</span><h4>趋势宽度</h4></div><small>站上各周期均线的股票比例</small></header>
-      <div className="market-pulse-trend-list">
-        {rows.map(([labelText, ratio, count]) => <article key={labelText}>
-          <div><strong>{labelText}</strong><small>{count ? `${count.toLocaleString('zh-CN')} 只有效样本` : '样本不足'}</small></div>
-          <span>{ratio == null ? '—' : percent(ratio)}</span>
-          <i><b style={{ width: `${Math.max(0, Math.min(100, (ratio ?? 0) * 100))}%` }} /></i>
-        </article>)}
-      </div>
-    </section>
-  );
-}
-
-function NewHighLowPanel({ breadth }: { breadth?: MarketBreadth }) {
-  const highLow = breadth?.newHighLow;
-  const rows = [
-    ['20 日', highLow?.high20Count, highLow?.low20Count],
-    ['60 日', highLow?.high60Count, highLow?.low60Count],
-    ['250 日', highLow?.high250Count, highLow?.low250Count]
-  ] as const;
-  return (
-    <section className="market-pulse-internal-card market-pulse-high-low">
-      <header><div><span>LEADERSHIP</span><h4>新高 / 新低</h4></div><small>识别强势扩散还是弱势尾部增多</small></header>
-      <div className="market-pulse-high-low-list">
-        {rows.map(([window, high, low]) => <article key={window}>
-          <strong>{window}</strong><span className="positive"><b>{high ?? '—'}</b> 新高</span><span className="negative"><b>{low ?? '—'}</b> 新低</span>
-        </article>)}
-      </div>
-      <dl className="market-pulse-ad-line">
-        <div><dt>净上涨家数</dt><dd className={(breadth?.netAdvances ?? 0) < 0 ? 'negative' : 'positive'}>{signedInteger(breadth?.netAdvances)}</dd></div>
-        <div><dt>A-D Line</dt><dd className={(breadth?.advanceDeclineLine ?? 0) < 0 ? 'negative' : 'positive'}>{signedInteger(breadth?.advanceDeclineLine)}</dd></div>
-      </dl>
     </section>
   );
 }
@@ -561,7 +400,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }
 
   return (
-    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : view === 'review' ? ' is-radar' : ''}`}
+    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : view === 'review' ? ' is-radar' : view === 'breadth' ? ' is-breadth' : ''}`}
       onKeyDownCapture={event => { event.currentTarget.dataset.interaction = 'keyboard'; }}
       onPointerDownCapture={event => { event.currentTarget.dataset.interaction = 'pointer'; }}>
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
@@ -574,7 +413,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'review' && <RadarOverview workspace={workspace} stage={stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}
         dimensions={[{ name: '趋势', value: label(regime?.trendState) }, { name: '流动性', value: label(regime?.liquidityState) }, { name: '风险偏好', value: label(regime?.riskAppetiteState) }, { name: '轮动速度', value: label(regime?.rotationState) }]}
         dates={dates} refreshing={refreshing} onLoad={date => void load(date)} onRefresh={() => void refresh()} />}
-      {view !== 'panorama' && view !== 'review' && <header className="market-pulse-hero">
+      {view !== 'panorama' && view !== 'review' && view !== 'breadth' && <header className="market-pulse-hero">
         <div className="market-pulse-hero-main">
           <p className="market-pulse-kicker">MARKET REGIME · {workspace.businessDate ?? 'LATEST'}</p>
           <h3>{stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}</h3>
@@ -613,7 +452,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'panorama' && <MarketPanorama workspace={workspace} dates={dates} refreshing={refreshing}
         onLoad={date => void load(date)} onRefresh={() => void refresh()} onOpenStock={onOpenStock} onOpenStockDiscovery={onOpenStockDiscovery} />}
 
-      <MarketPulseWarnings warnings={workspace.warnings} />
+      {view !== 'breadth' && <MarketPulseWarnings warnings={workspace.warnings} />}
 
       {view === 'review' && <>
         {workspace.businessDate && <DailyResearchPanel businessDate={workspace.businessDate} sectors={sectors}
@@ -627,13 +466,12 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'transition' && transitionDecision && <MarketTransitionPanel decision={transitionDecision}
         onOpenStockDiscovery={context => onOpenStockDiscovery?.(context)} />}
 
-      {view === 'history' && <HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} />}
+      {view === 'history' && <><MarketTape regimes={workspace.recentRegimes ?? []} /><HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} /></>}
 
       {view === 'breadth' && <>
-
-      <MarketBreadthPanel breadth={workspace.breadth} />
-
-      <MarketTape regimes={workspace.recentRegimes ?? []} />
+        <BreadthWorkspace key={workspace.businessDate} workspace={workspace} dates={dates} refreshing={refreshing}
+          loading={loading} onLoad={date => void load(date)} onRefresh={() => void refresh()} />
+        <MarketPulseWarnings warnings={workspace.warnings} />
       </>}
 
       <footer className="market-pulse-disclaimer"><span>研究边界</span><p>研究候选不是买入指令。页面用于提高研究优先级，最终决策仍需核验公司基本面、估值、流动性与个人风险承受能力。</p><time>{workspace.generatedAt ? `生成于 ${workspace.generatedAt.replace('T', ' ').slice(0, 16)}` : ''}</time></footer>
