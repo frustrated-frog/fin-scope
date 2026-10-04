@@ -25,9 +25,11 @@ class AutomationStore:
             db.execute('INSERT INTO overnight_automation_meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload',
                        (key, json.dumps(value)))
 
-    def jobs(self, limit=100):
+    def jobs(self, limit=100, history=False):
         with self.store.connect() as db:
-            rows = db.execute('SELECT payload FROM overnight_automation_job ORDER BY key DESC LIMIT ?', (limit,)).fetchall()
+            rows = db.execute('''SELECT payload FROM overnight_automation_job
+                WHERE (COALESCE(json_extract(payload, '$.phase'), '')='HISTORY')=?
+                ORDER BY key DESC LIMIT ?''', (int(history), limit)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
     def job(self, key):

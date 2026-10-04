@@ -40,6 +40,11 @@ export interface OvernightAutomationState {
   nextTailAt?: string; ledgerReceivedAt?: string; ledgerFresh: boolean; positionCount: number;
   holdingStatus: string; heartbeat?: { lastTickAt: string; error?: string };
   jobs: OvernightAutomationJob[];
+  history?: {
+    desiredDays: number;
+    coverage: Array<{ instrumentCode: string; firstDate: string; lastDate: string; completeDays: number; barCount: number }>;
+    jobs: Array<{ key: string; instrumentCode: string; status: string; reason?: string; addedDays?: number; finishedAt?: string }>;
+  };
 }
 
 export interface CapturePlan {

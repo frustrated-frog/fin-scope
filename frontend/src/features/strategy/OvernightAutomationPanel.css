@@ -31,6 +31,11 @@
 .overnight-auto-log { margin-top: 18px; font-size: 12px; }
 .overnight-auto-log > summary { cursor: pointer; color: var(--muted); padding: 8px 0; }
 .overnight-auto-log summary span { margin-left: 8px; }
+.overnight-history-status { margin-block: -8px 18px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.overnight-history-status > summary { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.overnight-history-status summary b { color: var(--ink); font-weight: 550; }
+.overnight-history-status summary span { margin: 0; }
+.overnight-history-status > p { color: var(--muted); line-height: 1.8; }
 .overnight-auto-log > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .overnight-auto-log > div p { flex-basis: 100%; color: var(--muted); margin: 4px 0 0; overflow-wrap: anywhere; }
 .overnight-auto footer { display: grid; gap: 6px; margin-top: 22px; color: var(--muted); font-size: 11px; line-height: 1.8; }

@@ -17,5 +17,6 @@ public class OvernightAutomationState {
     private int positionCount;
     private String holdingStatus;
     private Map<String, Object> heartbeat;
+    private Map<String, Object> history;
     private List<Map<String, Object>> jobs;
 }

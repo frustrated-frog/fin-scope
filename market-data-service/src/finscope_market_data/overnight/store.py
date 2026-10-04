@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import timedelta
 from contextlib import closing, contextmanager
 from pathlib import Path
 import sqlite3
@@ -27,6 +28,8 @@ class OvernightStore:
                 CREATE TABLE IF NOT EXISTS overnight_outcome (
                     prediction_id TEXT NOT NULL, observed_at TEXT NOT NULL,
                     payload TEXT NOT NULL, PRIMARY KEY(prediction_id, observed_at));
+                CREATE TABLE IF NOT EXISTS overnight_history_import (
+                    code TEXT PRIMARY KEY, payload TEXT NOT NULL);
             ''')
 
     @contextmanager
@@ -45,6 +48,50 @@ class OvernightStore:
             rows = db.execute('SELECT payload FROM overnight_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
                               (code, through.isoformat())).fetchall()
         return [MinuteBar.model_validate_json(row[0]) for row in rows]
+
+    def coverage(self, through):
+        with self.connect() as db:
+            rows = db.execute('''SELECT code, MIN(day), MAX(day), SUM(bars),
+                SUM(CASE WHEN bars=48 THEN 1 ELSE 0 END) FROM (
+                    SELECT code, substr(ended_at,1,10) day, COUNT(*) bars FROM overnight_minute
+                    WHERE ended_at BETWEEN ? AND ? GROUP BY code, day) GROUP BY code ORDER BY MAX(day) DESC, code LIMIT 200''',
+                ((through - timedelta(days=365)).isoformat(), through.isoformat())).fetchall()
+        return [{'instrumentCode': row[0], 'firstDate': row[1], 'lastDate': row[2],
+                 'barCount': row[3], 'completeDays': row[4]} for row in rows]
+
+    def import_history(self, code, bars, source, now):
+        """Append whole missing days atomically; never replace captured days or frozen reports."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            existing = {row[0]: MinuteBar.model_validate_json(row[1]) for row in db.execute(
+                'SELECT ended_at,payload FROM overnight_minute WHERE code=?', (code,))}
+            days = {stamp[:10] for stamp in existing}
+            overlap = 0
+            for bar in bars:
+                previous = existing.get(bar.ended_at.isoformat())
+                if previous is None:
+                    continue
+                overlap += 1
+                if any(abs(getattr(previous, key) - getattr(bar, key)) > .011
+                       for key in ('open', 'high', 'low', 'close')):
+                    raise ValueError('历史源与已采集分钟价格冲突，未合并')
+                if abs(previous.amount - bar.amount) > max(1, previous.amount * .02):
+                    raise ValueError('历史源与已采集成交额口径冲突，未合并')
+            additions = [bar for bar in bars if str(bar.ended_at.date()) not in days]
+            db.executemany('INSERT OR IGNORE INTO overnight_minute VALUES(?,?,?)',
+                [(code, bar.ended_at.isoformat(), bar.model_dump_json()) for bar in additions])
+            result = {'sourceCode': source, 'importedAt': now.isoformat(), 'addedBars': len(additions),
+                      'addedDays': len({bar.ended_at.date() for bar in additions}), 'overlapBars': overlap,
+                      'firstDate': str(bars[0].ended_at.date()) if bars else None,
+                      'lastDate': str(bars[-1].ended_at.date()) if bars else None}
+            db.execute('INSERT INTO overnight_history_import VALUES(?,?) ON CONFLICT(code) DO UPDATE SET payload=excluded.payload',
+                       (code, json.dumps(result)))
+        return result
+
+    def history_import(self, code):
+        with self.connect() as db:
+            row = db.execute('SELECT payload FROM overnight_history_import WHERE code=?', (code,)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def freeze(self, request, report, inputs):
         key = json.dumps({'request': request.model_dump(mode='json', by_alias=True),

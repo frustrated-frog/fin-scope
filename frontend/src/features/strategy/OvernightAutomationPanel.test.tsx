@@ -78,3 +78,17 @@ test('does not claim healthy background execution without a worker heartbeat', a
   expect(screen.getByText('澳弘电子')).toBeVisible();
   expect(screen.queryByText('后台运行')).not.toBeInTheDocument();
 });
+
+test('shows historical coverage separately from predictive accuracy and exposes backfill failures', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, history: { desiredDays: 140,
+    coverage: [{ instrumentCode: '605058.SH', completeDays: 181, barCount: 8688, firstDate: '2026-01-05', lastDate: '2026-09-30' }],
+    jobs: [{ key: 'history', instrumentCode: '600000.SH', status: 'FAILED', reason: '历史源价格冲突，未合并' }],
+  } })));
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
+  expect(await screen.findByText('1 只已覆盖 140 个完整交易日')).toBeVisible();
+  expect(screen.getByText('历史源价格冲突，未合并')).not.toBeVisible();
+  await userEvent.click(screen.getByText('历史样本自动补齐'));
+  expect(screen.getByText('181 个完整交易日')).toBeVisible();
+  expect(screen.getByText('历史源价格冲突，未合并')).toBeVisible();
+  expect(screen.getByText(/历史补数不计作前瞻预测成绩/)).toBeVisible();
+});

@@ -28,6 +28,10 @@ class OvernightService:
         if request.mode == 'TAIL_ENTRY' and completed >= cutoff + timedelta(minutes=5):
             report['evidenceKind'] = 'RETROSPECTIVE'
         report['sourceCode'] = self.provider.source
+        history = self.store.history_import(request.instrument_code)
+        if history:
+            report['sourceCode'] += '+' + history['sourceCode']
+            report['warnings'].append('包含事后获取的未复权分钟历史；历史重放不等于当时已留档的真实预测。')
         report['warnings'].extend(warnings)
         if report['status'] == 'WATCH' or freeze_all:
             report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])

@@ -25,6 +25,8 @@ from finscope_market_data.overnight.validation import summarize as summarize_ove
 from finscope_market_data.overnight.provider import OvernightMinuteProvider
 from finscope_market_data.overnight.store import OvernightStore
 from finscope_market_data.overnight.service import OvernightService
+from finscope_market_data.overnight.history_backfill import OvernightHistoryBackfill
+from finscope_market_data.providers.baostock_minutes import BaostockMinuteHistoryProvider
 from finscope_market_data.discovery.event_provider import MarketEventProvider
 from finscope_market_data.discovery.recall_archive import DiscoveryRecallArchive
 from finscope_market_data.discovery.providers import TonghuashunHotSectorProvider
@@ -137,6 +139,7 @@ def create_app(
 
     capture = OvernightCapture(overnight)
     automation = OvernightAutomation(overnight, OvernightCandidateScanner())
+    history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider())
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -198,12 +201,14 @@ def create_app(
         capture_stop = asyncio.Event()
         capture_task = asyncio.create_task(capture.run(capture_stop))
         automation_task = asyncio.create_task(automation.run(capture_stop))
+        history_task = asyncio.create_task(history_backfill.run(capture_stop))
         try:
             yield
         finally:
             capture_stop.set()
             await capture_task
             await automation_task
+            await history_task
             close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):

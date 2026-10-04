@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../shared/api/client';
 import type { OvernightAutomationState, OvernightMode, OvernightReport } from './overnightTypes';
+import { OvernightHistoryStatus } from './OvernightHistoryStatus';
 import './OvernightAutomationPanel.css';
 
 const states: Record<string, string> = {
@@ -69,6 +70,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport }: {
       <div><span>{mode === 'TAIL_ENTRY' ? '每个窗口研究上限' : '盘后研判窗口'}</span><strong>{mode === 'TAIL_ENTRY' ? `${state?.candidateLimit ?? '—'} 只` : '15:10—18:00'}</strong></div>
       <div><span>次日结果核验</span><strong>自动轮换更新</strong></div>
     </div>
+    <OvernightHistoryStatus history={state?.history} />
     {error && <p role="alert" className="overnight-auto-notice">{error}。连接恢复后自动刷新；下方保留上次读取的记录。</p>}
     {state && !state.calendarAvailable && <p className="overnight-auto-notice">已核验的交易日历未覆盖下一窗口，自动研究暂不推断日期。</p>}
     {state?.calendarAvailable && !state.tradingDay && <p className="overnight-auto-notice">当前为非交易日，下一交易日将自动恢复扫描与持仓研判。</p>}

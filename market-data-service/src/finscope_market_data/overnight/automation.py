@@ -9,6 +9,7 @@ from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.automation_store import AutomationStore
 from finscope_market_data.overnight.models import OvernightRequest
+from finscope_market_data.overnight.history_backfill import DESIRED_DAYS
 
 logger = logging.getLogger(__name__)
 SLOTS = (('14:20', '14:30'), ('14:40', '14:45'))
@@ -49,13 +50,16 @@ class OvernightAutomation:
             holding_status = 'WINDOW_CLOSED'
         elif now.strftime('%H:%M') >= '15:10':
             holding_status = 'ACTIVE'
+        jobs = self.store.jobs()
         return {'enabled': context['enabled'], 'candidateLimit': context['candidateLimit'],
             'serverTime': now.isoformat(), 'calendarAvailable': next_day is not None,
             'tradingDay': next_session(now.date() - timedelta(days=1)) == now.date(),
             'nextTailAt': next_tail, 'ledgerReceivedAt': received, 'ledgerFresh': fresh,
             'positionCount': len(context['positions']), 'holdingStatus': holding_status,
             'heartbeat': self.store.get('heartbeat'),
-            'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in self.store.jobs()]}
+            'history': {'desiredDays': DESIRED_DAYS, 'coverage': self.service.store.coverage(now),
+                'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in self.store.jobs(history=True)]},
+            'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in jobs]}
 
     def tick(self):
         now = self.clock()
