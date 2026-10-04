@@ -1,0 +1,218 @@
+/* Market Pulse shares the app's sky. Keep pigment on surfaces, never on text opacity. */
+.app-shell[data-theme] .market-pulse-page {
+  --mp-glass-panel: var(--workspace-glass);
+  --mp-glass-inset: var(--workspace-glass-inset);
+  --mp-glass-control: rgba(26, 43, 65, .58);
+  --mp-glass-floating: rgba(18, 30, 48, .94);
+  --mp-glass-solid: #142238;
+  --mp-glass-line: rgba(157, 188, 220, .22);
+  --mp-glass-highlight: rgba(129, 192, 220, .13);
+  --mp-glass-shadow: 0 8px 28px rgba(3, 10, 22, .08), inset 0 1px 0 rgba(212, 233, 255, .04);
+  --mp-blue: #83c9df;
+  --mp-blue-soft: rgba(131, 201, 223, .1);
+  --mp-red: #f09c93;
+  --mp-green: #80d4b4;
+  --mp-amber: #e3bd80;
+  --mpa-panel: var(--mp-glass-panel);
+  --mpa-inset: var(--mp-glass-inset);
+  --mbw-panel: var(--mp-glass-panel);
+  --mbw-inset: var(--mp-glass-inset);
+  --mpr-panel: var(--mp-glass-panel);
+  --mpr-raised: var(--mp-glass-inset);
+  --mpa-line: var(--mp-glass-line);
+  --mbw-line: var(--mp-glass-line);
+  --mpr-line: var(--mp-glass-line);
+  --line: var(--mp-glass-line);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.app-shell[data-theme="light"] .market-pulse-page {
+  --mp-glass-control: rgba(245, 249, 255, .66);
+  --mp-glass-floating: rgba(239, 245, 253, .96);
+  --mp-glass-solid: #edf3fb;
+  --mp-glass-line: rgba(89, 113, 152, .22);
+  --mp-glass-highlight: rgba(86, 135, 186, .12);
+  --mp-glass-shadow: 0 8px 28px rgba(40, 63, 99, .025), inset 0 1px 0 rgba(255, 255, 255, .3);
+  --ink: #213349;
+  --muted: #516780;
+  --faint: #61778f;
+  --line-strong: #8a9fb7;
+  --surface: #edf3fb;
+  --surface-2: #e5edf8;
+  --surface-3: #dbe7f4;
+  --mp-blue: #297c96;
+  --mp-blue-soft: rgba(41, 124, 150, .08);
+  --mp-red: #b64640;
+  --mp-green: #237959;
+  --mp-amber: #936521;
+}
+
+/* One tint per reading panel; nested sections remain clear to avoid alpha stacking. */
+.app-shell[data-theme] main.workspace .market-pulse-page :is(
+  .mpa-panel, .mbw-panel, .mpr-overview,
+  .market-pulse-hero, .market-pulse-tape, .market-pulse-history,
+  .market-pulse-review, .mp-research-section,
+  .mp-personal-main, .mp-personal-opportunities,
+  .market-transition-cockpit, .market-pulse-loading, .market-pulse-empty
+) {
+  background: var(--mp-glass-panel);
+  border-color: var(--mp-glass-line);
+  box-shadow: var(--mp-glass-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page :is(
+  .market-transition-thesis, .market-transition-gauges, .market-transition-trajectory,
+  .market-transition-selected, .market-transition-handoff, .market-transition-handoff dl,
+  .market-pulse-internals-history, .market-pulse-internals-selected, .market-pulse-review-overview,
+  .market-pulse-review-overview article, .market-pulse-review-list,
+  .mp-personal-list article, .mpa-catalyst-row, .market-pulse-history-row, .market-pulse-tape-node
+) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page :is(
+  .market-pulse-controls, .market-pulse-confidence, .market-pulse-regime-strip > span,
+  .market-transition-gauges > article, .market-transition-selected > *,
+  .market-transition-handoff dl > div, .market-transition-scenarios article,
+  .scenario-rank, .market-transition-chart,
+  .market-pulse-history-head, .market-pulse-internals-selected > *,
+  .mp-research-table-wrap, .mp-research-comparison article, .mp-theme-card, .mp-theme-editor
+) {
+  background: var(--mp-glass-inset);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-transition-gauges > article {
+  border-right: 1px solid var(--mp-glass-line);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-transition-chart .quadrant {
+  fill-opacity: .35;
+}
+
+/* Preserve the radar's risk/watch accents and panorama's price heat colors. */
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-review-list.is-risk {
+  background: color-mix(in srgb, var(--mp-red) 5%, transparent);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-review-list.is-watch {
+  background: color-mix(in srgb, var(--mp-green) 5%, transparent);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-tabs {
+  gap: 6px;
+  padding: 6px;
+  border-color: var(--mp-glass-line);
+  border-radius: 12px;
+  background: var(--mp-glass-panel);
+  box-shadow: var(--mp-glass-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-tabs button {
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-tabs button:hover {
+  color: var(--ink);
+  background: var(--mp-glass-highlight);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .market-pulse-tabs button[aria-selected="true"] {
+  color: var(--ink);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--mp-blue) 18%, transparent), var(--mp-glass-highlight));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mp-blue) 38%, transparent);
+}
+
+/* Inputs and overlays need more pigment than the surrounding reading surfaces. */
+.app-shell[data-theme] main.workspace .market-pulse-page :is(select, input:not([type="range"]):not([type="checkbox"]), textarea) {
+  color: var(--ink);
+  background: var(--mp-glass-control);
+  border-color: var(--mp-glass-line);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page option {
+  color: var(--ink);
+  background: var(--mp-glass-solid);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page :is(
+  .mpa-timeline, .mpa-matrix thead th, .mpa-matrix th:first-child, .mp-research-table-wrap thead
+) {
+  background: var(--mp-glass-floating);
+}
+
+.app-shell[data-theme] main.workspace .market-pulse-page .mpa-timeline {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* The legacy regime header also follows the light palette once its backplate is clear. */
+.app-shell[data-theme="light"] main.workspace .market-pulse-page :is(
+  .market-pulse-hero h3, .market-pulse-regime-strip strong, .market-pulse-confidence-dial strong
+) {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+.app-shell[data-theme="light"] main.workspace .market-pulse-page :is(
+  .market-pulse-hero-main > p:last-of-type, .market-pulse-regime-strip small,
+  .market-pulse-confidence > small, .market-pulse-controls label > span
+) {
+  color: var(--muted);
+}
+
+.app-shell[data-theme="light"] main.workspace .market-pulse-page .market-pulse-kicker {
+  color: var(--mp-blue);
+}
+
+.app-shell[data-theme="light"] main.workspace .market-pulse-page .market-pulse-confidence-dial .dial-value {
+  stroke: var(--mp-blue);
+  filter: none;
+}
+
+.app-shell[data-theme="light"] main.workspace .market-pulse-page .market-pulse-confidence-dial .dial-track {
+  stroke: var(--mp-glass-line);
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .app-shell[data-theme] .market-pulse-page {
+    --mp-glass-panel: var(--mp-glass-solid);
+    --mp-glass-inset: var(--mp-glass-solid);
+    --mp-glass-control: var(--mp-glass-solid);
+    --mp-glass-floating: var(--mp-glass-solid);
+    --mp-glass-line: var(--line-strong);
+    --mp-glass-shadow: none;
+    background: var(--mp-glass-solid);
+  }
+
+  .app-shell[data-theme] main.workspace .market-pulse-page :is(.market-pulse-tabs, .mpa-timeline) {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .app-shell[data-theme] .market-pulse-page {
+    --mp-glass-solid: Canvas;
+    --mp-glass-panel: Canvas;
+    --mp-glass-inset: Canvas;
+    --mp-glass-control: Canvas;
+    --mp-glass-floating: Canvas;
+    --mp-glass-line: CanvasText;
+    --mp-glass-shadow: none;
+    color: CanvasText;
+    background: Canvas;
+  }
+}

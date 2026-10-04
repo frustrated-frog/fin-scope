@@ -12,6 +12,7 @@ import type { PersonalChange } from './personalMarket';
 import { RadarOverview } from './RadarOverview';
 import { BreadthWorkspace } from './BreadthWorkspace';
 import './RadarWorkspace.css';
+import './MarketPulseMaterials.css';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
