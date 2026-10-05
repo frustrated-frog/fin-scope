@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { FinancialEvidenceRefs as EvidenceRefs } from './FinancialEvidenceRefs';
 import { FinancialInterpretationReportReader, FinancialReportScope } from './FinancialInterpretationReportReader';
-import { formatEvidenceValue } from './financialPresentation';
+import { evidenceTypeLabel, formatEvidenceValue, readableFinancialText } from './financialPresentation';
 import {
   FinancialEvidence,
   FinancialInterpretation,
@@ -267,7 +267,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
             onClick={(event) => event.stopPropagation()}
           >
             <header>
-              <div><span>{selectedEvidence.type}</span><h4>{selectedEvidence.label}</h4></div>
+              <div><span>{evidenceTypeLabel(selectedEvidence.type)}</span><h4>{selectedEvidence.label}</h4></div>
               <button type="button" aria-label="关闭证据详情" onClick={() => setSelectedEvidence(undefined)}>×</button>
             </header>
             <dl>
@@ -275,7 +275,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
               {selectedEvidence.value && <div><dt>披露或计算值</dt><dd>{formatEvidenceValue(selectedEvidence)}</dd></div>}
               {selectedEvidence.period && <div><dt>报告期</dt><dd>{selectedEvidence.period}</dd></div>}
             </dl>
-            {selectedEvidence.detail && <p>{selectedEvidence.detail}</p>}
+            {selectedEvidence.detail && <p>{readableFinancialText(selectedEvidence.detail)}</p>}
             {selectedEvidence.sourceRefs && selectedEvidence.sourceRefs.length > 0 && (
               <div className="financial-evidence-sources"><strong>上游证据</strong><span>{selectedEvidence.sourceRefs.join(' · ')}</span></div>
             )}

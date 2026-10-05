@@ -38,6 +38,22 @@ export const originLabels: Record<FinancialValueOrigin, string> = {
   AI_EXTRACTED: 'AI 提取'
 };
 
+/** 将底稿口径和来源标记译为阅读用语，数值与证据编号保持原样。 */
+export function readableFinancialText(text: string) {
+  const labels: Record<string, string> = {
+    CURRENT_YTD: '本期累计', CURRENT_QUARTER: '本期单季', CURRENT_PERIOD_END: '本期期末',
+    PRIOR_YTD: '上年同期累计', PRIOR_QUARTER: '上年同期单季', PRIOR_PERIOD_END: '上期期末',
+    REPORTED: '公开披露', DERIVED: '单季派生', CALCULATED: '计算', AI_EXTRACTED: 'AI 提取'
+  };
+  return text.replace(/\b(?:CURRENT_YTD|CURRENT_QUARTER|CURRENT_PERIOD_END|PRIOR_YTD|PRIOR_QUARTER|PRIOR_PERIOD_END|REPORTED|DERIVED|CALCULATED|AI_EXTRACTED)\b/g,
+    (token) => labels[token]);
+}
+
+export function evidenceTypeLabel(type: string) {
+  const labels: Record<string, string> = { LINE_ITEM: '报表科目', METRIC: '计算指标', FINDING: '规则提示', TREND: '历史趋势', DATA_GAP: '材料缺口' };
+  return labels[type] || '研究证据';
+}
+
 export const qualityLabels: Record<FinancialQualityStatus, string> = {
   FRESH: '数据完整',
   PARTIAL: '部分可用',

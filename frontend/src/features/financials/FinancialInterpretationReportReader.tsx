@@ -1,7 +1,7 @@
 import { useId } from 'react';
 
 import { FinancialEvidenceRefs } from './FinancialEvidenceRefs';
-import { formatEvidenceValue, reportLabel } from './financialPresentation';
+import { formatEvidenceValue, readableFinancialText, reportLabel } from './financialPresentation';
 import { FinancialEvidence, FinancialInterpretationClaim, FinancialInterpretationScope, FinancialInterpretationSection } from './financialTypes';
 import './financialReport.css';
 
@@ -75,8 +75,11 @@ export function FinancialInterpretationReportReader({ sections, ...evidenceProps
             </div>
           </div>
         </header>
-        <p className="financial-report-thesis">{section.summary}</p>
-        <FinancialEvidenceRefs refs={section.refs} {...evidenceProps} />
+        <p className="financial-report-thesis">{readableFinancialText(section.summary)}</p>
+        {section.refs.length > 4 ? <details className="financial-report-sources">
+          <summary>本章引用依据 · {section.refs.length} 条</summary>
+          <FinancialEvidenceRefs refs={section.refs} {...evidenceProps} />
+        </details> : <FinancialEvidenceRefs refs={section.refs} {...evidenceProps} />}
         <ChapterClaims title="关键事实" claims={section.facts} {...evidenceProps} showValues />
         <ChapterClaims title="分析过程与经营含义" claims={section.analysis} {...evidenceProps} />
         {section.learningExplanation && <details className="financial-report-learning">
@@ -120,7 +123,7 @@ function ChapterClaims({ title, claims, evidenceById, onEvidence, showValues = f
       <div className="financial-report-claim-meta"><span>{claimTypes[claim.claimType]}</span>
         {claim.confidence && <span>{confidences[claim.confidence]}</span>}
       </div>
-      <p>{claim.claim}</p>
+      <p>{readableFinancialText(claim.claim)}</p>
       {showValues && <div className="financial-report-values">
         {claim.refs.map((id) => {
           const item = evidenceById.get(id);
@@ -128,7 +131,7 @@ function ChapterClaims({ title, claims, evidenceById, onEvidence, showValues = f
             return null;
           }
           return <button type="button" key={id} aria-label={`核查${item.label}的数值`} onClick={() => onEvidence(id)}>
-            <span>{item.label}</span><strong>{formatEvidenceValue(item)}</strong><small>{item.period || '期间未标记'}{item.detail?.includes('口径=') ? ` · ${item.detail.split('；')[0].replace('口径=', '')}` : ''}</small>
+            <span>{item.label}</span><strong>{formatEvidenceValue(item)}</strong><small>{item.period || '期间未标记'}{item.detail?.includes('口径=') ? ` · ${readableFinancialText(item.detail.split('；')[0].replace('口径=', ''))}` : ''}</small>
           </button>;
         })}
       </div>}
