@@ -39,8 +39,12 @@ public class FinancialEvidenceSelector {
         LinkedHashMap<String, FinancialEvidence> selected =
                 new LinkedHashMap<String, FinancialEvidence>();
         addTypes(selected, sorted, "FINDING", "METRIC", "DATA_GAP");
-        addCoreLines(selected, sorted, reportType);
+        int trendReserve = (int) Math.min(16, sorted.stream()
+                .filter(value -> "TREND".equals(value.getType()) && isCore(value.getId())
+                        && value.getDetail() != null && value.getDetail().contains(";")).count());
+        addCoreLines(selected, sorted, reportType, MAX_EVIDENCE - trendReserve);
         addCoreTrends(selected, sorted);
+        addCoreLines(selected, sorted, reportType, MAX_EVIDENCE);
         List<FinancialEvidence> result = new ArrayList<FinancialEvidence>(selected.values());
         result.sort(Comparator.comparing(FinancialEvidence::getId));
         return result;
@@ -69,7 +73,7 @@ public class FinancialEvidenceSelector {
 
     private void addCoreLines(LinkedHashMap<String, FinancialEvidence> target,
                               List<FinancialEvidence> values,
-                              FinancialReportType reportType) {
+                              FinancialReportType reportType, int capacity) {
         Set<String> ids = new LinkedHashSet<String>();
         for (FinancialEvidence value : values) {
             ids.add(value.getId());
@@ -86,13 +90,17 @@ public class FinancialEvidenceSelector {
             }
             eligible.add(value);
         }
-        int remaining = Math.max(0, MAX_EVIDENCE - target.size());
-        int quota = Math.max(1, remaining / 3);
+        eligible.sort(Comparator.comparing(FinancialEvidence::getPeriod,
+                Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(FinancialEvidence::getId));
+        int remaining = Math.max(0, capacity - target.size());
+        int quota = remaining / 3;
         addStatementLines(target, eligible, "L_INCOME_", quota);
         addStatementLines(target, eligible, "L_BALANCE_SHEET_", quota);
         addStatementLines(target, eligible, "L_CASH_FLOW_", quota);
         for (FinancialEvidence value : eligible) {
-            add(target, value);
+            if (target.size() < capacity) {
+                add(target, value);
+            }
         }
     }
 

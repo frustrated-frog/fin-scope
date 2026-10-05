@@ -4,6 +4,7 @@ import com.finscope.domain.financials.FinancialFinding;
 import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
 import com.finscope.common.enums.financials.FinancialQualityStatus;
+import com.finscope.common.enums.financials.FinancialStatementType;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -197,7 +198,9 @@ public class FinancialAnalysisEngine {
             return result;
         }
         for (FinancialLineItem item : items) {
-            if (item.getConceptCode() != null && item.getNormalizedValue() != null
+            boolean currentRole = item.getStatementType() == FinancialStatementType.BALANCE_SHEET
+                    ? "CURRENT_PERIOD_END".equals(item.getPeriodRole()) : "CURRENT_YTD".equals(item.getPeriodRole());
+            if (currentRole && item.getConceptCode() != null && item.getNormalizedValue() != null
                     && !result.containsKey(item.getConceptCode())) {
                 result.put(item.getConceptCode(), item.getNormalizedValue());
             }

@@ -187,6 +187,18 @@ class FinancialAnalysisEngineTest {
         assertTrue(invalid.getMetrics().stream().noneMatch(item -> "INVENTORY_TO_ASSETS".equals(item.getMetricCode())));
     }
 
+    @Test
+    void usesCurrentCumulativeValuesRegardlessOfTheOrderOfQuarterlyAndHistoricalRows() {
+        FinancialLineItem quarter = line("REVENUE", "100", FinancialStatementType.INCOME);
+        quarter.setPeriodRole("CURRENT_QUARTER");
+        FinancialLineItem historical = line("REVENUE", "9000", FinancialStatementType.INCOME);
+        historical.setPeriodRole("PRIOR_YEAR_YTD");
+        FinancialAnalysisResult result = engine.analyze(
+                Arrays.asList(quarter, historical, line("REVENUE", "1100", FinancialStatementType.INCOME)),
+                Arrays.asList(line("REVENUE", "1000", FinancialStatementType.INCOME)));
+        assertEquals(new BigDecimal("10.000000"), metric(result, "REVENUE_YOY"));
+    }
+
     private BigDecimal metric(FinancialAnalysisResult result, String code) {
         return result.getMetrics().stream()
                 .filter(value -> code.equals(value.getMetricCode()))

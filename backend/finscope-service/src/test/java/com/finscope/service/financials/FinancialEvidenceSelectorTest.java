@@ -84,6 +84,23 @@ class FinancialEvidenceSelectorTest {
         assertTrue(ids.stream().anyMatch(id -> id.startsWith("L_CASH_FLOW_")));
     }
 
+    @Test
+    void preservesTrendsAndCurrentRowsWhenHistoricalStatementsExceedTheBudget() {
+        List<FinancialEvidence> input = new ArrayList<>();
+        for (int index = 0; index < 80; index++) {
+            FinancialEvidence old = evidence("L_INCOME_REVENUE_2024_ROLE_" + index, "LINE_ITEM", "1");
+            old.setPeriod("2024-03-31");
+            input.add(old);
+            input.add(evidence("L_INCOME_REVENUE_2026_ROLE_" + index, "LINE_ITEM", "2"));
+        }
+        input.add(evidence("T_REVENUE_QUARTER", "TREND", "2025-03-31=1;2026-03-31=2"));
+        List<String> ids = selector.select(input, FinancialReportType.Q1).stream()
+                .map(FinancialEvidence::getId).collect(Collectors.toList());
+        assertTrue(ids.contains("T_REVENUE_QUARTER"));
+        assertEquals(80, ids.stream().filter(id -> id.startsWith("L_INCOME_REVENUE_2026")).count());
+        assertTrue(ids.size() <= FinancialEvidenceSelector.MAX_EVIDENCE);
+    }
+
     private FinancialEvidence evidence(String id, String type, String value) {
         FinancialEvidence evidence = new FinancialEvidence();
         evidence.setId(id);
