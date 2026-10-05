@@ -84,8 +84,8 @@ public class FinancialEvidenceSelector {
                 continue;
             }
             if (reportType == FinancialReportType.Q1
-                    && value.getId().endsWith("_CURRENT_YTD")
-                    && ids.contains(value.getId().replace("_CURRENT_YTD", "_CURRENT_QUARTER"))) {
+                    && value.getId().endsWith("_CURRENT_QUARTER")
+                    && ids.contains(value.getId().replace("_CURRENT_QUARTER", "_CURRENT_YTD"))) {
                 continue;
             }
             eligible.add(value);

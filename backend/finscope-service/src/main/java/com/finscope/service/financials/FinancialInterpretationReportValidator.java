@@ -21,6 +21,8 @@ public final class FinancialInterpretationReportValidator {
     private static final Pattern NUMBER = Pattern.compile("(?<![A-Za-z_])[-+]?\\d+(?:\\.\\d+)?");
     private static final Pattern CAUSAL_FACT = Pattern.compile("由于|源于|驱动|导致|意味着|预示|得益于|主要受|有保障|必然|一定会");
     private static final Pattern CONTINUOUS_TREND = Pattern.compile("连续|逐季|持续改善|持续恶化|趋势确立");
+    private static final Pattern UNCONFIRMED_TREND = Pattern.compile(
+            "(?:不能|不足以|无法|不代表|尚未|未能|尚不能|是否|能否|核查|观察|关注|验证|缺少|缺乏|没有)[^，。；！？]{0,24}(?:连续|逐季|持续改善|持续恶化|趋势确立)");
 
     private FinancialInterpretationReportValidator() {
     }
@@ -61,9 +63,7 @@ public final class FinancialInterpretationReportValidator {
                     || !empty(section.getCounterEvidence()) || !empty(section.getWatchpoints()))) {
                 errors.add(field + " 无公司材料，不得补造公司判断");
             }
-            if (section.getLimitations() == null || section.getLimitations().size() > 8) {
-                errors.add(field + " limitations 必须为数组且不超过八项");
-            }
+            validateLimitations(section.getLimitations(), errors, field + ".limitations");
             validateText(section.getSummary(), section.getRefs(), packet, errors, field + ".summary", !insufficient);
             if (!insufficient && section.getRefs() != null && section.getRefs().stream().noneMatch(available::contains)) {
                 errors.add(field + " 缺少与章节主题有关的证据");
@@ -86,6 +86,7 @@ public final class FinancialInterpretationReportValidator {
         validateClaims(result.getRisks(), null, packet, errors, "risks");
         validateClaims(result.getTurningPoints(), null, packet, errors, "turningPoints");
         validateClaims(result.getWatchpoints(), null, packet, errors, "watchpoints");
+        validateLimitations(result.getLimitations(), errors, "limitations");
         if (result.getDimensions() != null && !result.getDimensions().isEmpty()) {
             errors.add("新版使用sections，不重复生成dimensions");
         }
@@ -95,6 +96,9 @@ public final class FinancialInterpretationReportValidator {
             }
             Set<String> domains = new HashSet<>();
             for (String ref : claim.getRefs()) {
+                if (ref == null) {
+                    continue;
+                }
                 if (ref.startsWith("L_INCOME_")) {
                     domains.add("INCOME");
                 } else if (ref.startsWith("L_BALANCE_SHEET_")) {
@@ -105,6 +109,19 @@ public final class FinancialInterpretationReportValidator {
             }
             if (domains.size() < 2) {
                 errors.add("三表联动必须引用至少两个报表域的原始科目");
+            }
+        }
+    }
+
+    private static void validateLimitations(List<String> limitations, List<String> errors, String field) {
+        if (limitations == null || limitations.size() > 8) {
+            errors.add(field + " 必须为数组且不超过八项");
+            return;
+        }
+        for (String limitation : limitations) {
+            if (limitation == null || limitation.isBlank() || limitation.length() > 1800
+                    || NUMBER.matcher(limitation).find()) {
+                errors.add(field + " 必须为材料限制描述，无引用限制段落不得补写数字");
             }
         }
     }
@@ -168,7 +185,8 @@ public final class FinancialInterpretationReportValidator {
                 hasTrend = true;
             }
         }
-        if (CONTINUOUS_TREND.matcher(text).find() && !hasTrend) {
+        String assertedText = UNCONFIRMED_TREND.matcher(text).replaceAll("");
+        if (CONTINUOUS_TREND.matcher(assertedText).find() && !hasTrend) {
             errors.add(field + " 连续趋势必须引用多时点趋势证据");
         }
         Matcher matcher = NUMBER.matcher(text.replace(",", ""));
@@ -212,7 +230,10 @@ public final class FinancialInterpretationReportValidator {
         while (matcher.find()) {
             BigDecimal number = new BigDecimal(matcher.group());
             numbers.add(number.stripTrailingZeros().toPlainString());
-            numbers.add(number.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
+            for (int scale = 0; scale <= 2; scale++) {
+                numbers.add(number.setScale(scale, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
+                numbers.add(number.setScale(scale, RoundingMode.DOWN).stripTrailingZeros().toPlainString());
+            }
         }
     }
 

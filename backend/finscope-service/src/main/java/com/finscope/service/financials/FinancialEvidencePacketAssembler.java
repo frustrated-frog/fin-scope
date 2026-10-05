@@ -85,6 +85,10 @@ public class FinancialEvidencePacketAssembler {
                     .distinct().sorted().forEach(scope.getComparablePeriods()::add);
             scope.getMaterialLimitations().add("本次使用结构化三张表、计算指标及本地历史报告，尚未接入业务拆分、管理层讨论、审计意见和附注原文。");
             scope.getMaterialLimitations().add("行业及会计准则未核验，不进行同行排名或套用跨市场统一阈值；金融企业需要专门框架。");
+            if (compatible.stream().flatMap(view -> view.getMetrics().stream()).anyMatch(metric ->
+                    !FinancialAnalysisEngine.FORMULA_VERSION.equals(metric.getFormulaVersion()))) {
+                scope.getMaterialLimitations().add("部分历史指标计算版本不同，未用于年度指标趋势对比；历史原始科目仍可核查。");
+            }
             if (compatible.isEmpty()) {
                 scope.getMaterialLimitations().add("没有同主体、同币种、同合并口径的历史报告，无法确认连续经营趋势。");
             }

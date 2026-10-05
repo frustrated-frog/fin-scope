@@ -23,7 +23,10 @@ public class FinancialTrendEngine {
         for (FinancialReportView view : sorted) {
             if (view.getReport().getReportType() == FinancialReportType.ANNUAL) {
                 for (FinancialMetric metric : view.getMetrics()) {
-                    if (metric.getValue() == null || metric.getMetricCode() == null) continue;
+                    if (metric.getValue() == null || metric.getMetricCode() == null
+                            || !FinancialAnalysisEngine.FORMULA_VERSION.equals(metric.getFormulaVersion())) {
+                        continue;
+                    }
                     Series series = annual.computeIfAbsent(metric.getMetricCode(),
                             code -> new Series(metric.getLabel(), metric.getUnit()));
                     series.add(view.getReport().getPeriodEnd().toString(),
@@ -32,8 +35,16 @@ public class FinancialTrendEngine {
             } else {
                 view.getStatements().values().forEach(items -> {
                     for (FinancialLineItem item : items) {
-                        if (!"CURRENT_QUARTER".equals(item.getPeriodRole())
-                                || item.getConceptCode() == null || item.getNormalizedValue() == null) continue;
+                        boolean firstQuarter = view.getReport().getReportType() == FinancialReportType.Q1;
+                        boolean hasFirstQuarterYtd = firstQuarter && items.stream().anyMatch(candidate ->
+                                "CURRENT_YTD".equals(candidate.getPeriodRole())
+                                        && java.util.Objects.equals(candidate.getConceptCode(), item.getConceptCode())
+                                        && candidate.getNormalizedValue() != null);
+                        boolean eligibleRole = hasFirstQuarterYtd ? "CURRENT_YTD".equals(item.getPeriodRole())
+                                : "CURRENT_QUARTER".equals(item.getPeriodRole());
+                        if (!eligibleRole || item.getConceptCode() == null || item.getNormalizedValue() == null) {
+                            continue;
+                        }
                         Series series = quarters.computeIfAbsent(item.getConceptCode(),
                                 code -> new Series(item.getSourceLabel(), item.getCurrency()));
                         series.add(view.getReport().getPeriodEnd().toString(),

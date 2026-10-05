@@ -115,6 +115,35 @@ class FinancialEvidencePacketAssemblerTest {
     }
 
     @Test
+    void firstQuarterTrendsPreferYtdToConflictingDerivedQuarterZeros() {
+        FinancialReportView current = view(9L, 101L, new BigDecimal("12.30"));
+        current.getReport().setReportType(FinancialReportType.Q1);
+        current.getReport().setPeriodEnd(LocalDate.of(2026, 3, 31));
+        current.getStatements().get(FinancialStatementType.INCOME).add(
+                line(102L, "REVENUE", "CURRENT_QUARTER", "0"));
+        FinancialReportView prior = view(8L, 100L, new BigDecimal("10.00"));
+        prior.getReport().setReportType(FinancialReportType.Q1);
+        prior.getReport().setPeriodEnd(LocalDate.of(2025, 3, 31));
+        prior.getStatements().get(FinancialStatementType.INCOME).get(0).setNormalizedValue(new BigDecimal("1000"));
+        prior.getStatements().get(FinancialStatementType.INCOME).add(
+                line(103L, "REVENUE", "CURRENT_QUARTER", "0"));
+        FinancialEvidence trend = trends.build(List.of(current, prior)).stream()
+                .filter(item -> "T_REVENUE_QUARTER".equals(item.getId())).findFirst().orElseThrow();
+        assertEquals("2025-03-31=1000;2026-03-31=1200", trend.getDetail());
+    }
+
+    @Test
+    void excludesStaleFormulaMetricsFromAnnualTrends() {
+        FinancialReportView current = view(9L, 101L, new BigDecimal("12.30"));
+        FinancialReportView prior = view(8L, 100L, new BigDecimal("10.00"));
+        prior.getReport().setPeriodEnd(LocalDate.of(2024, 12, 31));
+        prior.getMetrics().get(0).setFormulaVersion("financial-metrics-v2");
+        assertTrue(trends.build(List.of(current, prior)).isEmpty());
+        FinancialEvidencePacket packet = assembler.assemble(current, List.of(prior));
+        assertTrue(packet.getReportScope().getMaterialLimitations().stream().anyMatch(text -> text.contains("计算版本不同")));
+    }
+
+    @Test
     void excludesFuturePeriodsOtherCurrenciesAndOtherScopesFromReportHistory() {
         FinancialReportView current = view(9L, 1L, new BigDecimal("12.30"));
         FinancialReportView prior = view(8L, 2L, new BigDecimal("10.00"));
@@ -156,7 +185,7 @@ class FinancialEvidencePacketAssemblerTest {
         metric.setLabel("营业收入同比");
         metric.setValue(metricValue);
         metric.setUnit("%");
-        metric.setFormulaVersion("financial-metrics-v2");
+        metric.setFormulaVersion(FinancialAnalysisEngine.FORMULA_VERSION);
         metric.setQualityStatus(FinancialQualityStatus.FRESH);
         EnumMap<FinancialStatementType, List<FinancialLineItem>> statements =
                 new EnumMap<FinancialStatementType, List<FinancialLineItem>>(FinancialStatementType.class);

@@ -25,7 +25,7 @@ class FinancialEvidenceSelectorTest {
                 evidence("T_REVENUE_QUARTER", "TREND", "2025-03-31=100;2026-03-31=120"),
                 evidence("T_UNIMPORTANT_FIELD_QUARTER", "TREND", "2025-03-31=1;2026-03-31=2"),
                 evidence("L_INCOME_REVENUE_2026_Q1_CURRENT_YTD", "LINE_ITEM", "120"),
-                evidence("L_INCOME_REVENUE_2026_Q1_CURRENT_QUARTER", "LINE_ITEM", "120"),
+                evidence("L_INCOME_REVENUE_2026_Q1_CURRENT_QUARTER", "LINE_ITEM", "0"),
                 evidence("L_BALANCE_SHEET_TOTAL_ASSETS_2026_Q1_CURRENT_PERIOD_END", "LINE_ITEM", "300"),
                 evidence("L_BALANCE_SHEET_ASSET_BALANCE_2026_Q1_CURRENT_PERIOD_END", "LINE_ITEM", "0"),
                 evidence("L_INCOME_UNIMPORTANT_FIELD_2026_Q1_CURRENT_YTD", "LINE_ITEM", "9"));
@@ -37,10 +37,10 @@ class FinancialEvidenceSelectorTest {
         assertTrue(ids.contains("F_PROFIT_CASH_DIVERGENCE"));
         assertTrue(ids.contains("G_MISSING_CAPEX"));
         assertTrue(ids.contains("T_REVENUE_QUARTER"));
-        assertTrue(ids.contains("L_INCOME_REVENUE_2026_Q1_CURRENT_QUARTER"));
+        assertTrue(ids.contains("L_INCOME_REVENUE_2026_Q1_CURRENT_YTD"));
         assertTrue(ids.contains("L_BALANCE_SHEET_TOTAL_ASSETS_2026_Q1_CURRENT_PERIOD_END"));
         assertFalse(ids.contains("T_UNIMPORTANT_FIELD_QUARTER"));
-        assertFalse(ids.contains("L_INCOME_REVENUE_2026_Q1_CURRENT_YTD"));
+        assertFalse(ids.contains("L_INCOME_REVENUE_2026_Q1_CURRENT_QUARTER"));
         assertFalse(ids.contains("L_BALANCE_SHEET_ASSET_BALANCE_2026_Q1_CURRENT_PERIOD_END"));
         assertFalse(ids.contains("L_INCOME_UNIMPORTANT_FIELD_2026_Q1_CURRENT_YTD"));
     }

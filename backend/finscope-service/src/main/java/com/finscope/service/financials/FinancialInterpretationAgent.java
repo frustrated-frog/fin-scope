@@ -44,14 +44,14 @@ public class FinancialInterpretationAgent {
             try {
                 return new Execution(success(packet, output, "LLM", errors), llmCallCount);
             } catch (IllegalArgumentException first) {
-                errors.add("首次输出：" + message(first));
+                errors.add("首次输出：" + shorten(first.getMessage(), 6000));
             }
             llmCallCount++;
             output = llm.complete(systemPrompt(packet) + "修复validationError，只返回完整修复JSON。", repairInput(packet, output, errors.get(0)));
             try {
                 return new Execution(success(packet, output, "REPAIRED", errors), llmCallCount);
             } catch (IllegalArgumentException second) {
-                errors.add("修复输出：" + message(second));
+                errors.add("修复输出：" + shorten(second.getMessage(), 6000));
                 return new Execution(fallback(packet, "OUTPUT_REJECTED_BY_GATE", errors), llmCallCount);
             }
         } catch (SocketTimeoutException error) {
@@ -167,6 +167,12 @@ public class FinancialInterpretationAgent {
                 "sections必须按chapterPlan顺序覆盖全部十章。每章字段code、assessment、confidence、summary、refs、facts、analysis、counterEvidence、watchpoints、limitations。" +
                 "assessment只能是POSITIVE、NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE；summary为两至四句综合判断，refs引用本章证据。" +
                 "facts、analysis、counterEvidence、watchpoints均为Claim数组。Claim字段claim、claimType、confidence、refs。" +
+                "Claim的文本键必须叫claim，不能叫summary或text。结构示例（省略的章节仍必须完整输出，示例占位id必须替换）：" +
+                "{\"operatingState\":\"STABLE\",\"confidence\":\"MEDIUM\",\"executiveSummary\":[{\"claim\":\"综合判断\",\"claimType\":\"INFERENCE\",\"confidence\":\"MEDIUM\",\"refs\":[\"已有id\"]}]," +
+                "\"periodChanges\":[],\"crossStatementInsights\":[],\"sections\":[{\"code\":\"PERFORMANCE_TRENDS\",\"assessment\":\"NEUTRAL\",\"confidence\":\"MEDIUM\",\"summary\":\"本章判断\",\"refs\":[\"已有id\"]," +
+                "\"facts\":[{\"claim\":\"事实\",\"claimType\":\"FACT\",\"confidence\":\"MEDIUM\",\"refs\":[\"已有id\"]}],\"analysis\":[{\"claim\":\"完整分析段落\",\"claimType\":\"INFERENCE\",\"confidence\":\"MEDIUM\",\"refs\":[\"已有id\"]}]," +
+                "\"counterEvidence\":[{\"claim\":\"替代解释\",\"claimType\":\"INFERENCE\",\"confidence\":\"LOW\",\"refs\":[\"已有id\"]}],\"watchpoints\":[{\"claim\":\"下一步核查\",\"claimType\":\"WATCHPOINT\",\"confidence\":\"LOW\",\"refs\":[\"已有id\"]}],\"limitations\":[]}]," +
+                "\"dimensions\":[],\"positiveSignals\":[],\"risks\":[],\"turningPoints\":[],\"watchpoints\":[],\"limitations\":[],\"disclaimer\":\"仅用于研究\"}。" +
                 "facts使用FACT，逐项描述两至四个关键事实并说明期间口径；analysis使用INFERENCE，以两至三个完整段落解释数据关系、" +
                 "经营含义及条件，每段约一百五十至三百中文字符，证据充分时写深，避免堆砌术语或重复事实。" +
                 "counterEvidence使用INFERENCE，至少一条替代解释或能推翻判断的条件；watchpoints使用WATCHPOINT，至少一条可执行的验证清单，" +
@@ -178,8 +184,11 @@ public class FinancialInterpretationAgent {
                 "增长解释需核查基期正负与低基数，单期背离不直接等于财务造假或盈利恶化；合同负债增长不能保证未来收入。" +
                 "所有原因、影响、替代解释均标INFERENCE，不使用必然、保证等绝对表达。" +
                 "连续或逐季趋势必须引用至少三个相邻同口径时点的TREND，并核查时点是否连续；同比指标不能替代连续趋势。" +
+                "比较某科目的升降，必须引用该科目对应的同比指标、趋势或两个同口径时点；只有本期比率不能说明它已经改善。" +
+                "不要用收入同比证明毛利率变化，refs要支持本条整句中每个比较。第一季度累计等于单季，优先使用CURRENT_YTD原始数值。" +
                 "crossStatementInsights每条必须引用至少两个不同报表域的L_原始科目，不能只用两个指标冒充三表联动。" +
-                "优先用文字解释方向，页面会通过refs展示精确数值。若写数字，只使用本条refs证据中原样数值或保留两位小数，" +
+                "summary、analysis、counterEvidence、watchpoints优先用文字解释方向，不写阿拉伯数字、列举序号、具体年份或数值阈值，页面会通过refs展示精确数值。" +
+                "facts和FACT摘要若写数字，只使用本条refs证据中原样数值或保留零至两位小数，注意实际引用必须支持该数字，" +
                 "不要自算、换算万亿、造比率、预测值或阈值。facts中不写原因和未来影响。" +
                 "limitations是材料限制字符串数组，不在无引用限制段落补写公司数据；disclaimer说明仅用于研究。" +
                 "不要按字数凑内容；材料不足就解释边界，全文以证据覆盖和完整论证为准。";

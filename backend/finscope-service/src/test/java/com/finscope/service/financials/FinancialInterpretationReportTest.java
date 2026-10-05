@@ -81,6 +81,30 @@ class FinancialInterpretationReportTest {
     }
 
     @Test
+    void acceptsDisplayRoundingAndSeparatorsOnlyWhenSupportedByOwnEvidence() {
+        FinancialInterpretation.Result result = valid();
+        result.getExecutiveSummary().get(0).setClaim("营业收入同比约12%");
+        accept(result, packet());
+        FinancialEvidencePacket packet = packet();
+        packet.getEvidenceIndex().get("M_REVENUE_YOY").setValue("12345.6789");
+        result.getExecutiveSummary().get(0).setClaim("营业收入为12,345.68");
+        accept(result, packet);
+    }
+
+    @Test
+    void distinguishesUnconfirmedTrendsAndFutureVerificationFromAssertions() {
+        FinancialInterpretation.Result result = valid();
+        result.getExecutiveSummary().get(0).setClaimType("INFERENCE");
+        result.getExecutiveSummary().get(0).setClaim("现有两个时点不足以证明连续改善，后续观察是否逐季改善。");
+        accept(result, packet());
+        result.getExecutiveSummary().get(0).setClaim("虽然无法证明连续改善，但营业收入持续改善。");
+        reject(result, "多时点趋势证据");
+        result = valid();
+        result.getLimitations().add("公司收入为999");
+        reject(result, "无引用限制段落不得补写数字");
+    }
+
+    @Test
     void providesTenHonestChaptersEvenWhenTheModelIsUnavailable() {
         FinancialInterpretation value = new FinancialInterpretationFallbackBuilder().build(packet(), "LLM_TIMEOUT");
         assertEquals("FALLBACK", value.getStatus());

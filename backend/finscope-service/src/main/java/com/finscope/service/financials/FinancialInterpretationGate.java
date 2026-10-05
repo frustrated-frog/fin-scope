@@ -76,7 +76,9 @@ public class FinancialInterpretationGate {
             if (INVESTMENT_ADVICE.matcher(adviceCheckText).find()) {
                 errors.add("输出包含投资建议或承诺性表达");
             }
-            validateNumbers(text, packet, errors);
+            if (!FinancialInterpretationReportFramework.VERSION.equals(packet.getPromptVersion())) {
+                validateNumbers(text, packet, errors);
+            }
         }
         if (!errors.isEmpty()) {
             throw new IllegalArgumentException(String.join("；", new LinkedHashSet<String>(errors)));
