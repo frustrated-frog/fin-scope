@@ -21,8 +21,9 @@ public final class FinancialInterpretationReportValidator {
     private static final Pattern NUMBER = Pattern.compile("(?<![A-Za-z_])[-+]?\\d+(?:\\.\\d+)?");
     private static final Pattern CAUSAL_FACT = Pattern.compile("由于|源于|驱动|导致|意味着|预示|得益于|主要受|有保障|必然|一定会");
     private static final Pattern CONTINUOUS_TREND = Pattern.compile("连续|逐季|持续改善|持续恶化|趋势确立");
+    private static final Pattern ADJACENT_QUARTERS = Pattern.compile("相邻[^，。；！？]{0,6}季度|环比(?:改善|下降|增长|变化|上升|降低|回落)");
     private static final Pattern UNCONFIRMED_TREND = Pattern.compile(
-            "(?:不能|不足以|无法|不代表|尚未|未能|尚不能|是否|能否|核查|观察|关注|验证|缺少|缺乏|没有)[^，。；！？]{0,24}(?:连续|逐季|持续改善|持续恶化|趋势确立)");
+            "(?:不能|不足|不构成|无法|不代表|尚未|未能|未形成|尚不能|是否|能否|核查|观察|关注|验证|缺少|缺乏|没有|若|如果|假如|倘若|一旦)[^，。；！？]{0,24}(?:连续|逐季|持续改善|持续恶化|趋势确立|相邻[^，。；！？]{0,6}季度|环比(?:改善|下降|增长|变化|上升|降低|回落))");
 
     private FinancialInterpretationReportValidator() {
     }
@@ -171,6 +172,7 @@ public final class FinancialInterpretationReportValidator {
         }
         Set<String> numbers = new HashSet<>();
         boolean hasTrend = false;
+        boolean hasAdjacentQuarters = false;
         for (String ref : refs) {
             FinancialEvidence evidence = packet.getEvidenceIndex().get(ref);
             if (evidence == null) {
@@ -181,13 +183,17 @@ public final class FinancialInterpretationReportValidator {
             collectNumbers(numbers, evidence.getDetail());
             collectNumbers(numbers, evidence.getPeriod());
             if ("TREND".equals(evidence.getType()) && evidence.getDetail() != null
-                    && hasConsecutivePeriods(evidence)) {
-                hasTrend = true;
+                    && hasConsecutivePeriods(evidence, 2)) {
+                hasAdjacentQuarters = hasAdjacentQuarters || !evidence.getId().endsWith("_ANNUAL");
+                hasTrend = hasTrend || hasConsecutivePeriods(evidence, 3);
             }
         }
         String assertedText = UNCONFIRMED_TREND.matcher(text).replaceAll("");
         if (CONTINUOUS_TREND.matcher(assertedText).find() && !hasTrend) {
             errors.add(field + " 连续趋势必须引用多时点趋势证据");
+        }
+        if (ADJACENT_QUARTERS.matcher(assertedText).find() && !hasAdjacentQuarters) {
+            errors.add(field + " 相邻季度或已发生环比变化必须引用两个相邻季度证据；上年同季间隔不是相邻季度");
         }
         Matcher matcher = NUMBER.matcher(text.replace(",", ""));
         while (matcher.find()) {
@@ -198,9 +204,9 @@ public final class FinancialInterpretationReportValidator {
         }
     }
 
-    private static boolean hasConsecutivePeriods(FinancialEvidence evidence) {
+    private static boolean hasConsecutivePeriods(FinancialEvidence evidence, int minimumPoints) {
         String[] points = evidence.getDetail().split(";");
-        if (points.length < 3) {
+        if (points.length < minimumPoints) {
             return false;
         }
         java.time.LocalDate previous = null;

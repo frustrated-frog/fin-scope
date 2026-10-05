@@ -97,11 +97,32 @@ class FinancialInterpretationReportTest {
         result.getExecutiveSummary().get(0).setClaimType("INFERENCE");
         result.getExecutiveSummary().get(0).setClaim("现有两个时点不足以证明连续改善，后续观察是否逐季改善。");
         accept(result, packet());
+        result.getExecutiveSummary().get(0).setClaim("两个时点不构成连续趋势，若后续经营现金流能持续改善，则需要更新判断。");
+        accept(result, packet());
+        result.getExecutiveSummary().get(0).setClaim("后续关注营业收入是否环比增长，不能视作相邻季度的已知变化。");
+        accept(result, packet());
         result.getExecutiveSummary().get(0).setClaim("虽然无法证明连续改善，但营业收入持续改善。");
         reject(result, "多时点趋势证据");
         result = valid();
         result.getLimitations().add("公司收入为999");
         reject(result, "无引用限制段落不得补写数字");
+    }
+
+    @Test
+    void rejectsCallingTwoSameQuarterYearOnYearPointsAdjacentQuarters() {
+        FinancialInterpretation.Result result = valid();
+        result.getSections().get(1).setSummary("仅有相邻两个季度时点，不能确认连续趋势。");
+        reject(result, "上年同季间隔不是相邻季度");
+        FinancialEvidencePacket packet = packet();
+        FinancialEvidence evidence = new FinancialEvidence();
+        evidence.setId("T_REVENUE_QUARTER");
+        evidence.setType("TREND");
+        evidence.setDetail("2025-12-31=100;2026-03-31=1200");
+        packet.getEvidenceIndex().put(evidence.getId(), evidence);
+        packet.getModelEvidence().add(evidence);
+        result.getSections().get(1).setSummary("本期营业收入环比增长。");
+        result.getSections().get(1).setRefs(List.of(evidence.getId()));
+        accept(result, packet);
     }
 
     @Test
