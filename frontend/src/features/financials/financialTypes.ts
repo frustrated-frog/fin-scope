@@ -169,6 +169,7 @@ export type FinancialInterpretationStatus =
 export type FinancialInterpretationClaim = {
   claim: string;
   claimType: 'FACT' | 'INFERENCE' | 'WATCHPOINT';
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   refs: string[];
 };
 
@@ -180,7 +181,40 @@ export type FinancialInterpretationDimension = {
   details?: FinancialInterpretationClaim[];
 };
 
+export type FinancialInterpretationSection = {
+  code: string;
+  title: string;
+  assessment: FinancialInterpretationDimension['assessment'];
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  summary: string;
+  refs: string[];
+  facts: FinancialInterpretationClaim[];
+  analysis: FinancialInterpretationClaim[];
+  counterEvidence: FinancialInterpretationClaim[];
+  watchpoints: FinancialInterpretationClaim[];
+  limitations: string[];
+  learningExplanation?: string;
+  commonMisreading?: string;
+};
+
+export type FinancialInterpretationScope = {
+  companyName: string;
+  market?: string;
+  periodEnd: string;
+  reportType: FinancialReportType;
+  scope: string;
+  currency?: string;
+  sourceCode: string;
+  historicalReportCount: number;
+  modelEvidenceCount: number;
+  comparablePeriods: string[];
+  materialLimitations: string[];
+};
+
 export type FinancialInterpretationResult = {
+  reportVersion?: string;
+  reportScope?: FinancialInterpretationScope;
+  sections?: FinancialInterpretationSection[];
   operatingState: 'IMPROVING' | 'STABLE' | 'UNDER_PRESSURE' | 'INSUFFICIENT_EVIDENCE';
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   executiveSummary: FinancialInterpretationClaim[];

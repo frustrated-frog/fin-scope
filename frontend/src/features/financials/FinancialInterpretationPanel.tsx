@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
+import { FinancialEvidenceRefs as EvidenceRefs } from './FinancialEvidenceRefs';
+import { FinancialInterpretationReportReader, FinancialReportScope } from './FinancialInterpretationReportReader';
+import { formatEvidenceValue } from './financialPresentation';
 import {
   FinancialEvidence,
   FinancialInterpretation,
@@ -196,7 +199,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
         <div>
           <p className="financials-section-kicker">Evidence-constrained interpretation</p>
           <h4>财报解读 Agent</h4>
-          <p>Agent 只负责组织叙事；数字、趋势与引用均来自当前可复算快照。</p>
+          <p>从财务事实到经营解释，逐章阅读专业分析、通俗说明与后续验证。</p>
         </div>
         <div className="financial-agent-actions">
           {displayed && (
@@ -240,7 +243,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
           <div className="financial-agent-orbit" aria-hidden="true"><span>证据</span></div>
           <div>
             <h4>从三张表到一条可核查的经营叙事</h4>
-            <p>生成后将得到经营状态、六维分析、积极信号、风险、拐点与观察清单。所有实质判断都可点击查看证据。</p>
+            <p>生成十章详细研究报告，覆盖业绩、增长、盈利、现金、资产、偿债与资本配置，并解释概念、替代原因和材料缺口。</p>
           </div>
           <button className="primary-button" type="button" disabled={generating || pending} onClick={() => generate(false)}>
             {generating || pending ? '生成中…' : '生成 Agent 解读'}
@@ -269,7 +272,7 @@ export function FinancialInterpretationPanel({ reportId }: { reportId: number })
             </header>
             <dl>
               <div><dt>证据编号</dt><dd>{selectedEvidence.id}</dd></div>
-              {selectedEvidence.value && <div><dt>披露或计算值</dt><dd>{selectedEvidence.value}{selectedEvidence.unit || ''}</dd></div>}
+              {selectedEvidence.value && <div><dt>披露或计算值</dt><dd>{formatEvidenceValue(selectedEvidence)}</dd></div>}
               {selectedEvidence.period && <div><dt>报告期</dt><dd>{selectedEvidence.period}</dd></div>}
             </dl>
             {selectedEvidence.detail && <p>{selectedEvidence.detail}</p>}
@@ -310,6 +313,12 @@ function InterpretationResult({
         </div>
       </section>
 
+      {!result.sections?.length && <p className="financial-report-verification-note">这份历史解读使用旧版结构，重新生成可获得十章详细报告。</p>}
+      {result.reportScope && <FinancialReportScope scope={result.reportScope} />}
+      {Boolean(result.sections?.length) && interpretation.generationMode === 'DETERMINISTIC_FALLBACK' && (
+        <p className="financial-report-fallback" role="status">本次模型解读未完成，当前展示已核查数据和阅读指引；完整分析可重新生成。</p>
+      )}
+      {Boolean(result.sections?.length) && <p className="financial-report-verification-note">数字引用已经校验；原因解释仍是待核查推断，请结合各章反证与材料缺口阅读。</p>}
       <ClaimSection
         title="执行摘要"
         kicker="Core reading"
@@ -319,6 +328,9 @@ function InterpretationResult({
         prominent
       />
 
+      {result.sections?.length ? (
+        <FinancialInterpretationReportReader sections={result.sections} evidenceById={evidenceById} onEvidence={onEvidence} />
+      ) : <>
       {(result.periodChanges?.length || result.crossStatementInsights?.length) ? (
         <div className="financial-agent-claim-grid">
           {result.periodChanges?.length ? (
@@ -358,6 +370,7 @@ function InterpretationResult({
         <ClaimSection title="后续观察" kicker="Watchlist" claims={result.watchpoints} evidenceById={evidenceById} onEvidence={onEvidence} tone="watch" />
       </div>
 
+      </>}
       <footer className="financial-agent-limitations">
         <div><strong>数据限制</strong>{result.limitations.length ? result.limitations.map((item) => <span key={item}>{item}</span>) : <span>未声明额外限制。</span>}</div>
         <p>{result.disclaimer}</p>
@@ -431,25 +444,6 @@ function ClaimSection({
 
 function claimTypeLabel(claimType: FinancialInterpretationClaim['claimType']) {
   return claimType === 'FACT' ? '事实' : claimType === 'INFERENCE' ? '推断' : '观察';
-}
-
-function EvidenceRefs({
-  refs,
-  evidenceById,
-  onEvidence
-}: {
-  refs: string[];
-  evidenceById: Map<string, FinancialEvidence>;
-  onEvidence: (id: string) => void;
-}) {
-  return (
-    <div className="financial-evidence-refs">
-      {refs.map((id) => {
-        const label = evidenceById.get(id)?.label || id;
-        return <button key={id} type="button" aria-label={`${label}证据`} onClick={() => onEvidence(id)}>{label}</button>;
-      })}
-    </div>
-  );
 }
 
 function isDisplayable(value?: FinancialInterpretation): boolean {

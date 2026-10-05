@@ -1,0 +1,70 @@
+.financial-report-scope { padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.financial-report-scope-title > span { color: var(--fs-blue); font-size: 12px; font-weight: 700; }
+.financial-report-scope h4 { margin: 9px 0; font-size: 22px; }
+.financial-report-scope-title p, .financial-report-periods { color: var(--muted); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.financial-report-scope dl { display: flex; flex-wrap: wrap; gap: 14px 36px; margin: 18px 0; }
+.financial-report-scope dt { color: var(--muted); font-size: 11px; }
+.financial-report-scope dd { margin: 5px 0 0; color: var(--ink); font-size: 13px; }
+.financial-report-materials { border-top: 1px solid var(--line); padding-top: 14px; }
+.financial-report-materials strong { color: var(--fs-amber); font-size: 12px; }
+.financial-report-materials p { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 7px 0 0; }
+.financial-report-verification-note, .financial-report-fallback { margin: 0; padding: 12px 16px; border-left: 3px solid var(--fs-amber); background: var(--surface-2); color: var(--muted); font-size: 12px; line-height: 1.8; }
+.financial-report-reader { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 30px; }
+.financial-report-directory { position: sticky; top: 20px; display: grid; gap: 3px; padding: 16px 0; border-top: 1px solid var(--line); }
+.financial-report-directory > strong { font-size: 14px; color: var(--ink); }
+.financial-report-directory > p { margin: 9px 0 14px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.financial-report-directory a { display: grid; grid-template-columns: 24px 1fr; gap: 6px; align-items: baseline; text-decoration: none; color: var(--muted); font-size: 12px; line-height: 1.6; border-left: 2px solid transparent; padding: 8px 7px; }
+.financial-report-directory a:hover { color: var(--ink); border-left-color: var(--fs-blue); background: var(--surface-2); }
+.financial-report-directory a > span { color: var(--fs-blue); font: 11px ui-monospace, monospace; }
+.financial-report-directory a > small { grid-column: 2; color: var(--fs-amber); font-size: 10px; }
+.financial-report-chapters { min-width: 0; }
+.financial-report-chapter { scroll-margin-top: 24px; padding: 30px 0; border-top: 1px solid var(--line); }
+.financial-report-chapter > header { display: flex; align-items: start; gap: 14px; }
+.financial-report-chapter-number { color: var(--fs-blue); font: 24px/1.3 ui-monospace, monospace; }
+.financial-report-chapter h4 { margin: 0; color: var(--ink); font-size: 21px; line-height: 1.45; }
+.financial-report-assessment { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+.financial-report-assessment[data-assessment="negative"] > span:first-child { color: var(--fs-coral); }
+.financial-report-assessment[data-assessment="insufficient_evidence"] > span:first-child { color: var(--fs-amber); }
+.financial-report-thesis { margin: 20px 0 12px; color: var(--ink); font-size: 16px; line-height: 1.95; overflow-wrap: anywhere; }
+.financial-report-claim-group { margin-top: 26px; }
+.financial-report-claim-group h5 { margin: 0 0 12px; color: var(--ink); font-size: 14px; }
+.financial-report-claim-group article + article { margin-top: 20px; }
+.financial-report-claim-meta { display: flex; gap: 12px; color: var(--muted); font-size: 10px; }
+.financial-report-claim-meta > span:first-child { color: var(--fs-blue); }
+.financial-report-claim-group p { margin: 8px 0 12px; color: var(--ink); font-size: 14px; line-height: 2; white-space: pre-line; overflow-wrap: anywhere; }
+.financial-report-claim-group[data-tone="counter"] { border-left: 2px solid var(--fs-coral); padding-left: 16px; }
+.financial-report-claim-group[data-tone="watch"] { border-left: 2px solid var(--fs-mint); padding-left: 16px; }
+.financial-report-learning { margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.financial-report-learning > summary { cursor: pointer; padding: 13px 16px; color: var(--fs-blue); font-size: 13px; font-weight: 650; }
+.financial-report-learning > div { padding: 0 16px 14px; }
+.financial-report-learning p { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 1.95; }
+.financial-report-learning strong { display: block; color: var(--ink); margin-bottom: 4px; font-size: 12px; }
+.financial-report-chapter-limits { margin-top: 24px; background: var(--surface-2); padding: 14px 16px; border-radius: 8px; }
+.financial-report-chapter-limits strong { font-size: 12px; color: var(--fs-amber); }
+.financial-report-chapter-limits p { margin: 7px 0 0; font-size: 12px; line-height: 1.8; color: var(--muted); }
+.financial-report-values { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.financial-report-values button { display: grid; text-align: left; gap: 6px; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface-2); color: var(--ink); cursor: pointer; }
+.financial-report-values span { color: var(--muted); font-size: 11px; }
+.financial-report-values strong { color: var(--fs-mint); font: 650 17px ui-monospace, monospace; overflow-wrap: anywhere; }
+.financial-report-values small { color: var(--muted); font-size: 10px; }
+.financial-report-reading-path { border-top: 1px solid var(--line); padding: 24px 0; color: var(--ink); }
+.financial-report-reading-path h4 { margin: 0 0 14px; font-size: 17px; }
+.financial-report-reading-path ol { padding-left: 20px; font-size: 13px; line-height: 2; }
+.financial-report-reader :is(a, button, summary):focus-visible { outline: 2px solid var(--fs-blue); outline-offset: 4px; }
+.financial-report-reader .financial-evidence-refs button { font-size: 10px; padding: 5px 8px; }
+@media (max-width: 1100px) {
+  .financial-report-reader { grid-template-columns: 1fr; gap: 18px; }
+  .financial-report-directory { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .financial-report-directory > strong, .financial-report-directory > p { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .financial-report-scope { padding: 16px; }
+  .financial-report-scope h4 { font-size: 18px; }
+  .financial-report-chapter h4 { font-size: 18px; }
+  .financial-report-thesis { font-size: 15px; }
+  .financial-report-directory { grid-template-columns: 1fr; }
+}
+
+.financial-report-glossary { margin: 0 0 22px; }
+.financial-report-glossary details { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.financial-report-glossary details > summary { cursor: pointer; color: var(--ink); font-size: 13px; }

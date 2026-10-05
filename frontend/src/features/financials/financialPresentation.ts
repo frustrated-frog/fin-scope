@@ -1,5 +1,6 @@
 import {
   FinancialLineItem,
+  FinancialEvidence,
   FinancialQualityStatus,
   FinancialReportType,
   FinancialUnit,
@@ -91,7 +92,7 @@ export function formatMetric(value: number | string | null | undefined, unit?: s
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(parsed);
-  return unit === 'pct' ? `${rendered} pct` : `${rendered}${unit ?? ''}`;
+  return unit === 'pct' ? `${rendered} 个百分点` : `${rendered}${unit ?? ''}`;
 }
 
 export function defaultReportPeriod(now = new Date()) {
@@ -101,4 +102,19 @@ export function defaultReportPeriod(now = new Date()) {
   if (month <= 8) return { periodEnd: `${year}-03-31`, reportType: 'Q1' as const };
   if (month <= 10) return { periodEnd: `${year}-06-30`, reportType: 'HALF_YEAR' as const };
   return { periodEnd: `${year}-09-30`, reportType: 'Q3' as const };
+}
+
+/** 证据数值的展示只做单位换算，保留原币种和期间。 */
+export function formatEvidenceValue(evidence: FinancialEvidence) {
+  const unit = evidence.unit;
+  const value = evidence.value;
+  const parsed = Number(value);
+  if (value == null || value === '') {
+    return '—';
+  }
+  if (unit && /^[A-Z]{3}$/.test(unit) && Number.isFinite(parsed)) {
+    const amountUnit = Math.abs(parsed) >= 100_000_000 ? 'YI' : Math.abs(parsed) >= 10_000 ? 'WAN' : 'YUAN';
+    return `${formatFinancialValue(value, amountUnit)} ${unit}`;
+  }
+  return formatMetric(value, unit);
 }
