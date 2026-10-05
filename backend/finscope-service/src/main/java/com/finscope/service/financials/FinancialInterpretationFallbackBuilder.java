@@ -32,20 +32,29 @@ public class FinancialInterpretationFallbackBuilder {
                 : primary.getLabel() + (primary.getValue() == null ? "" : "为" + primary.getValue()
                 + (primary.getUnit() == null ? "" : primary.getUnit())));
         summary.setClaimType("FACT");
-        if (primary != null) summary.getRefs().add(primary.getId());
+        if (primary != null) {
+            summary.getRefs().add(primary.getId());
+        }
         result.getExecutiveSummary().add(summary);
         for (String code : DIMENSIONS) {
             FinancialInterpretation.Dimension dimension = new FinancialInterpretation.Dimension();
             dimension.setCode(code);
             dimension.setAssessment("INSUFFICIENT_EVIDENCE");
             dimension.setSummary("当前维度由规则结果兜底展示，需结合更多可比期证据复核。");
-            if (primary != null) dimension.getRefs().add(primary.getId());
+            if (primary != null) {
+                dimension.getRefs().add(primary.getId());
+            }
             result.getDimensions().add(dimension);
         }
         packet.getEvidence().stream().filter(item -> "DATA_GAP".equals(item.getType()))
                 .map(FinancialEvidence::getDetail).forEach(result.getLimitations()::add);
         if (result.getLimitations().isEmpty()) {
             result.getLimitations().add("模型解读不可用，当前展示确定性规则结果。");
+        }
+        if (FinancialInterpretationReportFramework.VERSION.equals(packet.getPromptVersion())) {
+            result.setOperatingState("INSUFFICIENT_EVIDENCE");
+            result.setSections(FinancialInterpretationReportFramework.fallback(packet));
+            FinancialInterpretationReportFramework.decorate(result, packet);
         }
         result.setDisclaimer("规则解读仅用于研究，不构成投资建议。");
         value.setResult(result);

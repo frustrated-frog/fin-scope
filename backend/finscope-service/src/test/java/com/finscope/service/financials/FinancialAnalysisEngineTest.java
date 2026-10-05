@@ -98,8 +98,8 @@ class FinancialAnalysisEngineTest {
 
         assertEquals(new BigDecimal("25.000000"), metric(result, "NET_PROFIT_PARENT_YOY"));
         assertEquals(new BigDecimal("25.000000"), metric(result, "OPERATING_CASH_FLOW_YOY"));
-        assertEquals(new BigDecimal("150.000000"), metric(result, "CURRENT_RATIO"));
-        assertEquals(new BigDecimal("120.000000"), metric(result, "QUICK_RATIO"));
+        assertEquals(new BigDecimal("1.500000"), metric(result, "CURRENT_RATIO"));
+        assertEquals(new BigDecimal("1.200000"), metric(result, "QUICK_RATIO"));
         assertEquals(new BigDecimal("500"), metric(result, "INTEREST_BEARING_DEBT"));
         assertEquals(new BigDecimal("40"), metric(result, "CAPITAL_EXPENDITURE"));
         assertEquals(new BigDecimal("60"), metric(result, "FREE_CASH_FLOW"));
@@ -155,9 +155,36 @@ class FinancialAnalysisEngineTest {
                         line("REVENUE", "1000", FinancialStatementType.INCOME),
                         line("CONTRACT_LIAB", "120", FinancialStatementType.BALANCE_SHEET)));
 
-        assertEquals(new BigDecimal("150.000000"), metric(result, "CURRENT_RATIO"));
-        assertEquals(new BigDecimal("120.000000"), metric(result, "QUICK_RATIO"));
+        assertEquals(new BigDecimal("1.500000"), metric(result, "CURRENT_RATIO"));
+        assertEquals(new BigDecimal("1.200000"), metric(result, "QUICK_RATIO"));
         assertEquals(new BigDecimal("50.000000"), metric(result, "CONTRACT_LIABILITIES_YOY"));
+    }
+
+    @Test
+    void distinguishesOperatingCostFromTotalOperatingExpensesAndWarnsAboutLossBases() {
+        FinancialAnalysisResult result = engine.analyze(
+                Arrays.asList(line("REVENUE", "100", FinancialStatementType.INCOME),
+                        line("TOTAL_OPERATING_COST", "80", FinancialStatementType.INCOME),
+                        line("NET_PROFIT_PARENT", "10", FinancialStatementType.INCOME)),
+                Arrays.asList(line("NET_PROFIT_PARENT", "-2", FinancialStatementType.INCOME)));
+        assertTrue(result.getMetrics().stream().noneMatch(item -> "GROSS_MARGIN".equals(item.getMetricCode())));
+        assertTrue(result.getDataGaps().stream().anyMatch(gap -> gap.contains("利润为亏损或零")));
+        assertTrue(result.getDataGaps().stream().anyMatch(gap -> gap.contains("营业总成本")));
+    }
+
+    @Test
+    void calculatesAssetConcentrationWithoutUsingMissingOrNegativeAssetBases() {
+        FinancialAnalysisResult result = engine.analyze(
+                Arrays.asList(line("TOTAL_ASSETS", "1000", FinancialStatementType.BALANCE_SHEET),
+                        line("INVENTORY", "600", FinancialStatementType.BALANCE_SHEET),
+                        line("ACCOUNTS_RECEIVABLE", "100", FinancialStatementType.BALANCE_SHEET)),
+                new ArrayList<>());
+        assertEquals(new BigDecimal("60.000000"), metric(result, "INVENTORY_TO_ASSETS"));
+        assertEquals(new BigDecimal("10.000000"), metric(result, "RECEIVABLES_TO_ASSETS"));
+        FinancialAnalysisResult invalid = engine.analyze(
+                Arrays.asList(line("TOTAL_ASSETS", "-1", FinancialStatementType.BALANCE_SHEET),
+                        line("INVENTORY", "600", FinancialStatementType.BALANCE_SHEET)), new ArrayList<>());
+        assertTrue(invalid.getMetrics().stream().noneMatch(item -> "INVENTORY_TO_ASSETS".equals(item.getMetricCode())));
     }
 
     private BigDecimal metric(FinancialAnalysisResult result, String code) {

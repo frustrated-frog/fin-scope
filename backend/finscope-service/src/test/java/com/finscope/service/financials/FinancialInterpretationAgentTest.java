@@ -117,9 +117,15 @@ class FinancialInterpretationAgentTest {
 
     private FinancialInterpretationAgent agent(LlmChatClient llm) {
         FinancialInterpretationResponseParser parser = new FinancialInterpretationResponseParser(json);
-        FinancialInterpretationGate gate = new FinancialInterpretationGate(json);
-        return new FinancialInterpretationAgent(llm, json, parser, gate,
-                new FinancialInterpretationFallbackBuilder());
+        FinancialInterpretationGate gate = new FinancialInterpretationGate();
+        org.springframework.test.util.ReflectionTestUtils.setField(gate, "json", json);
+        FinancialInterpretationAgent agent = new FinancialInterpretationAgent();
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "llm", llm);
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "json", json);
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "parser", parser);
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "gate", gate);
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "fallback", new FinancialInterpretationFallbackBuilder());
+        return agent;
     }
 
     private FinancialEvidencePacket packet() {
@@ -210,7 +216,9 @@ class FinancialInterpretationAgentTest {
 
         private String nextValue() throws Exception {
             Object value = values.get(calls++);
-            if (value instanceof Exception) throw (Exception) value;
+            if (value instanceof Exception) {
+                throw (Exception) value;
+            }
             return String.valueOf(value);
         }
     }

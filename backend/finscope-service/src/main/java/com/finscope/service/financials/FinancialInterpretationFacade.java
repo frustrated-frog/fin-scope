@@ -19,7 +19,8 @@ import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.service.agent.AgentHarness;
 import com.finscope.service.agent.AgentTraceService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
+import javax.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -35,39 +36,26 @@ import java.util.concurrent.Executor;
 @Service
 @Slf4j
 public class FinancialInterpretationFacade {
-    private final FinancialQueryService query;
-    private final FinancialAnalysisSnapshotRepository snapshots;
-    private final FinancialInterpretationRepository interpretations;
-    private final FinancialAnalysisPreflight preflight;
-    private final FinancialEvidencePacketAssembler assembler;
-    private final FinancialInterpretationAgent agent;
-    private final AgentHarness harness;
-    private final AgentTraceService traces;
-    private final ObjectMapper json;
-    private final Executor executor;
-
-    public FinancialInterpretationFacade(
-            FinancialQueryService query,
-            FinancialAnalysisSnapshotRepository snapshots,
-            FinancialInterpretationRepository interpretations,
-            FinancialAnalysisPreflight preflight,
-            FinancialEvidencePacketAssembler assembler,
-            FinancialInterpretationAgent agent,
-            AgentHarness harness,
-            AgentTraceService traces,
-            ObjectMapper json,
-            @Qualifier("financialInterpretationExecutor") Executor executor) {
-        this.query = query;
-        this.snapshots = snapshots;
-        this.interpretations = interpretations;
-        this.preflight = preflight;
-        this.assembler = assembler;
-        this.agent = agent;
-        this.harness = harness;
-        this.traces = traces;
-        this.json = json;
-        this.executor = executor;
-    }
+    @Autowired
+    private FinancialQueryService query;
+    @Autowired
+    private FinancialAnalysisSnapshotRepository snapshots;
+    @Autowired
+    private FinancialInterpretationRepository interpretations;
+    @Autowired
+    private FinancialAnalysisPreflight preflight;
+    @Autowired
+    private FinancialEvidencePacketAssembler assembler;
+    @Autowired
+    private FinancialInterpretationAgent agent;
+    @Autowired
+    private AgentHarness harness;
+    @Autowired
+    private AgentTraceService traces;
+    @Autowired
+    private ObjectMapper json;
+    @Resource(name = "financialInterpretationExecutor")
+    private Executor executor;
 
     public synchronized FinancialInterpretation request(Long reportId, boolean force) {
         FinancialReportView current = query.view(reportId);
@@ -84,12 +72,16 @@ public class FinancialInterpretationFacade {
         snapshots.saveOrReuse(snapshot);
 
         Optional<FinancialInterpretation> running = interpretations.findRunningByReport(reportId);
-        if (running.isPresent()) return markStale(running.get());
+        if (running.isPresent()) {
+            return markStale(running.get());
+        }
         String generationKey = sha256(packet.getInputHash() + "|" + packet.getPromptVersion()
                 + "|" + agent.modelName());
         if (!force) {
             Optional<FinancialInterpretation> reusable = interpretations.findReusable(generationKey);
-            if (reusable.isPresent()) return markStale(reusable.get());
+            if (reusable.isPresent()) {
+                return markStale(reusable.get());
+            }
         }
         FinancialInterpretation pending = new FinancialInterpretation();
         pending.setReportId(reportId);
@@ -114,7 +106,9 @@ public class FinancialInterpretationFacade {
     public FinancialInterpretation latest(Long reportId) {
         query.view(reportId);
         Optional<FinancialInterpretation> running = interpretations.findRunningByReport(reportId);
-        if (running.isPresent()) return markStale(running.get());
+        if (running.isPresent()) {
+            return markStale(running.get());
+        }
         return markStale(interpretations.findLatestDisplayable(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("该报告尚无财报解读：" + reportId)));
     }
@@ -141,10 +135,14 @@ public class FinancialInterpretationFacade {
             List<FinancialEvidence> all = json.convertValue(evidenceNode,
                     new TypeReference<List<FinancialEvidence>>() { });
             Set<String> used = usedRefs(interpretation.getResult());
-            if (used.isEmpty()) return new ArrayList<FinancialEvidence>();
+            if (used.isEmpty()) {
+                return new ArrayList<FinancialEvidence>();
+            }
             List<FinancialEvidence> result = new ArrayList<FinancialEvidence>();
             for (FinancialEvidence item : all) {
-                if (used.contains(item.getId())) result.add(item);
+                if (used.contains(item.getId())) {
+                    result.add(item);
+                }
             }
             return result;
         } catch (ResourceNotFoundException error) {
@@ -219,7 +217,9 @@ public class FinancialInterpretationFacade {
     }
 
     private String safeMessage(Throwable error) {
-        if (error == null) return "unknown error";
+        if (error == null) {
+            return "unknown error";
+        }
         String value = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
         return value.replace('\n', ' ').replace('\r', ' ').trim();
     }
@@ -227,9 +227,13 @@ public class FinancialInterpretationFacade {
     private List<FinancialReportView> comparables(FinancialReportView current) {
         List<FinancialReportView> result = new ArrayList<FinancialReportView>();
         for (FinancialReport report : query.listReports(current.getInstrument().getId())) {
-            if (report.getId().equals(current.getReport().getId())) continue;
+            if (!report.getPeriodEnd().isBefore(current.getReport().getPeriodEnd())) {
+                continue;
+            }
             result.add(query.view(report.getId()));
-            if (result.size() >= 8) break;
+            if (result.size() >= 20) {
+                break;
+            }
         }
         return result;
     }
@@ -243,7 +247,16 @@ public class FinancialInterpretationFacade {
 
     private Set<String> usedRefs(FinancialInterpretation.Result result) {
         Set<String> refs = new LinkedHashSet<String>();
-        if (result == null) return refs;
+        if (result == null) {
+            return refs;
+        }
+        for (com.finscope.domain.financials.FinancialInterpretationSection section : result.getSections()) {
+            refs.addAll(section.getRefs());
+            addClaimRefs(refs, section.getFacts());
+            addClaimRefs(refs, section.getAnalysis());
+            addClaimRefs(refs, section.getCounterEvidence());
+            addClaimRefs(refs, section.getWatchpoints());
+        }
         addClaimRefs(refs, result.getExecutiveSummary());
         addClaimRefs(refs, result.getPeriodChanges());
         addClaimRefs(refs, result.getCrossStatementInsights());
@@ -261,7 +274,9 @@ public class FinancialInterpretationFacade {
     }
 
     private void addClaimRefs(Set<String> refs, List<FinancialInterpretation.Claim> values) {
-        if (values != null) values.forEach(value -> refs.addAll(value.getRefs()));
+        if (values != null) {
+            values.forEach(value -> refs.addAll(value.getRefs()));
+        }
     }
 
     private String sha256(String value) {
@@ -269,7 +284,9 @@ public class FinancialInterpretationFacade {
             byte[] bytes = MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder();
-            for (byte item : bytes) result.append(String.format("%02x", item));
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
             return result.toString();
         } catch (Exception error) {
             throw new IllegalStateException("SHA-256 unavailable", error);

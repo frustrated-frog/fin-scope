@@ -31,7 +31,13 @@ class FinancialEvidencePacketAssemblerTest {
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final FinancialTrendEngine trends = new FinancialTrendEngine();
     private final FinancialEvidencePacketAssembler assembler =
-            new FinancialEvidencePacketAssembler(json, trends, new FinancialEvidenceSelector());
+            new FinancialEvidencePacketAssembler();
+
+    {
+        org.springframework.test.util.ReflectionTestUtils.setField(assembler, "json", json);
+        org.springframework.test.util.ReflectionTestUtils.setField(assembler, "trends", trends);
+        org.springframework.test.util.ReflectionTestUtils.setField(assembler, "selector", new FinancialEvidenceSelector());
+    }
 
     @Test
     void fingerprintAndEvidenceIdsIgnoreDatabaseIdsButTrackFinancialValues() {
@@ -106,6 +112,26 @@ class FinancialEvidencePacketAssemblerTest {
         assertFalse(annualTrend.getDetail().contains("2025-09-30"));
         assertTrue(quarterTrend.getDetail().contains("2025-09-30"));
         assertFalse(quarterTrend.getDetail().contains("CURRENT_YTD"));
+    }
+
+    @Test
+    void excludesFuturePeriodsOtherCurrenciesAndOtherScopesFromReportHistory() {
+        FinancialReportView current = view(9L, 1L, new BigDecimal("12.30"));
+        FinancialReportView prior = view(8L, 2L, new BigDecimal("10.00"));
+        prior.getReport().setPeriodEnd(LocalDate.of(2024, 12, 31));
+        FinancialReportView future = view(10L, 3L, new BigDecimal("20.00"));
+        future.getReport().setPeriodEnd(LocalDate.of(2026, 12, 31));
+        FinancialReportView foreign = view(7L, 4L, new BigDecimal("30.00"));
+        foreign.getReport().setPeriodEnd(LocalDate.of(2023, 12, 31));
+        foreign.getReport().setCurrency("USD");
+        FinancialReportView parent = view(6L, 5L, new BigDecimal("40.00"));
+        parent.getReport().setPeriodEnd(LocalDate.of(2022, 12, 31));
+        parent.getReport().setScope("PARENT");
+        FinancialEvidencePacket packet = assembler.assemble(current, Arrays.asList(prior, future, foreign, parent));
+        assertEquals(Collections.singletonList("2024-12-31"), packet.getReportScope().getComparablePeriods());
+        assertEquals(1, packet.getReportScope().getHistoricalReportCount());
+        assertTrue(packet.getEvidenceIndex().containsKey("L_INCOME_REVENUE_2024_ANNUAL_CURRENT_YTD"));
+        assertFalse(packet.getEvidence().stream().anyMatch(item -> "2026-12-31".equals(item.getPeriod())));
     }
 
     private FinancialReportView view(Long reportId, Long lineId, BigDecimal metricValue) {

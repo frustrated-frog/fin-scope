@@ -21,7 +21,8 @@ class FinancialInterpretationGateTest {
 
     @BeforeEach
     void setUp() {
-        gate = new FinancialInterpretationGate(json);
+        gate = new FinancialInterpretationGate();
+        org.springframework.test.util.ReflectionTestUtils.setField(gate, "json", json);
         packet = new FinancialEvidencePacket();
         packet.setQualityCeiling("MEDIUM");
         packet.setAllowedNumbers(new LinkedHashSet<String>(Arrays.asList("12.30", "12.3", "2025")));

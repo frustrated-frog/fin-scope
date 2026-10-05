@@ -1,6 +1,7 @@
 package com.finscope.service.financials;
 
 import com.finscope.domain.financials.FinancialEvidence;
+import com.finscope.domain.financials.FinancialInterpretationScope;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ public class FinancialEvidencePacket {
     private String sourceHash;
     private String inputHash;
     private String qualityCeiling;
+    private FinancialInterpretationScope reportScope;
     private String payloadJson;
     private String modelPayloadJson;
     private List<FinancialEvidence> evidence = new ArrayList<FinancialEvidence>();

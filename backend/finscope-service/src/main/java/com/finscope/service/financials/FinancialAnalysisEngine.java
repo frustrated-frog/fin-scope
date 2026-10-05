@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Component
 public class FinancialAnalysisEngine {
-    public static final String FORMULA_VERSION = "financial-metrics-v2";
+    public static final String FORMULA_VERSION = "financial-metrics-v3";
     private static final String RULE_VERSION = "financial-rules-v2";
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
@@ -34,13 +34,13 @@ public class FinancialAnalysisEngine {
             result.getDataGaps().add("缺少上年同期营业收入，无法计算营收同比");
         }
 
-        BigDecimal cost = first(now, "OPERATING_COST", "TOTAL_OPERATING_COST");
+        BigDecimal cost = now.get("OPERATING_COST");
         BigDecimal grossMargin = ratio(subtract(revenue, cost), revenue);
         if (grossMargin != null) {
             result.getMetrics().add(metric("GROSS_MARGIN", "毛利率", grossMargin, "%"));
         }
 
-        BigDecimal priorCost = first(prior, "OPERATING_COST", "TOTAL_OPERATING_COST");
+        BigDecimal priorCost = prior.get("OPERATING_COST");
         BigDecimal priorGrossMargin = ratio(subtract(priorRevenue, priorCost), priorRevenue);
         if (grossMargin != null && priorGrossMargin != null) {
             result.getMetrics().add(metric("GROSS_MARGIN_YOY_CHANGE", "毛利率同比变化",
@@ -55,7 +55,7 @@ public class FinancialAnalysisEngine {
         }
         BigDecimal netMargin = ratio(profit, revenue);
         if (netMargin != null) {
-            result.getMetrics().add(metric("NET_MARGIN", "净利率", netMargin, "%"));
+            result.getMetrics().add(metric("NET_MARGIN", "归母优先口径净利率", netMargin, "%"));
         }
         BigDecimal priorNetMargin = ratio(priorProfit, priorRevenue);
         if (netMargin != null && priorNetMargin != null) {
@@ -103,17 +103,17 @@ public class FinancialAnalysisEngine {
                 "TOTAL_CURRENT_LIABILITIES", "TOTAL_CURRENT_LIAB");
         BigDecimal currentRatio = ratio(currentAssets, currentLiabilities);
         if (currentRatio != null) {
-            result.getMetrics().add(metric("CURRENT_RATIO", "流动比率", currentRatio, "%"));
+            result.getMetrics().add(metric("CURRENT_RATIO", "流动比率", currentRatio.divide(HUNDRED), "倍"));
         }
         BigDecimal quickRatio = ratio(subtract(currentAssets, now.get("INVENTORY")), currentLiabilities);
         if (quickRatio != null) {
-            result.getMetrics().add(metric("QUICK_RATIO", "速动比率", quickRatio, "%"));
+            result.getMetrics().add(metric("QUICK_RATIO", "速动比率", quickRatio.divide(HUNDRED), "倍"));
         }
 
         BigDecimal interestBearingDebt = sum(now, "SHORT_TERM_BORROWINGS",
                 "CURRENT_PORTION_LONG_DEBT", "LONG_TERM_BORROWINGS", "BONDS_PAYABLE");
         if (interestBearingDebt != null) {
-            result.getMetrics().add(metric("INTEREST_BEARING_DEBT", "有息负债",
+            result.getMetrics().add(metric("INTEREST_BEARING_DEBT", "有息负债（已覆盖科目）",
                     interestBearingDebt, currency));
         }
 
@@ -137,6 +137,19 @@ public class FinancialAnalysisEngine {
                     contractLiabilitiesYoy, "%"));
         }
 
+        addRatioMetric(result, "INVENTORY_TO_ASSETS", "存货占总资产", now.get("INVENTORY"), assets);
+        addRatioMetric(result, "RECEIVABLES_TO_ASSETS", "应收账款占总资产", now.get("ACCOUNTS_RECEIVABLE"), assets);
+        addRatioMetric(result, "CAPEX_TO_REVENUE", "资本开支/营业收入", capitalExpenditure, revenue);
+        addRatioMetric(result, "CASH_TO_INTEREST_BEARING_DEBT", "货币资金/已覆盖有息负债", now.get("CASH"), interestBearingDebt);
+        if (priorProfit != null && priorProfit.signum() <= 0) {
+            result.getDataGaps().add("上年同期利润为亏损或零，利润变化百分比不能按通常增长率解释，需区分扭亏、减亏和亏损扩大。");
+        }
+        if (profit != null && profit.signum() <= 0) {
+            result.getDataGaps().add("本期利润不为正，经营现金流/净利润不能作为通常的利润现金转化率解释。");
+        }
+        if (cost == null) {
+            result.getDataGaps().add("缺少营业成本，不用含期间费用的营业总成本替代计算毛利率。");
+        }
         BigDecimal balanceGap = subtract(assets, sum(now, "TOTAL_LIABILITIES", "TOTAL_EQUITY"));
         if (balanceGap != null) {
             result.getMetrics().add(metric("BALANCE_SHEET_IDENTITY_GAP", "资产负债表恒等式差额",
@@ -190,6 +203,17 @@ public class FinancialAnalysisEngine {
             }
         }
         return result;
+    }
+
+    private void addRatioMetric(FinancialAnalysisResult result, String code, String label,
+                                BigDecimal numerator, BigDecimal denominator) {
+        if (denominator == null || denominator.signum() <= 0) {
+            return;
+        }
+        BigDecimal value = ratio(numerator, denominator);
+        if (value != null) {
+            result.getMetrics().add(metric(code, label, value, "%"));
+        }
     }
 
     private String currency(List<FinancialLineItem> items) {

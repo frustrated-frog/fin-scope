@@ -28,7 +28,12 @@ import static org.mockito.Mockito.verify;
 class FinancialAnalysisPreflightTest {
     private final FinancialReportRepository reports = mock(FinancialReportRepository.class);
     private final FinancialAnalysisPreflight preflight =
-            new FinancialAnalysisPreflight(new FinancialAnalysisEngine(), reports);
+            new FinancialAnalysisPreflight();
+
+    {
+        org.springframework.test.util.ReflectionTestUtils.setField(preflight, "engine", new FinancialAnalysisEngine());
+        org.springframework.test.util.ReflectionTestUtils.setField(preflight, "reports", reports);
+    }
 
     @Test
     void recalculatesAndPersistsMetricsWhenStoredFormulaVersionIsStale() {

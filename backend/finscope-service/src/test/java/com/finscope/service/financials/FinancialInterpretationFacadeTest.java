@@ -71,8 +71,17 @@ class FinancialInterpretationFacadeTest {
         when(agent.modelName()).thenReturn("test-model");
         when(agent.interpretWithMetrics(any()))
                 .thenReturn(new FinancialInterpretationAgent.Execution(success(), 1));
-        facade = new FinancialInterpretationFacade(query, snapshots, interpretations, preflight,
-                assembler, agent, new AgentHarness(), traces, new ObjectMapper(), Runnable::run);
+        facade = new FinancialInterpretationFacade();
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "query", query);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "interpretations", interpretations);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "preflight", preflight);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "assembler", assembler);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "agent", agent);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "traces", traces);
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "harness", new AgentHarness());
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "json", new ObjectMapper());
+        org.springframework.test.util.ReflectionTestUtils.setField(facade, "executor", (java.util.concurrent.Executor) Runnable::run);
     }
 
     @Test

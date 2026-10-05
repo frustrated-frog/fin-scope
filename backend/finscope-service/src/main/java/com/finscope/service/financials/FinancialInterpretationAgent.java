@@ -6,6 +6,7 @@ import com.finscope.domain.financials.FinancialInterpretation;
 import com.finscope.common.enums.financials.FinancialInterpretationStatus;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
@@ -15,22 +16,16 @@ import java.util.Map;
 
 @Service
 public class FinancialInterpretationAgent {
-    private final LlmChatClient llm;
-    private final ObjectMapper json;
-    private final FinancialInterpretationResponseParser parser;
-    private final FinancialInterpretationGate gate;
-    private final FinancialInterpretationFallbackBuilder fallback;
-
-    public FinancialInterpretationAgent(LlmChatClient llm, ObjectMapper json,
-                                        FinancialInterpretationResponseParser parser,
-                                        FinancialInterpretationGate gate,
-                                        FinancialInterpretationFallbackBuilder fallback) {
-        this.llm = llm;
-        this.json = json;
-        this.parser = parser;
-        this.gate = gate;
-        this.fallback = fallback;
-    }
+    @Autowired
+    private LlmChatClient llm;
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private FinancialInterpretationResponseParser parser;
+    @Autowired
+    private FinancialInterpretationGate gate;
+    @Autowired
+    private FinancialInterpretationFallbackBuilder fallback;
 
     public FinancialInterpretation interpret(FinancialEvidencePacket packet) {
         return interpretWithMetrics(packet).getValue();
@@ -45,14 +40,14 @@ public class FinancialInterpretationAgent {
         int llmCallCount = 0;
         try {
             llmCallCount++;
-            output = llm.complete(systemPrompt(), modelPayload(packet));
+            output = llm.complete(systemPrompt(packet), modelPayload(packet));
             try {
                 return new Execution(success(packet, output, "LLM", errors), llmCallCount);
             } catch (IllegalArgumentException first) {
                 errors.add("首次输出：" + message(first));
             }
             llmCallCount++;
-            output = llm.complete(repairPrompt(), repairInput(packet, output, errors.get(0)));
+            output = llm.complete(systemPrompt(packet) + "修复validationError，只返回完整修复JSON。", repairInput(packet, output, errors.get(0)));
             try {
                 return new Execution(success(packet, output, "REPAIRED", errors), llmCallCount);
             } catch (IllegalArgumentException second) {
@@ -129,13 +124,13 @@ public class FinancialInterpretationAgent {
                                String validationError) throws Exception {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("validationError", validationError);
-        value.put("invalidOutput", shorten(invalidOutput, 8000));
+        value.put("invalidOutput", shorten(invalidOutput, 48000));
         value.put("evidencePacket", json.readTree(modelPayload(packet)));
         return json.writeValueAsString(value);
     }
 
-    private String systemPrompt() {
-        return "你是A股非金融企业财报解读Agent。只能使用evidence中的证据和数字，只能引用现有id；" +
+    private String legacyPrompt() {
+        return "你是上市公司财报解读Agent，必须按report中市场、币种、实际报告期和合并口径分析。只能使用evidence中的证据和数字，只能引用现有id；" +
                 "输出单个JSON对象，字段为operatingState、confidence、executiveSummary、periodChanges、" +
                 "crossStatementInsights、dimensions、positiveSignals、risks、turningPoints、watchpoints、" +
                 "limitations、disclaimer。所有Claim必须包含claim、claimType、refs；executiveSummary必须是数组，输出3条；" +
@@ -157,8 +152,37 @@ public class FinancialInterpretationAgent {
                 "维度summary不超过60个中文字符；数据不足时使用INSUFFICIENT_EVIDENCE。只返回JSON。";
     }
 
-    private String repairPrompt() {
-        return systemPrompt() + "你正在修复未通过服务端门禁的输出，必须纠正validationError，只返回修复后的JSON。";
+    private String systemPrompt(FinancialEvidencePacket packet) {
+        if (!FinancialInterpretationReportFramework.VERSION.equals(packet.getPromptVersion())) {
+            return legacyPrompt();
+        }
+        return "你是严谨的公司财务研究员，为初学者撰写详细中文报告。读者要理解发生了什么、如何判断和如何核查。" +
+                "严格根据reportScope的市场、币种、实际报告期和合并口径分析；未知行业和会计准则不猜测，不套统一阈值。" +
+                "chapterPlan是服务端分析提纲，refs列出本章可用材料，limitations列出缺口，教学说明是一般知识而非公司事实。" +
+                "先按提纲组织论证，再输出一个完整JSON，不要Markdown。顶层字段：operatingState、confidence、executiveSummary、" +
+                "periodChanges、crossStatementInsights、sections、dimensions、positiveSignals、risks、turningPoints、watchpoints、limitations、disclaimer。" +
+                "operatingState只能是IMPROVING、STABLE、UNDER_PRESSURE、INSUFFICIENT_EVIDENCE；confidence只能是HIGH、MEDIUM、LOW且不超过qualityCeiling。" +
+                "executiveSummary必须是数组，三至五条综合判断；periodChanges与crossStatementInsights必须是数组，无材料允许空。" +
+                "dimensions、positiveSignals、risks、turningPoints、watchpoints输出空数组，避免重复sections。" +
+                "sections必须按chapterPlan顺序覆盖全部十章。每章字段code、assessment、confidence、summary、refs、facts、analysis、counterEvidence、watchpoints、limitations。" +
+                "assessment只能是POSITIVE、NEUTRAL、NEGATIVE、INSUFFICIENT_EVIDENCE；summary为两至四句综合判断，refs引用本章证据。" +
+                "facts、analysis、counterEvidence、watchpoints均为Claim数组。Claim字段claim、claimType、confidence、refs。" +
+                "facts使用FACT，逐项描述两至四个关键事实并说明期间口径；analysis使用INFERENCE，以两至三个完整段落解释数据关系、" +
+                "经营含义及条件，每段约一百五十至三百中文字符，证据充分时写深，避免堆砌术语或重复事实。" +
+                "counterEvidence使用INFERENCE，至少一条替代解释或能推翻判断的条件；watchpoints使用WATCHPOINT，至少一条可执行的验证清单，" +
+                "说明要看哪一科目或附注、哪种方向支持或削弱判断。所有数组最多八条。" +
+                "FACT置信度不超过数据质量上限；INFERENCE原因解释最高MEDIUM，不能将已核查数值等同于已证实原因。" +
+                "所有公司判断必须引用已有证据id；refs不能为空且来自本章或关联三表。无本章材料时assessment=INSUFFICIENT_EVIDENCE、" +
+                "confidence=LOW，summary解释缺什么材料、不能下什么结论，refs和四组Claim数组为空。不要凭公司名称补写业务或风险。" +
+                "原文尚未接入，不能把自己的解释写成管理层解释，不能确认审计意见、客户、产品、销量或价格变化。" +
+                "增长解释需核查基期正负与低基数，单期背离不直接等于财务造假或盈利恶化；合同负债增长不能保证未来收入。" +
+                "所有原因、影响、替代解释均标INFERENCE，不使用必然、保证等绝对表达。" +
+                "连续或逐季趋势必须引用至少三个相邻同口径时点的TREND，并核查时点是否连续；同比指标不能替代连续趋势。" +
+                "crossStatementInsights每条必须引用至少两个不同报表域的L_原始科目，不能只用两个指标冒充三表联动。" +
+                "优先用文字解释方向，页面会通过refs展示精确数值。若写数字，只使用本条refs证据中原样数值或保留两位小数，" +
+                "不要自算、换算万亿、造比率、预测值或阈值。facts中不写原因和未来影响。" +
+                "limitations是材料限制字符串数组，不在无引用限制段落补写公司数据；disclaimer说明仅用于研究。" +
+                "不要按字数凑内容；材料不足就解释边界，全文以证据覆盖和完整论证为准。";
     }
 
     private String message(Throwable error) {
@@ -168,7 +192,9 @@ public class FinancialInterpretationAgent {
     }
 
     private String shorten(String value, int limit) {
-        if (value == null) return "";
+        if (value == null) {
+            return "";
+        }
         return value.length() <= limit ? value : value.substring(0, limit);
     }
 

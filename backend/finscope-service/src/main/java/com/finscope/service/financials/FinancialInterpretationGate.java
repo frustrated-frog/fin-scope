@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.financials.FinancialInterpretation;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -36,11 +37,8 @@ public class FinancialInterpretationGate {
                     "保证收益(?:或(?:作出|做出)收益承诺)?|" +
                     "(?:作出|做出|包含|涉及)?收益承诺)");
 
-    private final ObjectMapper json;
-
-    public FinancialInterpretationGate(ObjectMapper json) {
-        this.json = json;
-    }
+    @Autowired
+    private ObjectMapper json;
 
     public FinancialInterpretation.Result apply(JsonNode root, FinancialEvidencePacket packet) {
         List<String> errors = new ArrayList<String>();
@@ -62,12 +60,18 @@ public class FinancialInterpretationGate {
         validateClaims(result.getRisks(), "risks", 5, packet, errors);
         validateClaims(result.getTurningPoints(), "turningPoints", 5, packet, errors);
         validateClaims(result.getWatchpoints(), "watchpoints", 5, packet, errors);
-        validateDimensions(result.getDimensions(), packet, errors);
+        if (FinancialInterpretationReportFramework.VERSION.equals(packet.getPromptVersion())) {
+            FinancialInterpretationReportValidator.validate(result, packet, errors);
+        } else {
+            validateDimensions(result.getDimensions(), packet, errors);
+        }
         if (rank(result.getConfidence()) > rank(packet.getQualityCeiling())) {
             errors.add("置信度超过数据质量上限 " + packet.getQualityCeiling());
         }
         for (String text : narrative(result)) {
-            if (text == null) continue;
+            if (text == null) {
+                continue;
+            }
             String adviceCheckText = NEGATED_INVESTMENT_ADVICE.matcher(text).replaceAll("");
             if (INVESTMENT_ADVICE.matcher(adviceCheckText).find()) {
                 errors.add("输出包含投资建议或承诺性表达");
@@ -77,6 +81,7 @@ public class FinancialInterpretationGate {
         if (!errors.isEmpty()) {
             throw new IllegalArgumentException(String.join("；", new LinkedHashSet<String>(errors)));
         }
+        FinancialInterpretationReportFramework.decorate(result, packet);
         return result;
     }
 
@@ -94,8 +99,12 @@ public class FinancialInterpretationGate {
             }
             require(DIMENSIONS, value.getCode(), "dimension.code", errors);
             require(ASSESSMENTS, value.getAssessment(), "dimension.assessment", errors);
-            if (!actual.add(value.getCode())) errors.add("dimensions 包含重复维度 " + value.getCode());
-            if (blank(value.getSummary())) errors.add("dimension.summary 不能为空");
+            if (!actual.add(value.getCode())) {
+                errors.add("dimensions 包含重复维度 " + value.getCode());
+            }
+            if (blank(value.getSummary())) {
+                errors.add("dimension.summary 不能为空");
+            }
             validateRefs(value.getRefs(), "dimension " + value.getCode(), packet, errors);
             if (value.getDetails() == null || value.getDetails().isEmpty()) {
                 errors.add("dimension " + value.getCode() + " 至少需要一条详情");
@@ -103,13 +112,19 @@ public class FinancialInterpretationGate {
             validateClaims(value.getDetails(), "dimension " + value.getCode() + ".details",
                     4, packet, errors);
         }
-        if (!actual.equals(DIMENSIONS)) errors.add("dimensions 必须完整覆盖六个固定维度");
+        if (!actual.equals(DIMENSIONS)) {
+            errors.add("dimensions 必须完整覆盖六个固定维度");
+        }
     }
 
     private void validateClaims(List<FinancialInterpretation.Claim> values, String field, int max,
                                 FinancialEvidencePacket packet, List<String> errors) {
-        if (values == null) return;
-        if (values.size() > max) errors.add(field + " 最多允许 " + max + " 条");
+        if (values == null) {
+            return;
+        }
+        if (values.size() > max) {
+            errors.add(field + " 最多允许 " + max + " 条");
+        }
         for (FinancialInterpretation.Claim value : values) {
             if (value == null || blank(value.getClaim())) {
                 errors.add(field + " 包含空结论");
@@ -160,28 +175,54 @@ public class FinancialInterpretationGate {
         addClaims(values, result.getRisks());
         addClaims(values, result.getTurningPoints());
         addClaims(values, result.getWatchpoints());
+        if (result.getSections() != null) {
+            result.getSections().forEach(section -> {
+                if (section != null) {
+                    values.add(section.getSummary());
+                    addClaims(values, section.getFacts());
+                    addClaims(values, section.getAnalysis());
+                    addClaims(values, section.getCounterEvidence());
+                    addClaims(values, section.getWatchpoints());
+                    if (section.getLimitations() != null) {
+                        values.addAll(section.getLimitations());
+                    }
+                }
+            });
+        }
         if (result.getDimensions() != null) {
             result.getDimensions().forEach(item -> {
                 values.add(item == null ? null : item.getSummary());
-                if (item != null) addClaims(values, item.getDetails());
+                if (item != null) {
+                    addClaims(values, item.getDetails());
+                }
             });
         }
-        if (result.getLimitations() != null) values.addAll(result.getLimitations());
+        if (result.getLimitations() != null) {
+            values.addAll(result.getLimitations());
+        }
         values.add(result.getDisclaimer());
         return values;
     }
 
     private void addClaims(List<String> target, List<FinancialInterpretation.Claim> claims) {
-        if (claims != null) claims.forEach(item -> target.add(item == null ? null : item.getClaim()));
+        if (claims != null) {
+            claims.forEach(item -> target.add(item == null ? null : item.getClaim()));
+        }
     }
 
     private void require(Set<String> allowed, String value, String field, List<String> errors) {
-        if (!allowed.contains(value)) errors.add(field + " 非法：" + value);
+        if (!allowed.contains(value)) {
+            errors.add(field + " 非法：" + value);
+        }
     }
 
     private int rank(String confidence) {
-        if ("HIGH".equals(confidence)) return 3;
-        if ("MEDIUM".equals(confidence)) return 2;
+        if ("HIGH".equals(confidence)) {
+            return 3;
+        }
+        if ("MEDIUM".equals(confidence)) {
+            return 2;
+        }
         return 1;
     }
 

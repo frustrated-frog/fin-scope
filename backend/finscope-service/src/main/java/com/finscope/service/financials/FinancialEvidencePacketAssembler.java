@@ -7,6 +7,9 @@ import com.finscope.domain.financials.FinancialLineItem;
 import com.finscope.domain.financials.FinancialMetric;
 import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.domain.financials.FinancialReportView;
+import com.finscope.domain.financials.FinancialInterpretationScope;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,38 +25,69 @@ import java.util.Map;
 
 @Component
 public class FinancialEvidencePacketAssembler {
-    public static final String PROMPT_VERSION = "financial-interpret-v4";
-    public static final String ALGORITHM_VERSION = "financial-analysis-v4";
+    public static final String PROMPT_VERSION = FinancialInterpretationReportFramework.VERSION;
+    public static final String ALGORITHM_VERSION = "financial-analysis-v5";
     private static final BigDecimal TEN_THOUSAND = new BigDecimal("10000");
     private static final BigDecimal HUNDRED_MILLION = new BigDecimal("100000000");
 
-    private final ObjectMapper json;
-    private final FinancialTrendEngine trends;
-    private final FinancialEvidenceSelector selector;
-
-    public FinancialEvidencePacketAssembler(ObjectMapper json, FinancialTrendEngine trends,
-                                            FinancialEvidenceSelector selector) {
-        this.json = json;
-        this.trends = trends;
-        this.selector = selector;
-    }
+    @Autowired
+    private ObjectMapper json;
+    @Autowired
+    private FinancialTrendEngine trends;
+    @Autowired
+    private FinancialEvidenceSelector selector;
 
     public FinancialEvidencePacket assemble(FinancialReportView current,
                                              List<FinancialReportView> comparables) {
         try {
+            List<FinancialReportView> compatible = new ArrayList<>();
+            if (comparables != null) {
+                for (FinancialReportView candidate : comparables) {
+                    if (candidate.getReport().getPeriodEnd().isBefore(current.getReport().getPeriodEnd())
+                            && Objects.equals(current.getReport().getCurrency(), candidate.getReport().getCurrency())
+                            && Objects.equals(current.getReport().getScope(), candidate.getReport().getScope())
+                            && Objects.equals(current.getInstrument().getCode(), candidate.getInstrument().getCode())
+                            && Objects.equals(current.getInstrument().getMarket(), candidate.getInstrument().getMarket())) {
+                        compatible.add(candidate);
+                    }
+                }
+            }
             List<FinancialEvidence> evidence = new ArrayList<FinancialEvidence>();
             evidence.addAll(metricEvidence(current));
             evidence.addAll(lineEvidence(current));
             evidence.addAll(findingEvidence(current));
             List<FinancialReportView> all = new ArrayList<FinancialReportView>();
             all.add(current);
-            if (comparables != null) all.addAll(comparables);
+            all.addAll(compatible);
+            for (FinancialReportView historical : compatible) {
+                if (historical.getReport().getReportType() == current.getReport().getReportType()
+                        && historical.getReport().getPeriodEnd().getYear() == current.getReport().getPeriodEnd().getYear() - 1) {
+                    evidence.addAll(lineEvidence(historical));
+                }
+            }
             evidence.addAll(trends.build(all));
             evidence.addAll(gapEvidence(current));
             evidence.sort(Comparator.comparing(FinancialEvidence::getId));
             List<FinancialEvidence> modelEvidence = selector.select(
                     evidence, current.getReport().getReportType());
 
+            FinancialInterpretationScope scope = new FinancialInterpretationScope();
+            scope.setCompanyName(current.getInstrument().getName());
+            scope.setMarket(current.getInstrument().getMarket());
+            scope.setPeriodEnd(current.getReport().getPeriodEnd().toString());
+            scope.setReportType(current.getReport().getReportType().name());
+            scope.setScope(current.getReport().getScope());
+            scope.setCurrency(current.getReport().getCurrency());
+            scope.setSourceCode(current.getReport().getSourceCode());
+            scope.setHistoricalReportCount(compatible.size());
+            scope.setModelEvidenceCount(modelEvidence.size());
+            compatible.stream().map(item -> item.getReport().getPeriodEnd().toString())
+                    .distinct().sorted().forEach(scope.getComparablePeriods()::add);
+            scope.getMaterialLimitations().add("本次使用结构化三张表、计算指标及本地历史报告，尚未接入业务拆分、管理层讨论、审计意见和附注原文。");
+            scope.getMaterialLimitations().add("行业及会计准则未核验，不进行同行排名或套用跨市场统一阈值；金融企业需要专门框架。");
+            if (compatible.isEmpty()) {
+                scope.getMaterialLimitations().add("没有同主体、同币种、同合并口径的历史报告，无法确认连续经营趋势。");
+            }
             String quality = qualityCeiling(current);
             Map<String, Object> report = new LinkedHashMap<String, Object>();
             report.put("stockCode", current.getInstrument().getCode());
@@ -62,17 +96,25 @@ public class FinancialEvidencePacketAssembler {
             report.put("periodEnd", current.getReport().getPeriodEnd().toString());
             report.put("reportType", current.getReport().getReportType().name());
             report.put("scope", current.getReport().getScope());
+            report.put("currency", current.getReport().getCurrency());
+            report.put("sourceCode", current.getReport().getSourceCode());
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("report", report);
+            payload.put("reportScope", scope);
+            payload.put("chapterPlan", FinancialInterpretationReportFramework.plan(modelEvidence));
             payload.put("qualityCeiling", quality);
             payload.put("evidence", evidence);
             payload.put("algorithmVersion", ALGORITHM_VERSION);
             payload.put("selectorVersion", FinancialEvidenceSelector.SELECTOR_VERSION);
             List<String> modelEvidenceIds = new ArrayList<String>();
-            for (FinancialEvidence item : modelEvidence) modelEvidenceIds.add(item.getId());
+            for (FinancialEvidence item : modelEvidence) {
+                modelEvidenceIds.add(item.getId());
+            }
             payload.put("modelEvidenceIds", modelEvidenceIds);
             Map<String, Object> modelPayload = new LinkedHashMap<String, Object>();
             modelPayload.put("report", report);
+            modelPayload.put("reportScope", scope);
+            modelPayload.put("chapterPlan", FinancialInterpretationReportFramework.plan(modelEvidence));
             modelPayload.put("qualityCeiling", quality);
             modelPayload.put("evidence", modelEvidence);
             modelPayload.put("algorithmVersion", ALGORITHM_VERSION);
@@ -90,6 +132,7 @@ public class FinancialEvidencePacketAssembler {
             packet.setSourceHash(sourceHash);
             packet.setInputHash(sha256(payloadJson));
             packet.setQualityCeiling(quality);
+            packet.setReportScope(scope);
             packet.setPayloadJson(payloadJson);
             packet.setModelPayloadJson(modelPayloadJson);
             packet.setEvidence(evidence);
@@ -115,7 +158,9 @@ public class FinancialEvidencePacketAssembler {
         sorted.sort(Comparator.comparing(FinancialMetric::getMetricCode));
         List<FinancialEvidence> result = new ArrayList<FinancialEvidence>();
         for (FinancialMetric metric : sorted) {
-            if (metric.getMetricCode() == null || metric.getValue() == null) continue;
+            if (metric.getMetricCode() == null || metric.getValue() == null) {
+                continue;
+            }
             FinancialEvidence value = base("M_" + token(metric.getMetricCode()), "METRIC",
                     metric.getLabel(), metric.getValue().toPlainString(), metric.getUnit(),
                     view.getReport().getPeriodEnd().toString());
@@ -134,7 +179,9 @@ public class FinancialEvidencePacketAssembler {
                 .thenComparing(value -> safe(value.getSourceLabel())));
         List<FinancialEvidence> result = new ArrayList<FinancialEvidence>();
         for (FinancialLineItem line : lines) {
-            if (line.getNormalizedValue() == null) continue;
+            if (line.getNormalizedValue() == null) {
+                continue;
+            }
             String concept = line.getConceptCode() == null ? line.getSourceLabel() : line.getConceptCode();
             String id = "L_" + token(line.getStatementType().name()) + "_" + token(concept) + "_"
                     + view.getReport().getPeriodEnd().getYear() + "_"
@@ -215,7 +262,9 @@ public class FinancialEvidencePacketAssembler {
     }
 
     private void collectNumbers(LinkedHashSet<String> values, String text) {
-        if (text == null) return;
+        if (text == null) {
+            return;
+        }
         java.util.regex.Matcher matcher = java.util.regex.Pattern
                 .compile("(?<![A-Za-z_])[-+]?\\d+(?:\\.\\d+)?").matcher(text);
         while (matcher.find()) {
@@ -236,7 +285,9 @@ public class FinancialEvidencePacketAssembler {
 
     private void addDisplayVariants(LinkedHashSet<String> values, BigDecimal number) {
         addDisplayVariantsForSign(values, number);
-        if (number.signum() < 0) addDisplayVariantsForSign(values, number.abs());
+        if (number.signum() < 0) {
+            addDisplayVariantsForSign(values, number.abs());
+        }
     }
 
     private void addDisplayVariantsForSign(LinkedHashSet<String> values, BigDecimal number) {
@@ -262,7 +313,9 @@ public class FinancialEvidencePacketAssembler {
             byte[] bytes = MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder();
-            for (byte item : bytes) result.append(String.format("%02x", item));
+            for (byte item : bytes) {
+                result.append(String.format("%02x", item));
+            }
             return result.toString();
         } catch (Exception error) {
             throw new IllegalStateException("SHA-256 unavailable", error);

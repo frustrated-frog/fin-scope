@@ -28,6 +28,9 @@ public class FinancialInterpretation {
 
     @Data
     public static class Result {
+        private String reportVersion;
+        private FinancialInterpretationScope reportScope;
+        private List<FinancialInterpretationSection> sections = new ArrayList<>();
         private String operatingState;
         private String confidence;
         private List<Claim> executiveSummary = new ArrayList<Claim>();
@@ -58,6 +61,7 @@ public class FinancialInterpretation {
     public static class Claim {
         private String claim;
         private String claimType;
+        private String confidence;
         private List<String> refs = new ArrayList<String>();
     }
 
