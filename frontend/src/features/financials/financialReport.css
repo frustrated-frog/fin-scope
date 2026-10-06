@@ -28,6 +28,9 @@
 .financial-report-thesis { margin: 20px 0 12px; color: var(--ink); font-size: 16px; line-height: 1.95; overflow-wrap: anywhere; }
 .financial-report-claim-group { margin-top: 26px; }
 .financial-report-claim-group h5 { margin: 0 0 12px; color: var(--ink); font-size: 14px; }
+.financial-report-claim-group > article { padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--line) 75%, transparent); border-radius: 10px; background: var(--surface-2); }
+/* Keep claim surfaces distinct from the workspace's generic article material. */
+.app-shell[data-theme] main.workspace .financial-report-claim-group > article { background: color-mix(in srgb, var(--surface-2) 42%, var(--workspace-glass)); }
 .financial-report-claim-group article + article { margin-top: 20px; }
 .financial-report-claim-meta { display: flex; gap: 12px; color: var(--muted); font-size: 10px; }
 .financial-report-claim-meta > span:first-child { color: var(--fs-blue); }
@@ -65,6 +68,7 @@
   .financial-report-chapter h4 { font-size: 18px; }
   .financial-report-thesis { font-size: 15px; }
   .financial-report-directory { grid-template-columns: 1fr; }
+  .financial-report-claim-group > article { padding: 14px; }
 }
 
 .financial-report-glossary { margin: 0 0 22px; }
