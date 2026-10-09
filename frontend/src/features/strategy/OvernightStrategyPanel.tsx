@@ -8,6 +8,9 @@ import { OvernightTargetEvidence } from './OvernightTargetEvidence';
 import { OvernightJointEvidence } from './OvernightJointPanel';
 import { OvernightDirectionPanel } from './OvernightDirectionPanel';
 import { OvernightAutomationPanel } from './OvernightAutomationPanel';
+import { OvernightSheet } from './OvernightSheet';
+import { OvernightReview } from './OvernightReview';
+import './OvernightWorkspace.css';
 
 const modeLabels = { TAIL_ENTRY: '尾盘入场', AFTER_CLOSE_HOLDING: '盘后持仓' };
 const statusLabels: Record<string, string> = {
@@ -21,6 +24,9 @@ const pct = (value?: number | null) => value == null ? '—' : `${(value * 100).
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 
 export function OvernightStrategyPanel() {
+  const [view, setView] = useState<'today' | 'performance' | 'history'>('today');
+  const [tool, setTool] = useState<'manual' | 'watchlist'>();
+  const [selectedReport, setSelectedReport] = useState<OvernightReport>();
   const [auditRevision, setAuditRevision] = useState(0);
   const [mode, setMode] = useState<OvernightMode>('TAIL_ENTRY');
   const [code, setCode] = useState('');
@@ -115,19 +121,23 @@ export function OvernightStrategyPanel() {
   }
 
   return <section className="overnight-workbench" aria-label="尾盘与盘后独立策略">
-    <header className="overnight-title"><div><span>隔夜策略 · 自动研究</span><h3>尾盘找机会，盘后看持仓</h3><p>自动筛选、到点判断、次日核验。每一次研究都保留当时的数据边界。</p></div><small>上海交易时间</small></header>
+    <header className="overnight-title"><div><span>OVERNIGHT / 隔夜研究</span><h3>把今天的判断，交给明天验证</h3><p>尾盘自动发现 · 盘后跟踪持仓 · 次日真实复盘</p></div>
+      <div className="overnight-tools"><button type="button" onClick={() => setTool('manual')}>研究工具 ↗</button>
+      {mode === 'TAIL_ENTRY' && <button type="button" onClick={() => setTool('watchlist')}>我的关注 ↗</button>}</div></header>
     <div className="overnight-mode" role="group" aria-label="研究场景">
       <button type="button" aria-pressed={mode === 'TAIL_ENTRY'} onClick={() => chooseMode('TAIL_ENTRY')} disabled={!!busy}><b>尾盘入场</b><span>现在买入，次日是否有净收益？</span></button>
       <button type="button" aria-pressed={mode === 'AFTER_CLOSE_HOLDING'} onClick={() => chooseMode('AFTER_CLOSE_HOLDING')} disabled={!!busy}><b>盘后持仓</b><span>已经持有，比较明天的持有时长</span></button>
     </div>
-    <ol className="overnight-clock" aria-label="决策与执行时间轴">
-      <li data-active={mode === 'TAIL_ENTRY'}><time>14:30 / 14:45</time><b>尾盘自动判断</b><span>提前扫描候选，到点截断数据</span></li>
-      <li data-active={mode === 'AFTER_CLOSE_HOLDING'}><time>15:10</time><b>盘后持仓更新</b><span>使用 15:00 收盘数据，读取真实账本</span></li>
-      <li><time>T+1</time><b>次日分时评测</b><span>开盘 / 10:00 / 14:30 / 收盘</span></li>
-    </ol>
-    <OvernightAutomationPanel mode={mode} records={records} renderReport={item => <ResearchResult report={item} />} />
+    <nav className="overnight-navigation" aria-label="隔夜工作区">
+      {([['today', '今日研判'], ['performance', '预测表现'], ['history', '历史复盘']] as const).map(([key, label]) => <button key={key} type="button" aria-current={view === key ? 'page' : undefined} onClick={() => setView(key)}>{label}</button>)}
+      <span>上海交易时间 / T → T+1</span>
+    </nav>
+    <div hidden={view === 'history'}><OvernightAutomationPanel mode={mode} records={records} revision={auditRevision} view={view === 'performance' ? 'performance' : 'today'} renderReport={item => <ResearchResult report={item} />} /></div>
     {historyError && <p role="alert" className="overnight-error">{historyError}</p>}
-    <details className="overnight-manual"><summary>单股补充研究与历史复盘</summary>
+    {view === 'history' && <OvernightReview mode={mode} records={records} busy={!!busy} onSettle={() => void settle()} onSelect={setSelectedReport} />}
+    {selectedReport && <OvernightSheet title={`${selectedReport.instrumentCode} · ${selectedReport.signalDate}`} onClose={() => setSelectedReport(undefined)}><ResearchResult report={selectedReport} /></OvernightSheet>}
+    {tool === 'watchlist' && <OvernightSheet title="我的关注" onClose={() => setTool(undefined)}><OvernightAuditPanel mode={mode} revision={auditRevision} view="watchlist" /></OvernightSheet>}
+    {tool === 'manual' && <OvernightSheet title="单股研究与历史回顾" onClose={() => setTool(undefined)}>
     <div className="overnight-layout"><form className="overnight-input" onSubmit={generate}>
       <h4>{modeLabels[mode]}设置</h4>
       {mode === 'TAIL_ENTRY' ? <label>研究股票<input value={code} onChange={event => { setCode(event.target.value); setReport(undefined); }} placeholder="例如 605058 或 605058.SH" required disabled={!!busy} /></label>
@@ -145,13 +155,7 @@ export function OvernightStrategyPanel() {
     </form><div className="overnight-result" aria-live="polite">
       {error && <p role="alert" className="overnight-error">{error}</p>}
       {report ? <ResearchResult report={report} /> : <div className="overnight-waiting"><span>{mode === 'TAIL_ENTRY' ? '买入之前' : '持有之后'}</span><h4>{mode === 'TAIL_ENTRY' ? '让预测对应你能参与的那段涨跌' : '从真实持仓出发，比较明天的选择'}</h4><p>{mode === 'TAIL_ENTRY' ? '按截止时刻截断分钟线，分别研究次日不同退出时点。没有合格分钟数据时，保留空缺，不借用收盘结果。' : '成本与数量直接读取账本。新盘后判断单独保存，尾盘入场时的判断仍然保留。'}</p><div>本地模型 · 4 个退出时点 · 独立冻结记录</div></div>}
-    </div></div></details>
-    <details className="overnight-manual"><summary>全历史验证与自定义观察名单</summary><OvernightAuditPanel mode={mode} revision={auditRevision} /></details>
-    <details className="overnight-manual"><summary>历史档案与次日复盘（{records.length}）</summary>
-    <section className="overnight-history" aria-label="两类预测独立档案"><header><div><h4>判断留痕与次日复盘</h4><p>展示最近 50 份档案；验收统计覆盖全部历史。每次最多更新 3 只股票，服务也会自动轮换核验。</p></div><button type="button" onClick={settle} disabled={!!busy || !records.length}>{busy === 'settle' ? '读取到期行情…' : '更新到期结果'}</button></header>
-      {!records.length && !historyError && <p className="overnight-empty">还没有冻结记录。完成第一份具备足够分钟历史的研究后，原始预测会保存在这里。</p>}
-      {records.map(item => <details key={item.id}><summary><span className="overnight-badge">{modeLabels[item.mode]}</span><b>{item.instrumentCode}</b><span>{item.signalDate} {item.cutoff}</span><span>{item.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</span><span>{statusLabels[item.outcome?.status ?? 'PENDING'] ?? '等待结算'}</span></summary><ResearchResult report={item} /></details>)}
-    </section></details>
+    </div></div></OvernightSheet>}
     {analysisOpen && <HoldingAnalysisDrawer analysis={analysis} loading={false} targetName={position?.instrumentName ?? code} targetCode={code} onClose={() => setAnalysisOpen(false)} />}
   </section>;
 }

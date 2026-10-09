@@ -16,15 +16,14 @@ test('saves explicit watchlist and shows missing windows without fabricating ret
     }
     return apiResponse(String(url).endsWith('/capture') ? capture : { recordCount: 0, groups: [], limitations: [] });
   }));
-  render(<OvernightAuditPanel mode="TAIL_ENTRY" revision={0} />);
+  render(<OvernightAuditPanel mode="TAIL_ENTRY" revision={0} view="watchlist" />);
   const user = userEvent.setup();
-  await user.click(screen.getByText('自定义观察名单（可选补充）'));
   expect(await screen.findByText('错过窗口')).toBeInTheDocument();
   await user.type(screen.getByLabelText('自动观察名单'), '605058, 000001');
   await user.click(screen.getByLabelText('启用自动留档'));
   await user.click(screen.getByRole('button', { name: '保存留档计划' }));
   await waitFor(() => expect(saved).toEqual([{ enabled: true, instrumentCodes: ['605058', '000001'], costBps: 20 }]));
-  expect(screen.getByText(/概率、收益和命中率保持空缺/)).toBeInTheDocument();
+  expect(screen.queryByLabelText('隔夜全历史验收')).not.toBeInTheDocument();
 });
 
 test('separates modes and retrospective evidence and exposes sample days and missing baseline', async () => {

@@ -10,7 +10,7 @@ const states: Record<string, string> = { RUNNING: '采集中', COMPLETED: '采�
 const percent = (value: number | null) => value == null ? '—' : `${(value * 100).toFixed(2)}%`;
 const decimal = (value: number | null) => value == null ? '—' : value.toFixed(3);
 
-export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; revision: number }) {
+export function OvernightAuditPanel({ mode, revision, view = 'validation' }: { mode: OvernightMode; revision: number; view?: 'validation' | 'watchlist' }) {
   const [capture, setCapture] = useState<CaptureState>();
   const [validation, setValidation] = useState<OvernightValidation>();
   const [codes, setCodes] = useState('');
@@ -22,20 +22,29 @@ export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; r
   const [evidence, setEvidence] = useState('FORWARD');
   const load = useCallback(async (resetForm = false) => {
     try {
-      const [state, summary] = await Promise.all([
-        api<CaptureState>('/api/quant/overnight/capture'), api<OvernightValidation>('/api/quant/overnight/validation'),
-      ]);
-      if (!state.plan || !Array.isArray(summary.groups)) {
-        throw new Error('服务尚未提供新版留档接口，请重启 Java 和 Python');
+      if (view === 'watchlist') {
+        const state = await api<CaptureState>('/api/quant/overnight/capture');
+        if (!state.plan || !Array.isArray(state.runs)) {
+          throw new Error('观察名单接口暂不可用');
+        }
+        setCapture(state);
+        if (resetForm) {
+          setCodes(state.plan.instrumentCodes.join(', '));
+          setCost(state.plan.costBps);
+          setEnabled(state.plan.enabled);
+        }
+      } else {
+        const summary = await api<OvernightValidation>('/api/quant/overnight/validation');
+        if (!Array.isArray(summary.groups)) {
+          throw new Error('收益验证接口暂不可用');
+        }
+        setValidation(summary);
       }
-      setCapture(state); setValidation(summary); setError('');
-      if (resetForm) {
-        setCodes(state.plan.instrumentCodes.join(', ')); setCost(state.plan.costBps); setEnabled(state.plan.enabled);
-      }
+      setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '验收信息读取失败');
     }
-  }, []);
+  }, [view]);
   useEffect(() => { void load(true); }, [load]);
   useEffect(() => {
     if (revision > 0) {
@@ -60,9 +69,9 @@ export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; r
   }
   const groups = validation?.groups.filter(group => group.mode === mode && group.evidenceKind === evidence) ?? [];
   return <section className="overnight-audit" aria-label="自动留档与全历史验收">
-    <header className="overnight-audit-heading"><div><span>记录当时，再看次日</span><h4>预测验证台</h4></div><button type="button" onClick={() => void load()}>刷新验收</button></header>
+    <header className="overnight-audit-heading"><h4>{view === 'watchlist' ? '我的关注' : '收益验证明细'}</h4><button type="button" onClick={() => void load()}>刷新</button></header>
     {error && <p role="alert" className="overnight-error">{error}</p>}
-    {mode === 'TAIL_ENTRY' && <details className="overnight-manual"><summary>自定义观察名单（可选补充）</summary><div className="overnight-capture-grid">
+    {view === 'watchlist' && mode === 'TAIL_ENTRY' && <div className="overnight-capture-grid">
       <form className="overnight-capture-form" onSubmit={save}>
         <h5>自定义名单留档 <span>{capture?.plan.enabled ? '已启用' : '未启用'}</span></h5>
         <p>系统自动发现无需设置此处。需要额外跟踪指定股票时，可在交易日 <b>14:30 / 14:45</b> 同步采集。</p>
@@ -80,20 +89,20 @@ export function OvernightAuditPanel({ mode, revision }: { mode: OvernightMode; r
         </details>)}
         {capture && <small>服务时间 {capture.serverTime.slice(0, 19).replace('T', ' ')}（上海） · 每 30 秒刷新</small>}
       </section>
-    </div></details>}
-    <section className="overnight-validation" aria-label="隔夜全历史验收">
-      <div className="overnight-validation-heading"><div><h5>{mode === 'TAIL_ENTRY' ? '尾盘入场' : '盘后持仓'} · 全历史验收</h5><p>共 {validation?.recordCount ?? '—'} 份冻结档案；按场景、时点、费用和模型版本分开统计。</p></div><label>验收记录范围<select value={evidence} onChange={event => setEvidence(event.target.value)}><option value="FORWARD">当时生成</option><option value="RETROSPECTIVE">历史回顾</option></select></label></div>
+    </div>}
+    {view === 'validation' && <section className="overnight-validation" aria-label="隔夜全历史验收">
+      <div className="overnight-validation-heading"><div><h5>{mode === 'TAIL_ENTRY' ? '尾盘入场' : '盘后持仓'} · 全历史验收</h5><p>当前范围 {groups.reduce((sum, group) => sum + group.recordCount, 0)} 份冻结档案；按场景、时点、费用和模型版本分开统计。</p></div><label>验收记录范围<select value={evidence} onChange={event => setEvidence(event.target.value)}><option value="FORWARD">当时生成</option><option value="RETROSPECTIVE">历史回顾</option></select></label></div>
       {!groups.length && <p className="overnight-audit-empty">该场景尚无{evidence === 'FORWARD' ? '当时生成' : '历史回顾'}档案。概率、收益和命中率保持空缺，等待真实记录到期。</p>}
       {groups.map(group => <article className="overnight-validation-group" key={`${group.modelVersion}-${group.cutoff}-${group.costBps}`}>
         <header><b>{group.cutoff} · {group.costBps} 基点</b><code>{group.modelVersion}</code><span>{group.recordCount} 份档案</span></header>
         <p>{Object.entries(group.statuses).map(([name, count]) => `${states[name] ?? name} ${count}`).join(' · ')}</p>
         {!group.targets.length && <p>尚无具备预测概率和到期行情的配对样本。</p>}
-        {group.targets.length > 0 && <div className="overnight-audit-table"><table><caption>按目标交易日等权，收益已扣除冻结成本假设</caption><thead><tr><th>退出时点</th><th>记录 / 交易日</th><th>方向准确率</th><th>概率误差 / 基准</th><th>全部参与</th><th>概率 ≥ 50% 参与</th></tr></thead><tbody>{group.targets.map(target => <tr key={target.target}><th>{names[target.target]}</th><td>{target.count} / {target.days}<small>{target.days < 60 ? '初期观察' : '仍需持续验证'}</small></td><td>{percent(target.accuracy)}</td><td>{decimal(target.pairedBrier)} / {decimal(target.baselineBrier)}<small>配对 {target.baselineCount} 条 · 越低越好</small></td><td>{percent(target.meanNetReturn)}</td><td>{percent(target.selectedNetReturn)}<small>参与 {target.selectedCount} 条</small></td></tr>)}</tbody></table></div>}
+        {group.targets.length > 0 && <div className="overnight-audit-table"><table><caption>按目标交易日等权，收益已扣除冻结成本假设</caption><thead><tr><th>退出时点</th><th>记录 / 交易日</th><th>盈利方向命中</th><th>概率误差 / 基准</th><th>全部参与</th><th>概率 ≥ 50% 参与</th></tr></thead><tbody>{group.targets.map(target => <tr key={target.target}><th>{names[target.target]}</th><td>{target.count} / {target.days}<small>{target.days < 60 ? '初期观察' : '仍需持续验证'}</small></td><td>{percent(target.accuracy)}</td><td>{decimal(target.pairedBrier)} / {decimal(target.baselineBrier)}<small>配对 {target.baselineCount} 条 · 越低越好</small></td><td>{percent(target.meanNetReturn)}</td><td>{percent(target.selectedNetReturn)}<small>参与 {target.selectedCount} 条</small></td></tr>)}</tbody></table></div>}
         <details><summary>概率分组与缺失原因</summary>{group.targets.map(target => <div key={target.target}><h6>{names[target.target]} · 概率可靠性</h6><div className="overnight-calibration">{target.bins.map(bin => <div key={bin.lower}><b>{Math.round(bin.lower * 100)}–{Math.round(bin.upper * 100)}%</b><span>预测 {percent(bin.predicted)}</span><span>实际盈利 {percent(bin.actual)}</span><small>{bin.count} 条 / {bin.days} 天</small></div>)}</div></div>)}{Object.entries(group.missingReasons).map(([reason, count]) => <p key={reason}>{reasonLabel(reason)} · {count} 条</p>)}</details>
       </article>)}
       <p className="overnight-audit-method">概率基准是预测时冻结的历史盈利比例，旧记录缺失时不追补。两种参与方式使用同一观察名单、日期和费用；概率不足 50% 时不参与，当日全部不参与记零收益。收益为价格代理，尚未证明可以实际成交。</p>
       <details className="overnight-audit-method"><summary>验收口径与限制</summary>{validation?.limitations.map(text => <p key={text}>{text}</p>)}</details>
-    </section>
+    </section>}
   </section>;
 }
 

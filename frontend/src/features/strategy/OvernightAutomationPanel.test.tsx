@@ -23,7 +23,7 @@ test('presents automatically discovered results without requiring a code or acti
   expect(screen.getByText('自动研究已开启')).toBeVisible();
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
-  expect(screen.getByText(/有效样本仅/)).not.toBeVisible();
+  expect(screen.queryByText(/有效样本仅/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByText('澳弘电子'));
   expect(screen.getByText(/有效样本仅/)).toBeVisible();
   expect(fetcher).toHaveBeenCalledTimes(1);
@@ -48,10 +48,10 @@ test('exposes missed windows and unknown calendars without claiming successful p
     status: 'MISSED', reason: '决策前没有有效候选快照', candidates: [], results: [] }] })));
   render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
   expect(await screen.findByText(/交易日历未覆盖下一窗口/)).toBeVisible();
-  expect(screen.getByText('暂未形成自动研究结果')).toBeVisible();
-  expect(screen.getByText('14:30 错过窗口：决策前没有有效候选快照')).toBeVisible();
-  await userEvent.click(screen.getByText('运行记录与未生成原因'));
   expect(screen.getByText('错过窗口')).toBeVisible();
+  expect(screen.getByText('14:30 错过窗口：决策前没有有效候选快照')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '运行状态 ↗' }));
+  expect(screen.getAllByText('错过窗口').length).toBeGreaterThan(0);
   expect(screen.getByText('决策前没有有效候选快照')).toBeVisible();
 });
 
@@ -85,6 +85,8 @@ test('shows historical coverage separately from predictive accuracy and exposes 
     jobs: [{ key: 'history', instrumentCode: '600000.SH', status: 'FAILED', reason: '历史源价格冲突，未合并' }],
   } })));
   render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
+  await screen.findByText('澳弘电子');
+  await userEvent.click(screen.getByRole('button', { name: '模型研究 ↗' }));
   expect(await screen.findByText('1 只已覆盖 140 个完整交易日')).toBeVisible();
   expect(screen.getByText('历史源价格冲突，未合并')).not.toBeVisible();
   await userEvent.click(screen.getByText('历史样本自动补齐'));
