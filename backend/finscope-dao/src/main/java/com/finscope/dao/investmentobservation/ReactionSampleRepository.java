@@ -75,22 +75,23 @@ public class ReactionSampleRepository {
     public boolean captureSource(ReactionSample proposed) {
         String origin = proposed.getSourceOriginType();
         String key = proposed.getSourceOriginKey();
-        // 兼容旧版 NEWS 身份：新渠道的同日完整标题优先挂到已有事件，保留原 ID。
-        if (proposed.getPublishedAt() != null) {
-            List<String> existingKeys = jdbcTemplate.queryForList("SELECT source_identity FROM investment_reaction_sample "
-                            + "WHERE replace(json_extract(snapshot_json,'$.title'),' ','')=? "
-                            + "AND substr(json_extract(snapshot_json,'$.publishedAt'),1,10)=? "
-                            + "AND COALESCE(json_extract(snapshot_json,'$.fact'),json_extract(snapshot_json,'$.title'))=? ORDER BY id LIMIT 1",
-                    String.class, proposed.getTitle().replaceAll("\\s", ""), proposed.getPublishedAt().toLocalDate().toString(),
-                    proposed.getFact() == null ? proposed.getTitle() : proposed.getFact());
-            if (!existingKeys.isEmpty()) {
-                proposed.setSourceIdentity(existingKeys.get(0));
-            }
-        }
-        jdbcTemplate.update("INSERT INTO investment_reaction_source(origin_type,origin_key,event_key,title,url,published_at,captured_at) "
-                        + "VALUES(?,?,?,?,?,?,?) ON CONFLICT(origin_type,origin_key) DO NOTHING", origin, key,
-                proposed.getSourceIdentity(), proposed.getTitle(), proposed.getSourceUrl(), TimeUtil.text(proposed.getPublishedAt()),
+        // 首条 SQL 即写入：旧身份匹配与插入原子完成，避免 WAL 读快照升级写锁失败。
+        // 兼容旧版 NEWS 身份，同日完整标题和事实相同的新渠道仍挂到原事件。
+        String publishedDate = proposed.getPublishedAt() == null
+                ? null : proposed.getPublishedAt().toLocalDate().toString();
+        int changed = jdbcTemplate.update("INSERT INTO investment_reaction_source(origin_type,origin_key,event_key,title,url,published_at,captured_at) "
+                        + "VALUES(?,?,COALESCE((SELECT source_identity FROM investment_reaction_sample "
+                        + "WHERE replace(json_extract(snapshot_json,'$.title'),' ','')=? "
+                        + "AND substr(json_extract(snapshot_json,'$.publishedAt'),1,10)=? "
+                        + "AND COALESCE(json_extract(snapshot_json,'$.fact'),json_extract(snapshot_json,'$.title'))=? "
+                        + "ORDER BY id LIMIT 1),?),?,?,?,?) ON CONFLICT(origin_type,origin_key) DO NOTHING",
+                origin, key, proposed.getTitle().replaceAll("\\s", ""), publishedDate,
+                proposed.getFact() == null ? proposed.getTitle() : proposed.getFact(), proposed.getSourceIdentity(),
+                proposed.getTitle(), proposed.getSourceUrl(), TimeUtil.text(proposed.getPublishedAt()),
                 TimeUtil.text(proposed.getFirstCapturedAt()));
+        if (changed != 0 && changed != 1) {
+            throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR);
+        }
         String identity = jdbcTemplate.queryForObject("SELECT event_key FROM investment_reaction_source WHERE origin_type=? AND origin_key=?",
                 String.class, origin, key);
         proposed.setSourceIdentity(identity);

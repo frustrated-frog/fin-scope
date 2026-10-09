@@ -41,6 +41,56 @@ class ReactionSampleRepositoryTest {
     }
 
     @Test
+    void capturesSourceWhenAnotherConnectionCommitsBeforeItsFirstWrite() {
+        jdbc.execute("PRAGMA journal_mode=WAL");
+        jdbc.execute("CREATE TABLE concurrent_write(value INTEGER)");
+        SQLiteDataSource otherSource = new SQLiteDataSource();
+        otherSource.setUrl("jdbc:sqlite:" + temp.resolve("test.db"));
+        JdbcTemplate other = new JdbcTemplate(otherSource);
+        java.util.concurrent.atomic.AtomicBoolean committed = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable concurrentWrite = () -> {
+            if (committed.compareAndSet(false, true)) {
+                other.update("INSERT INTO concurrent_write VALUES(1)");
+            }
+        };
+        // 确定性重现：另一连接在旧实现读完身份后、首次写入前提交。
+        JdbcTemplate interleaved = new JdbcTemplate(jdbc.getDataSource()) {
+            @Override
+            public <T> java.util.List<T> queryForList(String sql, Class<T> type, Object... args) {
+                java.util.List<T> rows = super.queryForList(sql, type, args);
+                if (sql.startsWith("SELECT source_identity")) {
+                    concurrentWrite.run();
+                }
+                return rows;
+            }
+
+            @Override
+            public int update(String sql, Object... args) {
+                if (sql.startsWith("INSERT INTO investment_reaction_source(")) {
+                    concurrentWrite.run();
+                }
+                return super.update(sql, args);
+            }
+        };
+        ReflectionTestUtils.setField(repository, "jdbcTemplate", interleaved);
+        ReactionSample proposed = sample();
+        proposed.setPublishedAt(now);
+        proposed.setSourceIdentity("EVENT:concurrent");
+        proposed.setSourceOriginType("NEWS_ITEM");
+        proposed.setSourceOriginKey("concurrent-news");
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(
+                new DataSourceTransactionManager(jdbc.getDataSource()));
+
+        assertEquals(Boolean.TRUE, transaction.execute(status -> repository.captureSource(proposed)));
+        assertTrue(committed.get());
+        assertEquals(1, other.queryForObject("SELECT COUNT(*) FROM concurrent_write", Integer.class));
+        assertEquals(1, repository.findByIdentity("EVENT:concurrent").size());
+        assertEquals(1, repository.sourceVersions("EVENT:concurrent").size());
+        assertEquals(Boolean.FALSE, transaction.execute(status -> repository.captureSource(proposed)));
+        assertEquals(1, repository.sourceVersions("EVENT:concurrent").size());
+    }
+
+    @Test
     void migrationAndRegistrationAreIdempotentAndKeepOriginalSource() {
         ReactionSample first = repository.create(sample());
         ReactionSample duplicate = sample();
