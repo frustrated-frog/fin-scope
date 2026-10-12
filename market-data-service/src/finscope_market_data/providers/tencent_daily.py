@@ -24,10 +24,11 @@ class TencentDailyBarProvider:
         "https://ifzq.gtimg.cn/appstock/app/newfqkline/get",
     )
 
-    def __init__(self, http=None, adjustment=None, *, today=None):
+    def __init__(self, http=None, adjustment=None, *, today=None, now=None):
         self.http = http or ProviderHttpClient(minimum_interval_seconds=0.15)
         self.adjustment = adjustment or DailyAdjustmentService()
-        self.today = today or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")).date())
+        self.now = now or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
+        self.today = today or (lambda: self.now().date())
 
     def supports(self, capability, symbol):
         return capability is DataCapability.DAILY_BARS and symbol.market.value in {"SH", "SZ"}
@@ -37,6 +38,13 @@ class TencentDailyBarProvider:
             raise ProviderError("UNSUPPORTED_MARKET", "腾讯历史日线暂不支持该市场", False)
         limit = min(max(int(kwargs.get("limit", 250)), 1), 5000)
         end = self.today()
+        local_now = self.now().astimezone(ZoneInfo("Asia/Shanghai"))
+        include_current = kwargs.get("include_current")
+        if include_current is None:
+            include_current = symbol.is_market_pulse_index
+        intraday = local_now.date() == end and local_now.hour * 60 + local_now.minute < 15 * 60 + 15
+        if intraday and not include_current:
+            end -= timedelta(days=1)
         bars = {}
         # A bounded backward cursor avoids downloading overlapping years twice.
         for _ in range(9):
@@ -61,6 +69,9 @@ class TencentDailyBarProvider:
         if not bars:
             raise ProviderError("EMPTY_DATA", "腾讯日线为空", True)
         result = sorted(bars.values(), key=lambda bar: bar.trade_date)[-limit:]
+        if intraday:
+            result = [bar.model_copy(update={"is_complete": False})
+                      if bar.trade_date == self.today().isoformat() else bar for bar in result]
         if symbol.is_market_pulse_index:
             return [bar.model_copy(update={"adjustment": "QFQ"}) for bar in result]
         return await self.adjustment.adjust(symbol, result)
@@ -112,6 +123,8 @@ class TencentDailyBarProvider:
 
     def warnings_for(self, capability, symbol, data):
         warnings = [] if symbol.is_market_pulse_index else ["前复权价格使用腾讯原始日线与新浪比例复权因子"]
+        if any(not bar.is_complete for bar in data):
+            warnings.append("当日日线尚未收盘，当前结果包含明确标记的盘中截面")
         if any(bar.amount is None for bar in data):
             warnings.append("部分日线缺少真实成交额，价格与成交量仍可展示")
         return warnings

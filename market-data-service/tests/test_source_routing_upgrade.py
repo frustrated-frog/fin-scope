@@ -170,3 +170,21 @@ async def test_hanging_primary_does_not_consume_backup_time_budget(tmp_path):
                           request_budget_seconds=0.08,provider_timeout_seconds=2,max_retries=0)
     result=await router.fetch(DataCapability.QUOTE,SYMBOL)
     assert result.source_code == 'B'
+
+
+def test_partial_daily_cache_expires_at_close_and_asof_is_not_future(tmp_path):
+    from finscope_market_data.models import DailyBar
+    from zoneinfo import ZoneInfo
+    now=datetime(2026,10,12,10,30,tzinfo=ZoneInfo('Asia/Shanghai'))
+    symbol=StockSymbol(market='SH',code='000300')
+    bars=[DailyBar(symbol=symbol,trade_date='2026-10-12',open=10,high=11,low=9,close=10,
+                   volume=1,is_complete=False)]
+    store=SnapshotStore(tmp_path/'a.db')
+    store.save(DataEnvelope(capability=DataCapability.DAILY_BARS,symbol=symbol,
+        quality_status=QualityStatus.PARTIAL_FRESH,source_family='TENCENT',retrieved_at=now,
+        coverage_limit=250,data=bars))
+    router=ProviderRouter([],store,ProviderHealthRegistry(),now_provider=lambda:now)
+    assert router._fresh_daily_bar_snapshot(symbol,1) is not None
+    assert router._as_of(bars,now) == now
+    router._now_provider=lambda:datetime(2026,10,12,15,20,tzinfo=ZoneInfo('Asia/Shanghai'))
+    assert router._fresh_daily_bar_snapshot(symbol,1) is None

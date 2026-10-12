@@ -183,3 +183,25 @@ async def test_baostock_cancellation_does_not_leave_worker_running(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert process.killed and process.reaped
+
+
+@pytest.mark.asyncio
+async def test_intraday_stock_history_uses_closed_bars_while_index_preserves_live_context():
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    class Http:
+        async def get_json(self,code,url,**kwargs):
+            symbol,_,_,end,*_=kwargs['params']['param'].split(',')
+            day=date.fromisoformat(end)
+            while day.weekday() >= 5:
+                day -= timedelta(days=1)
+            return {'code':0,'data':{symbol:{'day':[[str(day),'10','11','12','9','1',{},'0','1']]}}}
+    class Adjustment:
+        async def adjust(self,symbol,bars): return [bar.model_copy(update={'adjustment':'QFQ'}) for bar in bars]
+    provider=TencentDailyBarProvider(Http(),Adjustment(),now=lambda:datetime(2026,10,12,10,30,tzinfo=ZoneInfo('Asia/Shanghai')))
+    stock=await provider.fetch(DataCapability.DAILY_BARS,SYMBOL,limit=1)
+    index=await provider.fetch(DataCapability.DAILY_BARS,StockSymbol(market='SH',code='000300'),limit=1)
+    assert stock[0].trade_date == '2026-10-09'
+    assert stock[0].is_complete
+    assert index[0].trade_date == '2026-10-12'
+    assert not index[0].is_complete

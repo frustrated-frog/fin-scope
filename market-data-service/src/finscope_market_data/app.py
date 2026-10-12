@@ -568,6 +568,7 @@ def create_app(
         code: str,
         limit: int = Query(default=250, ge=1, le=5000),
         refresh: bool = Query(default=False),
+        include_current: bool | None = Query(default=None),
     ):
         return _response(
             await _fetch(
@@ -577,6 +578,7 @@ def create_app(
                 code,
                 limit=limit,
                 force_refresh=refresh,
+                include_current=include_current,
             )
         )
 

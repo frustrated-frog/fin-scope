@@ -110,14 +110,14 @@ class ProviderRouter:
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         if not force_refresh:
-            cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family)
+            cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family, kwargs.get("include_current"))
             if cached is not None:
                 return self._slice_daily_bars(cached, requested_limit)
 
         lock = self._daily_bar_locks.setdefault(symbol.cache_key, asyncio.Lock())
         async with lock:
             if not force_refresh:
-                cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family)
+                cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family, kwargs.get("include_current"))
                 if cached is not None:
                     return self._slice_daily_bars(cached, requested_limit)
             result = await self._fetch_online(
@@ -213,6 +213,8 @@ class ProviderRouter:
                         warnings = ["首选数据源不可用，已自动使用备用数据源", *warnings]
                     quality = QualityStatus.FRESH_PRIMARY if is_primary else QualityStatus.FRESH_FALLBACK
                     if isinstance(data, FinancialStatementsData) and len([statement for statement in data.statements if statement.values]) < 3:
+                        quality = QualityStatus.PARTIAL_FRESH
+                    if capability is DataCapability.DAILY_BARS and any(not bar.is_complete for bar in data):
                         quality = QualityStatus.PARTIAL_FRESH
                     if isinstance(data, CapitalFlowData):
                         warnings = [*warnings, *data.warnings]
@@ -338,6 +340,7 @@ class ProviderRouter:
         symbol: StockSymbol,
         requested_limit: int,
         provider_family: str | None = None,
+        include_current: bool | None = None,
     ) -> DataEnvelope[Any] | None:
         stored = self.snapshots.load(DataCapability.DAILY_BARS, symbol)
         if stored is None or not isinstance(stored.data, list) or not stored.data:
@@ -348,6 +351,12 @@ class ProviderRouter:
             return None
         now = self._now()
         age_seconds = max(0, int((now - stored.retrieved_at).total_seconds()))
+        if any(not bar.is_complete for bar in stored.data):
+            allowed = symbol.is_market_pulse_index if include_current is None else include_current
+            local = now.astimezone(ZoneInfo("Asia/Shanghai"))
+            if (not allowed or local.hour * 60 + local.minute >= 15 * 60 + 15 or age_seconds > 60
+                    or max(bar.trade_date for bar in stored.data) != local.date().isoformat()):
+                return None
         try:
             latest_trade_date = max(date.fromisoformat(item.trade_date) for item in stored.data)
         except (AttributeError, TypeError, ValueError):
@@ -405,9 +414,6 @@ class ProviderRouter:
             return max(item.observed_at for item in data)
         if isinstance(data, list) and data and all(isinstance(item, DailyBar) for item in data):
             last_trade_date = max(date.fromisoformat(item.trade_date) for item in data)
-            return datetime.combine(
-                last_trade_date,
-                time(hour=15),
-                tzinfo=ZoneInfo("Asia/Shanghai"),
-            )
+            close_time = datetime.combine(last_trade_date, time(hour=15), tzinfo=ZoneInfo("Asia/Shanghai"))
+            return min(close_time, fallback) if any(not bar.is_complete for bar in data) else close_time
         return fallback

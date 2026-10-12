@@ -48,6 +48,8 @@ class TencentMinuteBarProvider:
         result = {}
         for row in rows:
             try:
+                if not isinstance(row, list) or len(row) < 6:
+                    raise ValueError('minute row layout')
                 stamp = datetime.strptime(row[0],'%Y%m%d%H%M').replace(tzinfo=ZoneInfo('Asia/Shanghai'))
                 opening,close,high,low,volume = [float(value) for value in row[1:6]]
                 if not all(math.isfinite(value) for value in (opening,close,high,low,volume)):

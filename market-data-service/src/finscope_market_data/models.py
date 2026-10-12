@@ -247,6 +247,7 @@ class DailyBar(BaseModel):
     change: float | None = None
     turnover_rate: float | None = None
     adjustment: Literal["QFQ", "NONE"] = "NONE"
+    is_complete: bool = True
 
 
 class MinutePriceBar(BaseModel):

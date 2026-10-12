@@ -92,6 +92,10 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
                 throw contract("UNSUPPORTED_ADJUSTMENT",
                         "quant research requires QFQ adjusted daily bars", false);
             }
+            if (row.has("is_complete") && !row.path("is_complete").asBoolean()
+                    && !isMarketIndex(instrumentCode)) {
+                throw contract("INCOMPLETE_DAILY_BAR", "stock research requires completed daily bars", false);
+            }
             LocalDate tradeDate = tradeDate(row);
             if (lastTradeDate == null || tradeDate.isAfter(lastTradeDate)) {
                 lastTradeDate = tradeDate;

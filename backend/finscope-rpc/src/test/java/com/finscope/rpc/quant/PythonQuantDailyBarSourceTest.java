@@ -145,6 +145,15 @@ class PythonQuantDailyBarSourceTest {
         org.junit.jupiter.api.Assertions.assertNull(index.getBars().get(0).getAmount());
     }
 
+    @Test
+    void incompleteStockDailyBarIsExcludedFromResearch() {
+        String incomplete = payload("QFQ", "FRESH_PRIMARY").replace("\"adjustment\":\"QFQ\"", "\"adjustment\":\"QFQ\",\"is_complete\":false");
+        ProviderContractException error = assertThrows(ProviderContractException.class,
+                () -> source("http://localhost:8000", (code, uri, headers) -> response(incomplete))
+                        .fetch("600519.SH", 180));
+        assertEquals("INCOMPLETE_DAILY_BAR", error.getErrorType());
+    }
+
     private static PythonQuantDailyBarSource source(String baseUrl, FinanceHttpClient http) {
         PythonQuantDailyBarSource source = new PythonQuantDailyBarSource();
         org.springframework.test.util.ReflectionTestUtils.setField(source, "baseUrl", baseUrl);

@@ -74,9 +74,15 @@ class SinaFinancialStatementsProvider:
             if selected is None:
                 warnings.append(f'{statement_type.value} 报告期 {requested} 暂缺')
                 continue
-            if selected.get('rType') != '合并期末' or selected.get('rCurrency') != 'CNY':
-                raise ProviderError('REPORT_SCOPE_MISMATCH','新浪财报合并口径或币种不匹配',False)
-            values = self.parse_values(selected,statement_type)
+            if (not isinstance(selected, dict) or selected.get('rType') != '合并期末'
+                    or selected.get('rCurrency') != 'CNY'):
+                warnings.append(f'{statement_type.value} 口径、币种或结构不匹配，已保留其他有效报表')
+                continue
+            try:
+                values = self.parse_values(selected,statement_type)
+            except ProviderError as error:
+                warnings.append(f'{statement_type.value} 科目暂不可用：{error.error_type}')
+                continue
             if not values:
                 warnings.append(f'{statement_type.value} 尚无有效数值')
                 continue
@@ -103,6 +109,8 @@ class SinaFinancialStatementsProvider:
             raise ProviderError('SCHEMA_DRIFT','新浪财报科目列表缺失',False)
         result = []
         for row in rows:
+            if not isinstance(row, dict):
+                raise ProviderError('SCHEMA_DRIFT', '新浪财报科目结构无效', False)
             label = row.get('item_title')
             raw = row.get('item_value')
             if not label or raw in (None,'','--','-'):

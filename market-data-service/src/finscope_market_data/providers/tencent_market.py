@@ -67,6 +67,8 @@ class TencentMarketSnapshotService:
             raise ValueError('directory layout')
         grouped = {}
         for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError('directory entry layout')
             code = entry.get('code','')
             if entry.get('category') != 'A股' or not re.fullmatch(r'\d{6}',code):
                 continue
