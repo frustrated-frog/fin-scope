@@ -36,6 +36,7 @@ class MarketBreadthService:
         today_provider: Callable[[], date] | None = None,
         snapshot_store: SnapshotStore | None = None,
         calendar_loader: CalendarLoader | None = None,
+        tdx_loader: Callable[[date], Any] | None = None,
     ) -> None:
         self._eastmoney_loader = eastmoney_loader or self._load_eastmoney
         self._sina_loader = sina_loader or self._load_sina
@@ -45,12 +46,26 @@ class MarketBreadthService:
         self._today_provider = today_provider or (lambda: _shanghai_now().date())
         self._snapshot_store = snapshot_store
         self._calendar_loader = calendar_loader or self._load_calendar
+        self._tdx_loader = tdx_loader
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
         today = self._today_provider()
         frozen = None
         if self._snapshot_store is not None:
             frozen = self._snapshot_store.load_market_breadth(business_date.isoformat())
+        official_warning = None
+        local_now = self._now_provider()
+        if (self._tdx_loader is not None and business_date <= today
+                and (business_date < today or local_now.hour >= 16)):
+            if frozen is not None and frozen.source_family == "TDX":
+                return frozen
+            try:
+                result = self._fetch_official(business_date)
+                if self._snapshot_store is not None:
+                    self._snapshot_store.save_market_breadth(result)
+                return result
+            except Exception as error:
+                official_warning = "通达信盘后包暂不可用，继续使用在线来源：" + _message(error)
         latest_trade_date = self.latest_trade_date()
         if business_date != latest_trade_date:
             if frozen is not None:
@@ -62,6 +77,8 @@ class MarketBreadthService:
             return frozen
         try:
             result = self._fetch_online(business_date)
+            if official_warning:
+                result.warnings.append(official_warning)
             if self._snapshot_store is not None:
                 self._snapshot_store.save_market_breadth(result)
             return result
@@ -84,6 +101,32 @@ class MarketBreadthService:
                     ],
                 }
             )
+
+    def _fetch_official(self, business_date: date) -> MarketBreadthSnapshot:
+        records = self._tdx_loader(business_date)
+        rows = [(record.change_pct, record.amount) for record in records
+                if record.is_a_share and record.business_date == business_date
+                and record.change_pct is not None]
+        if not rows:
+            raise RuntimeError("通达信盘后包没有可计算的 A 股记录")
+        warnings = ["市场截面来自官方盘后包；新上市且没有有效昨收的股票不参与涨跌统计"]
+        limit_up = self._pool_count(self._limit_up_loader, business_date, "涨停池", warnings)
+        limit_down = self._pool_count(self._limit_down_loader, business_date, "跌停池", warnings)
+        changes = [row[0] for row in rows]
+        advance = sum(value > 0 for value in changes)
+        decline = sum(value < 0 for value in changes)
+        result = MarketBreadthSnapshot(
+            business_date=business_date.isoformat(), source_code="TDX_OFFICIAL_DAILY_PACKAGE",
+            source_family="TDX", quality_status=(QualityStatus.FRESH_PRIMARY
+                if limit_up is not None and limit_down is not None else QualityStatus.PARTIAL_FRESH),
+            retrieved_at=self._now_provider(), advance_count=advance, decline_count=decline,
+            flat_count=len(rows)-advance-decline, valid_count=len(rows), advance_ratio=advance/len(rows),
+            total_amount=sum(row[1] for row in rows), limit_up_count=limit_up, limit_down_count=limit_down,
+            median_change_pct=statistics.median(changes), return_distribution=_return_distribution(changes),
+            volume_pressure=_volume_pressure(rows), warnings=warnings,
+        )
+        self._attach_historical_internals(result, business_date, warnings)
+        return result
 
     def _fetch_historical(self, business_date: date) -> MarketBreadthSnapshot:
         if self._snapshot_store is None:

@@ -75,6 +75,9 @@ from finscope_market_data.providers.index_daily import (
 from finscope_market_data.providers.pytdx_provider import PytdxQuoteProvider
 from finscope_market_data.providers.sina import SinaCapitalFlowProvider, SinaQuoteProvider
 from finscope_market_data.providers.tencent import TencentQuoteProvider
+from finscope_market_data.providers.tdx_package import TdxDailyPackageService
+from finscope_market_data.providers.tencent_daily import TencentDailyBarProvider
+from finscope_market_data.providers.baostock_daily import BaostockDailyBarProvider
 from finscope_market_data.router import ProviderRouter
 from finscope_market_data.settings import Settings
 from finscope_market_data.sectors import TonghuashunSectorService
@@ -89,6 +92,8 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
     configure_direct_market_access()
     config = settings or Settings()
     providers: list[Any] = [
+        TencentDailyBarProvider(),
+        BaostockDailyBarProvider(),
         EastmoneyIndexDailyProvider(),
         SinaIndexDailyProvider(),
         TencentQuoteProvider(),
@@ -139,6 +144,7 @@ def create_app(
     configure_direct_market_access()
     config = settings or Settings()
     panel_store = PanelArtifactStore(config.data_dir / "quant")
+    tdx_packages = TdxDailyPackageService(config.data_dir / "tdx-daily-packages")
     joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
     overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
@@ -191,7 +197,8 @@ def create_app(
             application.state.sector_history = TonghuashunSectorHistoryService()
         if application.state.breadth is None:
             application.state.breadth = MarketBreadthService(
-                snapshot_store=application.state.router.snapshots
+                snapshot_store=application.state.router.snapshots,
+                tdx_loader=tdx_packages.fetch,
             )
         if application.state.market_dumps is None:
             application.state.market_dumps = FuyaoMarketDumpClient(

@@ -46,6 +46,10 @@ class ProviderRouter:
     async def aclose(self) -> None:
         closed: set[int] = set()
         for provider in self.providers:
+            close = getattr(provider, "aclose", None)
+            if callable(close):
+                await close()
+                continue
             client = getattr(provider, "http", None)
             if client is None or not hasattr(client, "aclose") or id(client) in closed:
                 continue
@@ -177,6 +181,10 @@ class ProviderRouter:
                     )
                     now = self._now()
                     is_primary = provider.provider_code == primary_code
+                    provider_warnings = getattr(provider, "warnings_for", None)
+                    warnings = provider_warnings(capability, symbol, data) if callable(provider_warnings) else []
+                    if not is_primary:
+                        warnings = ["首选数据源不可用，已自动使用备用数据源", *warnings]
                     envelope = DataEnvelope[Any](
                         capability=capability,
                         symbol=symbol,
@@ -187,7 +195,7 @@ class ProviderRouter:
                         source_family=provider.provider_family,
                         as_of=self._as_of(data, now),
                         retrieved_at=now,
-                        warnings=([] if is_primary else ["首选数据源不可用，已自动使用备用数据源"]),
+                        warnings=warnings,
                         attempts=attempts,
                         coverage_limit=(
                             int(kwargs["limit"])

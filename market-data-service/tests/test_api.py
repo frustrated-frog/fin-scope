@@ -266,12 +266,12 @@ def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: 
         provider.provider_code
         for provider in disabled.providers
         if provider.supports(DataCapability.DAILY_BARS, stock)
-    ] == []
+    ] == ["TENCENT_DAILY_RATIO_QFQ", "BAOSTOCK_DAILY_QFQ"]
     assert [
         provider.provider_code
         for provider in enabled.providers
         if provider.supports(DataCapability.DAILY_BARS, stock)
-    ] == ["FUYAO_TONGHUASHUN_API"]
+    ] == ["FUYAO_TONGHUASHUN_API", "TENCENT_DAILY_RATIO_QFQ", "BAOSTOCK_DAILY_QFQ"]
     assert [
         provider.provider_code
         for provider in enabled.providers
