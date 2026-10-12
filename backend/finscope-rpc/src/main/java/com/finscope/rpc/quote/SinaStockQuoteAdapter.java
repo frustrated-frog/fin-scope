@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,16 +29,8 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
     private static final int TIMEOUT_MS = 8000;
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.REALTIME_STOCK_QUOTE);
-    private final QuoteHttpTransport httpTransport;
-
-    public SinaStockQuoteAdapter() {
-        this(new QuoteHttpTransport());
-    }
-
     @Autowired
-    public SinaStockQuoteAdapter(QuoteHttpTransport httpTransport) {
-        this.httpTransport = httpTransport;
-    }
+    private QuoteHttpTransport httpTransport;
 
     @Override
     public String providerCode() {
@@ -122,8 +115,8 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
         return "sh" + c;
     }
 
-    private Quote parseLine(String line) {
-        int eq = line.indexOf('=');
+    static Quote parseLine(String line) {
+        int eq = line == null ? -1 : line.indexOf('=');
         if (eq < 0) {
             return null;
         }
@@ -134,10 +127,10 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
             return null;
         }
         String payload = line.substring(firstQuote + 1, lastQuote);
-        String[] fields = payload.split(",");
+        String[] fields = payload.split(",", -1);
         Quote quote = new Quote();
         quote.setInstrumentCode(stripPrefix(symbol));
-        if (fields.length < 4 || payload.trim().isEmpty()) {
+        if (fields.length < 32 || payload.trim().isEmpty()) {
             quote.setValid(false);
             quote.setNote("未取到有效行情");
             return quote;
@@ -173,7 +166,13 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
             quote.setVolume(parseDouble(fields[8]));
             quote.setTurnover(parseDouble(fields[9]));
         }
-        quote.setQuoteTime(LocalDateTime.now());
+        try {
+            quote.setQuoteTime(LocalDateTime.parse(fields[30].trim() + "T" + fields[31].trim()));
+        } catch (DateTimeParseException error) {
+            quote.setValid(false);
+            quote.setNote("行情来源未提供有效时间");
+            return quote;
+        }
         // 现价为 0 通常代表停牌或非交易时段无成交
         quote.setValid(price > 0);
         if (price <= 0) {
@@ -182,7 +181,7 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
         return quote;
     }
 
-    private String extractSymbol(String line, int eq) {
+    private static String extractSymbol(String line, int eq) {
         int idx = line.indexOf("hq_str_");
         if (idx < 0) {
             return "";
@@ -190,7 +189,7 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
         return line.substring(idx + "hq_str_".length(), eq).trim();
     }
 
-    private String stripPrefix(String symbol) {
+    private static String stripPrefix(String symbol) {
         if (symbol.length() > 2
                 && (symbol.startsWith("sh") || symbol.startsWith("sz") || symbol.startsWith("bj"))) {
             return symbol.substring(2);
@@ -204,7 +203,7 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
                 Collections.singletonMap("Referer", "https://finance.sina.com.cn"), GBK);
     }
 
-    private double parseDouble(String value) {
+    private static double parseDouble(String value) {
         try {
             return Double.parseDouble(value.trim());
         } catch (Exception ex) {
@@ -212,7 +211,7 @@ public class SinaStockQuoteAdapter implements QuoteAdapter {
         }
     }
 
-    private double round(double value) {
+    private static double round(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
 }
