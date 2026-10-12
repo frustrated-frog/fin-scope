@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import math
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -155,7 +156,8 @@ class SinaCapitalFlowProvider:
 
 def _number(value: str) -> float | None:
     try:
-        return float(value.strip())
+        number = float(value.strip())
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 
@@ -177,5 +179,5 @@ def _observed_at(date_value: str, time_value: str) -> datetime:
         return datetime.strptime(f"{date_value} {time_value}", "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=ZoneInfo("Asia/Shanghai")
         )
-    except ValueError:
-        return datetime.now(ZoneInfo("Asia/Shanghai"))
+    except ValueError as error:
+        raise ProviderError("SCHEMA_DRIFT", "新浪行情时间缺失或无效", False) from error

@@ -1,6 +1,7 @@
 package com.finscope.service.marketpulse;
 
 import com.finscope.domain.marketpulse.MarketRegimeFeatures;
+import com.finscope.common.enums.marketpulse.MarketLiquidityBasis;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.quant.data.QuantDailyBar;
 import com.finscope.rpc.quant.QuantDailyBarBatch;
@@ -94,7 +95,7 @@ public class MarketPulseFeatureService {
         }
         for (QuantDailyBar bar : batch.getBars()) {
             if (bar.getTradeDate() != null && !bar.getTradeDate().isAfter(businessDate)
-                    && positive(bar.getClose()) && positive(bar.getAmount())) {
+                    && positive(bar.getClose()) && (positive(bar.getAmount()) || positive(bar.getVolume()))) {
                 values.add(bar);
             }
         }
@@ -112,6 +113,13 @@ public class MarketPulseFeatureService {
         features.setVolatility20(volatility(bars, last, 20));
         features.setMaxDrawdown20(maxDrawdown(bars, last, 20));
         features.setAmountRatio5To20(amountRatio(bars, last));
+        boolean hasAmounts = true;
+        for (int index = last - 19; index <= last; index++) {
+            if (!positive(bars.get(index).getAmount())) {
+                hasAmounts = false;
+            }
+        }
+        features.setLiquidityBasis(hasAmounts ? MarketLiquidityBasis.AMOUNT : MarketLiquidityBasis.VOLUME_PROXY);
     }
 
     private double returnBetween(List<QuantDailyBar> bars, int start, int end) {
@@ -156,17 +164,24 @@ public class MarketPulseFeatureService {
         return drawdown;
     }
 
-    private double amountRatio(List<QuantDailyBar> bars, int last) {
+    private Double amountRatio(List<QuantDailyBar> bars, int last) {
+        boolean hasAmounts = true;
+        for (int index = last - 19; index <= last; index++) {
+            if (!positive(bars.get(index).getAmount())) {
+                hasAmounts = false;
+            }
+        }
         double amount5 = 0D;
         double amount20 = 0D;
         for (int index = last - 19; index <= last; index++) {
-            double amount = bars.get(index).getAmount().doubleValue();
+            BigDecimal activity = hasAmounts ? bars.get(index).getAmount() : bars.get(index).getVolume();
+            double amount = activity == null ? 0D : activity.doubleValue();
             amount20 += amount;
             if (index >= last - 4) {
                 amount5 += amount;
             }
         }
-        return (amount5 / 5D) / (amount20 / 20D);
+        return amount20 > 0D ? (amount5 / 5D) / (amount20 / 20D) : null;
     }
 
     private String fingerprint(QuantDailyBarBatch batch, List<QuantDailyBar> bars) {

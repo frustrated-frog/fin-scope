@@ -379,7 +379,9 @@ public class MarketDataGateway {
         Long runId = createAudit(capability, instrument.getId() + ":" + asOfDate, startedAt);
         List<CapitalFlowProvider> candidates = new ArrayList<CapitalFlowProvider>();
         for (CapitalFlowProvider provider : capitalFlowProviders) {
-            if (provider.supports(instrument)) candidates.add(provider);
+            if (provider.supports(instrument)) {
+                candidates.add(provider);
+            }
         }
         List<CapitalFlowProvider> ordered = routePolicy.order(candidates, capability);
         String primaryCode = ordered.isEmpty() ? null : ordered.get(0).providerCode();
@@ -410,14 +412,18 @@ public class MarketDataGateway {
                 boolean fallback = primaryCode != null && !primaryCode.equals(provider.providerCode());
                 MarketDataQualityStatus status = fallback
                         ? MarketDataQualityStatus.FRESH_FALLBACK : MarketDataQualityStatus.FRESH_PRIMARY;
+                if (fetched.getData().getQualityStatus() != null) {
+                    status = fetched.getData().getQualityStatus();
+                }
                 String warning = joinWarnings(fetched.getWarnings());
                 if (fetched.getData().getMinutePoints().isEmpty()) {
                     warning = appendWarning("分钟资金流暂不可用，当前使用日级资金数据。", warning);
                 }
-                if (fallback) warning = appendWarning(
-                        "主资金流数据源不可用，系统已自动切换备用数据源。", warning);
+                if (fallback) {
+                    warning = appendWarning("主资金流数据源不可用，系统已自动切换备用数据源。", warning);
+                }
                 CapitalFlowGatewayResult result = new CapitalFlowGatewayResult(fetched.getData(), status,
-                        provider.providerCode(), fetched.getRetrievedAt(), warning, null, refreshId);
+                        fetched.getData().getProviderCode(), fetched.getRetrievedAt(), warning, null, refreshId);
                 finishCapitalAudit(runId, result, attemptedSources, fetched.getData().allPoints().size());
                 return result;
             } catch (RuntimeException error) {

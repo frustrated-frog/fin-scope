@@ -75,6 +75,9 @@ from finscope_market_data.providers.index_daily import (
 from finscope_market_data.providers.pytdx_provider import PytdxQuoteProvider
 from finscope_market_data.providers.sina import SinaCapitalFlowProvider, SinaQuoteProvider
 from finscope_market_data.providers.tencent import TencentQuoteProvider
+from finscope_market_data.providers.tencent_minutes import TencentMinuteBarProvider
+from finscope_market_data.providers.tencent_market import TencentMarketSnapshotService
+from finscope_market_data.providers.sina_financials import SinaFinancialStatementsProvider
 from finscope_market_data.providers.tdx_package import TdxDailyPackageService
 from finscope_market_data.providers.tencent_daily import TencentDailyBarProvider
 from finscope_market_data.providers.baostock_daily import BaostockDailyBarProvider
@@ -93,7 +96,9 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
     config = settings or Settings()
     providers: list[Any] = [
         TencentDailyBarProvider(),
+        TencentMinuteBarProvider(),
         BaostockDailyBarProvider(),
+        SinaFinancialStatementsProvider(),
         EastmoneyIndexDailyProvider(),
         SinaIndexDailyProvider(),
         TencentQuoteProvider(),
@@ -129,6 +134,8 @@ def build_router(settings: Settings | None = None) -> ProviderRouter:
         max_retries=config.max_retries,
         retry_delay_seconds=config.retry_delay_seconds,
         daily_bar_retry_cooldown_seconds=config.daily_bar_retry_cooldown_seconds,
+        request_budget_seconds=config.request_budget_seconds,
+        provider_timeout_seconds=config.provider_timeout_seconds,
     )
 
 
@@ -145,6 +152,8 @@ def create_app(
     config = settings or Settings()
     panel_store = PanelArtifactStore(config.data_dir / "quant")
     tdx_packages = TdxDailyPackageService(config.data_dir / "tdx-daily-packages")
+    tencent_market = TencentMarketSnapshotService(config.data_dir / "official-stock-directory.json",
+                                                 universe_loader=tdx_packages.active_symbols)
     joint_store = JointSnapshotStore(config.data_dir / "quant" / "next-session-joint.json")
     overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
@@ -199,6 +208,7 @@ def create_app(
             application.state.breadth = MarketBreadthService(
                 snapshot_store=application.state.router.snapshots,
                 tdx_loader=tdx_packages.fetch,
+                tencent_loader=tencent_market.fetch,
             )
         if application.state.market_dumps is None:
             application.state.market_dumps = FuyaoMarketDumpClient(
@@ -569,6 +579,13 @@ def create_app(
                 force_refresh=refresh,
             )
         )
+
+    @application.get("/v1/stocks/{market}/{code}/minute-bars")
+    async def minute_bars(market: str, code: str,
+                          frequency: Literal[1, 5, 15, 30, 60] = Query(default=5),
+                          limit: int = Query(default=240, ge=1, le=320)):
+        return _response(await _fetch(application, DataCapability.MINUTE_BARS, market, code,
+                                      frequency=frequency, limit=limit))
 
     @application.get("/v1/stocks/{market}/{code}/capital-flow")
     async def capital_flow(

@@ -69,7 +69,7 @@ class ProviderHttpClient:
                     if remaining > 0:
                         await asyncio.sleep(remaining)
                 self._last_request_started_at = loop.time()
-                response = await self._client.get(url, headers=headers, params=params)
+            response = await self._client.get(url, headers=headers, params=params)
         except httpx.TimeoutException as error:
             raise ProviderError("TIMEOUT", f"{provider_code} request timed out") from error
         except httpx.HTTPError as error:

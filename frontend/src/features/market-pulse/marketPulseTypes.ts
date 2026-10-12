@@ -13,6 +13,7 @@ export type MarketRegimeFeatures = {
   volatility20?: number;
   maxDrawdown20?: number;
   amountRatio5To20?: number;
+  liquidityBasis?: 'AMOUNT' | 'VOLUME_PROXY';
   marketBreadth?: number;
   sectorDispersion?: number;
 };

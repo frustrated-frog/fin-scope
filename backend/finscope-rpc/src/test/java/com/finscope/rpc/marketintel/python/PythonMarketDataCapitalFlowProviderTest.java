@@ -7,6 +7,8 @@ import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 
 import java.math.BigDecimal;
 import java.net.URI;
@@ -27,13 +29,15 @@ class PythonMarketDataCapitalFlowProviderTest {
             return response(freshPayload());
         };
         PythonMarketDataCapitalFlowProvider provider =
-                new PythonMarketDataCapitalFlowProvider("http://127.0.0.1:8000/", http);
+                provider("http://127.0.0.1:8000/", http);
 
         CapitalFlowData data = provider.fetch(stock(), LocalDate.of(2026, 7, 16));
 
         assertEquals("/v1/stocks/SH/600519/capital-flow", requested.get().getPath());
         assertEquals("require_minute=false", requested.get().getQuery());
-        assertEquals("PYTHON_MARKET_DATA", data.getProviderCode());
+        assertEquals("EASTMONEY_DIRECT", data.getProviderCode());
+        assertEquals("EASTMONEY_DIRECT", data.getMinutePoints().get(0).getProviderCode());
+        assertEquals(MarketDataQualityStatus.FRESH_PRIMARY, data.getQualityStatus());
         assertEquals(new BigDecimal("1.53"), data.getTurnoverRate());
         assertEquals(1, data.getMinutePoints().size());
         assertEquals(1, data.getDailyPoints().size());
@@ -49,7 +53,7 @@ class PythonMarketDataCapitalFlowProviderTest {
         FinanceHttpClient http = (provider, uri, headers) -> response(
                 freshPayload().replace("FRESH_PRIMARY", "STALE_FALLBACK"));
         PythonMarketDataCapitalFlowProvider provider =
-                new PythonMarketDataCapitalFlowProvider("http://python-market-data:8000", http);
+                provider("http://python-market-data:8000", http);
 
         ProviderContractException error = assertThrows(ProviderContractException.class,
                 () -> provider.fetch(stock(), LocalDate.of(2026, 7, 16)));
@@ -59,11 +63,33 @@ class PythonMarketDataCapitalFlowProviderTest {
 
     @Test
     void providerAlwaysSupportsAshareStocksWithoutEnableSwitch() {
-        PythonMarketDataCapitalFlowProvider provider = new PythonMarketDataCapitalFlowProvider(
+        PythonMarketDataCapitalFlowProvider provider = provider(
                 "http://127.0.0.1:8000",
                 (providerCode, uri, headers) -> response(freshPayload()));
 
         assertTrue(provider.supports(stock()));
+    }
+
+    private static PythonMarketDataCapitalFlowProvider provider(String baseUrl, FinanceHttpClient http) {
+        PythonMarketDataCapitalFlowProvider provider = new PythonMarketDataCapitalFlowProvider();
+        ReflectionTestUtils.setField(provider, "baseUrl", baseUrl);
+        ReflectionTestUtils.setField(provider, "http", http);
+        return provider;
+    }
+
+    @Test
+    void retainsInnerFallbackQuality() {
+        CapitalFlowData data = provider("http://localhost:8000", (code, uri, headers) ->
+                response(freshPayload().replace("FRESH_PRIMARY", "FRESH_FALLBACK")))
+                .fetch(stock(), LocalDate.of(2026, 7, 16));
+        assertEquals(MarketDataQualityStatus.FRESH_FALLBACK, data.getQualityStatus());
+    }
+
+    @Test
+    void invalidFactTimestampNeverBecomesRetrievalTime() {
+        assertThrows(ProviderContractException.class, () -> provider("http://localhost:8000", (code, uri, headers) ->
+                response(freshPayload().replace("2026-07-16T10:30:00+08:00", "invalid")))
+                .fetch(stock(), LocalDate.of(2026, 7, 16)));
     }
 
     private static Instrument stock() {

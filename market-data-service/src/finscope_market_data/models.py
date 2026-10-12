@@ -16,6 +16,7 @@ class Market(str, Enum):
 class DataCapability(str, Enum):
     QUOTE = "QUOTE"
     DAILY_BARS = "DAILY_BARS"
+    MINUTE_BARS = "MINUTE_BARS"
     CAPITAL_FLOW = "CAPITAL_FLOW"
     PROFILE = "PROFILE"
     FINANCIAL_STATEMENTS = "FINANCIAL_STATEMENTS"
@@ -246,6 +247,19 @@ class DailyBar(BaseModel):
     change: float | None = None
     turnover_rate: float | None = None
     adjustment: Literal["QFQ", "NONE"] = "NONE"
+
+
+class MinutePriceBar(BaseModel):
+    symbol: StockSymbol
+    observed_at: datetime
+    frequency_minutes: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    amount: float | None = None
+    adjustment: Literal["NONE"] = "NONE"
 
 
 class CapitalFlowPoint(BaseModel):

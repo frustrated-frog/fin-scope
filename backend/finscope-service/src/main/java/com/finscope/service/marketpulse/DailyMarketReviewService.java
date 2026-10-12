@@ -10,6 +10,7 @@ import com.finscope.domain.marketpulse.MarketEventConfirmation;
 import com.finscope.domain.marketpulse.MarketIndexPerformance;
 import com.finscope.domain.marketpulse.MarketPulseWorkspace;
 import com.finscope.domain.marketpulse.MarketRegimeFeatures;
+import com.finscope.common.enums.marketpulse.MarketLiquidityBasis;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import com.finscope.domain.marketpulse.SectorRotationItem;
 import org.springframework.stereotype.Service;
@@ -178,7 +179,8 @@ public class DailyMarketReviewService {
         MarketRegimeFeatures features = workspace.getRegime() == null ? null : workspace.getRegime().getFeatures();
         if (features != null && features.getAmountRatio5To20() != null
                 && features.getAmountRatio5To20() < 0.9D) {
-            values.add(String.format(Locale.ROOT, "量能偏弱：5日/20日平均成交额比仅 %.2f",
+            String basis = features.getLiquidityBasis() == MarketLiquidityBasis.VOLUME_PROXY ? "成交量（代理）" : "成交额";
+            values.add(String.format(Locale.ROOT, "量能偏弱：5日/20日平均%s比仅 %.2f", basis,
                     features.getAmountRatio5To20()));
         }
         MarketBreadthSnapshot breadth = workspace.getBreadth();

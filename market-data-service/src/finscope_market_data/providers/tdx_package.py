@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import io
 import math
 import os
@@ -84,6 +84,25 @@ class TdxDailyPackageService:
             finally:
                 temporary.unlink(missing_ok=True)
             return records
+
+    def active_symbols(self, through_date):
+        # Prefer the latest official dated list; first use downloads at most one successful package.
+        now = datetime.now(ZoneInfo('Asia/Shanghai'))
+        end = through_date if through_date < now.date() or now.hour >= 16 else through_date-timedelta(days=1)
+        cached = sorted((path for path in self.cache_dir.glob('*.zip')
+                         if re.fullmatch(r'\d{8}\.zip',path.name) and path.stem <= end.strftime('%Y%m%d')),reverse=True)
+        if cached:
+            day = datetime.strptime(cached[0].stem,'%Y%m%d').date()
+            if (end-day).days <= 14:
+                return [record.symbol for record in self.fetch(day) if record.is_a_share]
+        for offset in range(14):
+            day = end-timedelta(days=offset)
+            try:
+                return [record.symbol for record in self.fetch(day) if record.is_a_share]
+            except ProviderError as error:
+                if error.error_type != 'PACKAGE_NOT_READY':
+                    raise
+        raise ProviderError('DIRECTORY_UNAVAILABLE', '近期官方盘后证券列表暂缺')
 
     def _checked_parse(self, content, business_date):
         records = self.parse(content, business_date)

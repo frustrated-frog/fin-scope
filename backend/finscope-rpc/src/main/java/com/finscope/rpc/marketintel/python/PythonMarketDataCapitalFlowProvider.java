@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketdata.MarketDataCapability;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
@@ -37,29 +38,23 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
     private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
             MarketDataCapability.CAPITAL_FLOW_5M);
 
-    private final String baseUrl;
-    private final FinanceHttpClient http;
+    @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
+    private String baseUrl;
+    @Autowired
+    private FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
 
-    @Autowired
-    public PythonMarketDataCapitalFlowProvider(
-            FinanceHttpClient http,
-            @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl) {
-        this(baseUrl, http);
-    }
-
-    PythonMarketDataCapitalFlowProvider(String baseUrl, FinanceHttpClient http) {
-        this.baseUrl = trimTrailingSlash(baseUrl);
-        this.http = http;
-    }
-
     private static BigDecimal decimal(JsonNode node) {
-        if (node == null || node.isNull() || !node.isNumber()) return null;
+        if (node == null || node.isNull() || !node.isNumber()) {
+            return null;
+        }
         return node.decimalValue();
     }
 
     private static String text(JsonNode node, String field) {
-        if (node == null) return null;
+        if (node == null) {
+            return null;
+        }
         JsonNode value = node.get(field);
         return value == null || value.isNull() || !value.isValueNode() ? null : value.asText();
     }
@@ -70,16 +65,20 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
     }
 
     private static void appendWarnings(List<String> target, JsonNode values) {
-        if (!values.isArray()) return;
+        if (!values.isArray()) {
+            return;
+        }
         for (JsonNode value : values) {
-            if (value.isTextual() && !value.asText().trim().isEmpty()) target.add(value.asText());
+            if (value.isTextual() && !value.asText().trim().isEmpty()) {
+                target.add(value.asText());
+            }
         }
     }
 
     private static LocalDateTime parseTime(String value, Instant fallback) {
         if (value != null && !value.trim().isEmpty()) {
             try {
-                return OffsetDateTime.parse(value).toLocalDateTime();
+                return OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.of("Asia/Shanghai")).toLocalDateTime();
             } catch (DateTimeParseException ignored) {
                 try {
                     return LocalDateTime.parse(value);
@@ -88,13 +87,17 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                 }
             }
         }
-        return LocalDateTime.ofInstant(fallback, ZoneId.systemDefault());
+        return LocalDateTime.ofInstant(fallback, ZoneId.of("Asia/Shanghai"));
     }
 
     private static String trimTrailingSlash(String value) {
-        if (value == null || value.trim().isEmpty()) return "http://127.0.0.1:8000";
+        if (value == null || value.trim().isEmpty()) {
+            return "http://127.0.0.1:8000";
+        }
         String normalized = value.trim();
-        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
         return normalized;
     }
 
@@ -152,7 +155,7 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                     "Python market data provider does not support this instrument",
                     false);
         }
-        URI uri = URI.create(baseUrl + "/v1/stocks/" + instrument.getMarket() + "/"
+        URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/stocks/" + instrument.getMarket() + "/"
                 + instrument.getCode() + "/capital-flow?require_minute=false");
         try {
             FinanceHttpResponse response = http.get(providerCode(), uri, Collections.<String, String>emptyMap());
@@ -183,10 +186,11 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
         }
         boolean stale = false;
         LocalDateTime retrievedAt = parseTime(text(root, "retrieved_at"), response.getRetrievedAt());
+        String source = defaultText(root, "source_code", providerCode());
         List<CapitalFlowPoint> minutePoints = parsePoints(
-                data.path("minute_points"), instrument, response, retrievedAt, stale);
+                data.path("minute_points"), instrument, response, retrievedAt, stale, source);
         List<CapitalFlowPoint> dailyPoints = parsePoints(
-                data.path("daily_points"), instrument, response, retrievedAt, stale);
+                data.path("daily_points"), instrument, response, retrievedAt, stale, source);
         if (minutePoints.isEmpty() && dailyPoints.isEmpty()) {
             throw new ProviderContractException(
                     "EMPTY_CAPITAL_FLOW", "Python market data service returned no capital flow points", true);
@@ -194,9 +198,7 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
         List<String> warnings = new ArrayList<String>();
         appendWarnings(warnings, root.path("warnings"));
         appendWarnings(warnings, data.path("warnings"));
-        String source = text(root, "source_code");
-        if (source != null) warnings.add("source:" + source);
-        if (stale) warnings.add("PYTHON_STALE_FALLBACK");
+        warnings.add("source:" + source);
         if ("FRESH_FALLBACK".equals(quality)) {
             warnings.add("PYTHON_SOURCE_FALLBACK");
         }
@@ -206,14 +208,20 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                 decimal(data.get("turnover_rate")),
                 decimal(data.get("volume_ratio")),
                 warnings,
-                providerCode());
+                source,
+                minutePoints.isEmpty() || "PARTIAL_FRESH".equals(quality)
+                        ? MarketDataQualityStatus.PARTIAL_FRESH
+                        : ("FRESH_FALLBACK".equals(quality) ? MarketDataQualityStatus.FRESH_FALLBACK
+                        : MarketDataQualityStatus.FRESH_PRIMARY));
     }
 
     private List<CapitalFlowPoint> parsePoints(JsonNode nodes, Instrument instrument,
                                                FinanceHttpResponse response,
                                                LocalDateTime retrievedAt,
-                                               boolean stale) {
-        if (!nodes.isArray()) return Collections.emptyList();
+                                               boolean stale, String source) {
+        if (!nodes.isArray()) {
+            return Collections.emptyList();
+        }
         List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>();
         for (JsonNode node : nodes) {
             String observedText = text(node, "observed_at");
@@ -221,10 +229,15 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
                 throw new ProviderContractException(
                         "PYTHON_SCHEMA_DRIFT", "capital flow point has no observed_at", false);
             }
-            LocalDateTime observedAt = parseTime(observedText, response.getRetrievedAt());
+            LocalDateTime observedAt;
+            try {
+                observedAt = OffsetDateTime.parse(observedText).atZoneSameInstant(ZoneId.of("Asia/Shanghai")).toLocalDateTime();
+            } catch (DateTimeParseException error) {
+                throw new ProviderContractException("PYTHON_SCHEMA_DRIFT", "资金流来源时间无效", false, error);
+            }
             CapitalFlowPoint point = new CapitalFlowPoint();
             point.setInstrumentId(instrument.getId());
-            point.setProviderCode(providerCode());
+            point.setProviderCode(source);
             point.setGranularity(text(node, "granularity"));
             point.setObservedAt(observedAt);
             point.setDataDate(observedAt.toLocalDate());

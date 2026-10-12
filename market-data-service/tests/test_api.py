@@ -276,7 +276,7 @@ def test_fuyao_provider_is_registered_only_when_api_key_is_configured(tmp_path: 
         provider.provider_code
         for provider in enabled.providers
         if provider.supports(DataCapability.FINANCIAL_STATEMENTS, stock)
-    ] == ["FUYAO_TONGHUASHUN_API"]
+    ] == ["FUYAO_TONGHUASHUN_API", "SINA_FINANCIAL_STATEMENTS"]
     assert [
         provider.provider_code
         for provider in enabled.providers

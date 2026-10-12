@@ -1,6 +1,7 @@
 package com.finscope.domain.marketpulse;
 
 import lombok.Data;
+import com.finscope.common.enums.marketpulse.MarketLiquidityBasis;
 
 @Data
 public class MarketRegimeFeatures {
@@ -12,6 +13,7 @@ public class MarketRegimeFeatures {
     private Double volatility20;
     private Double maxDrawdown20;
     private Double amountRatio5To20;
+    private MarketLiquidityBasis liquidityBasis;
     private Double marketBreadth;
     private Double growthRelativeReturn5d;
     private Double sectorDispersion;

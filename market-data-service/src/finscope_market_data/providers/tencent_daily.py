@@ -16,6 +16,8 @@ class TencentDailyBarProvider:
     provider_code = "TENCENT_DAILY_RATIO_QFQ"
     provider_family = "TENCENT"
     priority = 4
+    timeout_seconds = 25
+    max_retries = 0
     capabilities = {DataCapability.DAILY_BARS}
     endpoints = (
         "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkline/get",

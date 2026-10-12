@@ -215,7 +215,7 @@ async def test_capital_flow_falls_back_to_independent_daily_source_without_minut
         require_minute=False,
     )
 
-    assert result.quality_status is QualityStatus.FRESH_FALLBACK
+    assert result.quality_status is QualityStatus.PARTIAL_FRESH
     assert result.source_code == "SINA_CAPITAL_FLOW"
     assert result.source_family == "SINA"
     assert len(result.data.daily_points) == 1
@@ -371,7 +371,7 @@ def test_health_circuit_is_isolated_by_provider_capability() -> None:
 
 
 @pytest.mark.asyncio
-async def test_router_serializes_requests_within_same_provider_family(tmp_path: Path) -> None:
+async def test_router_isolates_capabilities_within_same_provider_family(tmp_path: Path) -> None:
     symbol = StockSymbol(market="SH", code="600519")
 
     class FamilyProvider:
@@ -409,7 +409,7 @@ async def test_router_serializes_requests_within_same_provider_family(tmp_path: 
         service.fetch(DataCapability.PROFILE, symbol),
     )
 
-    assert provider.max_active == 1
+    assert provider.max_active == 2
 
 
 @pytest.mark.asyncio

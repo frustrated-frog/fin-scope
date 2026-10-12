@@ -99,6 +99,27 @@ class MarketPulseFeatureServiceTest {
         assertEquals(LocalDate.of(2026, 8, 21), result.get(4));
     }
 
+    @Test
+    void keepsPriceFeaturesWhenIndexHasVolumeButNoAmount() {
+        QuantDailyBarSource source = mock(QuantDailyBarSource.class);
+        LocalDate businessDate = LocalDate.of(2026, 8, 21);
+        QuantDailyBarBatch input = batch(businessDate);
+        for (QuantDailyBar bar : input.getBars()) {
+            bar.setAmount(null);
+            bar.setVolume(BigDecimal.valueOf(1000));
+        }
+        when(source.fetch("000300.SH", 180)).thenReturn(input);
+        MarketPulseFeatureService service = new MarketPulseFeatureService();
+        ReflectionTestUtils.setField(service, "dailyBarSource", source);
+        ReflectionTestUtils.setField(service, "classifier", new MarketRegimeClassifier());
+        MarketRegimeSnapshot result = service.calculate(businessDate, 0.028D);
+        assertNotNull(result.getFeatures().getReturn20d());
+        assertEquals(1D, result.getFeatures().getAmountRatio5To20());
+        assertEquals(com.finscope.common.enums.marketpulse.MarketLiquidityBasis.VOLUME_PROXY,
+                result.getFeatures().getLiquidityBasis());
+        org.junit.jupiter.api.Assertions.assertTrue(result.getEvidence().stream().anyMatch(value -> value.contains("代理")));
+    }
+
     private QuantDailyBarBatch batch(LocalDate businessDate) {
         List<QuantDailyBar> bars = new ArrayList<>();
         for (int index = 79; index >= 0; index--) {

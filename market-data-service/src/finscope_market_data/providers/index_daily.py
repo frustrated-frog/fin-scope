@@ -153,7 +153,7 @@ def _map_records(records: list[dict[str, Any]], symbol: StockSymbol, limit: int)
                 low=low,
                 close=close,
                 volume=max(0.0, volume or 0.0),
-                amount=max(0.0, amount if amount is not None else (volume or 0.0)),
+                amount=max(0.0, amount) if amount is not None else None,
                 adjustment="QFQ",
             )
         )

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, date, datetime, time, timedelta
 from time import perf_counter
+import sqlite3
+import json
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -13,6 +15,7 @@ from finscope_market_data.models import (
     DataCapability,
     DataEnvelope,
     FinancialStatementsData,
+    MinutePriceBar,
     ProviderAttempt,
     QualityStatus,
     StockQuote,
@@ -32,6 +35,8 @@ class ProviderRouter:
         retry_delay_seconds: float = 0.15,
         daily_bar_retry_cooldown_seconds: int = 900,
         now_provider: Callable[[], datetime] | None = None,
+        request_budget_seconds: float = 45,
+        provider_timeout_seconds: float = 12,
     ) -> None:
         self.providers = providers
         self.snapshots = snapshots
@@ -40,10 +45,17 @@ class ProviderRouter:
         self.retry_delay_seconds = retry_delay_seconds
         self.daily_bar_retry_cooldown_seconds = daily_bar_retry_cooldown_seconds
         self._now_provider = now_provider or (lambda: datetime.now(UTC))
-        self._family_locks: dict[str, asyncio.Lock] = {}
+        self.request_budget_seconds = request_budget_seconds
+        self.provider_timeout_seconds = provider_timeout_seconds
+        self._family_locks: dict[tuple[str, DataCapability], asyncio.Semaphore] = {}
         self._daily_bar_locks: dict[str, asyncio.Lock] = {}
+        self._inflight: dict[str, asyncio.Task] = {}
 
     async def aclose(self) -> None:
+        tasks = list(self._inflight.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         closed: set[int] = set()
         for provider in self.providers:
             close = getattr(provider, "aclose", None)
@@ -75,13 +87,18 @@ class ProviderRouter:
                 provider_family=provider_family,
                 **kwargs,
             )
-        return await self._fetch_online(
-            capability,
-            symbol,
-            provider_mode=provider_mode,
-            provider_family=provider_family,
-            **kwargs,
-        )
+        if provider_mode:
+            return await self._fetch_online(capability, symbol, provider_mode=True,
+                                            provider_family=provider_family, **kwargs)
+        key = "|".join((capability.value, symbol.cache_key, provider_family or "",
+                        json.dumps(kwargs, sort_keys=True, default=str)))
+        task = self._inflight.get(key)
+        if task is None:
+            task = asyncio.create_task(self._fetch_online(capability, symbol,
+                                                         provider_family=provider_family, **kwargs))
+            self._inflight[key] = task
+            task.add_done_callback(lambda done: self._inflight.pop(key, None))
+        return (await asyncio.shield(task)).model_copy(deep=True)
 
     async def _fetch_daily_bars(
         self,
@@ -93,14 +110,14 @@ class ProviderRouter:
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         if not force_refresh:
-            cached = self._fresh_daily_bar_snapshot(symbol, requested_limit)
+            cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family)
             if cached is not None:
                 return self._slice_daily_bars(cached, requested_limit)
 
         lock = self._daily_bar_locks.setdefault(symbol.cache_key, asyncio.Lock())
         async with lock:
             if not force_refresh:
-                cached = self._fresh_daily_bar_snapshot(symbol, requested_limit)
+                cached = self._fresh_daily_bar_snapshot(symbol, requested_limit, provider_family)
                 if cached is not None:
                     return self._slice_daily_bars(cached, requested_limit)
             result = await self._fetch_online(
@@ -122,6 +139,12 @@ class ProviderRouter:
         **kwargs: Any,
     ) -> DataEnvelope[Any]:
         minimum_history_count = int(kwargs.pop("minimum_history_count", 0))
+        budget = min(self.request_budget_seconds, {
+            DataCapability.QUOTE: 8, DataCapability.CAPITAL_FLOW: 12,
+            DataCapability.MINUTE_BARS: 12, DataCapability.PROFILE: 15,
+        }.get(capability, self.request_budget_seconds))
+        deadline = asyncio.get_running_loop().time() + budget
+        scope = self._request_scope(capability, kwargs)
         supported = sorted(
             (
                 provider
@@ -141,17 +164,15 @@ class ProviderRouter:
         )
         primary_code = supported[0].provider_code if supported else None
         attempts: list[ProviderAttempt] = []
-        for provider in candidates:
+        for index, provider in enumerate(candidates):
+            if asyncio.get_running_loop().time() >= deadline:
+                break
             started = perf_counter()
             retry_count = 0
             while True:
                 try:
-                    family_lock = self._family_locks.setdefault(
-                        provider.provider_family,
-                        asyncio.Lock(),
-                    )
-                    async with family_lock:
-                        data = await provider.fetch(capability, symbol, **kwargs)
+                    data = await self._call_provider(provider, capability, symbol, deadline, kwargs,
+                                                     len(candidates) - index)
                     if data is None or data == []:
                         raise ProviderError("EMPTY_DATA", "provider returned no data", True)
                     if (capability is DataCapability.DAILY_BARS
@@ -168,6 +189,11 @@ class ProviderRouter:
                             "provider returned no intraday capital flow",
                             False,
                         )
+                    if isinstance(data, FinancialStatementsData):
+                        if (data.report.period_end != kwargs.get("period_end")
+                                or data.report.report_type != kwargs.get("report_type")
+                                or data.report.scope != kwargs.get("scope", "CONSOLIDATED")):
+                            raise ProviderError("REPORT_IDENTITY_MISMATCH", "财报报告期、类型或口径错配", False)
                     if not provider_mode:
                         self.health.record_success(provider, capability)
                     attempts.append(
@@ -185,12 +211,18 @@ class ProviderRouter:
                     warnings = provider_warnings(capability, symbol, data) if callable(provider_warnings) else []
                     if not is_primary:
                         warnings = ["首选数据源不可用，已自动使用备用数据源", *warnings]
+                    quality = QualityStatus.FRESH_PRIMARY if is_primary else QualityStatus.FRESH_FALLBACK
+                    if isinstance(data, FinancialStatementsData) and len([statement for statement in data.statements if statement.values]) < 3:
+                        quality = QualityStatus.PARTIAL_FRESH
+                    if isinstance(data, CapitalFlowData):
+                        warnings = [*warnings, *data.warnings]
+                        if not data.minute_points:
+                            warnings.append("当前仅有日级资金流，分钟资金变化暂缺")
+                            quality = QualityStatus.PARTIAL_FRESH
                     envelope = DataEnvelope[Any](
                         capability=capability,
                         symbol=symbol,
-                        quality_status=(
-                            QualityStatus.FRESH_PRIMARY if is_primary else QualityStatus.FRESH_FALLBACK
-                        ),
+                        quality_status=quality,
                         source_code=provider.provider_code,
                         source_family=provider.provider_family,
                         as_of=self._as_of(data, now),
@@ -205,11 +237,17 @@ class ProviderRouter:
                         data=data,
                     )
                     if not provider_mode:
-                        self.snapshots.save(envelope)
+                        try:
+                            if scope:
+                                self.snapshots.save_scoped(envelope, scope)
+                            else:
+                                self.snapshots.save(envelope)
+                        except (sqlite3.Error, OSError):
+                            envelope.warnings.append("数据已获取，但本地快照保存失败")
                     return envelope
                 except Exception as error:
                     retryable = not isinstance(error, ProviderError) or error.retryable
-                    if not provider_mode and retryable and retry_count < self.max_retries:
+                    if not provider_mode and retryable and retry_count < min(self.max_retries, getattr(provider, "max_retries", self.max_retries)) and asyncio.get_running_loop().time() < deadline:
                         retry_count += 1
                         if self.retry_delay_seconds:
                             await asyncio.sleep(self.retry_delay_seconds * retry_count)
@@ -229,7 +267,10 @@ class ProviderRouter:
                     )
                     break
 
-        stored = None if provider_mode else self.snapshots.load(capability, symbol)
+        stored = None if provider_mode else (self.snapshots.load_scoped(capability, symbol, scope)
+            if scope else self.snapshots.load(capability, symbol))
+        if stored is not None and provider_family is not None and stored.source_family != provider_family.upper():
+            stored = None
         now = self._now()
         if stored is not None and stored.data is not None:
             age = max(0, int((now - stored.retrieved_at).total_seconds()))
@@ -246,7 +287,7 @@ class ProviderRouter:
                     "quality_status": QualityStatus.STALE_FALLBACK,
                     "retrieved_at": now,
                     "stale_age_seconds": age,
-                    "warnings": [warning],
+                    "warnings": [*stored.warnings, warning],
                     "attempts": attempts,
                 }
             )
@@ -266,13 +307,42 @@ class ProviderRouter:
             data=None,
         )
 
+    async def _call_provider(self, provider, capability, symbol, deadline, kwargs, remaining_candidates):
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise ProviderError("REQUEST_BUDGET_EXCEEDED", "数据请求总时间预算已耗尽", False)
+        async def call():
+            gate = self._family_locks.setdefault((provider.provider_family, capability), asyncio.Semaphore(2))
+            async with gate:
+                return await provider.fetch(capability, symbol, **kwargs)
+        timeout = min(remaining / max(remaining_candidates, 1),
+                      getattr(provider, "timeout_seconds", self.provider_timeout_seconds))
+        try:
+            return await asyncio.wait_for(call(), timeout)
+        except TimeoutError as error:
+            raise ProviderError("TIMEOUT", "数据源超过本次调用时间预算", True) from error
+
+    @staticmethod
+    def _request_scope(capability, kwargs):
+        if capability is DataCapability.FINANCIAL_STATEMENTS:
+            return "|".join(str(kwargs.get(key, default)) for key,default in
+                            (("period_end", ""),("report_type", ""),("scope", "CONSOLIDATED")))
+        if capability is DataCapability.MINUTE_BARS:
+            return "frequency=" + str(kwargs.get("frequency", 5))
+        if capability is DataCapability.CORPORATE_ACTIONS:
+            return "|".join(str(kwargs.get(key, "")) for key in ("from_date", "to_date"))
+        return ""
+
     def _fresh_daily_bar_snapshot(
         self,
         symbol: StockSymbol,
         requested_limit: int,
+        provider_family: str | None = None,
     ) -> DataEnvelope[Any] | None:
         stored = self.snapshots.load(DataCapability.DAILY_BARS, symbol)
         if stored is None or not isinstance(stored.data, list) or not stored.data:
+            return None
+        if provider_family is not None and stored.source_family != provider_family.upper():
             return None
         if len(stored.data) < requested_limit and (stored.coverage_limit or 0) < requested_limit:
             return None
@@ -331,6 +401,8 @@ class ProviderRouter:
             return max((point.observed_at for point in points), default=fallback)
         if isinstance(data, FinancialStatementsData):
             return data.report.published_at or fallback
+        if isinstance(data, list) and data and all(isinstance(item, MinutePriceBar) for item in data):
+            return max(item.observed_at for item in data)
         if isinstance(data, list) and data and all(isinstance(item, DailyBar) for item in data):
             last_trade_date = max(date.fromisoformat(item.trade_date) for item in data)
             return datetime.combine(

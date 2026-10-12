@@ -67,7 +67,7 @@ async def test_sina_index_provider_is_limited_to_market_pulse_indices() -> None:
     assert provider.supports(DataCapability.DAILY_BARS, index)
     assert not provider.supports(DataCapability.DAILY_BARS, stock)
     result = await provider.fetch(DataCapability.DAILY_BARS, index, limit=30)
-    assert result[0].amount == 10
+    assert result[0].amount is None
 
 
 @pytest.mark.asyncio

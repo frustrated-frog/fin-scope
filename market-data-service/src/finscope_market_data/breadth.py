@@ -37,6 +37,7 @@ class MarketBreadthService:
         snapshot_store: SnapshotStore | None = None,
         calendar_loader: CalendarLoader | None = None,
         tdx_loader: Callable[[date], Any] | None = None,
+        tencent_loader: Callable[[date], Any] | None = None,
     ) -> None:
         self._eastmoney_loader = eastmoney_loader or self._load_eastmoney
         self._sina_loader = sina_loader or self._load_sina
@@ -47,6 +48,7 @@ class MarketBreadthService:
         self._snapshot_store = snapshot_store
         self._calendar_loader = calendar_loader or self._load_calendar
         self._tdx_loader = tdx_loader
+        self._tencent_loader = tencent_loader
 
     def fetch(self, business_date: date) -> MarketBreadthSnapshot:
         today = self._today_provider()
@@ -186,10 +188,21 @@ class MarketBreadthService:
     def _fetch_online(self, business_date: date) -> MarketBreadthSnapshot:
         warnings: list[str] = []
         try:
+            if self._tencent_loader is not None:
+                try:
+                    frame = self._tencent_loader(business_date)
+                    rows = self._normalize(frame, "TENCENT")
+                    warnings.extend(frame.attrs.get("warnings", []))
+                    source_code = "TENCENT_BATCH_A_SPOT"
+                    source_family = "TENCENT"
+                    quality = QualityStatus.PARTIAL_FRESH if frame.attrs.get("partial") else QualityStatus.FRESH_PRIMARY
+                    return self._online_result(business_date, rows, source_code, source_family, quality, warnings)
+                except Exception as error:
+                    warnings.append("腾讯批量行情暂不可用，尝试东方财富：" + _message(error))
             rows = self._normalize(self._eastmoney_loader(), "EASTMONEY")
             source_code = "AKSHARE_EASTMONEY_A_SPOT"
             source_family = "EASTMONEY"
-            quality = QualityStatus.FRESH_PRIMARY
+            quality = QualityStatus.FRESH_FALLBACK if self._tencent_loader is not None else QualityStatus.FRESH_PRIMARY
         except Exception as primary_error:
             warnings.append(f"东方财富全A行情不可用，已切换新浪：{_message(primary_error)}")
             rows = self._normalize(self._sina_loader(), "SINA")
@@ -199,6 +212,9 @@ class MarketBreadthService:
         if not rows:
             raise RuntimeError("全A行情没有有效股票")
 
+        return self._online_result(business_date, rows, source_code, source_family, quality, warnings)
+
+    def _online_result(self, business_date, rows, source_code, source_family, quality, warnings):
         limit_up = self._pool_count(
             self._limit_up_loader,
             business_date,

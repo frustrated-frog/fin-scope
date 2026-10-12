@@ -135,6 +135,16 @@ class PythonQuantDailyBarSourceTest {
                 () -> invalid.fetchSince("600519.SH", 5000, LocalDate.of(2026, 7, 1)));
     }
 
+    @Test
+    void indexCanRetainPricesWithoutInventingAmountButStocksRequireIt() {
+        String missing = payload("QFQ", "FRESH_PRIMARY").replace("\"amount\":1480500", "\"amount\":null");
+        assertThrows(ProviderContractException.class, () -> source("http://localhost:8000", (code, uri, headers) ->
+                response(missing)).fetch("600519.SH", 180));
+        QuantDailyBarBatch index = source("http://localhost:8000", (code, uri, headers) ->
+                response(missing.replace("600519", "000300"))).fetch("000300.SH", 180);
+        org.junit.jupiter.api.Assertions.assertNull(index.getBars().get(0).getAmount());
+    }
+
     private static PythonQuantDailyBarSource source(String baseUrl, FinanceHttpClient http) {
         PythonQuantDailyBarSource source = new PythonQuantDailyBarSource();
         org.springframework.test.util.ReflectionTestUtils.setField(source, "baseUrl", baseUrl);

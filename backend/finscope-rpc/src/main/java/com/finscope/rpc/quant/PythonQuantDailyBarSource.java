@@ -126,7 +126,8 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
         bar.setClose(decimal(row, "close"));
         bar.setAdjustedClose(bar.getClose());
         bar.setVolume(decimal(row, "volume"));
-        bar.setAmount(decimal(row, "amount"));
+        JsonNode amount = row.get("amount");
+        bar.setAmount(amount != null && amount.isNumber() ? amount.decimalValue() : null);
         bar.setTradeStatus("TRADING");
         return bar;
     }
@@ -142,7 +143,8 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
     private static void assertValidBar(QuantDailyBar bar) {
         if (!positive(bar.getOpen()) || !positive(bar.getHigh()) || !positive(bar.getLow())
                 || !positive(bar.getClose()) || bar.getVolume() == null || bar.getVolume().signum() < 0
-                || bar.getAmount() == null || bar.getAmount().signum() < 0) {
+                || (bar.getAmount() == null && !isMarketIndex(bar.getInstrumentCode()))
+                || (bar.getAmount() != null && bar.getAmount().signum() < 0)) {
             throw contract("INVALID_DAILY_BAR", "daily bar contains invalid price, volume or amount: " + barContext(bar), false);
         }
         BigDecimal top = bar.getOpen().max(bar.getClose()).max(bar.getLow());
@@ -150,6 +152,11 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
         if (bar.getHigh().compareTo(top) < 0 || bar.getLow().compareTo(bottom) > 0) {
             throw contract("INVALID_OHLC", "daily bar contains invalid OHLC: " + barContext(bar), false);
         }
+    }
+
+    private static boolean isMarketIndex(String instrumentCode) {
+        return java.util.Arrays.asList("000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "000852.SH")
+                .contains(instrumentCode);
     }
 
     private static String barContext(QuantDailyBar bar) {

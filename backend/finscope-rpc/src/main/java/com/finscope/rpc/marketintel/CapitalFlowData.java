@@ -1,6 +1,7 @@
 package com.finscope.rpc.marketintel;
 
 import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.domain.marketdata.MarketDataQualityStatus;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -14,9 +15,17 @@ public final class CapitalFlowData {
     private final BigDecimal volumeRatio;
     private final List<String> warnings;
     private final String providerCode;
+    private final MarketDataQualityStatus qualityStatus;
 
     public CapitalFlowData(List<CapitalFlowPoint> minutePoints, List<CapitalFlowPoint> dailyPoints,
                            BigDecimal turnoverRate, BigDecimal volumeRatio, List<String> warnings, String providerCode) {
+        this(minutePoints, dailyPoints, turnoverRate, volumeRatio, warnings, providerCode, null);
+    }
+
+    public CapitalFlowData(List<CapitalFlowPoint> minutePoints, List<CapitalFlowPoint> dailyPoints,
+                           BigDecimal turnoverRate, BigDecimal volumeRatio, List<String> warnings,
+                           String providerCode, MarketDataQualityStatus qualityStatus) {
+        this.qualityStatus = qualityStatus;
         this.minutePoints = immutable(minutePoints);
         this.dailyPoints = immutable(dailyPoints);
         this.turnoverRate = turnoverRate;
@@ -51,6 +60,10 @@ public final class CapitalFlowData {
 
     public String getProviderCode() {
         return providerCode;
+    }
+
+    public MarketDataQualityStatus getQualityStatus() {
+        return qualityStatus;
     }
 
     public List<CapitalFlowPoint> allPoints() {

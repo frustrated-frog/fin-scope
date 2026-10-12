@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -39,6 +40,8 @@ class TencentQuoteProvider:
         fields = match.group(1).split("~")
         if len(fields) < 44:
             raise ProviderError("SCHEMA_DRIFT", "腾讯行情字段数量不足", False)
+        if _field(fields, 2) != symbol.code:
+            raise ProviderError("SYMBOL_MISMATCH", "腾讯返回证券代码与请求不一致", False)
         observed = _parse_time(_field(fields, 30))
         price = _number(_field(fields, 3))
         if price is None or price <= 0:
@@ -65,7 +68,8 @@ def _field(fields: list[str], index: int) -> str:
 
 def _number(value: str) -> float | None:
     try:
-        return None if not value or value == "--" else float(value)
+        number = None if not value or value == "--" else float(value)
+        return number if number is not None and math.isfinite(number) else None
     except ValueError:
         return None
 

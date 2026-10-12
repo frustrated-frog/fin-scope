@@ -7,6 +7,7 @@ import com.finscope.common.enums.marketpulse.MarketRotationState;
 import com.finscope.common.enums.marketpulse.MarketStage;
 import com.finscope.common.enums.marketpulse.MarketTrendState;
 import com.finscope.domain.marketpulse.MarketRegimeFeatures;
+import com.finscope.common.enums.marketpulse.MarketLiquidityBasis;
 import com.finscope.domain.marketpulse.MarketRegimeSnapshot;
 import org.springframework.stereotype.Service;
 
@@ -127,7 +128,8 @@ public class MarketRegimeClassifier {
     private void explain(MarketRegimeSnapshot value, MarketRegimeFeatures features) {
         value.getEvidence().add(String.format("20日收益 %.2f%%，价格相对MA20 %.2f%%",
                 features.getReturn20d() * 100D, features.getPriceVsMa20() * 100D));
-        value.getEvidence().add(String.format("5日成交额相对20日均值 %.0f%%",
+        String activity = features.getLiquidityBasis() == MarketLiquidityBasis.VOLUME_PROXY ? "成交量（流动性代理）" : "成交额";
+        value.getEvidence().add(String.format("5日%s相对20日均值 %.0f%%", activity,
                 features.getAmountRatio5To20() * 100D));
         value.getEvidence().add(String.format("20日最大回撤 %.2f%%，年化波动率 %.2f%%",
                 features.getMaxDrawdown20() * 100D, features.getVolatility20() * 100D));
@@ -136,7 +138,7 @@ public class MarketRegimeClassifier {
                     features.getMarketBreadth() * 100D));
         }
         if (value.getMarketStage() == MarketStage.POST_SELL_OFF_REPAIR) {
-            value.setExplanation("急跌后的缩量修复：指数回升但成交额仍低于中期均值");
+            value.setExplanation("急跌后的缩量修复：指数回升但成交活跃度仍低于中期均值");
         } else if (value.getMarketStage() == MarketStage.SELL_OFF) {
             value.setExplanation("风险释放：短期跌幅与波动率同步上升");
         } else if (value.getMarketStage() == MarketStage.RISK_ON) {
