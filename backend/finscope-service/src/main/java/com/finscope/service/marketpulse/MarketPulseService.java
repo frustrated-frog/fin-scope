@@ -62,7 +62,7 @@ public class MarketPulseService {
     private DailyMarketReviewService reviewService;
 
     public MarketPulseRefreshResult refresh() {
-        return executeExclusive(() -> refreshLatest(featureService.latestBusinessDate()));
+        return executeExclusive(() -> refreshLatest(featureService.refreshLatestBusinessDate()));
     }
 
     public MarketPulseRefreshResult refresh(LocalDate businessDate) {
@@ -100,7 +100,8 @@ public class MarketPulseService {
                 return Optional.empty();
             }
             Optional<MarketPulseWorkspace> existing = repository.findWorkspace(latestBusinessDate);
-            if (existing.isPresent() && isAfterCloseSnapshot(existing.get(), latestBusinessDate)) {
+            if (existing.isPresent() && isAfterCloseSnapshot(existing.get(), latestBusinessDate)
+                    && completeBreadth(existing.get().getBreadth())) {
                 return Optional.empty();
             }
             return Optional.of(refreshLatest(latestBusinessDate));

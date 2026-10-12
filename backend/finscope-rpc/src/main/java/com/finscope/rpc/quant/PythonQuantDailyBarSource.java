@@ -29,6 +29,8 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
 
     @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
     private String baseUrl;
+    @Value("${finscope.python-market-data.daily-bars-timeout-ms:45000}")
+    private int dailyBarsTimeoutMs = 45000;
     @Autowired
     private FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
@@ -40,16 +42,27 @@ public class PythonQuantDailyBarSource implements QuantDailyBarSource {
 
     @Override
     public QuantDailyBarBatch fetchSince(String instrumentCode, int limit, LocalDate fromDate) {
+        return request(instrumentCode, limit, fromDate, false);
+    }
+
+    @Override
+    public QuantDailyBarBatch refresh(String instrumentCode, int limit) {
+        return request(instrumentCode, limit, null, true);
+    }
+
+    private QuantDailyBarBatch request(String instrumentCode, int limit, LocalDate fromDate, boolean refresh) {
         Matcher matcher = INSTRUMENT.matcher(instrumentCode == null ? "" : instrumentCode.trim());
         if (!matcher.matches()) {
             throw contract("INVALID_INSTRUMENT", "instrument code must use 600519.SH format", false);
         }
         int normalizedLimit = Math.max(1, Math.min(limit, 5000));
         URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/stocks/" + matcher.group(2) + "/"
-                + matcher.group(1) + "/daily-bars?limit=" + normalizedLimit);
+                + matcher.group(1) + "/daily-bars?limit=" + normalizedLimit
+                + (refresh ? "&refresh=true" : ""));
         try {
             FinanceHttpResponse response = http.get(
-                    CLIENT_CODE, uri, Collections.<String, String>emptyMap());
+                    CLIENT_CODE, uri, Collections.<String, String>emptyMap(),
+                    2 * 1024 * 1024, dailyBarsTimeoutMs);
             return parse(response, instrumentCode.trim(), matcher.group(1), matcher.group(2), fromDate);
         } catch (ProviderContractException error) {
             throw error;

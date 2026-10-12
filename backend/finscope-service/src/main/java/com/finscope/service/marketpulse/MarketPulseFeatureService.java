@@ -28,9 +28,18 @@ public class MarketPulseFeatureService {
     private MarketRegimeClassifier classifier;
 
     public LocalDate latestBusinessDate() {
+        return latestBusinessDate(false);
+    }
+
+    public LocalDate refreshLatestBusinessDate() {
+        return latestBusinessDate(true);
+    }
+
+    private LocalDate latestBusinessDate(boolean refresh) {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
         try {
-            QuantDailyBarBatch batch = dailyBarSource.fetch(BENCHMARK_CODE, FETCH_LIMIT);
+            QuantDailyBarBatch batch = refresh ? dailyBarSource.refresh(BENCHMARK_CODE, FETCH_LIMIT)
+                    : dailyBarSource.fetch(BENCHMARK_CODE, FETCH_LIMIT);
             if (batch != null && batch.getAsOfDate() != null && !batch.getAsOfDate().isAfter(today)) {
                 return batch.getAsOfDate();
             }

@@ -86,7 +86,7 @@ class MarketPulseServiceTest {
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
         regime.setBusinessDate(latestTradingDate);
         regime.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
-        when(features.latestBusinessDate()).thenReturn(latestTradingDate);
+        when(features.refreshLatestBusinessDate()).thenReturn(latestTradingDate);
         when(sectors.calculateResult(latestTradingDate)).thenReturn(sectorResult(Collections.emptyList()));
         when(breadthService.calculate(latestTradingDate)).thenReturn(breadth(latestTradingDate));
         when(sectors.dispersion(Collections.emptyList())).thenReturn(0D);
@@ -187,6 +187,7 @@ class MarketPulseServiceTest {
         when(features.latestBusinessDate()).thenReturn(latestTradingDate);
         MarketPulseWorkspace existing = workspace(latestTradingDate, breadth(latestTradingDate));
         existing.setGeneratedAt(LocalDateTime.of(2026, 8, 21, 15, 31));
+        existing.getBreadth().setIndices(Arrays.asList(index(), index(), index(), index(), index()));
         when(repository.findWorkspace(latestTradingDate)).thenReturn(Optional.of(existing));
 
         Optional<MarketPulseRefreshResult> result = service.recoverMissing();
@@ -194,6 +195,20 @@ class MarketPulseServiceTest {
         assertTrue(!result.isPresent());
         verify(sectors, never()).calculateResult(any(LocalDate.class));
         verify(repository, never()).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void recoveryRetriesAnAfterCloseSnapshotWithUnavailableBreadth() {
+        LocalDate date = LocalDate.of(2026, 8, 21);
+        prepareEmptyRefresh(date);
+        MarketPulseWorkspace incomplete = workspace(date, unavailableBreadth(date));
+        incomplete.setGeneratedAt(date.atTime(15, 31));
+        when(repository.findWorkspace(date)).thenReturn(Optional.of(incomplete));
+
+        Optional<MarketPulseRefreshResult> result = service.recoverMissing();
+
+        assertTrue(result.isPresent());
+        verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
     }
 
     @Test
@@ -308,7 +323,7 @@ class MarketPulseServiceTest {
         LocalDate latest = LocalDate.of(2026, 8, 28);
         LocalDate historical = LocalDate.of(2026, 8, 26);
         LocalDate weekend = LocalDate.of(2026, 8, 23);
-        when(features.latestBusinessDate()).thenReturn(latest);
+        when(features.refreshLatestBusinessDate()).thenReturn(latest);
         when(features.businessDates(latest.minusDays(60), latest))
                 .thenReturn(Arrays.asList(historical, latest));
         when(sectors.calculateResult(latest)).thenReturn(sectorResult(Collections.emptyList()));

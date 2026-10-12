@@ -68,3 +68,55 @@ async def test_sina_index_provider_is_limited_to_market_pulse_indices() -> None:
     assert not provider.supports(DataCapability.DAILY_BARS, stock)
     result = await provider.fetch(DataCapability.DAILY_BARS, index, limit=30)
     assert result[0].amount == 10
+
+
+@pytest.mark.asyncio
+async def test_direct_eastmoney_request_maps_index_market_and_amount() -> None:
+    import httpx
+    from finscope_market_data.providers.http import ProviderHttpClient
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["secid"] == "2.000852"
+        assert request.url.params["fqt"] == "0"
+        return httpx.Response(200, json={"data": {"klines": [
+            "2026-10-12,100,102,104,99,1234,456789,5"
+        ]}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        provider = EastmoneyIndexDailyProvider(http=ProviderHttpClient(client=client))
+        bars = await provider.fetch(DataCapability.DAILY_BARS, StockSymbol(market="SH", code="000852"))
+    assert bars[0].trade_date == "2026-10-12"
+    assert bars[0].close == 102
+    assert bars[0].amount == 456789
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{"data": None}, {"data": {"klines": ["broken"]}}])
+async def test_direct_eastmoney_rejects_invalid_payload(payload) -> None:
+    import httpx
+    from finscope_market_data.providers.http import ProviderHttpClient
+    from finscope_market_data.providers.base import ProviderError
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload)
+    )) as client:
+        provider = EastmoneyIndexDailyProvider(http=ProviderHttpClient(client=client))
+        with pytest.raises(ProviderError, match="东方财富指数日线"):
+            await provider.fetch(DataCapability.DAILY_BARS, StockSymbol(market="SH", code="000300"))
+
+
+@pytest.mark.asyncio
+async def test_direct_eastmoney_disconnect_preserves_retryable_transport_error() -> None:
+    import httpx
+    from finscope_market_data.providers.http import ProviderHttpClient
+    from finscope_market_data.providers.base import ProviderError
+
+    def disconnected(request):
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(disconnected)) as client:
+        provider = EastmoneyIndexDailyProvider(http=ProviderHttpClient(client=client))
+        with pytest.raises(ProviderError) as raised:
+            await provider.fetch(DataCapability.DAILY_BARS, StockSymbol(market="SH", code="000300"))
+    assert raised.value.error_type == "CONNECTION_ERROR"
+    assert raised.value.retryable

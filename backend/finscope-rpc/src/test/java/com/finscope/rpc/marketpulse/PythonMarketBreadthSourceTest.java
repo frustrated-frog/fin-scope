@@ -19,6 +19,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PythonMarketBreadthSourceTest {
 
     @Test
+    void wholeMarketCollectionUsesItsOwnTimeoutBudget() throws Exception {
+        FinanceHttpClient http = org.mockito.Mockito.mock(FinanceHttpClient.class);
+        org.mockito.Mockito.when(http.get(
+                org.mockito.ArgumentMatchers.eq("PYTHON_MARKET_BREADTH"),
+                org.mockito.ArgumentMatchers.any(java.net.URI.class),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.eq(2 * 1024 * 1024),
+                org.mockito.ArgumentMatchers.eq(120000)))
+                .thenReturn(response(payload("FRESH_FALLBACK", "2026-08-21")));
+
+        MarketBreadthSnapshot result = source("http://127.0.0.1:8000", http)
+                .fetch(LocalDate.of(2026, 8, 21));
+
+        assertEquals(5100, result.getValidCount());
+    }
+
+    @Test
     void parsesVersionedMarketBreadthAndPreservesProvenance() {
         AtomicReference<URI> requested = new AtomicReference<URI>();
         FinanceHttpClient http = (provider, uri, headers) -> {

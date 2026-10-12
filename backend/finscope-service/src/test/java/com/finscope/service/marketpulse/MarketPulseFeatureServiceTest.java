@@ -32,6 +32,17 @@ class MarketPulseFeatureServiceTest {
     }
 
     @Test
+    void manualRefreshResolvesDateFromRefetchedBenchmark() {
+        QuantDailyBarSource source = mock(QuantDailyBarSource.class);
+        LocalDate today = LocalDate.of(2026, 10, 12);
+        when(source.refresh("000300.SH", 180)).thenReturn(batch(today));
+        MarketPulseFeatureService service = new MarketPulseFeatureService();
+        ReflectionTestUtils.setField(service, "dailyBarSource", source);
+
+        assertEquals(today, service.refreshLatestBusinessDate());
+    }
+
+    @Test
     void calculatesPointInTimeIndexFeaturesWithoutUsingFutureBars() {
         QuantDailyBarSource source = mock(QuantDailyBarSource.class);
         LocalDate businessDate = LocalDate.of(2026, 8, 21);

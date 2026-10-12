@@ -34,6 +34,8 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
             "BULLISH_THRUST", "RECOVERING", "NEUTRAL", "WEAKENING", "UNAVAILABLE");
     @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
     private String baseUrl;
+    @Value("${finscope.python-market-data.breadth-timeout-ms:120000}")
+    private int breadthTimeoutMs = 120000;
     @Resource
     private FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
@@ -44,7 +46,8 @@ public class PythonMarketBreadthSource implements MarketBreadthSource {
                 + "/v1/markets/CN-A/breadth?business_date=" + businessDate);
         try {
             FinanceHttpResponse response = http.get(
-                    CLIENT_CODE, uri, Collections.<String, String>emptyMap());
+                    CLIENT_CODE, uri, Collections.<String, String>emptyMap(),
+                    2 * 1024 * 1024, breadthTimeoutMs);
             return parse(response, businessDate);
         } catch (ProviderContractException error) {
             throw error;

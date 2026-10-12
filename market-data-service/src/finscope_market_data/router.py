@@ -30,7 +30,7 @@ class ProviderRouter:
         health: ProviderHealthRegistry,
         max_retries: int = 1,
         retry_delay_seconds: float = 0.15,
-        daily_bar_retry_cooldown_seconds: int = 21600,
+        daily_bar_retry_cooldown_seconds: int = 900,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.providers = providers

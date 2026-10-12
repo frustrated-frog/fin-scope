@@ -8,25 +8,26 @@ from typing import Any
 
 from finscope_market_data.models import DailyBar, DataCapability, StockSymbol
 from finscope_market_data.providers.base import ProviderError
+from finscope_market_data.providers.http import ProviderHttpClient
 
 
 FrameLoader = Callable[..., Any]
 
 
 class EastmoneyIndexDailyProvider:
-    provider_code = "AKSHARE_EASTMONEY_INDEX_DAILY"
+    provider_code = "EASTMONEY_INDEX_DAILY"
     provider_family = "EASTMONEY"
     priority = 5
     capabilities = {DataCapability.DAILY_BARS}
 
-    def __init__(self, loader: FrameLoader | None = None) -> None:
+    def __init__(self, loader: FrameLoader | None = None, http: ProviderHttpClient | None = None) -> None:
         self._loader = loader
+        self.http = http or ProviderHttpClient(timeout_seconds=8, minimum_interval_seconds=1)
 
     def supports(self, capability: DataCapability, symbol: StockSymbol) -> bool:
         return (
             capability is DataCapability.DAILY_BARS
             and symbol.is_market_pulse_index
-            and (self._loader is not None or importlib.util.find_spec("akshare") is not None)
         )
 
     async def fetch(
@@ -34,10 +35,11 @@ class EastmoneyIndexDailyProvider:
     ) -> list[DailyBar]:
         if not self.supports(capability, symbol):
             raise ProviderError("UNSUPPORTED_INDEX", symbol.cache_key, False)
-        loader = self._loader or _eastmoney_loader
         try:
+            if self._loader is None:
+                return await self._fetch_direct(symbol, int(kwargs.get("limit", 250)), kwargs)
             frame = await asyncio.to_thread(
-                loader,
+                self._loader,
                 _eastmoney_symbol(symbol),
                 str(kwargs.get("start_date", "19900101")),
                 str(kwargs.get("end_date", "20500101")),
@@ -49,6 +51,34 @@ class EastmoneyIndexDailyProvider:
             raise ProviderError(
                 "EASTMONEY_INDEX_ERROR", f"东方财富指数日线获取失败：{error}"
             ) from error
+
+    async def _fetch_direct(self, symbol: StockSymbol, limit: int, options: dict[str, Any]) -> list[DailyBar]:
+        market = "2" if symbol.code == "000852" else ("1" if symbol.market == "SH" else "0")
+        payload = await self.http.get_json(
+            self.provider_code,
+            "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+            headers={"Referer": "https://quote.eastmoney.com/"},
+            params={
+                "secid": f"{market}.{symbol.code}",
+                "fields1": "f1,f2,f3,f4,f5",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+                "klt": "101", "fqt": "0",
+                "beg": str(options.get("start_date", "19900101")),
+                "end": str(options.get("end_date", "20500101")),
+            },
+        )
+        data = payload.get("data")
+        if not isinstance(data, dict) or not isinstance(data.get("klines"), list):
+            raise ProviderError("INVALID_INDEX_RESPONSE", "东方财富指数日线缺少 klines", False)
+        records = []
+        for row in data["klines"]:
+            fields = row.split(",") if isinstance(row, str) else []
+            if len(fields) < 8:
+                raise ProviderError("INVALID_INDEX_RESPONSE", "东方财富指数日线字段不足", False)
+            records.append(dict(zip(
+                ("date", "open", "close", "high", "low", "volume", "amount"), fields[:7]
+            )))
+        return _map_records(records, symbol, limit)
 
 
 class SinaIndexDailyProvider:
@@ -84,16 +114,6 @@ class SinaIndexDailyProvider:
             ) from error
 
 
-def _eastmoney_loader(symbol: str, start_date: str, end_date: str) -> Any:
-    import akshare as ak
-
-    return ak.stock_zh_index_daily_em(
-        symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-
 def _sina_loader(symbol: str) -> Any:
     import akshare as ak
 
@@ -109,7 +129,10 @@ def _eastmoney_symbol(symbol: StockSymbol) -> str:
 def _map_frame(frame: Any, symbol: StockSymbol, limit: int) -> list[DailyBar]:
     if frame is None or not hasattr(frame, "to_dict"):
         raise ProviderError("INVALID_INDEX_RESPONSE", "指数日线响应不是表格", True)
-    records = frame.to_dict(orient="records")
+    return _map_records(frame.to_dict(orient="records"), symbol, limit)
+
+
+def _map_records(records: list[dict[str, Any]], symbol: StockSymbol, limit: int) -> list[DailyBar]:
     result: list[DailyBar] = []
     for record in records[-min(max(limit, 1), 5000) :]:
         trade_date = _field(record, "date", "日期")

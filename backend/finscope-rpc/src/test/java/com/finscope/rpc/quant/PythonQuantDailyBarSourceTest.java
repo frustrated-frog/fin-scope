@@ -42,6 +42,19 @@ class PythonQuantDailyBarSourceTest {
     }
 
     @Test
+    void explicitRefreshBypassesPythonDailyBarCache() {
+        AtomicReference<URI> requested = new AtomicReference<>();
+        PythonQuantDailyBarSource source = source("http://127.0.0.1:8000", (provider, uri, headers) -> {
+            requested.set(uri);
+            return response(payload("QFQ", "FRESH_FALLBACK"));
+        });
+
+        source.refresh("600519.SH", 180);
+
+        assertEquals("limit=180&refresh=true", requested.get().getQuery());
+    }
+
+    @Test
     void requestsUpToFiveThousandBarsForSingleStockResearch() {
         AtomicReference<URI> requested = new AtomicReference<URI>();
         PythonQuantDailyBarSource source = source(

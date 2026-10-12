@@ -32,6 +32,14 @@ pytdx 不使用其全网节点扫描器，而是在少量候选节点内以 2 �
 
 每个响应都包含 `source_code`、`source_family`、`as_of`、`retrieved_at`、`attempts` 和 `warnings`。网络失败、空数据、Schema 变化和不支持的粒度不会用空数组伪装成成功。
 
+### 收盘更新与超时
+
+日线数据晚于或等于预期交易日时复用快照；收盘后仍落后的日线只冷却 15 分钟（`FINSCOPE_MARKET_DATA_DAILY_BAR_RETRY_COOLDOWN_SECONDS=900`），之后允许重试。`daily-bars?refresh=true` 会跳过缓存，Market Pulse 的手动刷新会用它重新获取沪深 300，确定最新交易日。自动补偿仍按小时执行，并重试市场宽度未完整的收盘快照。
+
+东方财富指数日线使用统一 `ProviderHttpClient`，单次读取限时 8 秒、连接限时 4 秒，复用路由器的有限重试、熔断及新浪回退，来源代码为 `EASTMONEY_INDEX_DAILY`。远端无响应会记录 `CONNECTION_ERROR`，不能把备用来源成功解释为东方财富恢复。
+
+Java `application.yml` 为日线配置 `finscope.python-market-data.daily-bars-timeout-ms: 45000`，为全市场宽度配置 `breadth-timeout-ms: 120000`，给上游重试与全 A 股票分页采集留出时间；其他接口的等待时间不变。
+
 ## 本地运行
 
 ```bash

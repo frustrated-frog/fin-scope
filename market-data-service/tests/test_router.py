@@ -636,3 +636,30 @@ async def test_daily_bar_snapshot_refreshes_after_close_when_latest_trade_date_i
 
     assert provider.calls == 1
     assert result.data[-1].trade_date == "2026-08-06"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("elapsed_minutes, expected_calls", [(14, 0), (16, 1)])
+async def test_lagging_after_close_snapshot_retries_after_fifteen_minutes(
+    tmp_path: Path, elapsed_minutes: int, expected_calls: int,
+) -> None:
+    symbol = StockSymbol(market="SH", code="000300")
+    retrieved = datetime(2026, 10, 12, 7, 30, tzinfo=UTC)
+    provider = FakeProvider("PRIMARY", "EASTMONEY", 10, [
+        daily_bars(symbol, 250, end=date(2026, 10, 12))
+    ])
+    provider.capabilities = {DataCapability.DAILY_BARS}
+    router = ProviderRouter(
+        providers=[provider], snapshots=SnapshotStore(tmp_path / "snapshots.db"),
+        health=ProviderHealthRegistry(), max_retries=0,
+        now_provider=lambda: retrieved + timedelta(minutes=elapsed_minutes),
+    )
+    router.snapshots.save(DataEnvelope(
+        capability=DataCapability.DAILY_BARS, symbol=symbol,
+        quality_status=QualityStatus.FRESH_FALLBACK, source_code="SINA", source_family="SINA",
+        as_of=datetime(2026, 10, 9, 7, 0, tzinfo=UTC), retrieved_at=retrieved,
+        data=daily_bars(symbol, 250, end=date(2026, 10, 9)),
+    ))
+    result = await router.fetch(DataCapability.DAILY_BARS, symbol, limit=180)
+    assert provider.calls == expected_calls
+    assert result.data[-1].trade_date == ("2026-10-12" if expected_calls else "2026-10-09")

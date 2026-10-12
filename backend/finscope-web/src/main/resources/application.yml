@@ -87,6 +87,8 @@ finscope:
       concurrency: 3
   python-market-data:
     base-url: http://127.0.0.1:8000
+    daily-bars-timeout-ms: 45000
+    breadth-timeout-ms: 120000
     forecast-timeout-ms: 240000
     discovery-timeout-ms: 900000
   fuyao:
