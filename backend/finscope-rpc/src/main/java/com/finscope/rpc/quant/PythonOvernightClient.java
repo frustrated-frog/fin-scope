@@ -26,6 +26,8 @@ import java.util.Map;
 
 @Component
 public class PythonOvernightClient {
+    // Fifty frozen reports include validation evidence and can exceed the default 2 MiB.
+    private static final int HISTORY_MAX_BYTES = 8 * 1024 * 1024;
     @Resource
     private FinanceHttpClient http;
     @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
@@ -57,8 +59,8 @@ public class PythonOvernightClient {
     public List<OvernightResearchReport> history(boolean settle) {
         try {
             FinanceHttpResponse response = settle
-                    ? http.postJson("PYTHON_OVERNIGHT", endpoint("settle"), "{}", Collections.emptyMap(), timeoutMs)
-                    : http.get("PYTHON_OVERNIGHT", endpoint("history"), Collections.emptyMap());
+                    ? http.postJson("PYTHON_OVERNIGHT", endpoint("settle"), "{}", Collections.emptyMap(), timeoutMs, HISTORY_MAX_BYTES)
+                    : http.get("PYTHON_OVERNIGHT", endpoint("history"), Collections.emptyMap(), HISTORY_MAX_BYTES, timeoutMs);
             List<OvernightResearchReport> reports = json.readValue(response.getBody(),
                     new TypeReference<List<OvernightResearchReport>>() { });
             for (OvernightResearchReport report : reports) {

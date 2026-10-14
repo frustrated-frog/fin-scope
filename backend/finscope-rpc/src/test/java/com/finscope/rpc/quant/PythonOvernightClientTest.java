@@ -23,6 +23,34 @@ import static org.mockito.Mockito.*;
 
 class PythonOvernightClientTest {
     @Test
+    void readsAndSettlesArchivesLargerThanDefaultHttpLimit() throws Exception {
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        String payload = "[" + " ".repeat(3 * 1024 * 1024) + "]";
+        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        server.createContext("/v1/quant/overnight/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var http = new com.finscope.rpc.marketintel.JdkFinanceHttpClient();
+            var client = new PythonOvernightClient();
+            String base = "http://127.0.0.1:" + server.getAddress().getPort();
+            ReflectionTestUtils.setField(client, "http", http);
+            ReflectionTestUtils.setField(client, "baseUrl", base);
+            ReflectionTestUtils.setField(client, "timeoutMs", 30000);
+            assertThrows(ProviderContractException.class,
+                    () -> http.get("PYTHON_OVERNIGHT", URI.create(base + "/v1/quant/overnight/history"), Map.of()));
+            assertTrue(client.history(false).isEmpty());
+            assertTrue(client.history(true).isEmpty());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void synchronizesLedgerDatesAndCostsWithoutSendingValuationFields() throws Exception {
         var context = new OvernightAutomationContext();
         context.setEnabled(true);
