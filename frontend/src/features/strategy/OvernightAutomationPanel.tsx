@@ -100,6 +100,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
       <p>{problem ? `${problem.cutoff} ${states[problem.status]}：${problem.reason ?? '请查看运行状态'}` : mode === 'TAIL_ENTRY' ? '14:20 / 14:40 扫描候选，14:30 / 14:45 冻结判断。保持服务运行即可，无需手动选股。' : '交易日 15:10 起自动研判真实持仓，成本与数量来自账本。'}</p>
       {!!pool?.candidates?.length && <small>{pool.candidates.map(item => item.instrumentName || item.instrumentCode).join(' · ')}</small>}
     </div>}
+    {research.some(job => job.key.includes('|RECOVERY|')) && <p className="overnight-auto-notice">含人工事后补跑：候选采集晚于原决策窗口，仅供复盘，不是当时已生成的预测。</p>}
     <div className="overnight-candidate-list">{results.map(({ job, result }) => {
       const candidate = job.candidates?.find(item => item.instrumentCode === result.instrumentCode);
       const report = records.find(item => item.id === result.reportId);
@@ -108,7 +109,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
       const probability = direction?.upProbability;
       return <button type="button" className="overnight-candidate" key={`${job.key}-${result.instrumentCode}`}
         onClick={() => setSelected(`${job.key}-${result.instrumentCode}`)}>
-        <span className="overnight-candidate-name"><b>{candidate?.instrumentName ?? job.instrumentName ?? result.instrumentCode}</b><small>{result.instrumentCode} · {job.cutoff}</small></span>
+        <span className="overnight-candidate-name"><b>{candidate?.instrumentName ?? job.instrumentName ?? result.instrumentCode}</b><small>{result.instrumentCode} · {job.cutoff}{job.key.includes('|RECOVERY|') ? ' · 事后补跑' : ''}</small></span>
         <span><small>次日收盘上涨概率</small><strong>{probability == null ? '—' : `${(probability * 100).toFixed(1)}%`}</strong><small>{direction?.selectedModel === 'PRIOR' ? '历史比例参考' : probability == null ? '等待有效预测' : direction?.validated ? '已通过前瞻对照' : '模型判断 · 验证中'}</small></span>
         <span><small>次日 10:00 净收益参考</small><strong>{target?.expectedNetReturn == null ? '—' : `${(target.expectedNetReturn * 100).toFixed(2)}%`}</strong><small>{target?.probabilitySource === 'HISTORICAL_BASELINE' ? '历史平均 · 已扣假设成本' : '已扣假设成本'}</small></span>
         <span className="overnight-candidate-state"><small>{states[result.status] ?? result.status}</small><small>{target?.lowerNetReturn == null ? '风险区间待验证' : `收益区间下界 ${(target.lowerNetReturn * 100).toFixed(1)}%`}</small><b>查看依据 ↗</b></span>

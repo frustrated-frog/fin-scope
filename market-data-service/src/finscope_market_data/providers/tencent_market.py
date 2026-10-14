@@ -133,7 +133,9 @@ class TencentMarketSnapshotService:
                         if quote.change_pct is None or quote.amount is None:
                             continue
                         result.append({'code':symbol.prefixed_code,'trade':quote.price,
-                                       'change_pct':quote.change_pct,'amount':quote.amount})
+                                       'change_pct':quote.change_pct,'amount':quote.amount,
+                                       'name':quote.name,'open':quote.open,'high':quote.high,'low':quote.low,
+                                       'observed_at':quote.observed_at})
                     return result
                 with ThreadPoolExecutor(max_workers=4,thread_name_prefix='tencent-market') as pool:
                     futures = [pool.submit(batch,values) for values in batches]

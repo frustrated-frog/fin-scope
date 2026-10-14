@@ -158,7 +158,7 @@ def create_app(
     overnight = OvernightService(OvernightStore(config.data_dir / "overnight-research.db"), OvernightMinuteProvider())
 
     capture = OvernightCapture(overnight)
-    automation = OvernightAutomation(overnight, OvernightCandidateScanner())
+    automation = OvernightAutomation(overnight, OvernightCandidateScanner(fallback=tencent_market))
     overnight.joint = OvernightJointResearch(overnight.store, automation.store)
     joint_worker = OvernightJointWorker(automation, overnight.joint)
     history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),

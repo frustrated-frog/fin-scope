@@ -186,6 +186,71 @@ def quote(code='605058', **kwargs):
             'f124': datetime(2026, 9, 21, 14, 20, tzinfo=ZoneInfo('Asia/Shanghai')).timestamp(), **kwargs}
 
 
+def test_backup_scan_preserves_freshness_and_does_not_invent_volume_ratio():
+    import pandas as pd
+    now = datetime(2026, 9, 21, 14, 20)
+    frame = pd.DataFrame([{'code': 'sh605058', 'name': '澳弘电子', 'trade': 23, 'change_pct': 5,
+        'amount': 200_000_000, 'high': 23.2, 'low': 20, 'open': 21,
+        'observed_at': now.replace(tzinfo=ZoneInfo('Asia/Shanghai'))}])
+    scanner = OvernightCandidateScanner(fallback=SimpleNamespace(fetch=lambda day: frame), clock=lambda: now)
+    async def unavailable():
+        raise ValueError('upstream disconnected')
+    scanner._quotes = unavailable
+    result = scanner.scan(now, 6)
+    assert result['sourceCode'] == 'TENCENT_LIVE'
+    assert result['candidates'][0]['volumeRatio'] is None
+    assert result['candidates'][0]['selectionLane'] == 'BROAD_RESEARCH'
+    assert result['observations'][0]['ruleRejectionReasons'] == ['MISSING_VOLUME_RATIO']
+    frame.loc[0, 'observed_at'] -= timedelta(days=1)
+    with pytest.raises(ValueError, match='时间戳'):
+        scanner.scan(now, 6)
+
+
+def test_successful_primary_scan_does_not_fetch_backup():
+    now = datetime(2026, 9, 21, 14, 20)
+    def unexpected(day):
+        pytest.fail('successful primary must not invoke backup')
+    scanner = OvernightCandidateScanner(fallback=SimpleNamespace(fetch=unexpected), clock=lambda: now)
+    async def primary():
+        return [quote()]
+    scanner._quotes = primary
+    assert scanner.scan(now, 6)['sourceCode'] == 'EASTMONEY_LIVE'
+
+
+def test_recovery_keeps_missed_window_and_is_idempotent(flow):
+    from finscope_market_data.overnight.recovery import recover_today
+    auto, now, calls, scans = flow
+    now[0] = now[0].replace(hour=15)
+    auto.tick()
+    original = auto.store.job('2026-09-21|TAIL|14:30')
+    def generate(request, freeze_all, settle_cached, cohort):
+        assert freeze_all and not settle_cached and cohort == 'CUSTOM'
+        calls.append(request)
+        return {'id': 'recovery', 'status': 'DATA_UNAVAILABLE',
+                'evidenceKind': 'RETROSPECTIVE', 'warnings': ['missing minute data']}
+    auto.service.generate = generate
+    recovered = recover_today(auto, '14:30')
+    assert recovered['status'] == 'PARTIAL'
+    assert recovered['results'][0]['evidenceKind'] == 'RETROSPECTIVE'
+    assert auto.store.job('2026-09-21|TAIL|14:30') == original
+    assert recover_today(auto, '14:30') == recovered
+    assert len(calls) == len(scans) == 1
+
+
+def test_recovery_rejects_open_windows_and_retains_scan_failure(flow):
+    from finscope_market_data.overnight.recovery import recover_today
+    auto, now, calls, scans = flow
+    with pytest.raises(ValueError, match='尚未结束'):
+        recover_today(auto, '14:30')
+    assert not auto.store.jobs()
+    now[0] = now[0].replace(hour=15)
+    def failed(at, limit):
+        raise ValueError('no fresh quotes')
+    auto.scanner.scan = failed
+    assert recover_today(auto, '14:30')['status'] == 'FAILED'
+    assert not calls
+
+
 def test_candidate_filter_rejects_stale_halted_limit_up_and_unsupported_rows():
     now = datetime(2026, 9, 21, 14, 20)
     rows = [quote(), quote('600001', f3=9.8), quote('600002', f6=0), quote('600003', f14='ST测试'),

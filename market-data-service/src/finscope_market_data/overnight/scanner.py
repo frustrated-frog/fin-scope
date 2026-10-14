@@ -7,9 +7,14 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from finscope_market_data.providers.http import ProviderHttpClient
+from finscope_market_data.providers.base import ProviderError
 
 
 class OvernightCandidateScanner:
+    def __init__(self, fallback=None, clock=None):
+        self.fallback = fallback
+        self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None))
+
     async def _quotes(self):
         http = ProviderHttpClient(timeout_seconds=8)
         rows = []
@@ -31,12 +36,29 @@ class OvernightCandidateScanner:
             await http.aclose()
 
     def scan(self, now, limit):
-        rows = asyncio.run(self._quotes())
-        received = datetime.now(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None)
-        return self.select(rows, received, limit)
+        try:
+            rows = asyncio.run(self._quotes())
+            return self.select(rows, self.clock(), limit)
+        except (ProviderError, ValueError, OSError) as primary_error:
+            if self.fallback is None:
+                raise
+            # Tencent does not supply a verified volume ratio in our adapter.
+            # Such quotes may enter the existing broad research lane only.
+            frame = self.fallback.fetch(now.date())
+            rows = [{'f12': row['code'][2:], 'f14': row['name'], 'f2': row['trade'],
+                     'f3': row['change_pct'], 'f6': row['amount'], 'f15': row['high'],
+                     'f16': row['low'], 'f17': row['open'], 'f124': row['observed_at'].timestamp()}
+                    for row in frame.to_dict('records')]
+            rows = sorted(rows, key=lambda row: -row['f6'])[:200] + sorted(rows, key=lambda row: -row['f3'])[:200]
+            result = self.select(rows, self.clock(), limit, allow_missing_ratio=True)
+            result.update(sourceCode='TENCENT_LIVE',
+                scope='腾讯有效报价中成交额与涨幅各前 200 条；量比缺失，仅纳入广泛研究候选',
+                warnings=[f'东方财富扫描失败（{type(primary_error).__name__}），已切换腾讯；未补造量比',
+                          *frame.attrs.get('warnings', [])])
+            return result
 
     @staticmethod
-    def select(rows, now, limit):
+    def select(rows, now, limit, allow_missing_ratio=False):
         candidates = {}
         observations = {}
         broad = {}
@@ -49,10 +71,13 @@ class OvernightCandidateScanner:
             if not name or any(flag in name.upper() for flag in ('ST', '退', 'N', 'C')):
                 continue
             try:
-                price, change, amount, ratio, high, low, opening = [float(row[key])
-                    for key in ('f2', 'f3', 'f6', 'f10', 'f15', 'f16', 'f17')]
+                price, change, amount, high, low, opening = [float(row[key])
+                    for key in ('f2', 'f3', 'f6', 'f15', 'f16', 'f17')]
+                ratio = None if allow_missing_ratio and row.get('f10') is None else float(row['f10'])
                 observed = datetime.fromtimestamp(float(row['f124']), ZoneInfo('Asia/Shanghai')).replace(tzinfo=None)
-                if not all(math.isfinite(v) for v in (price, change, amount, ratio, high, low, opening)):
+                if not all(math.isfinite(v) for v in (price, change, amount, high, low, opening)):
+                    continue
+                if ratio is not None and not math.isfinite(ratio):
                     continue
             except (KeyError, TypeError, ValueError, OverflowError, OSError):
                 continue
@@ -69,12 +94,14 @@ class OvernightCandidateScanner:
                 reasons.append('LOW_LIQUIDITY')
             if not .5 <= change < board_limit:
                 reasons.append('CHANGE_OUTSIDE_RULE')
-            if ratio < 1:
+            if ratio is None:
+                reasons.append('MISSING_VOLUME_RATIO')
+            elif ratio < 1:
                 reasons.append('LOW_VOLUME_RATIO')
             if location < .65 or price < opening or high == low:
                 reasons.append('WEAK_OR_ONE_PRICE')
             # Ranking is an acquisition priority, never presented as an up probability.
-            score = 30 * location + 8 * min(ratio, 4) + 2 * min(change, 8)
+            score = 30 * location + 8 * min(ratio or 0, 4) + 2 * min(change, 8)
             symbol = code + ('.SH' if code.startswith('6') else '.SZ')
             observation = {'instrumentCode': symbol, 'instrumentName': name,
                 'changePct': change, 'amount': amount, 'volumeRatio': ratio,

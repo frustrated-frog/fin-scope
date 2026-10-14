@@ -94,3 +94,12 @@ test('shows historical coverage separately from predictive accuracy and exposes 
   expect(screen.getByText('历史源价格冲突，未合并')).toBeVisible();
   expect(screen.getByText(/历史补数不计作前瞻预测成绩/)).toBeVisible();
 });
+
+
+test('labels retrospective recovery separately from timely forecasts', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, jobs: [{ ...state.jobs[0],
+    key: '2026-09-21|RECOVERY|14:30', status: 'PARTIAL' }] })));
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
+  expect(await screen.findByText(/含人工事后补跑/)).toBeVisible();
+  expect(screen.getByText('605058.SH · 14:30 · 事后补跑')).toBeVisible();
+});
