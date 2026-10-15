@@ -13,6 +13,7 @@ import { RadarOverview } from './RadarOverview';
 import { BreadthWorkspace } from './BreadthWorkspace';
 import './RadarWorkspace.css';
 import './MarketPulseMaterials.css';
+import { MarketAgentOverlay } from './MarketAgentOverlay';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -476,6 +477,8 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       </>}
 
       <footer className="market-pulse-disclaimer"><span>研究边界</span><p>研究候选不是买入指令。页面用于提高研究优先级，最终决策仍需核验公司基本面、估值、流动性与个人风险承受能力。</p><time>{workspace.generatedAt ? `生成于 ${workspace.generatedAt.replace('T', ' ').slice(0, 16)}` : ''}</time></footer>
+      <MarketAgentOverlay businessDate={workspace.businessDate} currentView={view}
+        qualityStatus={workspace.qualityStatus} generatedAt={workspace.generatedAt} />
     </section>
   );
 }
