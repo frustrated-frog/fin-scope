@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="FinScope Frontend" type="js.build_tools.npm" factoryName="npm">
+    <package-json value="$PROJECT_DIR$/frontend/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="dev:agent" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs>
+      <env name="VITE_WEAVRIA_AGENT_URL" value="http://127.0.0.1:8766" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>

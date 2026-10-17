@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="FinScope with Weavria" type="CompoundRunConfigurationType">
+    <toRun name="FinScope Backend" type="SpringBootApplicationConfigurationType" />
+    <toRun name="FinScope Frontend" type="js.build_tools.npm" />
+    <toRun name="Weavria Sidecar" type="ShConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

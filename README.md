@@ -300,6 +300,12 @@ cd frontend
 VITE_WEAVRIA_AGENT_URL=http://127.0.0.1:8765 npm run dev
 ```
 
+使用 IDEA 时可以直接运行共享配置 `FinScope with Weavria`。它会同时启动后端、固定使用
+`5173` 且带 Agent 地址的前端和 Weavria Sidecar；Sidecar 默认使用 `8766`，避免与本机其他开发服务争用
+`8765`。启动脚本只读取 `application.yml` 中的模型地址/名称以及用户目录
+`~/.config/finscope/llm.local.properties` 中的密钥，不会复制或提交密钥。若 Weavria 不在默认的
+`../../weavria` 位置，可在 `Weavria Sidecar` 配置中设置 `WEAVRIA_PROJECT_DIR`。
+
 悬浮窗只向 Weavria 传递当前页面、业务日期和质量状态等导航上下文。回答所需的市场事实由
 Weavria 通过 FinScope 现有 `/api/market-pulse/**` 只读接口重新获取；当前版本不会刷新行情、
 修改 FinScope 数据或执行交易操作。可提交的示例配置见 `frontend/.env.example`。
