@@ -18,6 +18,8 @@ type AgentMessage = {
   version?: number;
 };
 
+const WEAVRIA_WIDGET_ASSET_VERSION = 2;
+
 export function MarketAgentOverlay({
   businessDate,
   currentView,
@@ -83,7 +85,7 @@ export function MarketAgentOverlay({
         </header>
         <iframe
           ref={frameRef}
-          src={`${endpoint.href}/widget`}
+          src={`${endpoint.href}/widget?asset-version=${WEAVRIA_WIDGET_ASSET_VERSION}`}
           title="市场状态 Agent 对话"
           sandbox="allow-scripts allow-same-origin"
           referrerPolicy="no-referrer"

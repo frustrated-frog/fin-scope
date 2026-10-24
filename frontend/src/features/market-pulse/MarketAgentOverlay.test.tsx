@@ -24,7 +24,10 @@ describe('MarketAgentOverlay', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '问市场 Agent' }));
     const frame = screen.getByTitle('市场状态 Agent 对话') as HTMLIFrameElement;
-    expect(frame).toHaveAttribute('src', 'http://127.0.0.1:8765/widget');
+    expect(frame).toHaveAttribute(
+      'src',
+      'http://127.0.0.1:8765/widget?asset-version=2'
+    );
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
     const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
 
