@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from './app/AppShell';
+import { AgentView } from './features/agent/AgentView';
 import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleView } from './features/articles/ArticleView';
 import { BriefReaderView } from './features/briefs/BriefReaderView';
@@ -242,6 +243,8 @@ export default function App() {
     switch (view) {
       case 'dashboard':
         return 'Dashboard';
+      case 'agent':
+        return 'Agent · 全域问答';
       case 'sources':
         return 'Sources';
       case 'intake':
@@ -497,6 +500,7 @@ export default function App() {
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       onRefresh={refreshWorkspace}
     >
+      {view === 'agent' && <AgentView />}
       {view === 'dashboard' && (
         <DashboardView
           dashboard={dashboard}

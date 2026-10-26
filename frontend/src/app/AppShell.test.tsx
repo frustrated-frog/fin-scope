@@ -1,12 +1,12 @@
 // @ts-expect-error Vitest runs in Node, while the app intentionally avoids shipping Node types.
 import { readFileSync } from 'node:fs';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import { AppShell } from './AppShell';
 
-test('groups the workspace and exposes one knowledge entry', () => {
+test('groups the workspace and exposes the knowledge workbench', () => {
   render(
     <AppShell
       view="knowledge"
@@ -44,8 +44,38 @@ test('groups the workspace and exposes one knowledge entry', () => {
   expect(document.querySelector('main.workspace')).not.toHaveClass('workspace--flush-content');
 });
 
-test('removes the topbar gap only for the industry chain workspace', () => {
+test('exposes the full Agent workspace under knowledge and judgment', () => {
+  const onChangeView = vi.fn();
   const { container } = render(
+    <AppShell
+      view="agent"
+      currentTitle="Agent · 全域问答"
+      theme="dark"
+      articlesCount={31}
+      topicsCount={4}
+      message="准备就绪"
+      toasts={[]}
+      onChangeView={onChangeView}
+      onToggleTheme={vi.fn()}
+      onRefresh={vi.fn()}
+    >
+      <div />
+    </AppShell>
+  );
+
+  const knowledgeGroup = screen.getByRole('region', { name: '知识与判断' });
+  const agentEntry = within(knowledgeGroup).getByRole('button', { name: 'Agent' });
+  expect(agentEntry).toHaveAttribute('aria-current', 'page');
+  expect(within(agentEntry).getByText('AI')).toBeInTheDocument();
+  expect(within(agentEntry).getByText('全域问答')).toBeInTheDocument();
+  expect(container.querySelector('main.workspace')).toHaveClass('workspace--flush-content', 'workspace--agent');
+
+  fireEvent.click(agentEntry);
+  expect(onChangeView).toHaveBeenCalledWith('agent');
+});
+
+test('removes the topbar gap for full-canvas workspaces', () => {
+  const { container, rerender } = render(
     <AppShell
       view="industryChain"
       currentTitle="Industry Graph · 产业链图谱"
@@ -63,6 +93,24 @@ test('removes the topbar gap only for the industry chain workspace', () => {
   );
 
   expect(container.querySelector('main.workspace')).toHaveClass('workspace--flush-content');
+
+  rerender(
+    <AppShell
+      view="agent"
+      currentTitle="Agent · 全域问答"
+      theme="dark"
+      articlesCount={31}
+      topicsCount={4}
+      message="已打开 Agent"
+      toasts={[]}
+      onChangeView={vi.fn()}
+      onToggleTheme={vi.fn()}
+      onRefresh={vi.fn()}
+    >
+      <div />
+    </AppShell>
+  );
+  expect(container.querySelector('main.workspace')).toHaveClass('workspace--flush-content', 'workspace--agent');
 
   const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
   const styles = readFileSync(`${cwd}/src/styles.css`, 'utf8');

@@ -741,6 +741,16 @@ test('renders the FinScope workspace shell and dashboard', async () => {
   expect(await screen.findByRole('heading', { name: '今天的研究脉冲' })).toBeInTheDocument();
 });
 
+test('opens the full Agent workspace from the primary navigation', async () => {
+  render(<App />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+  expect(screen.getByRole('heading', { name: 'Agent · 全域问答' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '配置 FinScope Agent' })).toBeInTheDocument();
+  expect(document.querySelector('main.workspace')).toHaveClass('workspace--agent');
+});
+
 test('dashboard keeps the research pulse and replaces operational sections with market summaries', async () => {
   render(<App />);
 

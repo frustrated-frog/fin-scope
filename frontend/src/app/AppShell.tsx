@@ -24,6 +24,7 @@ const navGroups: Array<{
   {
     label: '知识与判断',
     items: [
+      { id: 'agent', label: 'Agent', hint: '全域问答', code: 'AI' },
       { id: 'knowledge', label: 'Facts & Knowledge', hint: '事实与知识', code: 'KN' },
       { id: 'globalExpectations', label: 'Global Expectations', hint: '全球预期', code: 'GE' },
       { id: 'contentStudio', label: 'Studio', hint: '内容输出', code: 'ST' },
@@ -75,6 +76,12 @@ export function AppShell({
   onRefresh: () => void;
   children: ReactNode;
 }) {
+  const workspaceClassName = view === 'industryChain'
+    ? 'workspace workspace--flush-content'
+    : view === 'agent'
+      ? 'workspace workspace--flush-content workspace--agent'
+      : 'workspace';
+
   return (
     <div className="app-shell" data-theme={theme} data-view={view}>
       <div className="shell-ambient" aria-hidden="true" />
@@ -125,7 +132,7 @@ export function AppShell({
         </nav>
       </aside>
 
-      <main className={view === 'industryChain' ? 'workspace workspace--flush-content' : 'workspace'}>
+      <main className={workspaceClassName}>
         <header className="topbar">
           <div>
             <p className="eyebrow">Local-first investment intelligence</p>
