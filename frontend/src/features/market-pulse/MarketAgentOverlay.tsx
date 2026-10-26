@@ -18,7 +18,7 @@ type AgentMessage = {
   version?: number;
 };
 
-const WEAVRIA_WIDGET_ASSET_VERSION = 3;
+const WEAVRIA_WIDGET_ASSET_VERSION = 4;
 
 export function MarketAgentOverlay({
   businessDate,

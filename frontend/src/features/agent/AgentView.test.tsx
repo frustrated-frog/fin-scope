@@ -26,7 +26,7 @@ describe('AgentView', () => {
     const frame = screen.getByTitle('FinScope Agent 对话') as HTMLIFrameElement;
     expect(frame).toHaveAttribute(
       'src',
-      'http://127.0.0.1:8765/widget?mode=full&asset-version=3'
+      'http://127.0.0.1:8765/widget?mode=full&asset-version=4'
     );
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');

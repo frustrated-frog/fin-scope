@@ -288,10 +288,11 @@ npm run dev
 
 默认访问 `http://localhost:5173`。如果端口占用，Vite 会选择下一个可用端口；前端将 `/api` 代理到 `http://localhost:8080`。
 
-### 可选：接入 Weavria 市场状态 Agent
+### 可选：接入 Weavria Agent
 
-市场状态与机会页可以挂载一个本机 Weavria 悬浮窗。该接入默认关闭，不修改 FinScope
-后端、数据库或既有 Agent；未配置或 sidecar 不可用时，FinScope 仍可独立运行。
+左侧 `Agent · 全域问答` 页面与市场状态页悬浮窗都可以连接本机 Weavria Sidecar。该接入不在
+FinScope 中实现 Agent Runtime，也不修改后端、数据库或既有 Agent；未配置或 sidecar 不可用时，
+FinScope 仍可独立运行，Agent 页面会显示本地配置指引。
 
 先按 Weavria 仓库 `apps/finscope/README.md` 启动 sidecar，再为前端设置地址：
 
@@ -306,9 +307,11 @@ VITE_WEAVRIA_AGENT_URL=http://127.0.0.1:8765 npm run dev
 `~/.config/finscope/llm.local.properties` 中的密钥，不会复制或提交密钥。若 Weavria 不在默认的
 `../../weavria` 位置，可在 `Weavria Sidecar` 配置中设置 `WEAVRIA_PROJECT_DIR`。
 
-悬浮窗只向 Weavria 传递当前页面、业务日期和质量状态等导航上下文。回答所需的市场事实由
-Weavria 通过 FinScope 现有 `/api/market-pulse/**` 只读接口重新获取；当前版本不会刷新行情、
-修改 FinScope 数据或执行交易操作。可提交的示例配置见 `frontend/.env.example`。
+页面只向 Weavria 传递当前页面、业务日期、质量状态或导航标签等上下文。回答所需事实由 Weavria
+适配器通过 FinScope 现有 HTTP API 重新获取：市场快照使用专用只读工具，其余采集、研究、知识、
+新闻、自选、财务、产业链、策略、持仓和量化数据使用固定路由白名单。所有工具均声明为只读，
+不接受模型提供 URL、HTTP 方法或 SQL，并显式关闭刷新开关；不会修改 FinScope 数据或执行交易。
+完整页与悬浮窗复用同一持久会话。可提交的示例配置见 `frontend/.env.example`。
 
 ### 不使用 Docker 运行行情服务
 

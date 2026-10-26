@@ -11,7 +11,7 @@ type AgentMessage = {
   version?: unknown;
 };
 
-const WEAVRIA_WIDGET_ASSET_VERSION = 3;
+const WEAVRIA_WIDGET_ASSET_VERSION = 4;
 const WORKSPACE_NAVIGATION_CONTEXT = {
   schema_version: 1,
   surface: 'finscope_workspace',
