@@ -294,6 +294,9 @@ npm run dev
 FinScope 中实现 Agent Runtime，也不修改后端、数据库或既有 Agent；未配置或 sidecar 不可用时，
 FinScope 仍可独立运行，Agent 页面会显示本地配置指引。
 
+对话界面由 FinScope 原生 React 组件渲染并沿用工作台视觉规范，前端只调用 Sidecar 的会话和消息
+JSON 接口；Weavria 不托管、嵌入或定制 FinScope 页面。完整页与市场浮窗复用同一套组件和持久会话。
+
 先按 Weavria 仓库 `apps/finscope/README.md` 启动 sidecar，再为前端设置地址：
 
 ```bash
@@ -311,7 +314,7 @@ VITE_WEAVRIA_AGENT_URL=http://127.0.0.1:8765 npm run dev
 适配器通过 FinScope 现有 HTTP API 重新获取：市场快照使用专用只读工具，其余采集、研究、知识、
 新闻、自选、财务、产业链、策略、持仓和量化数据使用固定路由白名单。所有工具均声明为只读，
 不接受模型提供 URL、HTTP 方法或 SQL，并显式关闭刷新开关；不会修改 FinScope 数据或执行交易。
-完整页与悬浮窗复用同一持久会话。可提交的示例配置见 `frontend/.env.example`。
+可提交的示例配置见 `frontend/.env.example`。
 
 ### 不使用 Docker 运行行情服务
 

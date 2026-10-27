@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import { AgentConversation } from '../agent/AgentConversation';
+import { parseAgentEndpoint } from '../agent/agentClient';
 import type { MarketPulseQuality } from './marketPulseTypes';
 import './MarketAgentOverlay.css';
 
@@ -13,12 +15,10 @@ type MarketAgentOverlayProps = {
   agentUrl?: string;
 };
 
-type AgentMessage = {
-  type?: string;
-  version?: number;
-};
-
-const WEAVRIA_WIDGET_ASSET_VERSION = 4;
+const MARKET_SUGGESTIONS = [
+  '今天的市场参与度如何？',
+  '当前最值得跟踪的市场转折是什么？'
+] as const;
 
 export function MarketAgentOverlay({
   businessDate,
@@ -27,50 +27,16 @@ export function MarketAgentOverlay({
   generatedAt,
   agentUrl = import.meta.env.VITE_WEAVRIA_AGENT_URL
 }: MarketAgentOverlayProps) {
-  const endpoint = useMemo(() => parseEndpoint(agentUrl), [agentUrl]);
-  const frameRef = useRef<HTMLIFrameElement>(null);
+  const endpoint = useMemo(() => parseAgentEndpoint(agentUrl), [agentUrl]);
   const [open, setOpen] = useState(false);
   const context = useMemo(() => ({
-    schema_version: 1,
-    surface: 'market_pulse',
+    schema_version: 1 as const,
+    surface: 'market_pulse' as const,
     business_date: businessDate ?? null,
     current_view: currentView,
     quality_status: qualityStatus ?? null,
     generated_at: generatedAt ?? null
   }), [businessDate, currentView, qualityStatus, generatedAt]);
-
-  const postContext = useCallback(() => {
-    if (!endpoint || !frameRef.current?.contentWindow) {
-      return;
-    }
-    frameRef.current.contentWindow.postMessage(
-      { type: 'weavria:context', context },
-      endpoint.origin
-    );
-  }, [context, endpoint]);
-
-  useEffect(() => {
-    if (!endpoint) {
-      return undefined;
-    }
-    const receive = (event: MessageEvent<AgentMessage>) => {
-      if (event.origin !== endpoint.origin
-        || event.source !== frameRef.current?.contentWindow
-        || event.data?.type !== 'weavria:ready'
-        || event.data.version !== 1) {
-        return;
-      }
-      postContext();
-    };
-    window.addEventListener('message', receive);
-    return () => window.removeEventListener('message', receive);
-  }, [endpoint, postContext]);
-
-  useEffect(() => {
-    if (open) {
-      postContext();
-    }
-  }, [open, postContext]);
 
   if (!endpoint) {
     return null;
@@ -80,16 +46,17 @@ export function MarketAgentOverlay({
     <aside className={`market-agent-overlay${open ? ' is-open' : ''}`} aria-label="市场状态 Agent">
       <section className="market-agent-frame" id="market-agent-frame" hidden={!open}>
         <header>
-          <div><span>WEAVRIA LAB</span><strong>市场状态 Agent</strong></div>
+          <div><span>FIN/SCOPE</span><strong>市场状态 Agent</strong></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="收起市场状态 Agent">×</button>
         </header>
-        <iframe
-          ref={frameRef}
-          src={`${endpoint.href}/widget?asset-version=${WEAVRIA_WIDGET_ASSET_VERSION}`}
-          title="市场状态 Agent 对话"
-          sandbox="allow-scripts allow-same-origin"
-          referrerPolicy="no-referrer"
-        />
+        <div className="market-agent-conversation">
+          <AgentConversation
+            endpoint={endpoint}
+            context={context}
+            mode="compact"
+            suggestions={MARKET_SUGGESTIONS}
+          />
+        </div>
       </section>
       <button
         className="market-agent-launcher"
@@ -97,7 +64,7 @@ export function MarketAgentOverlay({
         aria-label={open ? '收起市场 Agent' : '问市场 Agent'}
         aria-expanded={open}
         aria-controls="market-agent-frame"
-        onClick={() => setOpen(value => !value)}
+        onClick={() => setOpen((value) => !value)}
       >
         <span aria-hidden="true"><i /><i /><i /></span>
         <strong>{open ? '收起 Agent' : '问市场 Agent'}</strong>
@@ -105,20 +72,4 @@ export function MarketAgentOverlay({
       </button>
     </aside>
   );
-}
-
-function parseEndpoint(value?: string) {
-  const normalized = value?.trim().replace(/\/+$/, '');
-  if (!normalized) {
-    return null;
-  }
-  try {
-    const url = new URL(normalized);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return null;
-    }
-    return { href: url.href.replace(/\/+$/, ''), origin: url.origin };
-  } catch {
-    return null;
-  }
 }

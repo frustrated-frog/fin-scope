@@ -83,7 +83,7 @@
 .market-agent-frame > header button { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
 .market-agent-frame > header button:hover,
 .market-agent-frame > header button:focus-visible { background: var(--surface-2); color: var(--ink); outline: none; }
-.market-agent-frame iframe { display: block; width: 100%; height: calc(100% - 52px); border: 0; background: var(--surface-2); }
+.market-agent-conversation { height: calc(100% - 52px); min-height: 0; background: var(--surface-2); }
 
 @media (prefers-reduced-motion: no-preference) {
   .market-agent-launcher { transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
