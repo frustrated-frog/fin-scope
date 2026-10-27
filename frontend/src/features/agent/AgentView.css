@@ -1,19 +1,202 @@
 .workspace.workspace--agent {
   padding: 0;
-  background: var(--base);
+  background: transparent;
+}
+
+.app-shell[data-view="agent"] > .shell-ambient {
+  background:
+    radial-gradient(ellipse at 22% 18%, rgba(74, 157, 202, .17), transparent 49%),
+    radial-gradient(ellipse at 78% 14%, rgba(120, 98, 197, .15), transparent 48%),
+    radial-gradient(ellipse at 66% 88%, rgba(66, 145, 180, .11), transparent 54%),
+    linear-gradient(145deg, #dfe9f2, #e7ebf4 52%, #e1e8f2);
+}
+
+.app-shell[data-theme="dark"][data-view="agent"] > .shell-ambient {
+  background:
+    radial-gradient(ellipse at 20% 16%, rgba(40, 120, 166, .18), transparent 48%),
+    radial-gradient(ellipse at 79% 12%, rgba(101, 72, 187, .18), transparent 50%),
+    radial-gradient(ellipse at 62% 84%, rgba(26, 99, 146, .13), transparent 54%),
+    linear-gradient(145deg, #050b14, #08111f 48%, #0d1423);
+}
+
+.app-shell[data-view="agent"] .topbar {
+  border-bottom-color: rgba(89, 139, 177, .17);
+  background: rgba(229, 238, 247, .7);
+  backdrop-filter: blur(22px) saturate(125%);
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
+}
+
+.app-shell[data-theme="dark"][data-view="agent"] .topbar {
+  border-bottom-color: rgba(119, 175, 215, .12);
+  background:
+    linear-gradient(90deg, rgba(7, 17, 30, .82), rgba(12, 18, 34, .72)),
+    rgba(7, 15, 28, .74);
 }
 
 .agent-workspace {
+  position: relative;
+  isolation: isolate;
   display: grid;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 18px clamp(14px, 2.4vw, 30px) 24px;
-  background: var(--base);
+  overflow: hidden;
+  padding: 22px clamp(16px, 2.6vw, 36px) 28px;
+  background:
+    linear-gradient(180deg, rgba(234, 243, 250, .08), rgba(214, 229, 241, .2)),
+    transparent;
+}
+
+.app-shell[data-theme="dark"] .agent-workspace {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(21, 75, 116, .08), transparent 46%),
+    linear-gradient(180deg, rgba(2, 8, 17, .06), rgba(2, 8, 17, .26));
 }
 
 .agent-workspace > .agent-conversation {
-  width: min(1180px, 100%);
+  z-index: 2;
+  width: min(1260px, 100%);
   margin: 0 auto;
+}
+
+.agent-space-field {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.agent-space-field::before,
+.agent-space-field::after {
+  position: absolute;
+  inset: -12%;
+  content: "";
+  pointer-events: none;
+}
+
+.agent-space-field::before {
+  background-image:
+    radial-gradient(circle at 7% 18%, rgba(50, 122, 168, .55) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 19% 73%, rgba(102, 88, 183, .46) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 31% 42%, rgba(52, 126, 174, .38) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 44% 12%, rgba(100, 86, 190, .4) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 58% 66%, rgba(52, 131, 177, .48) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 71% 29%, rgba(94, 83, 186, .48) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 82% 82%, rgba(45, 121, 169, .45) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 94% 48%, rgba(103, 90, 185, .38) 0 1.1px, transparent 1.8px);
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  background-size: 420px 310px;
+  opacity: .48;
+  mask-image: radial-gradient(ellipse at center, #000 26%, rgba(0, 0, 0, .68) 68%, transparent 100%);
+}
+
+.agent-space-field::after {
+  background-image:
+    radial-gradient(circle at 13% 26%, rgba(73, 151, 193, .62) 0 1.4px, transparent 2.1px),
+    radial-gradient(circle at 38% 82%, rgba(125, 105, 207, .54) 0 1.2px, transparent 2px),
+    radial-gradient(circle at 63% 18%, rgba(75, 156, 198, .58) 0 1.3px, transparent 2px),
+    radial-gradient(circle at 88% 68%, rgba(133, 111, 211, .5) 0 1.2px, transparent 2px);
+  background-size: 720px 520px;
+  opacity: .55;
+}
+
+.app-shell[data-theme="dark"] .agent-space-field::before {
+  background-image:
+    radial-gradient(circle at 7% 18%, rgba(119, 220, 255, .74) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 19% 73%, rgba(174, 151, 255, .62) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 31% 42%, rgba(112, 207, 248, .58) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 44% 12%, rgba(181, 157, 255, .58) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 58% 66%, rgba(117, 215, 255, .66) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 71% 29%, rgba(168, 146, 255, .66) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 82% 82%, rgba(107, 204, 248, .62) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 94% 48%, rgba(177, 153, 255, .58) 0 1.1px, transparent 1.8px);
+  opacity: .64;
+}
+
+.app-shell[data-theme="dark"] .agent-space-field::after {
+  background-image:
+    radial-gradient(circle at 13% 26%, rgba(133, 226, 255, .9) 0 1.4px, transparent 2.1px),
+    radial-gradient(circle at 38% 82%, rgba(184, 161, 255, .76) 0 1.2px, transparent 2px),
+    radial-gradient(circle at 63% 18%, rgba(134, 223, 255, .84) 0 1.3px, transparent 2px),
+    radial-gradient(circle at 88% 68%, rgba(191, 166, 255, .72) 0 1.2px, transparent 2px);
+  opacity: .68;
+}
+
+.agent-space-orbit {
+  position: absolute;
+  display: block;
+  border: 1px solid rgba(69, 142, 184, .13);
+  border-radius: 50%;
+  box-shadow: inset 0 0 60px rgba(67, 145, 188, .025);
+}
+
+.app-shell[data-theme="dark"] .agent-space-orbit {
+  border-color: rgba(116, 210, 251, .11);
+  box-shadow: inset 0 0 74px rgba(79, 175, 225, .025), 0 0 54px rgba(79, 142, 220, .025);
+}
+
+.agent-space-orbit::after {
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #57b5db;
+  box-shadow: 0 0 16px rgba(84, 186, 230, .72);
+  content: "";
+}
+
+.agent-space-orbit--near {
+  top: 4%;
+  right: -15%;
+  width: 760px;
+  height: 460px;
+  transform: rotate(-17deg);
+}
+
+.agent-space-orbit--far {
+  bottom: -35%;
+  left: -12%;
+  width: 940px;
+  height: 560px;
+  transform: rotate(14deg);
+  border-color: rgba(112, 87, 185, .1);
+}
+
+.agent-space-orbit--far::after {
+  top: 20%;
+  right: 5%;
+  left: auto;
+  width: 4px;
+  height: 4px;
+  background: #9a7ce7;
+  box-shadow: 0 0 14px rgba(154, 124, 231, .72);
+}
+
+.agent-space-horizon {
+  position: absolute;
+  right: -10%;
+  bottom: -16%;
+  left: -10%;
+  height: 44%;
+  display: block;
+  background:
+    linear-gradient(rgba(82, 145, 181, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(82, 145, 181, .08) 1px, transparent 1px);
+  background-size: 56px 42px;
+  mask-image: linear-gradient(180deg, transparent, rgba(0, 0, 0, .54));
+  opacity: .38;
+  transform: perspective(500px) rotateX(62deg);
+  transform-origin: center bottom;
+}
+
+.app-shell[data-theme="dark"] .agent-space-horizon {
+  background:
+    linear-gradient(rgba(102, 195, 235, .075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(102, 195, 235, .075) 1px, transparent 1px);
+  background-size: 56px 42px;
+  opacity: .44;
 }
 
 .agent-workspace--setup {
@@ -21,21 +204,34 @@
 }
 
 .agent-setup-state {
+  position: relative;
+  z-index: 2;
   display: grid;
-  width: min(520px, calc(100% - 32px));
+  width: min(540px, calc(100% - 32px));
   justify-items: start;
-  gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  padding: 34px;
-  box-shadow: var(--shadow-tight);
+  gap: 13px;
+  border: 1px solid rgba(97, 158, 198, .24);
+  border-radius: 20px;
+  background: rgba(241, 247, 252, .76);
+  padding: 36px;
+  box-shadow: 0 26px 80px rgba(18, 40, 64, .17), inset 0 1px 0 rgba(255, 255, 255, .42);
+  backdrop-filter: blur(24px);
+}
+
+.app-shell[data-theme="dark"] .agent-setup-state {
+  border-color: rgba(125, 193, 235, .18);
+  background: rgba(8, 20, 35, .76);
+  box-shadow: 0 28px 90px rgba(0, 4, 14, .46), inset 0 1px 0 rgba(198, 233, 255, .06);
 }
 
 .agent-setup-code {
-  color: var(--accent);
+  color: #3f94bd;
   font: 750 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .14em;
+  letter-spacing: .16em;
+}
+
+.app-shell[data-theme="dark"] .agent-setup-code {
+  color: #76d9ff;
 }
 
 .agent-setup-state h3,
@@ -46,8 +242,8 @@
 
 .agent-setup-state h3 {
   color: var(--ink);
-  font-size: 24px;
-  letter-spacing: -.025em;
+  font-size: 25px;
+  letter-spacing: -.03em;
 }
 
 .agent-setup-state p {
@@ -60,11 +256,11 @@
 .agent-setup-state code {
   max-width: 100%;
   overflow-wrap: anywhere;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
+  border: 1px solid rgba(98, 159, 198, .2);
+  border-radius: 9px;
+  background: rgba(71, 132, 171, .08);
   color: var(--ink);
-  padding: 9px 11px;
+  padding: 10px 12px;
   font-size: 12px;
 }
 
@@ -73,28 +269,71 @@
   font-size: 11px;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .agent-space-field::before {
+    animation: agent-stars-drift 54s linear infinite;
+  }
+
+  .agent-space-field::after {
+    animation: agent-stars-drift 88s linear infinite reverse;
+  }
+
+  .agent-space-orbit::after {
+    animation: agent-star-breathe 3.2s ease-in-out infinite alternate;
+  }
+
+  @keyframes agent-stars-drift {
+    to { background-position: 52px -34px, -41px 28px, 37px 22px, -28px -31px, 46px 30px, -34px 42px, 39px -25px, -44px -29px; }
+  }
+
+  @keyframes agent-star-breathe {
+    to { opacity: .45; transform: scale(.76); }
+  }
+}
+
 @media (max-width: 980px) {
   .agent-workspace {
-    min-height: 680px;
-    padding: 12px;
+    min-height: 700px;
+    padding: 14px;
+  }
+
+  .agent-space-orbit--near {
+    right: -45%;
   }
 }
 
 @media (max-width: 640px) {
   .agent-workspace {
-    min-height: 620px;
+    min-height: 640px;
     padding: 8px;
+  }
+
+  .agent-workspace > .agent-conversation {
+    border-radius: 16px;
   }
 
   .agent-setup-state {
     width: calc(100% - 16px);
-    border-radius: 12px;
-    padding: 24px;
+    border-radius: 16px;
+    padding: 25px;
+  }
+
+  .agent-space-horizon {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-space-field::before,
+  .agent-space-field::after,
+  .agent-space-orbit::after {
+    animation: none;
   }
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .agent-setup-state {
     background: var(--surface);
+    backdrop-filter: none;
   }
 }

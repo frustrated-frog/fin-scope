@@ -30,7 +30,9 @@ describe('AgentView', () => {
 
     expect(screen.getByRole('region', { name: 'FinScope Agent 对话' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '向整个研究工作区提问' })).toBeInTheDocument();
-    expect(screen.getByText('从一个研究问题开始')).toBeInTheDocument();
+    expect(screen.getByText('从问题出发，沿证据抵达结论。')).toBeInTheDocument();
+    expect(screen.getByLabelText('可检索范围')).toHaveTextContent('文章研究新闻市场财务知识');
+    expect(container.querySelector('.agent-space-field')).toBeInTheDocument();
     expect(container.querySelector('iframe')).not.toBeInTheDocument();
   });
 

@@ -33,6 +33,10 @@ const WORKSPACE_SUGGESTIONS = [
   '查找一家公司的财务、产业链与已有研究材料'
 ] as const;
 
+const WORKSPACE_SCOPE = ['文章', '研究', '新闻', '市场', '财务', '知识'] as const;
+const WORKSPACE_SUGGESTION_LABELS = ['线索聚合', '主题补证', '公司研究'] as const;
+const MARKET_SUGGESTION_LABELS = ['市场参与', '转折信号', '证据追踪'] as const;
+
 export function AgentConversation({
   endpoint,
   context,
@@ -164,7 +168,7 @@ export function AgentConversation({
     ? '正在分析'
     : connectionState === 'error'
       ? '上次运行失败'
-      : '只读就绪';
+      : '就绪';
 
   return (
     <section
@@ -172,11 +176,23 @@ export function AgentConversation({
       aria-label="FinScope Agent 对话"
     >
       <header className="agent-conversation-status">
-        <div>
+        <div className="agent-context-identity">
           <span className={`agent-status-dot is-${connectionState}`} aria-hidden="true" />
-          <strong>{contextLabel}</strong>
+          <span className="agent-context-copy">
+            <small>{mode === 'compact' ? 'MARKET CONTEXT' : 'EVIDENCE NAVIGATOR'}</small>
+            <strong>{contextLabel}</strong>
+          </span>
         </div>
-        <span className={`agent-status-label is-${connectionState}`}>{statusLabel}</span>
+        <div className="agent-status-cluster">
+          <span className="agent-readonly-badge">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="3.5" y="7" width="9" height="6.5" rx="2" />
+              <path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" />
+            </svg>
+            只读
+          </span>
+          <span className={`agent-status-label is-${connectionState}`}>{statusLabel}</span>
+        </div>
       </header>
 
       <div
@@ -188,19 +204,40 @@ export function AgentConversation({
       >
         {messages.length === 0 ? (
           <div className="agent-empty-state">
-            <span className="agent-empty-mark" aria-hidden="true">AI</span>
-            <div>
-              <h3>{mode === 'compact' ? '询问当前市场状态' : '从一个研究问题开始'}</h3>
-              <p>
-                {mode === 'compact'
-                  ? 'Agent 会按当前日期和视图读取只读证据。'
-                  : 'Agent 会按需读取 FinScope 中的文章、研究、市场与知识数据，并明确证据边界。'}
-              </p>
+            <div className="agent-empty-intro">
+              <div className="agent-empty-visual" aria-hidden="true">
+                <span className="agent-empty-mark">AI</span>
+                <i className="agent-evidence-orbit agent-evidence-orbit--outer" />
+                <i className="agent-evidence-orbit agent-evidence-orbit--inner" />
+                <i className="agent-evidence-node agent-evidence-node--one" />
+                <i className="agent-evidence-node agent-evidence-node--two" />
+                <i className="agent-evidence-node agent-evidence-node--three" />
+              </div>
+              <div className="agent-empty-copy">
+                <span>{mode === 'compact' ? 'MARKET EVIDENCE' : 'FIN//SCOPE EVIDENCE ORBIT'}</span>
+                <h3>
+                  {mode === 'compact'
+                    ? '读取这一刻的市场证据'
+                    : '从问题出发，沿证据抵达结论。'}
+                </h3>
+                <p>
+                  {mode === 'compact'
+                    ? '围绕当前日期与视图，只读检索市场状态、变化和证据边界。'
+                    : '按需检索 FinScope 中的研究材料，串联事实、变化与判断，并在回答中保留证据边界。'}
+                </p>
+                {mode === 'workspace' ? (
+                  <div className="agent-evidence-scope" aria-label="可检索范围">
+                    {WORKSPACE_SCOPE.map((item) => <span key={item}>{item}</span>)}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="agent-suggestions" aria-label="建议问题">
-              {suggestions.map((suggestion) => (
+              {suggestions.map((suggestion, index) => (
                 <button type="button" key={suggestion} onClick={() => chooseSuggestion(suggestion)}>
-                  {suggestion}
+                  <small>{presentSuggestionLabel(mode, index)}</small>
+                  <strong>{suggestion}</strong>
+                  <span aria-hidden="true">↗</span>
                 </button>
               ))}
             </div>
@@ -257,10 +294,13 @@ export function AgentConversation({
       </div>
 
       <form className="agent-composer" onSubmit={submitQuestion}>
-        <label htmlFor={`agent-question-${mode}`}>
-          {mode === 'compact' ? '向市场状态提问' : '向整个研究工作区提问'}
-        </label>
-        <div>
+        <div className="agent-composer-heading">
+          <label htmlFor={`agent-question-${mode}`}>
+            {mode === 'compact' ? '向市场状态提问' : '向整个研究工作区提问'}
+          </label>
+          <span>Enter 发送 · Shift + Enter 换行</span>
+        </div>
+        <div className="agent-composer-shell">
           <textarea
             id={`agent-question-${mode}`}
             ref={questionRef}
@@ -275,10 +315,17 @@ export function AgentConversation({
             onKeyDown={handleQuestionKeyDown}
           />
           <button type="submit" disabled={busy || !draft.trim()}>
-            {busy ? '分析中' : '发送'}
+            <span>{busy ? '分析中' : '发送'}</span>
+            <svg viewBox="0 0 18 18" aria-hidden="true">
+              <path d="M3 9h11M10 5l4 4-4 4" />
+            </svg>
           </button>
         </div>
         <small>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="3.5" y="7" width="9" height="6.5" rx="2" />
+            <path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" />
+          </svg>
           {activeClarificationId ? '本次输入将作为上一条追问的回答。' : '只读研究 · 不写入、不刷新、不生成业务数据'}
         </small>
       </form>
@@ -303,4 +350,9 @@ function presentMarketView(view: string): string {
     history: '历史演变'
   };
   return labels[view] ?? '市场状态';
+}
+
+function presentSuggestionLabel(mode: 'workspace' | 'compact', index: number): string {
+  const labels = mode === 'compact' ? MARKET_SUGGESTION_LABELS : WORKSPACE_SUGGESTION_LABELS;
+  return labels[index] ?? '研究路径';
 }

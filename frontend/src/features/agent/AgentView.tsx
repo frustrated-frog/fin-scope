@@ -28,6 +28,7 @@ export function AgentView({
     const hasInvalidUrl = Boolean(agentUrl?.trim());
     return (
       <section className="agent-workspace agent-workspace--setup" aria-labelledby="agent-setup-title">
+        <AgentSpaceField />
         <div className="agent-setup-state">
           <span className="agent-setup-code">AI / WORKSPACE</span>
           <h3 id="agent-setup-title">{hasInvalidUrl ? 'Agent 地址无效' : '配置 FinScope Agent'}</h3>
@@ -45,7 +46,18 @@ export function AgentView({
 
   return (
     <section className="agent-workspace" aria-label="FinScope Agent">
+      <AgentSpaceField />
       <AgentConversation endpoint={endpoint} context={WORKSPACE_NAVIGATION_CONTEXT} />
     </section>
+  );
+}
+
+function AgentSpaceField() {
+  return (
+    <div className="agent-space-field" aria-hidden="true">
+      <span className="agent-space-orbit agent-space-orbit--near" />
+      <span className="agent-space-orbit agent-space-orbit--far" />
+      <span className="agent-space-horizon" />
+    </div>
   );
 }
