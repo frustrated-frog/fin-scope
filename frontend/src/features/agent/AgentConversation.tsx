@@ -37,6 +37,28 @@ const WORKSPACE_SCOPE = ['文章', '研究', '新闻', '市场', '财务', '知�
 const WORKSPACE_SUGGESTION_LABELS = ['线索聚合', '主题补证', '公司研究'] as const;
 const MARKET_SUGGESTION_LABELS = ['市场参与', '转折信号', '证据追踪'] as const;
 
+type AnswerMarkdownNode = {
+  type: string;
+  value?: string;
+  children?: AnswerMarkdownNode[];
+};
+
+function hideInternalSourceMarkers() {
+  function visit(node: AnswerMarkdownNode): void {
+    if (node.type === 'link' || node.type === 'linkReference') {
+      return;
+    }
+    if (node.type === 'text' && node.value) {
+      node.value = node.value.replace(
+        /[ \t]*\[来源[ \t]*[:：][ \t]*(?:finscope:|market-pulse:)[^\]\r\n]+\]/g,
+        ''
+      );
+    }
+    node.children?.forEach(visit);
+  }
+  return visit;
+}
+
 export function AgentConversation({
   endpoint,
   context,
@@ -253,7 +275,7 @@ export function AgentConversation({
             {message.role === 'agent' ? (
               <div className="agent-message-markdown">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[remarkGfm, hideInternalSourceMarkers]}
                   components={{
                     a: ({ children, href }) => (
                       <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>

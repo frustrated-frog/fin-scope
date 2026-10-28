@@ -83,6 +83,41 @@ describe('AgentView', () => {
     }));
   });
 
+  it('hides internal source markers in answers while preserving Markdown and failed tool traces', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ session_id: 'session-1' }, 201))
+      .mockResolvedValueOnce(jsonResponse({
+        session_id: 'session-1',
+        run_id: 'run-1',
+        status: 'completed',
+        task_outcome: 'unverifiable',
+        answer: '## 数据汇总\n\n已确认 **公司身份** [来源:finscope:search:reaction_events:abc]。\n\n'
+          + '| 指标 | 值 |\n| --- | --- |\n| 行情 | 48.08 [来源：market-pulse:2026-10-27] |\n\n'
+          + '[查看报道](https://example.org/report)\n\n代码示例：`[来源:finscope:template]`',
+        error: null,
+        completion_reason: 'finalization_incomplete_evidence',
+        tools: [{ call_id: 'call-1', tool_name: 'read_finscope_resource', status: 'failed' }],
+        clarification_id: null
+      })));
+    const { container } = render(<AgentView agentUrl="https://agent.example" />);
+
+    const question = '请汇总数据，保留这个提问文本 [来源:finscope:question]';
+    await user.type(screen.getByRole('textbox'), question.replace(/\[/g, '[['));
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByRole('heading', { name: '数据汇总' })).toBeInTheDocument();
+    const answer = container.querySelector('.agent-message-markdown');
+    expect(answer).not.toHaveTextContent('finscope:search:reaction_events:abc');
+    expect(answer).not.toHaveTextContent('market-pulse:2026-10-27');
+    expect(answer?.querySelector('strong')).toHaveTextContent('公司身份');
+    expect(screen.getByRole('cell', { name: '48.08' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '查看报道' })).toHaveAttribute('href', 'https://example.org/report');
+    expect(answer?.querySelector('code')).toHaveTextContent('[来源:finscope:template]');
+    expect(screen.getByText(question)).toBeInTheDocument();
+    expect(screen.getByText('read_finscope_resource · 失败')).toBeInTheDocument();
+  });
+
   it('shows a Sidecar error inside the native conversation', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', vi.fn()
