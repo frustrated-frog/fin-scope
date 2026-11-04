@@ -30,14 +30,13 @@ test('filters mode, evidence and date without turning unavailable outcomes into 
   expect(screen.queryByText('000001.SZ')).not.toBeInTheDocument();
 });
 
-test('uses net-return evidence for legacy reports without inventing a close-direction prediction', () => {
+test('preserves missing direction in legacy reports without substituting trading profit', () => {
   render(<OvernightReview records={[{ ...record, closeDirection: undefined,
     targets: [{ target: '10:00', status: 'WATCH', sampleCount: 80, upProbability: .3, probabilitySource: 'HISTORICAL_BASELINE' }],
     outcome: { status: 'SETTLED', targets: [{ target: '10:00', actualNetReturn: -.02 }] } }]}
     mode="TAIL_ENTRY" busy={false} onSettle={vi.fn()} onSelect={vi.fn()} />);
-  expect(screen.getByLabelText('对照目标')).toHaveValue('10:00');
-  expect(screen.getByText('历史盈利比例')).toBeVisible();
-  expect(screen.getByText('-2.0%')).toBeVisible();
-  expect(screen.getByText('方向命中')).toBeVisible();
-  expect(screen.queryByText('冻结上涨概率')).not.toBeInTheDocument();
+  expect(screen.getByText('未记录涨跌预测')).toBeVisible();
+  expect(screen.getByText('预测缺失')).toBeVisible();
+  expect(screen.queryByText('-2.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('方向命中')).not.toBeInTheDocument();
 });

@@ -103,3 +103,32 @@ test('labels retrospective recovery separately from timely forecasts', async () 
   expect(await screen.findByText(/含人工事后补跑/)).toBeVisible();
   expect(screen.getByText('605058.SH · 14:30 · 事后补跑')).toBeVisible();
 });
+
+test('shows decision-price probability but never presents a prior or old target as a new model forecast', async () => {
+  const records = [
+    { id: 'new', closeDirection: { target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', selectedModel: 'SHAPE_TREE', upProbability: .63 } },
+    { id: 'prior', closeDirection: { target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', selectedModel: 'PRIOR', upProbability: .72 } },
+    { id: 'old', closeDirection: { target: 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', selectedModel: 'SHAPE_TREE', upProbability: .81 } },
+  ].map((report, index) => ({ ...report, instrumentCode: `60000${index}.SH`, dataThrough: '2026-09-21T14:30:00' }));
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, jobs: [{ ...state.jobs[0],
+    results: records.map(report => ({ instrumentCode: report.instrumentCode, reportId: report.id, status: 'WATCH' })) }] })));
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={records as import('./overnightTypes').OvernightReport[]} renderReport={() => null} />);
+  expect(await screen.findByText('63.0%')).toBeVisible();
+  expect(screen.getByText('偏涨')).toBeVisible();
+  expect(screen.getByText('尚未发现模型优势')).toBeVisible();
+  expect(screen.getByText('旧版口径 · 查看详情')).toBeVisible();
+  expect(screen.queryByText('72.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('81.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText(/净收益/)).not.toBeInTheDocument();
+});
+
+test('shows the latest decision window and lets earlier forecasts be inspected separately', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, jobs: [state.jobs[0],
+    { ...state.jobs[0], key: 'late', cutoff: '14:45' }] })));
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
+  expect(await screen.findByText('605058.SH · 14:45')).toBeVisible();
+  expect(screen.queryByText('605058.SH · 14:30')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '14:30', exact: true }));
+  expect(screen.getByText('605058.SH · 14:30')).toBeVisible();
+  expect(screen.queryByText('605058.SH · 14:45')).not.toBeInTheDocument();
+});

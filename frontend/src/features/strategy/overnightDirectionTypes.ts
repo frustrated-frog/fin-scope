@@ -5,6 +5,7 @@ export interface OvernightDirectionMetrics {
 }
 
 export interface OvernightCloseDirection {
+  referencePrice?: number; referenceAt?: string;
   protocol: string; target: string; status: string; reason: string;
   upProbability?: number; notUpProbability?: number; direction?: 'UP' | 'NOT_UP';
   rawUpProbability?: number; calibratedUpProbability?: number; probabilitySource?: string;
@@ -25,6 +26,7 @@ export interface OvernightDirectionOutcome {
 }
 
 export interface OvernightDirectionForward {
+  protocol?: string; target?: string;
   groups: Array<{ key: string; mode: string; cutoff: string; status: string; eligible: boolean;
     dayCount: number; requiredDays: number; coverage: number; metrics?: OvernightDirectionMetrics }>;
 }

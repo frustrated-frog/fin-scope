@@ -4,8 +4,6 @@ import { HoldingAnalysisDrawer, type HoldingAnalysis } from './HoldingAnalysisDr
 import type { OvernightMode, OvernightPosition, OvernightReport } from './overnightTypes';
 import './OvernightStrategyPanel.css';
 import { OvernightAuditPanel } from './OvernightAuditPanel';
-import { OvernightTargetEvidence } from './OvernightTargetEvidence';
-import { OvernightJointEvidence } from './OvernightJointPanel';
 import { OvernightDirectionPanel } from './OvernightDirectionPanel';
 import { OvernightAutomationPanel } from './OvernightAutomationPanel';
 import { OvernightSheet } from './OvernightSheet';
@@ -19,8 +17,6 @@ const statusLabels: Record<string, string> = {
   CALENDAR_UNAVAILABLE: '交易日历未覆盖', PENDING: '等待次日行情',
   PARTIAL: '部分时点已到期', SETTLED: '四个时点已结算', ENTRY_UNVERIFIED: '入场价格无法验证',
 };
-const targetLabels: Record<string, string> = { OPEN: '次日开盘', '10:00': '次日 10:00', '14:30': '次日 14:30', CLOSE: '次日收盘' };
-const pct = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 
 export function OvernightStrategyPanel() {
@@ -32,7 +28,6 @@ export function OvernightStrategyPanel() {
   const [code, setCode] = useState('');
   const [signalDate, setSignalDate] = useState(today);
   const [cutoff, setCutoff] = useState('14:30');
-  const [costBps, setCostBps] = useState(20);
   const [positions, setPositions] = useState<OvernightPosition[]>([]);
   const [records, setRecords] = useState<OvernightReport[]>([]);
   const [report, setReport] = useState<OvernightReport>();
@@ -79,7 +74,6 @@ export function OvernightStrategyPanel() {
 
   function chooseMode(value: OvernightMode) {
     setMode(value); setReport(undefined); setError('');
-    setCostBps(value === 'TAIL_ENTRY' ? 20 : 10);
     if (value === 'AFTER_CLOSE_HOLDING') {
       setCode(positions[0]?.instrumentCode ?? '');
     }
@@ -89,7 +83,8 @@ export function OvernightStrategyPanel() {
     event.preventDefault(); setBusy('generate'); setError(''); setReport(undefined);
     try {
       const value = await api<OvernightReport>('/api/quant/overnight/generate', { method: 'POST', body: JSON.stringify({
-        instrumentCode: code, signalDate, mode, cutoff: mode === 'TAIL_ENTRY' ? cutoff : '15:00', costBps,
+        instrumentCode: code, signalDate, mode, cutoff: mode === 'TAIL_ENTRY' ? cutoff : '15:00',
+        costBps: mode === 'TAIL_ENTRY' ? 20 : 10,
       }) });
       setReport(value);
       setAuditRevision(value => value + 1);
@@ -125,8 +120,8 @@ export function OvernightStrategyPanel() {
       <div className="overnight-tools"><button type="button" onClick={() => setTool('manual')}>研究工具 ↗</button>
       {mode === 'TAIL_ENTRY' && <button type="button" onClick={() => setTool('watchlist')}>我的关注 ↗</button>}</div></header>
     <div className="overnight-mode" role="group" aria-label="研究场景">
-      <button type="button" aria-pressed={mode === 'TAIL_ENTRY'} onClick={() => chooseMode('TAIL_ENTRY')} disabled={!!busy}><b>尾盘入场</b><span>现在买入，次日是否有净收益？</span></button>
-      <button type="button" aria-pressed={mode === 'AFTER_CLOSE_HOLDING'} onClick={() => chooseMode('AFTER_CLOSE_HOLDING')} disabled={!!busy}><b>盘后持仓</b><span>已经持有，比较明天的持有时长</span></button>
+      <button type="button" aria-pressed={mode === 'TAIL_ENTRY'} onClick={() => chooseMode('TAIL_ENTRY')} disabled={!!busy}><b>尾盘入场</b><span>14:30 后，发现明日偏涨股票</span></button>
+      <button type="button" aria-pressed={mode === 'AFTER_CLOSE_HOLDING'} onClick={() => chooseMode('AFTER_CLOSE_HOLDING')} disabled={!!busy}><b>盘后持仓</b><span>已经持有，判断明日走势</span></button>
     </div>
     <nav className="overnight-navigation" aria-label="隔夜工作区">
       {([['today', '今日研判'], ['performance', '预测表现'], ['history', '历史复盘']] as const).map(([key, label]) => <button key={key} type="button" aria-current={view === key ? 'page' : undefined} onClick={() => setView(key)}>{label}</button>)}
@@ -148,39 +143,27 @@ export function OvernightStrategyPanel() {
       <label>信号日期<input type="date" value={signalDate} onChange={event => { setSignalDate(event.target.value); setReport(undefined); }} required disabled={!!busy} /></label>
       <label>数据截止时刻<select value={mode === 'TAIL_ENTRY' ? cutoff : '15:00'} onChange={event => { setCutoff(event.target.value); setReport(undefined); }} disabled={!!busy || mode === 'AFTER_CLOSE_HOLDING'}>
         <option value="14:30">14:30</option><option value="14:45">14:45</option><option value="14:50">14:50</option>{mode === 'AFTER_CLOSE_HOLDING' && <option value="15:00">15:00 · 收盘</option>}</select></label>
-      <label>{mode === 'TAIL_ENTRY' ? '买卖成本及滑点假设' : '后续卖出成本及滑点假设'}<div className="overnight-unit"><input type="number" min="0" max="200" step="1" value={costBps} onChange={event => { setCostBps(Number(event.target.value)); setReport(undefined); }} required disabled={!!busy} /><span>基点</span></div><small>10 基点 = 0.1%，请按你的实际费用调整。</small></label>
       <button className="overnight-primary" type="submit" disabled={!!busy || !code}>{busy === 'generate' ? '读取分钟数据并计算…' : `生成${modeLabels[mode]}研究`}</button>
       {mode === 'AFTER_CLOSE_HOLDING' && <button type="button" onClick={existingAnalysis} disabled={!!busy || !code}>查看现有持仓分析</button>}
       <small>历史补跑单独标记；只有形成有效研究结果才冻结入档，不覆盖同条件下的第一次判断。</small>
     </form><div className="overnight-result" aria-live="polite">
       {error && <p role="alert" className="overnight-error">{error}</p>}
-      {report ? <ResearchResult report={report} /> : <div className="overnight-waiting"><span>{mode === 'TAIL_ENTRY' ? '买入之前' : '持有之后'}</span><h4>{mode === 'TAIL_ENTRY' ? '让预测对应你能参与的那段涨跌' : '从真实持仓出发，比较明天的选择'}</h4><p>{mode === 'TAIL_ENTRY' ? '按截止时刻截断分钟线，分别研究次日不同退出时点。没有合格分钟数据时，保留空缺，不借用收盘结果。' : '成本与数量直接读取账本。新盘后判断单独保存，尾盘入场时的判断仍然保留。'}</p><div>本地模型 · 4 个退出时点 · 独立冻结记录</div></div>}
+      {report ? <ResearchResult report={report} /> : <div className="overnight-waiting"><span>{mode === 'TAIL_ENTRY' ? '买入之前' : '持有之后'}</span><h4>{mode === 'TAIL_ENTRY' ? '让预测对应你能参与的那段涨跌' : '从真实持仓出发，比较明天的选择'}</h4><p>{mode === 'TAIL_ENTRY' ? '只使用截止时刻已知的数据，判断次日收盘能否高于当时参考价。没有合格数据时，保留空缺。' : '自动读取账本中的股票，判断次日收盘相对今日收盘的涨跌。盘后与尾盘记录分别保留。'}</p><div>本地模型 · 次日涨跌 · 独立冻结记录</div></div>}
     </div></div></OvernightSheet>}
     {analysisOpen && <HoldingAnalysisDrawer analysis={analysis} loading={false} targetName={position?.instrumentName ?? code} targetCode={code} onClose={() => setAnalysisOpen(false)} />}
   </section>;
 }
 
 export function ResearchResult({ report }: { report: OvernightReport }) {
-  const resultStatus = report.closeDirection?.upProbability != null && report.status === 'INSUFFICIENT_DATA'
-    ? '涨跌预测已生成 · 收益样本不足' : statusLabels[report.status] ?? report.status;
+  const resultStatus = report.closeDirection?.upProbability != null
+    ? '次日涨跌判断已冻结' : statusLabels[report.status] ?? report.status;
+  const referencePrice = report.closeDirection?.referencePrice ?? report.referencePrice;
   return <article><header className="overnight-result-head"><div><span>{modeLabels[report.mode]} · {report.instrumentCode}</span><h4>{resultStatus}</h4></div><b className="overnight-badge">{report.evidenceKind === 'FORWARD' ? '当时生成' : '历史回顾'}</b></header>
-    <dl className="overnight-evidence"><div><dt>数据截止</dt><dd>{report.dataThrough.replace('T', ' ')}</dd></div><div><dt>预测对应日期</dt><dd>{report.targetDate ?? '日历未覆盖'}</dd></div><div><dt>截止时点参考价</dt><dd>{report.referencePrice ? `¥${report.referencePrice.toFixed(2)}` : '暂无完整行情'}</dd></div><div><dt>费用假设</dt><dd>{report.costBps} 基点</dd></div></dl>
-    <p className="overnight-note">{report.mode === 'TAIL_ENTRY' ? '参考价不是承诺买入价；收益目标对应决策后 5 分钟的入场价格代理。' : `持仓成本 ¥${report.costBasis?.toFixed(2)}；预期收益相对当日收盘，另列相对成本的收益。`}</p>
-    {report.jointResearch && <p className="overnight-note">联合预测：{report.jointResearch.reason}</p>}
+    <dl className="overnight-evidence"><div><dt>数据截止</dt><dd>{report.dataThrough.replace('T', ' ')}</dd></div><div><dt>预测对应日期</dt><dd>{report.targetDate ?? '日历未覆盖'}</dd></div><div><dt>截止时点参考价</dt><dd>{referencePrice != null ? `¥${referencePrice.toFixed(2)}` : '暂无完整行情'}</dd></div></dl>
     <OvernightDirectionPanel report={report} />
-    <div className="overnight-targets">{report.targets.map(target => {
-      const actual = report.outcome?.targets.find(item => item.target === target.target);
-      const baseline = target.probabilitySource === 'HISTORICAL_BASELINE';
-      const joint = target.probabilitySource === 'JOINT_MODEL';
-      return <section key={target.target}><h5>{targetLabels[target.target]}</h5><strong>{pct(target.upProbability)}</strong><span>{joint ? '联合模型盈利概率 · 前瞻对照通过' : baseline ? '历史基线参考 · 已扣假设成本' : target.calibrationStatus === 'FITTED' ? '校准后盈利概率 · 已扣假设成本' : '扣除假设成本后盈利的概率'}</span>
-        {baseline && <p>模型尚未通过历史对照，当前采用过去的盈利比例，不代表已发现上涨优势。</p>}
-        {target.status === 'INSUFFICIENT_DATA' ? <><p>可用历史 {target.sampleCount} 例，至少需要 {target.minimumSamples ?? 60} 例</p>{target.missingSamples != null && <p>还需积累 {target.missingSamples} 个有效收益样本。</p>}{target.missingValidationSamples != null && <p>独立验证还缺 {target.missingValidationSamples} 例，暂不输出概率。</p>}</> : <><dl><div><dt>{baseline ? '历史平均净收益' : '预期净收益'}</dt><dd>{pct(target.expectedNetReturn)}</dd></div>{!baseline && <div><dt>{joint ? '80% 校准残差范围' : target.reliability ? '80% 校准误差范围' : '历史验证误差区间'}</dt><dd>{pct(target.lowerNetReturn)} ～ {pct(target.upperNetReturn)}</dd></div>}{target.costBasisReturn != null && <div><dt>{baseline ? '历史均值对应成本收益' : '相对持仓成本'}</dt><dd>{pct(target.costBasisReturn)}</dd></div>}</dl>{!joint && <><small>历史 {target.sampleCount} 例 · 顺序验证 {target.validationCount} 例</small><small>模型概率误差 Brier {target.brierScore?.toFixed(3)} / 基线 {target.baselineBrier?.toFixed(3)}（越低越好）</small></>}<OvernightTargetEvidence target={target} /></>}
-        <OvernightJointEvidence target={target} />
-        {actual && <p className="overnight-actual">实际价格路径净收益 {pct(actual.actualNetReturn)}</p>}
-      </section>;
-    })}</div>
+    {!report.closeDirection && <p className="overnight-note">这份记录没有可用的次日涨跌预测。</p>}
     {(report.outcome?.warnings ?? []).map(warning => <p role="alert" className="overnight-error" key={warning}>{warning}</p>)}
-    {report.warnings.map(warning => <p className="overnight-note" key={warning}>{warning}</p>)}
-    <small>生成于 {report.generatedAt.replace('T', ' ')} · {report.id ? '原始记录已冻结' : '尚未形成可冻结的预测'} · {report.modelVersion}</small>
+    {!!report.warnings.length && <details><summary>数据与研究说明</summary>{report.warnings.map(warning => <p className="overnight-note" key={warning}>{warning}</p>)}</details>}
+    <small>生成于 {report.generatedAt.replace('T', ' ')} · {report.id ? '原始记录已冻结' : '尚未形成可冻结的预测'}</small>
   </article>;
 }

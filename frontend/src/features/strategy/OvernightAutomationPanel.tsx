@@ -8,7 +8,7 @@ import { OvernightSheet } from './OvernightSheet';
 import { OvernightPerformance } from './OvernightPerformance';
 
 const states: Record<string, string> = {
-  COMPLETED: '研究完成', RUNNING: '正在处理', FAILED: '执行失败', MISSED: '错过窗口',
+  NO_PREDICTION: '未生成有效预测', COMPLETED: '执行完成', RUNNING: '正在处理', FAILED: '执行失败', MISSED: '错过窗口',
   PARTIAL: '部分完成', INTERRUPTED: '运行中断', EMPTY: '暂无合格候选', SKIPPED: '条件不满足',
   WATCH: '研究已冻结', INSUFFICIENT_DATA: '样本积累中', DATA_UNAVAILABLE: '分钟行情不足',
   CALENDAR_UNAVAILABLE: '日历未覆盖', BEFORE_CUTOFF: '等待决策时刻',
@@ -23,6 +23,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
   const [error, setError] = useState('');
   const [tool, setTool] = useState<'runtime' | 'research'>();
   const [selected, setSelected] = useState<string>();
+  const [chosenWindow, setChosenWindow] = useState('');
   useEffect(() => { setSelected(undefined); }, [mode]);
   useEffect(() => {
     let active = true;
@@ -59,9 +60,12 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
   const latestDay = days[days.length - 1];
   const latest = jobs.filter(job => job.signalDate === latestDay);
   const research = latest.filter(job => job.phase === 'PREDICT');
+  const windows = [...new Set(research.map(job => job.cutoff))].sort();
+  const activeWindow = windows.includes(chosenWindow) ? chosenWindow : windows[windows.length - 1];
   const pool = latest.find(job => job.phase === 'DISCOVER' && job.status === 'COMPLETED');
-  const results = research.flatMap(job => (job.results ?? []).map(result => ({ job, result })));
-  const problem = latest.find(job => ['FAILED', 'MISSED', 'INTERRUPTED', 'SKIPPED'].includes(job.status));
+  const results = research.filter(job => job.cutoff === activeWindow)
+    .flatMap(job => (job.results ?? []).map(result => ({ job, result })));
+  const problem = latest.find(job => ['FAILED', 'MISSED', 'INTERRUPTED', 'SKIPPED', 'NO_PREDICTION'].includes(job.status));
   const heartbeatAge = state?.heartbeat ? Date.parse(`${state.serverTime}+08:00`) - Date.parse(`${state.heartbeat.lastTickAt}+08:00`) : Infinity;
   const running = state?.jobs.some(job => job.status === 'RUNNING');
   const healthy = !!state?.heartbeat && !state.heartbeat.error && (heartbeatAge < 120000 || (running && heartbeatAge < 600000));
@@ -83,7 +87,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
     <div className="overnight-session">
       <div><span className="overnight-auto-kicker">{mode === 'TAIL_ENTRY' ? '收盘之前 · 自动发现' : '收盘之后 · 真实持仓'}</span>
         <h4>{mode === 'TAIL_ENTRY' ? '为下一交易日，提前看一步' : '从已有持仓，判断下一步'}</h4>
-        <p>{mode === 'TAIL_ENTRY' ? '候选按决策窗口留档，次日自动核验。入选观察不等于看涨。' : '自动读取账本，分别观察次日涨跌与四个退出时点。'}</p></div>
+        <p>{mode === 'TAIL_ENTRY' ? '候选按决策窗口留档，次日自动核验。入选观察不等于看涨。' : '自动读取账本，判断持有的股票明天会不会涨。'}</p></div>
       <div className="overnight-session-time"><span>{mode === 'TAIL_ENTRY' ? '下一判断窗口' : '盘后研判窗口'}</span>
         <strong>{mode === 'TAIL_ENTRY' ? state?.nextTailAt?.slice(11, 16) ?? '—' : '15:10'}</strong>
         <small>{mode === 'TAIL_ENTRY' ? state?.nextTailAt?.slice(0, 10) ?? '等待交易日历' : '数据截止 15:00 · 上海时间'}</small></div>
@@ -94,6 +98,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
     {mode === 'AFTER_CLOSE_HOLDING' && state?.holdingStatus === 'EMPTY' && <p className="overnight-auto-notice">账本当前没有未平仓股票。记入真实买入后，盘后会自动纳入研判。</p>}
     {mode === 'AFTER_CLOSE_HOLDING' && state?.holdingStatus === 'WINDOW_CLOSED' && <p className="overnight-auto-notice">今日盘后窗口已结束。未完成的持仓将在下一交易日继续处理。</p>}
     <div className="overnight-auto-section-title"><h5>{mode === 'TAIL_ENTRY' ? '隔夜观察候选' : '持仓研判'} <em>{results.length}</em></h5><span>{latestDay ? `最近窗口 ${latestDay} · 行情截止 ${formatTime(dataThrough)}` : '等待首个交易窗口'}</span></div>
+    {windows.length > 1 && <div className="overnight-window-filter" role="group" aria-label="判断窗口"><span>判断窗口</span>{windows.map(cutoff => <button type="button" key={cutoff} aria-pressed={cutoff === activeWindow} onClick={() => { setChosenWindow(cutoff); setSelected(undefined); }}>{cutoff}</button>)}</div>}
     {!results.length && <div className="overnight-quiet-state">
       <span className="overnight-window-mark" aria-hidden="true">T → T+1</span>
       <h4>{!state ? error ? '暂时无法读取研究状态' : '正在读取研究状态' : problem ? states[problem.status] : pool?.candidates?.length ? '候选已准备，等待决策窗口' : latest.some(job => job.status === 'EMPTY') ? '本轮暂无合格候选' : '等待自动研究结果'}</h4>
@@ -105,14 +110,15 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
       const candidate = job.candidates?.find(item => item.instrumentCode === result.instrumentCode);
       const report = records.find(item => item.id === result.reportId);
       const direction = report?.closeDirection;
-      const target = report?.targets.find(item => item.target === '10:00');
-      const probability = direction?.upProbability;
+      const currentTarget = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE';
+      const prior = direction?.selectedModel === 'PRIOR';
+      const probability = currentTarget && !prior ? direction?.upProbability : undefined;
       return <button type="button" className="overnight-candidate" key={`${job.key}-${result.instrumentCode}`}
         onClick={() => setSelected(`${job.key}-${result.instrumentCode}`)}>
         <span className="overnight-candidate-name"><b>{candidate?.instrumentName ?? job.instrumentName ?? result.instrumentCode}</b><small>{result.instrumentCode} · {job.cutoff}{job.key.includes('|RECOVERY|') ? ' · 事后补跑' : ''}</small></span>
-        <span><small>次日收盘上涨概率</small><strong>{probability == null ? '—' : `${(probability * 100).toFixed(1)}%`}</strong><small>{direction?.selectedModel === 'PRIOR' ? '历史比例参考' : probability == null ? '等待有效预测' : direction?.validated ? '已通过前瞻对照' : '模型判断 · 验证中'}</small></span>
-        <span><small>次日 10:00 净收益参考</small><strong>{target?.expectedNetReturn == null ? '—' : `${(target.expectedNetReturn * 100).toFixed(2)}%`}</strong><small>{target?.probabilitySource === 'HISTORICAL_BASELINE' ? '历史平均 · 已扣假设成本' : '已扣假设成本'}</small></span>
-        <span className="overnight-candidate-state"><small>{states[result.status] ?? result.status}</small><small>{target?.lowerNetReturn == null ? '风险区间待验证' : `收益区间下界 ${(target.lowerNetReturn * 100).toFixed(1)}%`}</small><b>查看依据 ↗</b></span>
+        <span><small>明日判断</small><strong>{probability == null ? '证据不足' : probability >= .55 ? '偏涨' : probability <= .45 ? '偏跌' : '不明确'}</strong><small>{prior ? '尚未发现模型优势' : direction?.validated ? '已通过前瞻验证' : probability == null ? states[result.status] ?? '等待有效预测' : '预测仍在验证'}</small></span>
+        <span><small>上涨概率</small><strong>{probability == null ? '—' : `${(probability * 100).toFixed(1)}%`}</strong><small>{currentTarget ? `相对 ${job.cutoff} 参考价` : direction ? '旧版口径 · 查看详情' : '等待涨跌预测'}</small></span>
+        <span className="overnight-candidate-state"><b>查看依据 ↗</b></span>
       </button>;
     })}</div>
     </>}
@@ -130,6 +136,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
         {mode === 'TAIL_ENTRY' && research.map(job => <OvernightJointRanking key={job.key} job={job} />)}
         <OvernightHistoryStatus history={state?.history} /></> : <>
         <p>{headline} · 最近心跳 {formatTime(state?.heartbeat?.lastTickAt)}</p>
+        {state?.history?.archive && <p>档案覆盖 {state.history.archive.firstGeneratedAt?.slice(0, 10) ?? '—'} 至 {state.history.archive.lastGeneratedAt?.slice(0, 10) ?? '—'} · {state.history.archive.signalDays} 个信号日 / {state.history.archive.recordCount} 份记录，其中 {state.history.archive.directionCount} 份含涨跌概率。记录数量不代表预测成功数量。</p>}
         <p>心跳代表任务服务状态，不代表行情新鲜度。页面每 30 秒自动更新。</p>
         {state?.heartbeat?.error && <p role="alert">{state.heartbeat.error}</p>}
         <div className="overnight-run-list">{latest.map(job => <article key={job.key}><header><b>{job.cutoff} · {job.phase === 'DISCOVER' ? '市场扫描' : job.instrumentName ?? '自动研判'}</b><span>{states[job.status] ?? job.status}</span></header>

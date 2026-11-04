@@ -53,6 +53,7 @@ export interface OvernightAutomationState {
   jobs: OvernightAutomationJob[];
   joint?: OvernightJointState;
   history?: {
+    archive?: { recordCount: number; firstGeneratedAt?: string; lastGeneratedAt?: string; signalDays: number; directionCount: number };
     desiredDays: number;
     coverage: Array<{ instrumentCode: string; firstDate: string; lastDate: string; completeDays: number; barCount: number }>;
     jobs: Array<{ key: string; instrumentCode: string; status: string; reason?: string; addedDays?: number; finishedAt?: string }>;

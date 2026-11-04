@@ -28,13 +28,13 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
         <div><dt>{prior ? '历史上涨比例' : '上涨概率'}</dt><dd>{percent(probability)}</dd></div>
         <div><dt>未上涨概率<span>含持平</span></dt><dd>{percent(direction.notUpProbability ?? 1 - probability)}</dd></div>
       </dl>
-      <p>比较 {report.targetDate ?? '次一交易日'} 与 {report.signalDate} 的收盘价，不扣交易成本。本次预测仅使用截至 {report.cutoff} 的数据。</p>
+      {direction.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE' ? <p>比较 {report.targetDate ?? '次一交易日'} 收盘价与本次 {report.cutoff} 参考价 ¥{direction.referencePrice?.toFixed(2) ?? report.referencePrice?.toFixed(2) ?? '—'}。仅使用判断时点及之前的数据。</p> : <p>旧版口径：比较 {report.targetDate ?? '次一交易日'} 与 {report.signalDate} 的收盘价，不扣交易成本。本次预测仅使用截至 {report.cutoff} 的数据。</p>}
       {!direction.validated && <p className="overnight-direction-status">{phases[direction.forwardStatus ?? 'ACCUMULATING']} · {direction.forwardDays ?? 0} / 60 个交易日。当前结果保留观察。</p>}
       {direction.activeSource === 'CONTEXT_DIRECTION' && <p className="overnight-direction-status">已采用通过前瞻对照的环境增强方案，持续监测表现。</p>}
       {actual?.status === 'SETTLED' && <div className="overnight-direction-outcome"><b>次日实际{actual.actualUp ? '上涨' : actual.actualReturn === 0 ? '持平' : '下跌'} {percent(actual.actualReturn)}</b>
         <span>{actual.correct ? '本次方向判断命中' : '本次方向判断未命中'}</span></div>}
       <details><summary>查看涨跌验证依据</summary>
-        <p>目标是未复权价格涨跌；普通除权分红尚未完整核验。涨跌与下方扣费盈利分别统计。</p>
+        <p>目标是未复权价格涨跌；普通除权分红尚未完整核验。新旧预测口径分开验证。</p>
         {history && <dl className="overnight-direction-metrics">
           <div><dt>历史方向命中 / 简单基准</dt><dd>{percent(history.accuracy)} / {percent(history.comparisons.HISTORICAL_PRIOR?.accuracy)}</dd></div>
           <div><dt>两类平均识别率</dt><dd>{percent(history.balancedAccuracy)}</dd></div>
@@ -65,12 +65,15 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
 }
 
 export function OvernightDirectionSummary({ state, mode }: { state: OvernightJointState; mode: OvernightMode }) {
-  const models = state.models.filter(model => model.profile.mode === mode && model.closeDirection);
-  const groups = state.closeDirectionForward?.groups.filter(group => group.mode === mode) ?? [];
-  const contextGroups = state.contextDirectionForward?.groups.filter(group => group.mode === mode) ?? [];
+  const models = state.models.filter(model => model.profile.mode === mode
+    && model.closeDirection?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE');
+  const groups = state.closeDirectionForward?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
+    ? state.closeDirectionForward.groups.filter(group => group.mode === mode) : [];
+  const contextGroups = state.contextDirectionForward?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
+    ? state.contextDirectionForward.groups.filter(group => group.mode === mode) : [];
   const snapshot = state.contextSnapshots?.find(row => mode === 'TAIL_ENTRY' ? row.cutoff !== '15:00' : row.cutoff === '15:00');
   return <details className="overnight-direction-summary"><summary>次日涨跌独立验证 <span>{models.length ? `${models.length} 个时点已训练` : '后台自动准备'}</span></summary>
-    <p>预测次日收盘是否高于当日收盘；与扣费盈利使用不同标签和验证记录。</p>
+    <p>新版预测次日收盘是否高于判断时的参考价格；旧版收盘对收盘记录不混入新版成绩。</p>
     {!groups.length && <p>尚无已到期的真实涨跌对照。尾盘自动发现与盘后持仓将分别积累。</p>}
     {groups.map(group => <div className="overnight-direction-summary-row" key={group.key}>
       <b>{group.cutoff} → 次日收盘</b><span>{phases[group.status] ?? '等待结果'} · {group.dayCount} / {group.requiredDays} 日</span>

@@ -40,7 +40,7 @@ test('keeps entry cutoff separate from ledger holding research and never fabrica
   await user.click(screen.getByRole('button', { name: '生成尾盘入场研究' }));
   expect(await screen.findByText('分钟数据未就绪')).toBeInTheDocument();
   expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
-  expect(requests[0]).toMatchObject({ mode: 'TAIL_ENTRY', cutoff: '14:50', costBps: 20 });
+  expect(requests[0]).toMatchObject({ mode: 'TAIL_ENTRY', cutoff: '14:50' });
   await user.click(screen.getByRole('button', { name: '关闭详情' }));
   await user.click(screen.getByRole('button', { name: /盘后持仓 已经持有/ }));
   await user.click(screen.getByRole('button', { name: '研究工具 ↗' }));
@@ -48,7 +48,7 @@ test('keeps entry cutoff separate from ledger holding research and never fabrica
   expect(screen.getByLabelText('数据截止时刻')).toBeDisabled();
   await user.click(screen.getByRole('button', { name: '生成盘后持仓研究' }));
   await waitFor(() => expect(requests).toHaveLength(2));
-  expect(requests[1]).toMatchObject({ mode: 'AFTER_CLOSE_HOLDING', cutoff: '15:00', costBps: 10 });
+  expect(requests[1]).toMatchObject({ mode: 'AFTER_CLOSE_HOLDING', cutoff: '15:00' });
   expect(requests[1]).not.toHaveProperty('costBasis');
 });
 
@@ -72,65 +72,13 @@ test('shows both frozen modes and settles observations without generating anothe
   expect(calls).not.toContain('/api/quant/overnight/generate');
 });
 
-const calibrated: OvernightReport = {
-  ...blocked, mode: 'TAIL_ENTRY', evidenceKind: 'FORWARD', status: 'WATCH', modelVersion: 'overnight-local-v3-calibrated',
-  inputFingerprint: 'a'.repeat(64), targets: [{ target: 'OPEN', status: 'WATCH', sampleCount: 130,
-    upProbability: .57, rawUpProbability: .72, baselineProbability: .53, expectedNetReturn: .004,
-    lowerNetReturn: -.02, upperNetReturn: .028, validationCount: 60, calibrationCount: 20, trainingCount: 109,
-    calibrationStatus: 'FITTED', brierScore: .26, baselineBrier: .25, directionAccuracy: .52,
-    reliability: { status: 'BASELINE_NOT_BEATEN', count: 60, brierSkill: -.04, recentBrierSkill: -.08,
-      recentCount: 10, intervalCoverage: .78, nominalCoverage: .8, rawBrier: .29, baselineAccuracy: .53,
-      from: '2026-06-01', through: '2026-09-15', expectedReturnMae: .015 },
-  }],
-};
-
-test('shows calibrated probability alongside baseline failure and keeps detailed diagnostics folded', async () => {
-  render(<ResearchResult report={calibrated} />);
-  expect(screen.getByText('57.0%')).toBeVisible();
-  expect(screen.getByText('校准后盈利概率 · 已扣假设成本')).toBeVisible();
-  expect(screen.getByText('尚未超过历史基线')).toBeVisible();
-  expect(screen.getByText('历史基线盈利比例 53.0%')).toBeVisible();
-  expect(screen.getByText('概率误差改善')).not.toBeVisible();
-  await userEvent.click(screen.getByText('查看独立验证依据'));
-  expect(screen.getByText('-4.0%')).toBeVisible();
-  expect(screen.getByText('-8.0%')).toBeVisible();
-  expect(screen.getByText('78.0%')).toBeVisible();
-  expect(screen.getByText(/这些是历史顺序验证/)).toBeVisible();
-});
-
-test('labels baseline fallback and never attaches the rejected model interval to the reference', async () => {
-  render(<ResearchResult report={{ ...calibrated, modelVersion: 'overnight-local-v4-evidence-gated', targets: [{
-    ...calibrated.targets[0], probabilitySource: 'HISTORICAL_BASELINE', modelUpProbability: .85,
-    upProbability: .53, expectedNetReturn: -.001, lowerNetReturn: null, upperNetReturn: null,
-  }] }} />);
-  expect(screen.getByText('历史基线参考 · 已扣假设成本')).toBeVisible();
-  expect(screen.getByText('53.0%')).toBeVisible();
-  expect(screen.getByText('历史平均净收益')).toBeVisible();
-  expect(screen.queryByText('校准后盈利概率 · 已扣假设成本')).not.toBeInTheDocument();
-  expect(screen.queryByText('80% 校准误差范围')).not.toBeInTheDocument();
-  await userEvent.click(screen.getByText('查看独立验证依据'));
-  expect(screen.getByText(/未采用的模型概率 85.0%/)).toBeVisible();
-});
-
-test('uses the new required sample count and preserves old records without fabricating calibration', () => {
-  const { rerender } = render(<ResearchResult report={{ ...calibrated, targets: [{ target: 'CLOSE',
-    status: 'INSUFFICIENT_DATA', sampleCount: 60, minimumSamples: 82, missingSamples: 22 }] }} />);
-  expect(screen.getByText('可用历史 60 例，至少需要 82 例')).toBeVisible();
-  expect(screen.getByText('还需积累 22 个有效收益样本。')).toBeVisible();
-  expect(screen.queryByText('57.0%')).not.toBeInTheDocument();
-  rerender(<ResearchResult report={{ ...calibrated, modelVersion: 'overnight-local-v2', targets: [{
-    target: 'OPEN', status: 'WATCH', sampleCount: 60, upProbability: .57, validationCount: 20 }] }} />);
-  expect(screen.queryByText('查看独立验证依据')).not.toBeInTheDocument();
-  expect(screen.queryByText('校准后盈利概率 · 已扣假设成本')).not.toBeInTheDocument();
-  expect(screen.getByText('57.0%')).toBeVisible();
-});
-
-test('explains missing calibration and recent degradation without claiming a trading signal', async () => {
-  render(<ResearchResult report={{ ...calibrated, targets: [{ ...calibrated.targets[0],
-    calibrationStatus: 'NOT_FITTED', calibrationReason: '校准区正负标签均需至少 5 个',
-    reliability: { ...calibrated.targets[0].reliability!, status: 'RECENT_DEGRADATION' } }] }} />);
-  expect(screen.getByText('近期效果退化')).toBeVisible();
-  expect(screen.queryByText('校准后盈利概率 · 已扣假设成本')).not.toBeInTheDocument();
-  await userEvent.click(screen.getByText('查看独立验证依据'));
-  expect(screen.getByText('校准区正负标签均需至少 5 个')).toBeVisible();
+test('shows missing direction instead of confusing legacy profitability with next-day growth', () => {
+  const report: OvernightReport = { ...blocked, mode: 'TAIL_ENTRY', evidenceKind: 'FORWARD',
+    modelVersion: 'legacy', inputFingerprint: 'old', targets: [{ target: '10:00', status: 'WATCH',
+      sampleCount: 100, upProbability: .75, expectedNetReturn: .02 }] };
+  render(<ResearchResult report={report} />);
+  expect(screen.getByText('这份记录没有可用的次日涨跌预测。')).toBeVisible();
+  expect(screen.queryByText('75.0%')).not.toBeInTheDocument();
+  expect(screen.queryByText('费用假设')).not.toBeInTheDocument();
+  expect(screen.queryByText(/净收益/)).not.toBeInTheDocument();
 });

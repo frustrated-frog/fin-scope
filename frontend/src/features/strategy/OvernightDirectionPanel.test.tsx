@@ -55,7 +55,7 @@ test('shows actual price outcome and keeps old reports compatible', () => {
 
 test('filters direction acceptance by tail and holding modes', async () => {
   const state: OvernightJointState = { protocol: 'test', poolSize: 120, targetSize: 120, readySymbols: 20,
-    minimumSymbols: 20, models: [], jobs: [], closeDirectionForward: { groups: [
+    minimumSymbols: 20, models: [], jobs: [], closeDirectionForward: { target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', groups: [
       { key: 'tail', mode: 'TAIL_ENTRY', cutoff: '14:30', status: 'ACCUMULATING', eligible: false,
         dayCount: 4, requiredDays: 60, coverage: 1, metrics: report.closeDirection!.historical },
       { key: 'holding', mode: 'AFTER_CLOSE_HOLDING', cutoff: '15:00', status: 'QUALIFIED', eligible: true,
@@ -70,7 +70,7 @@ test('filters direction acceptance by tail and holding modes', async () => {
 
 test('a ready direction forecast is visible while trading return samples are insufficient', () => {
   render(<ResearchResult report={{ ...report, status: 'INSUFFICIENT_DATA' }} />);
-  expect(screen.getByRole('heading', { name: '涨跌预测已生成 · 收益样本不足' })).toBeVisible();
+  expect(screen.getByRole('heading', { name: '次日涨跌判断已冻结' })).toBeVisible();
   expect(screen.getByRole('region', { name: '次日收盘涨跌预测' })).toBeVisible();
 });
 
@@ -101,4 +101,12 @@ test('shows adoption while preserving the incumbent in the comparison', async ()
   expect(screen.getByText(/已采用通过前瞻对照的环境增强方案/)).toBeVisible();
   await userEvent.click(screen.getByText('环境增强对照'));
   expect(screen.getByText('58.0% / 62.0%')).toBeVisible();
+});
+
+test('explains the frozen decision price instead of using the later close as reference', () => {
+  render(<OvernightDirectionPanel report={{ ...report, referencePrice: 120, closeDirection: {
+    ...report.closeDirection!, target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', referencePrice: 100 } }} />);
+  expect(screen.getByText(/14:30 参考价 ¥100.00/)).toBeVisible();
+  expect(screen.queryByText(/旧版口径/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/¥120.00/)).not.toBeInTheDocument();
 });
