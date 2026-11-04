@@ -1,5 +1,7 @@
 """Cost-independent direction with purged selection and order-preserving calibration."""
 from dataclasses import asdict
+from collections import defaultdict
+from math import ceil
 
 import lightgbm as lgb
 import numpy as np
@@ -17,10 +19,25 @@ from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL 
 SELECTION_DAYS = 20
 TEST_DAYS = 20
 CANDIDATES = ('PRIOR', 'SESSION_LOGISTIC', 'SHAPE_LOGISTIC', 'SHAPE_TREE', 'SHAPE_ENSEMBLE')
+MIN_DATE_COVERAGE = .75
+
+
+def covered_matured_rows(rows, through):
+    matured = [row for row in rows if row['exitAt'] < through]
+    symbols, by_date = set(), defaultdict(set)
+    for row in matured:
+        symbols.add(row['instrumentCode'])
+        by_date[row['signalDate']].add(row['instrumentCode'])
+    required = max(MIN_SYMBOLS, ceil(len(symbols) * MIN_DATE_COVERAGE))
+    excluded = sorted(day for day, codes in by_date.items() if len(codes) < required)
+    usable = {day for day, codes in by_date.items() if len(codes) >= required}
+    return [row for row in matured if row['signalDate'] in usable], {
+        'requiredSymbolsPerDate': required, 'minimumDateCoverage': MIN_DATE_COVERAGE,
+        'excludedDates': excluded, 'usableDays': len(usable), 'observedSymbols': len(symbols)}
 
 
 def temporal_parts(rows, through):
-    matured = [row for row in rows if row['exitAt'] < through]
+    matured, _ = covered_matured_rows(rows, through)
     days = sorted({row['signalDate'] for row in matured})[-MAX_DAYS:]
     if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + 2:
         return None
@@ -115,14 +132,16 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER'):
 def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=TEST_DAYS, include_checks=False):
     if test_days < TEST_DAYS:
         raise ValueError('测试区间不得少于 20 个交易日')
-    matured = [r for r in rows if r['exitAt'] < through]
+    matured, coverage = covered_matured_rows(rows, through)
     days = sorted({r['signalDate'] for r in matured})
     if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + test_days + 3:
         return None
     checks, folds = [], []
     for day in days[-test_days:]:
         decision_at = f'{day}T{cutoff}:00'
-        fitted = fit_direction_before(matured, decision_at, selection_policy=selection_policy)
+        # Recompute training coverage from labels available at each decision,
+        # never from which stocks will have outcomes later in this audit.
+        fitted = fit_direction_before(rows, decision_at, selection_policy=selection_policy)
         if fitted is None:
             return None
         test = [r for r in matured if r['signalDate'] == day]
@@ -132,7 +151,7 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=
         checks.extend({**r, 'probability': float(value), 'raw': float(unadjusted), 'calibrated': float(adjusted),
                        'baseline': fitted['model']['baselineProbability']} for r, value, unadjusted, adjusted in zip(test, p, raw, calibrated))
         folds.append({'signalDate': day, 'cutoff': decision_at, **fitted['audit']})
-    current = fit_direction_before(matured, through, selection_policy=selection_policy)
+    current = fit_direction_before(rows, through, selection_policy=selection_policy)
     if current is None:
         return None
     labels, dates = [r['actualReturn'] > 0 for r in checks], [r['signalDate'] for r in checks]
@@ -147,7 +166,7 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=
     protocol = CONTEXT_PROTOCOL if selection_policy == POLICY else PROTOCOL
     result = {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
         'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in checks),
-        'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD'}}
+        'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD', 'dateCoverage': coverage}}
     if include_checks:
         result['checks'] = checks
     return result

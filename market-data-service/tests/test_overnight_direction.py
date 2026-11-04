@@ -105,6 +105,29 @@ def test_single_class_does_not_fabricate_discrimination(direction_rows):
     assert direction_prediction({**fitted, 'audit': {'historical': {}}}, rows[0]['features'])['direction'] == 'NOT_UP'
 
 
+def test_sparse_latest_day_cannot_shift_training_or_daily_evaluation(direction_rows, direction_fit):
+    partial = {**direction_rows[-1], 'signalDate': '2026-06-20', 'exitAt': '2026-06-21T15:00:00',
+               'actualReturn': 10, 'features': [99.] * len(FEATURES)}
+    modified = direction_rows + [partial]
+    through = '2026-07-01T12:00:00'
+    assert fit_direction_before(modified, through) == fit_direction_before(direction_rows, through)
+    fitted = fit_direction(modified, through, '14:30')
+    assert fitted['audit']['historical'] == direction_fit['audit']['historical']
+    assert fitted['audit']['dateCoverage']['excludedDates'] == ['2026-06-20']
+    assert fitted['audit']['dateCoverage']['requiredSymbolsPerDate'] == 20
+
+
+def test_date_coverage_uses_only_matured_symbols_and_unique_stocks(direction_rows):
+    from finscope_market_data.overnight.direction_learning import covered_matured_rows
+    rows = direction_rows[:40]
+    pending = [{**rows[0], 'instrumentCode': f'NEW{i}', 'exitAt': '2026-12-01T15:00:00'} for i in range(80)]
+    usable, audit = covered_matured_rows(rows + pending, '2026-02-01T12:00:00')
+    assert usable == rows
+    assert audit['requiredSymbolsPerDate'] == 20
+    # Repeating the same stock must not masquerade as a covered cross-section.
+    assert not covered_matured_rows([rows[0]] * 40, '2026-02-01T12:00:00')[0]
+
+
 def test_price_outcome_settles_even_when_a_trade_could_not_be_entered():
     from test_overnight import history, request
     from finscope_market_data.overnight.engine import settle
