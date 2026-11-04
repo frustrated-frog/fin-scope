@@ -45,7 +45,7 @@
       "signalMethod": "FIXED_RULE",
       "protocolVersion": "OPEN_5D_V1",
       "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
-      "dataFingerprint": "9778f2ed52986cdec7b731f4f365475132435073d522ad2c20a5913e1e640cac",
+      "dataFingerprint": "3abd0c016b8daace676aa5a280048d9159964b9bce9b551c6a52ff919b775e8a",
       "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
       "candidates": [
         {
@@ -73,7 +73,7 @@
       "signalMethod": "FIXED_RULE",
       "protocolVersion": "OPEN_5D_V1",
       "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
-      "dataFingerprint": "f3a193711aa5a5b9e9fe1f662bc823b3bd7ffb791b5ab4d6825cb579e16a6d70",
+      "dataFingerprint": "144d3ba0431aea9198044df1ff5fddf421f41c86a472aee7940aaf0c08da6305",
       "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
       "candidates": [
         {
@@ -101,7 +101,7 @@
       "signalMethod": "FIXED_RULE",
       "protocolVersion": "OPEN_5D_V1",
       "modelVersion": "MOMENTUM_LOW_VOL_FIXED_V1",
-      "dataFingerprint": "95658d5e7210e0e7badd0220f6f129d0b72c6bf6ded2f1991a0f7a0ea2609f9b",
+      "dataFingerprint": "7cc80829e19cfb3fe64e496c04724fe2da63724261612ec20a0fce5401137daa",
       "universeEvidence": "SYNTHETIC_COMPLETE_UNIVERSE",
       "candidates": [
         {

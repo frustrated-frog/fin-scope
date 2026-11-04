@@ -6,11 +6,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --extra ecosystem
+RUN uv sync --frozen --no-dev --extra ecosystem \
+    && .venv/bin/python -c "import lightgbm"
 
 EXPOSE 8000
 
