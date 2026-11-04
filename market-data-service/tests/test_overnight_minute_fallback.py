@@ -53,6 +53,12 @@ def test_partial_oldest_day_cannot_shadow_complete_historical_data():
     assert batch[-1].ended_at == datetime(2026, 11, 4, 14, 30)
 
 
+def test_before_first_bar_uses_previous_completed_session_for_outcome_refresh():
+    batch = OvernightMinuteProvider(lambda: Http(rows())).fetch('000001.SZ', datetime(2026, 11, 5, 0, 10))
+    assert len(batch) == 48
+    assert batch[-1].ended_at == datetime(2026, 11, 4, 15)
+
+
 @pytest.mark.parametrize('change', ['missing_amount', 'stale', 'hole', 'conflict'])
 def test_invalid_fallback_does_not_masquerade_as_success(change):
     data = rows()

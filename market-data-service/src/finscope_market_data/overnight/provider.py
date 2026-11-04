@@ -83,7 +83,7 @@ class OvernightMinuteProvider:
     @staticmethod
     def validate_coverage(bars, through):
         day = through.date()
-        if next_session(day - timedelta(days=1)) != day:
+        if next_session(day - timedelta(days=1)) != day or through.strftime('%H:%M') < '09:35':
             day = previous_session(day)
         cutoff = through.strftime('%H:%M') if day == through.date() else '15:00'
         required = expected_times(cutoff)
