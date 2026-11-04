@@ -83,3 +83,5 @@ Vite 开发模式可热更新前端。Python 当前在 Docker 中，源码未挂
 Docker 重建发现原镜像缺少 LightGBM 所需的 `libgomp.so.1`，现已在 Dockerfile 安装 `libgomp1` 并于构建时执行导入检查。更新后 `/ready` 返回 READY，容器内实际采集验证为 `SINA_5M_RAW`、1,008 条完整日期分钟线，最新时间 2026-11-04 15:00；保留东方财富连接失败的来源记录。新版协议训练任务已自动启动。
 
 回归还发现旧跨语言合成样例未跟随 `DailyBar.is_complete` 字段更新指纹。去掉该字段后可精确重现旧的三个哈希，因此仅更新合成 JSON 的三处指纹，所有信号、价格、日期、排序与执行配置保持一致；相关 15 项测试通过。
+
+最终验收：Python 全量 641 项通过（127.85 秒）；前端隔夜相关 30 项通过、TypeScript 与 Vite 构建通过；390px 窄屏与桌面列表、窗口切换、详情、档案覆盖均已通过浏览器核对。测试命令使用 `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m pytest -q`，避免小样本训练中数值库过度并行。现存 Starlette 弃用提示与 Vite 大块体积提示不阻断本轮验证。
