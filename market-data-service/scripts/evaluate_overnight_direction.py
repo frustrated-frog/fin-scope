@@ -7,6 +7,7 @@ from pathlib import Path
 from evaluate_overnight_joint import FrozenMinutes
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, build_direction_panel
 from finscope_market_data.overnight.direction_learning import fit_direction
+from finscope_market_data.overnight.direction_selection import POLICY
 from finscope_market_data.overnight.joint_learning import fit_target
 
 
@@ -15,15 +16,20 @@ def main():
     parser.add_argument('--input-dir', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
     parser.add_argument('--compare-legacy', action='store_true')
+    parser.add_argument('--compare-selection', action='store_true')
+    parser.add_argument('--cutoffs', nargs='+', choices=('14:30', '14:45', '15:00'), default=['14:30', '14:45', '15:00'])
     args = parser.parse_args()
     inputs = json.loads((args.input_dir / 'protocol.json').read_text())
     through = datetime.fromisoformat(inputs['through'])
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results = []
-    for cutoff in ('14:30', '14:45', '15:00'):
+    for cutoff in args.cutoffs:
         rows, data = build_direction_panel(FrozenMinutes(args.input_dir), inputs['codes'], cutoff, through)
         fitted = fit_direction(rows, through.isoformat(), cutoff)
         result = {'cutoff': cutoff, 'data': data, 'audit': fitted['audit'] if fitted else None}
+        if args.compare_selection:
+            challenger = fit_direction(rows, through.isoformat(), cutoff, selection_policy=POLICY)
+            result['balancedSelectionSamePriceTarget'] = challenger['audit'] if challenger else None
         if args.compare_legacy:
             # Same price labels, features and evaluation dates. This is an ablation,
             # not the incumbent net-profit forecast, whose target is different.

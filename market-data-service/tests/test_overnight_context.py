@@ -155,25 +155,31 @@ def test_adoption_requires_past_forward_approval_and_reverts_without_it(tmp_path
                 'contextDirection': {'protocol': PROTOCOL, 'data': {'fingerprint': 'data'}}}
     def forecast(fitted, x, gate):
         assert len(x) == 44
-        return {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', 'upProbability': .7, 'status': 'SHADOW'}
+        return {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'upProbability': .7, 'status': 'SHADOW'}
     monkeypatch.setattr('finscope_market_data.overnight.context_research.direction_prediction', forecast)
     def report():
         return {'dataThrough': f'{day}T14:30:00', 'jointResearch': {'cohort': 'AUTOMATIC'},
-                'closeDirection': {'protocol': 'overnight-close-direction-v1',
-                                   'target': 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', 'upProbability': .4}}
+                'closeDirection': {'protocol': 'overnight-reference-direction-v2',
+                                   'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'upProbability': .4}}
     gate = {'key': 'TAIL_ENTRY|14:30', 'eligible': True, 'status': 'QUALIFIED', 'dayCount': 60}
-    meta.put('contextDirectionForward', {'computedAt': f'{day}T14:31:00', 'groups': [gate]})
+    meta.put('contextDirectionForward', {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'computedAt': f'{day}T14:31:00', 'groups': [gate]})
     future = report()
     attach_context_direction(future, request(day), group_bars(bars), artifact, contexts, meta)
     assert future['closeDirection']['upProbability'] == .4
-    meta.put('contextDirectionForward', {'computedAt': f'{day}T12:00:00', 'groups': [gate]})
+    meta.put('contextDirectionForward', {'protocol': 'overnight-context-direction-v2',
+        'target': 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', 'computedAt': f'{day}T12:00:00', 'groups': [gate]})
+    legacy = report()
+    attach_context_direction(legacy, request(day), group_bars(bars), artifact, contexts, meta)
+    assert legacy['closeDirection']['upProbability'] == .4
+    assert not legacy['closeDirection']['challenger']['validated']
+    meta.put('contextDirectionForward', {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'computedAt': f'{day}T12:00:00', 'groups': [gate]})
     adopted = report()
     attach_context_direction(adopted, request(day), group_bars(bars), artifact, contexts, meta)
     assert adopted['closeDirection']['upProbability'] == .7
     assert adopted['closeDirection']['incumbentPrediction']['upProbability'] == .4
     assert adopted['closeDirection']['challenger']['incumbentProbability'] == .4
     gate.update(eligible=False, status='MONITORING_DEGRADED')
-    meta.put('contextDirectionForward', {'computedAt': f'{day}T12:00:00', 'groups': [gate]})
+    meta.put('contextDirectionForward', {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'computedAt': f'{day}T12:00:00', 'groups': [gate]})
     reverted = report()
     attach_context_direction(reverted, request(day), group_bars(bars), artifact, contexts, meta)
     assert reverted['closeDirection']['upProbability'] == .4
@@ -186,7 +192,7 @@ def test_adopted_report_still_evaluates_the_frozen_incumbent_separately():
     report = {'id': 'adopted', 'generatedAt': '2026-09-21T14:31:00', 'signalDate': '2026-09-21',
         'targetDate': '2026-09-22', 'instrumentCode': '600000.SH', 'mode': 'TAIL_ENTRY', 'cutoff': '14:30',
         'evidenceKind': 'FORWARD', 'jointResearch': {'cohort': 'AUTOMATIC'},
-        'closeDirection': {'protocol': 'overnight-context-direction-v2', 'upProbability': .8,
+        'closeDirection': {'protocol': 'overnight-context-reference-v3', 'upProbability': .8,
             'incumbentPrediction': {'protocol': PROTOCOL, 'target': TARGET, 'artifactId': 'old',
                 'upProbability': .2, 'baselineProbability': .5}},
         'outcome': {'closeDirection': {'status': 'SETTLED', 'actualUp': True, 'correct': True}}}

@@ -58,7 +58,7 @@ class OvernightAutomation:
             'positionCount': len(context['positions']), 'holdingStatus': holding_status,
             'joint': self.service.joint.status(now) if getattr(self.service, 'joint', None) is not None else None,
             'heartbeat': self.store.get('heartbeat'),
-            'history': {'desiredDays': DESIRED_DAYS, 'coverage': self.service.store.coverage(now),
+            'history': {'archive': self.service.store.archive_summary(), 'desiredDays': DESIRED_DAYS, 'coverage': self.service.store.coverage(now),
                 'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in self.store.jobs(history=True)]},
             'jobs': [{k: v for k, v in job.items() if k not in ('token', 'observations')} for job in jobs]}
 

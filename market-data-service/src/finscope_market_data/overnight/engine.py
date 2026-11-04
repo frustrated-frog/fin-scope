@@ -9,7 +9,7 @@ import numpy as np
 from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.overnight.learning import forecast_target
 
-VERSION = 'overnight-v5-shared-evidence'
+VERSION = 'overnight-v6-decision-direction'
 TARGETS = ('OPEN', '10:00', '14:30', 'CLOSE')
 
 
@@ -131,8 +131,12 @@ def settle(report, bars, now):
     entry, field = entry_bar(grouped.get(request.signal_date, {}), request)
     result = {'status': 'PENDING', 'targets': [], 'executionStatus': 'UNVERIFIED', 'missingReasons': []}
     if report.get('closeDirection', {}).get('upProbability') is not None:
-        from finscope_market_data.overnight.direction_dataset import close_outcome
-        direction = close_outcome(grouped, request.signal_date, now)
+        from finscope_market_data.overnight.direction_dataset import close_outcome, TARGET
+        prediction = report['closeDirection']
+        decision_target = prediction.get('target') == TARGET
+        direction = close_outcome(grouped, request.signal_date, now,
+            request.cutoff if decision_target else '15:00',
+            prediction.get('referencePrice', report.get('referencePrice')) if decision_target else None)
         if direction['status'] == 'SETTLED':
             p = report['closeDirection']['upProbability']
             direction.update(brierScore=(p - direction['actualUp']) ** 2,
@@ -150,7 +154,7 @@ def settle(report, bars, now):
             result['missingReasons'].append(f'{target}:DATA_MISSING_OR_NOT_DUE')
             continue
         if report.get('modelVersion') in ('overnight-local-v2', 'overnight-local-v3-calibrated',
-                'overnight-local-v4-evidence-gated', VERSION) and bar.high == bar.low:
+                'overnight-local-v4-evidence-gated', 'overnight-v5-shared-evidence', VERSION) and bar.high == bar.low:
             result['missingReasons'].append(f'{target}:EXIT_UNVERIFIED')
             continue
         net = getattr(bar, field) / price - 1 - request.cost_bps / 10000

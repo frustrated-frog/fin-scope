@@ -1,4 +1,4 @@
-"""Separate immutable forward checkpoint for close/close price direction."""
+"""Immutable forward checkpoints scoped to the current direction target/protocol."""
 from collections import defaultdict
 
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction

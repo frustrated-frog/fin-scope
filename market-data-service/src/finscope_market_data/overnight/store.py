@@ -119,6 +119,15 @@ class OvernightStore:
             for row in cursor:
                 yield {**json.loads(row[0]), 'outcome': json.loads(row[1]) if row[1] else None}
 
+    def archive_summary(self):
+        with self.connect() as db:
+            row = db.execute("""SELECT COUNT(*), MIN(generated_at), MAX(generated_at),
+                COUNT(DISTINCT json_extract(payload, '$.signalDate')),
+                SUM(CASE WHEN json_extract(payload, '$.closeDirection.upProbability') IS NOT NULL
+                    THEN 1 ELSE 0 END) FROM overnight_prediction""").fetchone()
+        return {'recordCount': row[0], 'firstGeneratedAt': row[1], 'lastGeneratedAt': row[2],
+                'signalDays': row[3], 'directionCount': row[4] or 0}
+
     def history(self, limit=50):
         return list(self.iter_history(limit))
 

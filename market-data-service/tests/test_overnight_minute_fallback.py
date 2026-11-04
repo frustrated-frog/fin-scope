@@ -43,6 +43,16 @@ def test_fallback_keeps_actual_amount_and_never_exposes_future_bars():
     assert http.closed
 
 
+def test_partial_oldest_day_cannot_shadow_complete_historical_data():
+    oldest = [{**row, 'day': row['day'].replace('11-04', '11-02')} for row in rows()[-5:]]
+    previous = [{**row, 'day': row['day'].replace('11-04', '11-03')} for row in rows()]
+    batch = OvernightMinuteProvider(lambda: Http(oldest + previous + rows())).fetch(
+        '000001.SZ', datetime(2026, 11, 4, 14, 31))
+    assert not any(bar.ended_at.day == 2 for bar in batch)
+    assert sum(bar.ended_at.day == 3 for bar in batch) == 48
+    assert batch[-1].ended_at == datetime(2026, 11, 4, 14, 30)
+
+
 @pytest.mark.parametrize('change', ['missing_amount', 'stale', 'hole', 'conflict'])
 def test_invalid_fallback_does_not_masquerade_as_success(change):
     data = rows()

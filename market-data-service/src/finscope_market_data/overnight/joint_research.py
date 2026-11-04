@@ -75,13 +75,16 @@ class OvernightJointResearch:
             return
         monitor = self.meta.get('closeDirectionForward') or {}
         key = f'{request.mode}|{request.cutoff}'
-        gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if monitor.get('computedAt', '9999') < report['dataThrough'] else {}
+        compatible = (monitor.get('protocol') == DIRECTION_PROTOCOL and monitor.get('target') == DIRECTION_TARGET
+                      and monitor.get('computedAt', '9999') < report['dataThrough'])
+        gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if compatible else {}
         forecast = direction_prediction(fitted, x, gate.get('calibrationGate'))
         report['closeDirection'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
             'dataFingerprint': fitted['data']['fingerprint'], 'forwardDays': gate.get('dayCount', 0),
             'forwardStatus': gate.get('status', 'ACCUMULATING'),
             'validated': bool((report.get('jointResearch') or {}).get('cohort') == 'AUTOMATIC' and gate.get('eligible')),
-            'reason': '预测次日未复权收盘价是否高于当日收盘价；涨跌目标不扣交易成本，持平计入未上涨'}
+            'referencePrice': grouped[request.signal_date][request.cutoff].close, 'referenceAt': report['dataThrough'],
+            'reason': '预测次日收盘价是否高于本次判断时的参考价格；持平计入未上涨'}
 
     def status(self, now):
         universe = self.meta.get(POOL_KEY) or {}

@@ -45,7 +45,7 @@ def test_features_do_not_use_signal_close_or_future_market_data():
     store = SimpleNamespace(bars=lambda code, through: [b for b in bars if b.ended_at <= through])
     through = bars[-1].ended_at
     rows, audit = build_direction_panel(store, ['605058.SH'], '14:30', through)
-    assert rows and audit['target'] == 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE'
+    assert rows and audit['target'] == 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
     assert all(r['exitAt'] < through.isoformat() for r in rows)
     assert not any('actualNetReturn' in r for r in rows)
 
@@ -222,4 +222,38 @@ def test_background_price_model_is_not_blocked_by_unavailable_trade_labels(tmp_p
     assert job['status'] == 'COMPLETED'
     artifact = research.models.latest('TAIL_ENTRY|14:30|20', now)
     assert artifact['targets'] == {}
-    assert artifact['closeDirection']['protocol'] == 'overnight-close-direction-v1'
+    assert artifact['closeDirection']['protocol'] == 'overnight-reference-direction-v2'
+
+
+def test_tail_labels_and_frozen_settlement_use_decision_price_not_later_close():
+    from test_overnight import history, request
+    from finscope_market_data.overnight.engine import settle
+    from finscope_market_data.overnight.direction_dataset import TARGET
+    bars = history(10)
+    grouped = group_bars(bars)
+    day = sorted(grouped)[-2]
+    grouped[day]['14:30'].close = 100
+    grouped[day]['15:00'].close = 110
+    grouped[next_session(day)]['15:00'].close = 105
+    now = bars[-1].ended_at + timedelta(seconds=1)
+    assert close_outcome(grouped, day, now, '14:30')['actualUp']
+    assert not close_outcome(grouped, day, now)['actualUp']
+    report = {'request': request(day).model_dump(mode='json', by_alias=True), 'targets': [],
+              'closeDirection': {'target': TARGET, 'referencePrice': 100, 'upProbability': .7}}
+    # A later source revision must not rewrite the original reference price.
+    grouped[day]['14:30'].close = 120
+    actual = settle(report, bars, now)['closeDirection']
+    assert actual['actualReturn'] == pytest.approx(.05)
+    assert actual['correct'] is True
+    assert actual['referencePrice'] == 100
+    legacy = {**report, 'closeDirection': {'target': 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', 'upProbability': .7}}
+    assert settle(legacy, bars, now)['closeDirection']['actualUp'] is False
+
+
+def test_old_target_records_do_not_enter_new_forward_statistics():
+    from finscope_market_data.overnight.direction_validation import summarize_direction
+    from finscope_market_data.overnight.direction_dataset import PROTOCOL
+    report = {'id': 'old', 'generatedAt': '2026-10-08T14:30:01', 'evidenceKind': 'FORWARD',
+              'jointResearch': {'cohort': 'AUTOMATIC'}, 'closeDirection': {'protocol': PROTOCOL,
+              'target': 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE', 'upProbability': .7}}
+    assert summarize_direction(SimpleNamespace(iter_history=lambda: iter([report])), datetime(2026, 11, 4))['groups'] == []

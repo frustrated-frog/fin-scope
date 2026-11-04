@@ -35,6 +35,15 @@ class OvernightMinuteProvider:
                 try:
                     bars = await fetch(http, code, through)
                     self.validate_coverage(bars, through)
+                    # A limited provider response often starts midway through its
+                    # oldest day. Persisting that fragment would hide the complete
+                    # historical day in overnight_effective_minute.
+                    complete = set(expected_times('15:00'))
+                    days = {}
+                    for bar in bars:
+                        days.setdefault(bar.ended_at.date(), set()).add(bar.ended_at.strftime('%H:%M'))
+                    bars = [bar for bar in bars if bar.ended_at.date() == through.date()
+                            or complete.issubset(days[bar.ended_at.date()])]
                     return MinuteBatch(bars, source, failures)
                 except (ProviderError, ValueError, KeyError, TypeError) as error:
                     failures.append({'source': source, 'code': getattr(error, 'error_type', 'INVALID_DATA')})

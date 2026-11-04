@@ -1,4 +1,4 @@
-"""Next-session close/close direction, independent of trade costs and fill proxies."""
+"""Next-session close relative to the observable decision-time price, independent of trade costs and fill proxies."""
 from collections import Counter
 import hashlib
 import json
@@ -10,8 +10,9 @@ from finscope_market_data.overnight.engine import expected_times, features, grou
 from finscope_market_data.overnight.session_features import FEATURE_CODES, session_features
 from finscope_market_data.overnight.joint_dataset import FEATURES as JOINT_FEATURES
 
-PROTOCOL = 'overnight-close-direction-v1'
-TARGET = 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE'
+PROTOCOL = 'overnight-reference-direction-v2'
+TARGET = 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
+LEGACY_TARGET = 'NEXT_SESSION_CLOSE_VS_SIGNAL_CLOSE'
 FEATURES = JOINT_FEATURES[:8] + FEATURE_CODES + (
     'LAST_5M_RETURN', 'LAST_30M_RETURN', 'LAST_60M_RETURN', 'AFTERNOON_RETURN',
     'RANGE_POSITION', 'DRAWDOWN_FROM_HIGH', 'REBOUND_FROM_LOW', 'DOWNSIDE_VOLATILITY',
@@ -43,18 +44,23 @@ def direction_features(grouped, day, cutoff, code, *, complete_dates=None):
         float(code.startswith('3'))]
 
 
-def close_outcome(grouped, signal_day, through):
+def close_outcome(grouped, signal_day, through, cutoff='15:00', reference_price=None):
     following = next_session(signal_day)
-    current = grouped.get(signal_day, {}).get('15:00')
+    current = grouped.get(signal_day, {}).get(cutoff)
     future = grouped.get(following, {}).get('15:00')
-    if current is None or future is None or future.ended_at >= through:
+    if (reference_price is None and current is None) or future is None or future.ended_at >= through:
         return {'status': 'PENDING', 'reason': 'CLOSE_DATA_MISSING_OR_NOT_DUE'}
-    if current.amount <= 0 or future.amount <= 0:
+    if (reference_price is None and current.amount <= 0) or future.amount <= 0:
         return {'status': 'UNVERIFIED', 'reason': 'CLOSE_WITHOUT_TRADING_AMOUNT'}
     # One-price bars remain valid price observations. They do not prove execution.
-    actual = future.close / current.close - 1
+    reference = reference_price if reference_price is not None else current.close
+    if not np.isfinite(reference) or reference <= 0:
+        return {'status': 'UNVERIFIED', 'reason': 'INVALID_REFERENCE_PRICE'}
+    actual = future.close / reference - 1
     return {'status': 'SETTLED', 'actualReturn': actual, 'actualUp': actual > 0,
-            'signalClose': current.close, 'targetClose': future.close, 'exitAt': future.ended_at.isoformat()}
+            'referencePrice': reference, 'referenceAt': f'{signal_day}T{cutoff}:00',
+            **({'signalClose': reference} if cutoff == '15:00' else {}),
+            'targetClose': future.close, 'exitAt': future.ended_at.isoformat()}
 
 
 def build_direction_panel(store, members, cutoff, through):
@@ -63,7 +69,7 @@ def build_direction_panel(store, members, cutoff, through):
         grouped = group_bars(store.bars(code, through))
         complete = {day for day, bars in grouped.items() if features(bars, '15:00') is not None}
         for day in sorted(grouped):
-            actual = close_outcome(grouped, day, through)
+            actual = close_outcome(grouped, day, through, cutoff)
             if actual['status'] != 'SETTLED':
                 quality[actual['reason']] += 1
                 continue

@@ -6,7 +6,7 @@ import json
 from finscope_market_data.forecast.industry_features import IndustryMembership, load_industry_memberships
 from finscope_market_data.overnight.context_features import FEATURES, build_context_panel, context_features, stock_context
 from finscope_market_data.overnight.context_store import OvernightContextStore
-from finscope_market_data.overnight.direction_dataset import FEATURES as STOCK_FEATURES, direction_features
+from finscope_market_data.overnight.direction_dataset import FEATURES as STOCK_FEATURES, TARGET, direction_features
 from finscope_market_data.overnight.direction_learning import direction_prediction, fit_direction
 from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL
 from finscope_market_data.overnight.action_verification import ActionVerificationStore
@@ -49,12 +49,15 @@ def attach_context_direction(report, request, grouped, artifact, contexts, meta)
         return
     monitor = meta.get('contextDirectionForward') or {}
     key = f'{request.mode}|{request.cutoff}'
-    gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if monitor.get('computedAt', '9999') < report['dataThrough'] else {}
+    compatible = (monitor.get('protocol') == PROTOCOL and monitor.get('target') == TARGET
+                  and monitor.get('computedAt', '9999') < report['dataThrough'])
+    gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if compatible else {}
     forecast = direction_prediction(fitted, x + contextual, gate.get('calibrationGate'))
     parent['challenger'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
         'dataFingerprint': fitted['data']['fingerprint'], 'incumbentProbability': parent.get('upProbability'),
         'forwardDays': gate.get('dayCount', 0), 'forwardStatus': gate.get('status', 'ACCUMULATING'),
         'validated': bool((report.get('jointResearch') or {}).get('cohort') == 'AUTOMATIC' and gate.get('eligible')),
+        'referencePrice': grouped[request.signal_date][request.cutoff].close, 'referenceAt': report['dataThrough'],
         'contextAt': snapshot['observedAt'], 'contextReceivedAt': snapshot['receivedAt'],
         'contextFingerprint': snapshot['fingerprint'], 'contextSymbols': len(snapshot['pool']),
         'industryAvailable': bool(contextual[-7]), 'indexCount': len(snapshot.get('indices', {})),

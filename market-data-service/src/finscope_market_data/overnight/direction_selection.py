@@ -4,7 +4,7 @@ import numpy as np
 from finscope_market_data.overnight.joint_dataset import date_weights
 
 POLICY = 'DIRECTION_BALANCED_V1'
-PROTOCOL = 'overnight-context-direction-v2'
+PROTOCOL = 'overnight-context-reference-v3'
 
 
 def metrics(probabilities, rows):
