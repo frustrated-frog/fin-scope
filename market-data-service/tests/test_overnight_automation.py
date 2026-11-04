@@ -176,7 +176,8 @@ def test_one_failed_stock_does_not_block_the_remaining_candidates(flow):
     now[0] = now[0].replace(minute=30)
     auto.tick()
     job = auto.store.job('2026-09-21|TAIL|14:30')
-    assert job['status'] == 'PARTIAL'
+    assert job['status'] == 'NO_PREDICTION'
+    assert job['predictionCount'] == 0
     assert [r['status'] for r in job['results']] == ['FAILED', 'INSUFFICIENT_DATA']
 
 
@@ -284,3 +285,27 @@ def test_automation_routes_are_read_only_until_worker_runs(tmp_path):
     assert client.get('/v1/quant/overnight/automation').json()['positionCount'] == 1
     assert client.get('/v1/calendar/next-session?after=2026-09-30').json() == {'next_session': '2026-10-08'}
     assert client.get('/v1/calendar/next-session?after=2027-01-01').status_code == 503
+
+
+def test_job_completion_requires_an_actual_forward_direction():
+    from finscope_market_data.overnight.automation import prediction_summary
+    missing = {'status': 'DATA_UNAVAILABLE', 'directionAvailable': False, 'evidenceKind': 'FORWARD'}
+    valid = {'status': 'INSUFFICIENT_DATA', 'directionAvailable': True, 'evidenceKind': 'FORWARD'}
+    assert prediction_summary([missing])['status'] == 'NO_PREDICTION'
+    assert prediction_summary([missing, valid])['predictionCount'] == 1
+    assert prediction_summary([missing, valid])['status'] == 'PARTIAL'
+    assert prediction_summary([valid])['status'] == 'COMPLETED'
+    assert prediction_summary([{**valid, 'evidenceKind': 'RETROSPECTIVE'}])['predictionCount'] == 0
+
+
+def test_prewarm_is_once_per_minute_without_generating_a_prediction(flow):
+    auto, now, calls, _ = flow
+    warmed = []
+    auto.service.prewarm = lambda codes: warmed.append(codes) or []
+    auto.tick()
+    auto.tick()
+    assert len(warmed) == 1 and not calls
+    now[0] += timedelta(minutes=1)
+    auto.tick()
+    assert len(warmed) == 2 and not calls
+    assert all(job['phase'] != 'PREWARM' for job in auto.store.jobs())

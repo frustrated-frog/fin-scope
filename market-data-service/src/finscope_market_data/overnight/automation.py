@@ -109,6 +109,14 @@ class OvernightAutomation:
                         self.store.finish(job, completed, status='COMPLETED', snapshotAt=completed.isoformat(), **result)
                 except Exception as error:
                     self.store.finish(job, self.clock(), status='FAILED', reason=f'候选扫描失败：{type(error).__name__}: {error}')
+            scan = self.store.job(scan_key)
+            if scan and scan['status'] == 'COMPLETED' and hasattr(self.service, 'prewarm'):
+                # One acquisition per minute during the preparation window, durable across restarts.
+                warm_key = f'{day}|PREWARM|{cutoff}|{now:%H:%M}'
+                warm = self.store.claim(warm_key, now, {**metadata, 'phase': 'PREWARM'})
+                if warm:
+                    results = self.service.prewarm([row['instrumentCode'] for row in scan['candidates']])
+                    self.store.finish(warm, self.clock(), status='COMPLETED', results=results)
             return
         job = self.store.claim(key, now, metadata)
         if not job:
@@ -121,10 +129,9 @@ class OvernightAutomation:
             mode='TAIL_ENTRY', cutoff=cutoff, cost_bps=context['tailCostBps']) for row in scan['candidates']]
         with ThreadPoolExecutor(max_workers=3) as pool:
             results = list(pool.map(self._generate, requests))
-        incomplete = any(row['status'] in {'FAILED', 'MISSED'} or row.get('evidenceKind') == 'RETROSPECTIVE' for row in results)
-        self.store.finish(job, self.clock(), status=('PARTIAL' if incomplete else 'COMPLETED') if requests else 'EMPTY',
-                          candidates=scan['candidates'], results=results, snapshotAt=scan['snapshotAt'],
-                          ranking=rank_candidates(results))
+        summary = prediction_summary(results)
+        self.store.finish(job, self.clock(), **summary, candidates=scan['candidates'], results=results,
+                          snapshotAt=scan['snapshotAt'], ranking=rank_candidates(results))
 
     def _generate(self, request):
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}')
@@ -137,7 +144,8 @@ class OvernightAutomation:
             primary = next((target.get('joint') for target in report.get('targets', []) if target['target'] == '10:00'), None)
             return {'instrumentCode': request.instrument_code, 'status': report['status'],
                 'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings'],
-                'joint': primary}
+                'joint': primary, 'directionAvailable': report.get('closeDirection', {}).get('upProbability') is not None,
+                'acquisition': report.get('acquisition')}
         except Exception as error:
             return {'instrumentCode': request.instrument_code, 'status': 'FAILED',
                     'reason': f'研究失败：{type(error).__name__}'}
@@ -166,8 +174,7 @@ class OvernightAutomation:
                     cost_basis=position['averageCost'], quantity=position['quantity'],
                     position_opened_on=position.get('openedOn'))
                 result = self._generate(request)
-                self.store.finish(job, self.clock(), status='FAILED' if result['status'] == 'FAILED' else 'COMPLETED',
-                                  results=[result])
+                self.store.finish(job, self.clock(), **prediction_summary([result]), results=[result])
             except ValueError:
                 self.store.finish(job, self.clock(), status='SKIPPED', reason='持仓代码、成本或建仓日期不满足研究条件')
             processed += 1
@@ -197,3 +204,10 @@ def rank_candidates(results):
             'opportunityStatus': 'QUALIFIED' if active and selected else 'NO_QUALIFIED' if active else 'RESEARCH_ONLY',
             'evaluatedCount': len(usable), 'candidates': [{**row['joint'], 'instrumentCode': row['instrumentCode'],
                 'reportId': row['reportId']} for row in selected[:3]]}
+
+
+def prediction_summary(results):
+    available = sum(row.get('directionAvailable', False) and row.get('evidenceKind') == 'FORWARD' for row in results)
+    status = 'EMPTY' if not results else 'COMPLETED' if available == len(results) else 'PARTIAL' if available else 'NO_PREDICTION'
+    return {'status': status, 'predictionCount': available, 'attemptedCount': len(results),
+            'reason': None if available == len(results) else '任务已执行，但部分或全部股票未生成有效次日涨跌预测'}

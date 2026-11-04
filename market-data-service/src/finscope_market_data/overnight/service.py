@@ -27,12 +27,19 @@ class OvernightService:
         now = self.clock()
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
         warnings = []
+        source = self.provider.source
+        acquisition = {'status': 'NOT_REQUESTED'}
         if now >= cutoff:
             try:
                 fetched = self.provider.fetch(request.instrument_code, now)
                 self.store.save_bars(request.instrument_code, fetched)
+                source = getattr(fetched, 'source', source)
+                acquisition = {'status': 'AVAILABLE', 'source': source, 'receivedAt': self.clock().isoformat(),
+                    'dataThrough': max((bar.ended_at.isoformat() for bar in fetched), default=None),
+                    'fallbackReasons': getattr(fetched, 'failures', [])}
             except Exception as error:
-                warnings.append(f'分钟源不可用：{type(error).__name__}；仅使用已有分钟缓存')
+                acquisition = {'status': 'UNAVAILABLE', 'code': getattr(error, 'error_type', type(error).__name__)}
+                warnings.append(f"分钟源不可用：{acquisition['code']}；仅使用已有分钟缓存")
         bars = self.store.bars(request.instrument_code, min(cutoff, now))
         report = predict(request, bars, now)
         if self.joint is not None:
@@ -52,7 +59,8 @@ class OvernightService:
             report['evidenceKind'] = 'RETROSPECTIVE'
         if request.mode == 'AFTER_CLOSE_HOLDING' and completed.date() != request.signal_date:
             report['evidenceKind'] = 'RETROSPECTIVE'
-        report['sourceCode'] = self.provider.source
+        report['sourceCode'] = source
+        report['acquisition'] = acquisition
         history = self.store.history_import(request.instrument_code)
         if history:
             report['sourceCode'] += '+' + history['sourceCode']
@@ -67,6 +75,19 @@ class OvernightService:
         if settle_cached:
             self._settle_cached(now)
         return report
+
+    def prewarm(self, codes):
+        def acquire(code):
+            try:
+                fetched = self.provider.fetch(code, self.clock())
+                self.store.save_bars(code, fetched)
+                return {'instrumentCode': code, 'status': 'AVAILABLE',
+                        'source': getattr(fetched, 'source', self.provider.source)}
+            except Exception as error:
+                return {'instrumentCode': code, 'status': 'UNAVAILABLE',
+                        'code': getattr(error, 'error_type', type(error).__name__)}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            return list(pool.map(acquire, codes))
 
     def _settle_cached(self, now):
         for report in self.store.iter_history():
