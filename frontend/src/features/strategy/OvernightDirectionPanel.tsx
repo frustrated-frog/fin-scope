@@ -84,6 +84,10 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
   const snapshot = state.contextSnapshots?.find(row => mode === 'TAIL_ENTRY' ? row.cutoff !== '15:00' : row.cutoff === '15:00');
   return <details className="overnight-direction-summary"><summary>次日涨跌独立验证 <span>{models.length ? `${models.length} 个时点已训练` : '后台自动准备'}</span></summary>
     <p>新版预测次日收盘是否高于判断时的参考价格；旧版收盘对收盘记录不混入新版成绩。</p>
+    {state.validationWorker && <p aria-label="验证统计刷新状态">验证统计独立刷新 · 最近完成 {state.validationWorker.lastCompletedAt?.replace('T', ' ') ?? '尚未完成'}
+      {state.validationWorker.status === 'PARTIAL' ? ' · 部分刷新失败，保留上次结果'
+        : state.validationWorker.status === 'DISABLED' ? ' · 自动任务已关闭'
+        : state.validationWorker.status === 'RUNNING' ? ' · 正在刷新' : ''}</p>}
     {!groups.length && <p>尚无已到期的真实涨跌对照。尾盘自动发现与盘后持仓将分别积累。</p>}
     {groups.map(group => <div className="overnight-direction-summary-row" key={group.key}>
       <b>{group.cutoff} → 次日收盘</b><span>{phases[group.status] ?? '等待结果'} · {group.dayCount} / {group.requiredDays} 日</span>

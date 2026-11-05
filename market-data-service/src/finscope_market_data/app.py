@@ -28,6 +28,7 @@ from finscope_market_data.overnight.service import OvernightService
 from finscope_market_data.overnight.history_backfill import OvernightHistoryBackfill
 from finscope_market_data.overnight.joint_research import OvernightJointResearch
 from finscope_market_data.overnight.joint_worker import OvernightJointWorker
+from finscope_market_data.overnight.validation_worker import OvernightValidationWorker
 from finscope_market_data.overnight.context_capture import OvernightContextCapture
 from finscope_market_data.overnight.action_verification import OvernightActionVerification
 from finscope_market_data.providers.baostock_actions import BaostockActionProvider
@@ -228,6 +229,7 @@ def create_app(
         automation_task = asyncio.create_task(automation.run(capture_stop))
         history_task = asyncio.create_task(history_backfill.run(capture_stop))
         joint_task = asyncio.create_task(joint_worker.run(capture_stop))
+        validation_task = asyncio.create_task(OvernightValidationWorker(automation, overnight.joint).run(capture_stop))
         context_capture = OvernightContextCapture(automation, application.state.router,
             config.data_dir / 'stock-discovery-constituents.json', config.data_dir / 'quant' / 'industry-membership-history.json',
             market_loader=tencent_market.fetch)
@@ -240,6 +242,7 @@ def create_app(
             await capture_task
             await automation_task
             await history_task
+            await validation_task
             await joint_task
             await context_task
             await action_task

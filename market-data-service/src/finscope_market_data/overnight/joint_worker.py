@@ -7,23 +7,19 @@ from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.engine import TARGETS
 from finscope_market_data.overnight.direction_dataset import PROTOCOL as DIRECTION_PROTOCOL, FEATURES as DIRECTION_FEATURES, build_direction_panel
 from finscope_market_data.overnight.direction_learning import fit_direction
-from finscope_market_data.overnight.direction_validation import summarize_direction
 from finscope_market_data.overnight.context_research import fit_context_direction
 from finscope_market_data.overnight.direction_selection import PROTOCOL as CONTEXT_PROTOCOL
 from finscope_market_data.overnight.joint_dataset import (
     PROTOCOL, FEATURES, MIN_SYMBOLS, build_panel, profiles,
 )
 from finscope_market_data.overnight.joint_learning import fit_target
-from finscope_market_data.overnight.joint_validation import summarize_forward
 from finscope_market_data.overnight.universe import POOL_KEY
-from finscope_market_data.overnight.error_audit import build_error_audit
 from finscope_market_data.overnight.candidate_cohort import frozen_cohorts
 from finscope_market_data.overnight.up_selection import PROTOCOL as UP_PROTOCOL, fit_up_selection
 from finscope_market_data.overnight.candidate_dataset import extend_candidate_rows
 
 from finscope_market_data.overnight.market_ablation import evaluate_market_groups
 from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PROTOCOL
-from finscope_market_data.overnight.market_validation import summarize_market_forward
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +36,8 @@ class OvernightJointWorker:
         context = meta.get('context') or AutomationContext().model_dump(mode='json', by_alias=True)
         if not context['enabled']:
             return
-        audit = meta.get('errorAudit') or {}
-        if not audit.get('computedAt') or now - datetime.fromisoformat(audit['computedAt']) >= timedelta(minutes=5):
-            meta.put('errorAudit', build_error_audit(self.automation.service.store, meta, self.research.contexts, now))
-            meta.put('marketForward', summarize_market_forward(self.automation.service.store, meta, now))
         if '13:00' <= now.strftime('%H:%M') < '18:00':
             return
-        meta.put('jointForward', summarize_forward(self.automation.service.store, now, meta))
-        meta.put('closeDirectionForward', summarize_direction(self.automation.service.store, now, meta))
-        meta.put('contextDirectionForward', summarize_direction(self.automation.service.store, now, meta, challenger=True))
         for previous in meta.jobs(phase='JOINT'):
             if previous['status'] == 'RUNNING' and now - datetime.fromisoformat(previous['startedAt']) >= timedelta(minutes=10):
                 identifier = self.research.models.for_job(previous['key'])

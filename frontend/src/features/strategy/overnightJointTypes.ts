@@ -31,6 +31,7 @@ export interface OvernightJointState {
   closeDirectionForward?: OvernightDirectionForward;
   contextDirectionForward?: OvernightDirectionForward;
   errorAudit?: ErrorAudit;
+  validationWorker?: { status: string; lastTickAt: string; lastCompletedAt?: string | null; intervalSeconds: number };
   marketAblation?: Array<{ cutoff: string; groups: Array<{ group: string; status: string; dayCount: number; requiredDays: number }> }>;
   marketForward?: { groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
     dayCount: number; requiredDays: number; pairedCount: number; scheduledCount: number;
