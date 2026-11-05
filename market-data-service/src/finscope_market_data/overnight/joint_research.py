@@ -100,4 +100,6 @@ class OvernightJointResearch:
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
                 'contextSnapshots': self.contexts.recent(),
+                'marketAblation': [value for cutoff in ('14:30', '14:45', '15:00')
+                                   if (value := self.meta.get(f'marketAblation:{cutoff}'))],
                 'jobs': [{k: v for k, v in row.items() if k != 'token'} for row in self.meta.jobs(limit=6, phase='JOINT')]}

@@ -229,7 +229,8 @@ def create_app(
         history_task = asyncio.create_task(history_backfill.run(capture_stop))
         joint_task = asyncio.create_task(joint_worker.run(capture_stop))
         context_capture = OvernightContextCapture(automation, application.state.router,
-            config.data_dir / 'stock-discovery-constituents.json', config.data_dir / 'quant' / 'industry-membership-history.json')
+            config.data_dir / 'stock-discovery-constituents.json', config.data_dir / 'quant' / 'industry-membership-history.json',
+            market_loader=tencent_market.fetch)
         context_task = asyncio.create_task(context_capture.run(capture_stop))
         action_task = asyncio.create_task(OvernightActionVerification(automation, BaostockActionProvider()).run(capture_stop))
         try:

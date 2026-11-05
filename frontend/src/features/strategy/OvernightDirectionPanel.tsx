@@ -90,6 +90,9 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
     </div>)}
     {models.map(model => <p key={model.id}>{model.profile.cutoff} · {model.closeDirection?.data.symbolCount} 只股票参与涨跌学习。历史开发对照：方向命中 {percent(model.closeDirection?.audit.historical.accuracy)} / 基准 {percent(model.closeDirection?.audit.historical.comparisons.HISTORICAL_PRIOR?.accuracy)}。仅供诊断。</p>)}
     <p>环境增强方案：{snapshot ? `最近采集 ${snapshot.signalDate} ${snapshot.observedAt.slice(11, 16)} · ${snapshot.capturedSymbols} / ${snapshot.expectedSymbols} 只研究池股票。` : '等待交易时段自动采集环境数据。'}</p>
+    <p>广泛市场数据：{snapshot?.market?.quality === 'SUFFICIENT'
+      ? `已留存 ${snapshot.market.capturedSymbols} / ${snapshot.market.expectedSymbols} 只有效报价，正在积累独立对照。`
+      : '等待有效交易时段积累；缺失数据不会用盘后行情补填。'}</p>
     {contextGroups.map(group => <div className="overnight-direction-summary-row" key={`context-${group.key}`}>
       <b>{group.cutoff} 环境增强对照</b><span>{phases[group.status] ?? '等待结果'} · {group.dayCount} / {group.requiredDays} 日</span>
       <small>候选 / 现有方案命中率 {percent(group.metrics?.accuracy)} / {percent(group.metrics?.comparisons.INCUMBENT?.accuracy)} · 可核验 {percent(group.coverage)}</small>

@@ -32,6 +32,7 @@ export interface OvernightJointState {
   contextDirectionForward?: OvernightDirectionForward;
   errorAudit?: ErrorAudit;
   contextSnapshots?: Array<{ signalDate: string; cutoff: string; observedAt: string;
-    receivedAt: string; capturedSymbols: number; expectedSymbols: number }>;
+    receivedAt: string; capturedSymbols: number; expectedSymbols: number;
+    market?: { quality: string; capturedSymbols?: number; expectedSymbols?: number; reason?: string } }>;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;
 }

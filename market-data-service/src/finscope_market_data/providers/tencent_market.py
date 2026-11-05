@@ -158,6 +158,7 @@ class TencentMarketSnapshotService:
                 frame.attrs['warnings'].append(universe_warning)
             if errors:
                 frame.attrs['warnings'].append(f'{len(errors)} 个行情批次暂缺，其余批次已保留')
+            frame.attrs['expectedSymbols'] = len(symbols)
             frame.attrs['partial'] = len(rows) < len(symbols) or universe_warning is not None
             self._cached = (business_date,time.monotonic(),frame)
             return frame.copy()

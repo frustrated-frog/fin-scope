@@ -21,6 +21,8 @@ from finscope_market_data.overnight.candidate_cohort import frozen_cohorts
 from finscope_market_data.overnight.up_selection import PROTOCOL as UP_PROTOCOL, fit_up_selection
 from finscope_market_data.overnight.candidate_dataset import extend_candidate_rows
 
+from finscope_market_data.overnight.market_ablation import evaluate_market_groups
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,6 +97,11 @@ class OvernightJointWorker:
                         specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts)
                     except Exception:
                         logger.exception('Up-candidate training failed; retaining direction models')
+                try:
+                    market_audit = evaluate_market_groups(direction_rows, self.research.contexts, profile.cutoff, now)
+                    meta.put(f'marketAblation:{profile.cutoff}', market_audit)
+                except Exception:
+                    logger.exception('Market group evaluation failed; retaining incumbent models')
                 artifact = self.research.models.publish({'protocol': PROTOCOL, 'profile': profile.dump(),
                     'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows + context_rows + selection_rows),
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],

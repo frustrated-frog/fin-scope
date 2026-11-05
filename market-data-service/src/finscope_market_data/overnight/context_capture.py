@@ -13,12 +13,14 @@ from finscope_market_data.overnight.context_features import INDEX_CODES, context
 from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.engine import group_bars
 from finscope_market_data.overnight.universe import POOL_KEY
+from finscope_market_data.overnight.market_context import market_snapshot
 
 logger = logging.getLogger(__name__)
 
 
 class OvernightContextCapture:
-    def __init__(self, automation, router, membership_path, history_path):
+    def __init__(self, automation, router, membership_path, history_path, market_loader=None):
+        self.market_loader = market_loader
         self.automation = automation
         self.router = router
         self.clock = automation.clock
@@ -100,9 +102,28 @@ class OvernightContextCapture:
             except Exception:
                 failures.append(code)
 
-        await asyncio.gather(*(stock(code) for code in codes), *(index(code) for code in INDEX_CODES))
+        market = {'quality': 'UNAVAILABLE', 'reason': '未配置广泛市场行情'}
+
+        async def broad_market():
+            nonlocal market
+            if self.market_loader is None:
+                return
+            try:
+                budget = min(45, (deadline - self.clock()).total_seconds())
+                if budget <= 0:
+                    return
+                frame = await asyncio.wait_for(asyncio.to_thread(self.market_loader, observed.date()), timeout=budget)
+                received = self.clock()
+                if received > deadline:
+                    market = {'quality': 'UNAVAILABLE', 'reason': '行情接收超过截止时间'}
+                    return
+                market = market_snapshot(frame, observed, received)
+            except Exception as error:
+                market = {'quality': 'UNAVAILABLE', 'reason': f'行情采集失败：{type(error).__name__}'}
+
+        await asyncio.gather(broad_market(), *(stock(code) for code in codes), *(index(code) for code in INDEX_CODES))
         return {'signalDate': str(observed.date()), 'cutoff': cutoff, 'observedAt': observed.isoformat(),
-                'pool': pool, 'indices': indices, 'failures': sorted(set(failures)),
+                'pool': pool, 'indices': indices, 'market': market, 'failures': sorted(set(failures)),
                 'scope': '固定研究股票池，并非全市场涨跌家数'}
 
     async def run(self, stop):
