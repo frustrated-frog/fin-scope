@@ -7,21 +7,33 @@ import numpy as np
 def evaluate_candidates(rows, *, top_k=3, threshold=.5):
     if not isinstance(top_k, int) or top_k < 1 or not 0 <= threshold <= 1:
         raise ValueError('候选评价参数无效')
+    return _evaluate(rows, top_k, threshold, 'probability')
+
+
+def evaluate_ranking(rows, *, top_k=3):
+    """Unbounded ordering scores are not probabilities; always rank the full day."""
+    if not isinstance(top_k, int) or top_k < 1:
+        raise ValueError('排序评价参数无效')
+    return _evaluate(rows, top_k, None, 'score')
+
+
+def _evaluate(rows, top_k, threshold, score_key):
     by_day, seen = defaultdict(list), set()
     for row in rows:
         identity = (row['signalDate'], row['instrumentCode'])
         if identity in seen:
             raise ValueError('候选评价不允许同日同股重复计数')
         seen.add(identity)
-        p = row['probability']
-        if not np.isfinite(p) or not 0 <= p <= 1 or row['actualUp'] not in (False, True):
+        p = row[score_key]
+        if (not np.isfinite(p) or (score_key == 'probability' and not 0 <= p <= 1)
+                or row['actualUp'] not in (False, True)):
             raise ValueError('候选概率或实际涨跌标签无效')
         by_day[row['signalDate']].append(row)
     daily = []
     for day, values in sorted(by_day.items()):
-        p = np.array([row['probability'] for row in values])
+        p = np.array([row[score_key] for row in values])
         y = np.array([row['actualUp'] for row in values], dtype=float)
-        eligible = p >= threshold
+        eligible = np.ones(len(p), dtype=bool) if threshold is None else p >= threshold
         count = min(top_k, int(eligible.sum()))
         if not count:
             continue
