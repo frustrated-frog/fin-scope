@@ -8,8 +8,12 @@ from finscope_market_data.overnight.context_features import FEATURES, build_cont
 from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.direction_dataset import FEATURES as STOCK_FEATURES, TARGET, direction_features
 from finscope_market_data.overnight.direction_learning import direction_prediction, fit_direction
+from finscope_market_data.overnight.direction_candidates import MULTISCALE_RECIPE
+from finscope_market_data.overnight.multiscale_features import FEATURES as HISTORY_FEATURES, multiscale_features
 from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL
 from finscope_market_data.overnight.action_verification import ActionVerificationStore
+
+MODEL_FEATURES = STOCK_FEATURES + FEATURES + HISTORY_FEATURES
 
 
 def fit_context_direction(store, members, cutoff, through):
@@ -17,26 +21,27 @@ def fit_context_direction(store, members, cutoff, through):
     memberships = load_industry_memberships(root / 'stock-discovery-constituents.json',
                                             root / 'quant' / 'industry-membership-history.json')
     rows, data = build_context_panel(store, members, cutoff, through,
-                                    contexts=OvernightContextStore(store), memberships=memberships)
+                                    contexts=OvernightContextStore(store), memberships=memberships, include_multiscale=True)
     rows, action_audit = ActionVerificationStore(store).annotate(rows, through)
     data.update(actionVerification=action_audit,
                 fingerprint=hashlib.sha256(json.dumps(rows, sort_keys=True, allow_nan=False).encode()).hexdigest())
-    fitted = fit_direction(rows, through.isoformat(), cutoff, selection_policy=POLICY)
+    fitted = fit_direction(rows, through.isoformat(), cutoff, selection_policy=POLICY, recipe=MULTISCALE_RECIPE)
     if fitted:
-        fitted.update(data=data, features=list(STOCK_FEATURES + FEATURES))
+        fitted.update(data=data, features=list(MODEL_FEATURES))
     return fitted, rows
 
 
 def attach_context_direction(report, request, grouped, artifact, contexts, meta):
     parent = report['closeDirection']
     parent['challenger'] = {'protocol': PROTOCOL, 'target': parent['target'], 'status': 'WAITING_MODEL',
-                            'reason': '环境增强方案在后台自动训练并单独验证'}
+                            'reason': '多周期量价与市场环境方案在后台自动训练并单独验证'}
     fitted = artifact.get('contextDirection')
-    if not fitted or fitted.get('protocol') != PROTOCOL:
+    if not fitted or fitted.get('protocol') != PROTOCOL or fitted.get('features') != list(MODEL_FEATURES):
         return
     decision = datetime.fromisoformat(report['dataThrough'])
     snapshot = contexts.at(request.signal_date, request.cutoff, decision)
     x = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
+    history = multiscale_features(grouped, request.signal_date, request.cutoff)
     if not snapshot or snapshot.get('universeFingerprint') != artifact.get('universeFingerprint'):
         parent['challenger'].update(status='MISSING_CONTEXT', reason='预测时点前的环境快照不足；不使用盘后数据补填')
         return
@@ -47,12 +52,15 @@ def attach_context_direction(report, request, grouped, artifact, contexts, meta)
     if x is None or contextual is None:
         parent['challenger'].update(status='MISSING_CONTEXT', reason='环境样本覆盖不足；需要至少 19 只其他股票且覆盖率达到 75%')
         return
+    if history is None:
+        parent['challenger'].update(status='MISSING_HISTORY', reason='过去 21 个完整交易日不足，保留原方案并等待自动补齐')
+        return
     monitor = meta.get('contextDirectionForward') or {}
     key = f'{request.mode}|{request.cutoff}'
     compatible = (monitor.get('protocol') == PROTOCOL and monitor.get('target') == TARGET
                   and monitor.get('computedAt', '9999') < report['dataThrough'])
     gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if compatible else {}
-    forecast = direction_prediction(fitted, x + contextual, gate.get('calibrationGate'))
+    forecast = direction_prediction(fitted, x + contextual + history, gate.get('calibrationGate'))
     parent['challenger'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
         'dataFingerprint': fitted['data']['fingerprint'], 'incumbentProbability': parent.get('upProbability'),
         'forwardDays': gate.get('dayCount', 0), 'forwardStatus': gate.get('status', 'ACCUMULATING'),
@@ -61,7 +69,8 @@ def attach_context_direction(report, request, grouped, artifact, contexts, meta)
         'contextAt': snapshot['observedAt'], 'contextReceivedAt': snapshot['receivedAt'],
         'contextFingerprint': snapshot['fingerprint'], 'contextSymbols': len(snapshot['pool']),
         'industryAvailable': bool(contextual[-7]), 'indexCount': len(snapshot.get('indices', {})),
-        'reason': '环境增强候选；与现有模型及简单基准进行相同股票、相同日期的前瞻对照'}
+        'historyWindows': [5, 10, 20], 'featureCount': len(MODEL_FEATURES),
+        'reason': '多周期量价与环境增强候选；与原模型、历史上涨比例进行同股票同日期的前瞻对照'}
     if parent['challenger']['validated'] and parent.get('upProbability') is not None:
         incumbent = {key: value for key, value in parent.items() if key != 'challenger'}
         parent.update({**parent['challenger'], 'incumbentPrediction': incumbent,

@@ -141,10 +141,10 @@ def test_forward_challenger_must_beat_incumbent_not_only_prior(tmp_path):
 
 def test_adoption_requires_past_forward_approval_and_reverts_without_it(tmp_path, monkeypatch):
     from test_overnight import history, request
-    from finscope_market_data.overnight.context_research import attach_context_direction
+    from finscope_market_data.overnight.context_research import MODEL_FEATURES, attach_context_direction
     from finscope_market_data.overnight.direction_selection import PROTOCOL
     from finscope_market_data.overnight.automation_store import AutomationStore
-    bars = history(12)
+    bars = history(35)
     day = bars[-1].ended_at.date()
     store = OvernightStore(tmp_path / 'adopt.db')
     contexts, meta = OvernightContextStore(store), AutomationStore(store)
@@ -152,9 +152,9 @@ def test_adoption_requires_past_forward_approval_and_reverts_without_it(tmp_path
     value.update(universeFingerprint='pool', memberships=[])
     contexts.freeze(value)
     artifact = {'id': 'model', 'createdAt': f'{day}T12:00:00', 'universeFingerprint': 'pool',
-                'contextDirection': {'protocol': PROTOCOL, 'data': {'fingerprint': 'data'}}}
+                'contextDirection': {'protocol': PROTOCOL, 'data': {'fingerprint': 'data'}, 'features': list(MODEL_FEATURES)}}
     def forecast(fitted, x, gate):
-        assert len(x) == 44
+        assert len(x) == len(MODEL_FEATURES)
         return {'protocol': PROTOCOL, 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'upProbability': .7, 'status': 'SHADOW'}
     monkeypatch.setattr('finscope_market_data.overnight.context_research.direction_prediction', forecast)
     def report():

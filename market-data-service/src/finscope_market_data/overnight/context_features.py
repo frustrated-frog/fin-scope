@@ -6,8 +6,9 @@ import json
 import numpy as np
 
 from finscope_market_data.forecast.trading_calendar import previous_session
-from finscope_market_data.overnight.engine import expected_times, group_bars
+from finscope_market_data.overnight.engine import expected_times, features, group_bars
 from finscope_market_data.overnight.direction_dataset import build_direction_panel
+from finscope_market_data.overnight.multiscale_features import multiscale_features
 
 INDEX_CODES = ('000300.SH', '000852.SH', '399006.SZ')
 FEATURES = ('POOL_RETURN', 'POOL_UP_SHARE', 'POOL_DISPERSION', 'POOL_INTRADAY', 'POOL_LAST_30M',
@@ -62,18 +63,23 @@ def context_features(code, own, snapshot, memberships=()):
     return values
 
 
-def build_context_panel(store, members, cutoff, through, *, contexts=None, memberships=()):
+def build_context_panel(store, members, cutoff, through, *, contexts=None, memberships=(), include_multiscale=False):
     base, audit = build_direction_panel(store, members, cutoff, through)
     days = sorted({row['signalDate'] for row in base})
     pool_by_day = {day: {} for day in days}
+    history_by_key = {}
     # Keep compact per-stock/day observations, not 120 full minute histories
     # resident at once. A long-lived sample library must remain bounded in RAM.
     for code in sorted(set(members)):
         grouped = group_bars(store.bars(code, through))
+        complete = {day for day, bars in grouped.items() if features(bars, '15:00') is not None} if include_multiscale else set()
         for day in days:
-            value = stock_context(grouped, datetime.fromisoformat(day).date(), cutoff)
+            signal_day = datetime.fromisoformat(day).date()
+            value = stock_context(grouped, signal_day, cutoff)
             if value is not None:
                 pool_by_day[day][code] = value
+            if include_multiscale:
+                history_by_key[(day, code)] = multiscale_features(grouped, signal_day, cutoff, complete_dates=complete)
     snapshots = {}
     historical_reconstruction = 0
     for day in days:
@@ -83,18 +89,27 @@ def build_context_panel(store, members, cutoff, through, *, contexts=None, membe
             snapshot = {'signalDate': day, 'pool': pool_by_day[day], 'expectedSymbols': len(members), 'indices': {}}
             historical_reconstruction += 1
         snapshots[day] = snapshot
-    rows = []
+    rows, missing_history, missing_context = [], 0, 0
     for row in base:
         code, day = row['instrumentCode'], row['signalDate']
         own = pool_by_day[day].get(code)
         x = context_features(code, own, snapshots[day], memberships)
-        if x is not None:
-            rows.append({**row, 'features': row['features'] + x})
+        history = history_by_key.get((day, code)) if include_multiscale else []
+        if x is None:
+            missing_context += 1
+            continue
+        if history is None:
+            missing_history += 1
+            continue
+        rows.append({**row, 'features': row['features'] + x + history})
+    # Context flags precede optional history features; never rely on tail offsets.
+    context_offset = len(base[0]['features']) if base else 0
     audit.update(fingerprint=hashlib.sha256(json.dumps(rows, sort_keys=True, allow_nan=False).encode()).hexdigest(),
                  rows=len(rows), dayCount=len({r['signalDate'] for r in rows}),
-                 symbolCount=len({r['instrumentCode'] for r in rows}), missingContextRows=len(base) - len(rows),
+                 symbolCount=len({r['instrumentCode'] for r in rows}), missingContextRows=missing_context,
+                 missingHistoryRows=missing_history, historyWindows=[5, 10, 20] if include_multiscale else [],
                  reconstructedDays=historical_reconstruction, contextLagMinutes=10,
-                 industryRows=sum(row['features'][-7] == 1 for row in rows),
-                 indexRows=sum(any(row['features'][i] == 1 for i in (-1, -3, -5)) for row in rows),
+                 industryRows=sum(row['features'][context_offset + 11] == 1 for row in rows),
+                 indexRows=sum(any(row['features'][context_offset + i] == 1 for i in (13, 15, 17)) for row in rows),
                  contextScope='固定研究股票池，非全市场；行业成员只在记录可用日期后生效')
     return rows, audit

@@ -5,6 +5,7 @@ from finscope_market_data.forecast.direction_evaluation import evaluate_directio
 from finscope_market_data.forecast.calibration_gate import select_calibration_outputs
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
 from finscope_market_data.overnight.direction_selection import PROTOCOL as CONTEXT_PROTOCOL
+from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 
 FORWARD_DAYS = 60
 
@@ -34,7 +35,8 @@ def summarize_direction(store, now, meta=None, *, challenger=False):
                 or (challenger and prediction.get('incumbentProbability') is None)):
             pending[key].add(report['signalDate'])
             continue
-        groups[key].append({**prediction, 'signalDate': report['signalDate'], 'actualUp': outcome['actualUp']})
+        groups[key].append({**prediction, 'signalDate': report['signalDate'],
+                            'instrumentCode': report['instrumentCode'], 'actualUp': outcome['actualUp']})
     result = []
     for key, count in expected.items():
         rows = groups[key]
@@ -54,6 +56,7 @@ def summarize_direction(store, now, meta=None, *, challenger=False):
             metrics = evaluate_direction([r['upProbability'] for r in selected], [r['actualUp'] for r in selected],
                 [r['signalDate'] for r in selected], baselines(selected, challenger), family_size=6 if challenger else 3)
             metrics['task'] = TARGET
+            metrics['upCandidates'] = evaluate_candidates([{**r, 'probability': r['upProbability']} for r in selected])
             audit['metrics'] = metrics
             audit['checkpointPassed'] = metrics['eligible']
             if len(days) >= FORWARD_DAYS:

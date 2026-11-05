@@ -3,22 +3,22 @@ from dataclasses import asdict
 from collections import defaultdict
 from math import ceil
 
-import lightgbm as lgb
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
 
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.calibration_gate import select_calibration_outputs
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
+from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 from finscope_market_data.overnight.joint_dataset import CALIBRATION_DAYS, MAX_DAYS, MIN_SYMBOLS, TRAIN_DAYS, date_weights
-from finscope_market_data.overnight.joint_learning import TREE_PARAMETERS, booster, sigmoid
-from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, select_direction
+from finscope_market_data.overnight.joint_learning import sigmoid
+from finscope_market_data.overnight.direction_candidates import (
+    BASE_RECIPE, MULTISCALE_RECIPE, RECENCY_HALF_LIFE, candidate_probabilities, fit_candidates,
+)
+from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, LEGACY_PROTOCOL, select_direction
 
 SELECTION_DAYS = 20
 TEST_DAYS = 20
-CANDIDATES = ('PRIOR', 'SESSION_LOGISTIC', 'SHAPE_LOGISTIC', 'SHAPE_TREE', 'SHAPE_ENSEMBLE')
 MIN_DATE_COVERAGE = .75
 
 
@@ -52,39 +52,6 @@ def temporal_parts(rows, through):
     return training, selection, calibration
 
 
-def fit_candidates(rows):
-    rows = [row for row in rows if row.get('trainingEligible', True)]
-    raw = np.array([r['features'] for r in rows])
-    # Equal dates, mean-one row weights: regularization has the declared sample scale.
-    weights = date_weights(rows)
-    weights = weights / weights.mean()
-    low, high = np.quantile(raw, [.01, .99], axis=0)
-    clipped = np.clip(raw, low, high)
-    scaler = StandardScaler().fit(clipped, sample_weight=weights)
-    x, y = scaler.transform(clipped), np.array([r['actualReturn'] > 0 for r in rows])
-    model = {'mean': scaler.mean_.tolist(), 'scale': scaler.scale_.tolist(),
-             'clipLow': low.tolist(), 'clipHigh': high.tolist(), 'prior': float(np.average(y, weights=weights))}
-    if len(set(y)) < 2:
-        return model
-    for name, width in (('session', 14), ('shape', x.shape[1])):
-        fit = LogisticRegression(C=.1, max_iter=400, random_state=42).fit(x[:, :width], y, sample_weight=weights)
-        model[name] = {'coef': fit.coef_[0].tolist(), 'intercept': float(fit.intercept_[0])}
-    tree = lgb.LGBMClassifier(**TREE_PARAMETERS).fit(x, y, sample_weight=weights)
-    model['tree'] = tree.booster_.model_to_string()
-    return model
-
-
-def candidate_probabilities(model, features):
-    x = (np.clip(np.asarray(features), model['clipLow'], model['clipHigh']) - model['mean']) / model['scale']
-    prior = np.full(len(x), model['prior'])
-    if 'tree' not in model:
-        return {name: prior.copy() for name in CANDIDATES}
-    session = sigmoid(x[:, :14] @ model['session']['coef'] + model['session']['intercept'])
-    shape = sigmoid(x @ model['shape']['coef'] + model['shape']['intercept'])
-    tree = booster(model['tree']).predict(x, num_threads=2)
-    return dict(zip(CANDIDATES, (prior, session, shape, tree, .5 * (shape + tree))))
-
-
 def apply_calibration(p, calibration):
     p = np.clip(p, 1e-6, 1 - 1e-6)
     return sigmoid(calibration['slope'] * np.log(p / (1 - p)) + calibration['intercept'])
@@ -95,24 +62,24 @@ def predict_direction(model, features):
     return raw, apply_calibration(raw, model['calibration'])
 
 
-def fit_direction_before(rows, through, *, selection_policy='BRIER'):
+def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE_RECIPE):
     if selection_policy not in ('BRIER', POLICY):
         raise ValueError('未知方向模型选择协议')
     parts = temporal_parts(rows, through)
     if parts is None:
         return None
     training, selection, calibration = parts
-    candidates = fit_candidates(training)
+    candidates = fit_candidates(training, recipe)
     sy = np.array([r['actualReturn'] > 0 for r in selection])
     weights = date_weights(selection)
     probabilities = candidate_probabilities(candidates, [r['features'] for r in selection])
     scores = {name: float(np.average((p - sy) ** 2, weights=weights)) for name, p in probabilities.items()}
-    selected = min(CANDIDATES, key=lambda name: (scores[name], CANDIDATES.index(name)))
+    selected = min(probabilities, key=lambda name: (scores[name], list(probabilities).index(name)))
     selection_audit = {'policy': 'BRIER'}
     if selection_policy == POLICY:
         selected, selection_audit = select_direction(probabilities, selection)
     # Selection labels may now train the chosen recipe; calibration remains separate.
-    model = fit_candidates(training + selection)
+    model = fit_candidates(training + selection, recipe)
     model['selected'] = selected
     cy = np.array([r['actualReturn'] > 0 for r in calibration])
     raw = candidate_probabilities(model, [r['features'] for r in calibration])[selected]
@@ -122,6 +89,7 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER'):
     model['baselineProbability'] = float(np.average([r['actualReturn'] > 0 for r in training + selection + calibration],
                                                    weights=date_weights(training + selection + calibration)))
     return {'model': model, 'audit': {'selected': selected, 'selectionBrier': scores, 'selection': selection_audit,
+        'recipe': recipe, 'recencyHalfLifeSessions': RECENCY_HALF_LIFE if recipe == MULTISCALE_RECIPE else None,
         'trainingThrough': max(r['exitAt'] for r in training), 'selectionStart': min(r['signalDate'] for r in selection),
         'selectionThrough': max(r['exitAt'] for r in selection), 'calibrationStart': min(r['signalDate'] for r in calibration),
         'calibrationThrough': max(r['exitAt'] for r in calibration),
@@ -129,7 +97,8 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER'):
         'selectionDays': len({r['signalDate'] for r in selection}), 'calibrationDays': len({r['signalDate'] for r in calibration})}}
 
 
-def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=TEST_DAYS, include_checks=False):
+def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', recipe=BASE_RECIPE,
+                  test_days=TEST_DAYS, include_checks=False):
     if test_days < TEST_DAYS:
         raise ValueError('测试区间不得少于 20 个交易日')
     matured, coverage = covered_matured_rows(rows, through)
@@ -141,7 +110,7 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=
         decision_at = f'{day}T{cutoff}:00'
         # Recompute training coverage from labels available at each decision,
         # never from which stocks will have outcomes later in this audit.
-        fitted = fit_direction_before(rows, decision_at, selection_policy=selection_policy)
+        fitted = fit_direction_before(rows, decision_at, selection_policy=selection_policy, recipe=recipe)
         if fitted is None:
             return None
         test = [r for r in matured if r['signalDate'] == day]
@@ -151,19 +120,20 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', test_days=
         checks.extend({**r, 'probability': float(value), 'raw': float(unadjusted), 'calibrated': float(adjusted),
                        'baseline': fitted['model']['baselineProbability']} for r, value, unadjusted, adjusted in zip(test, p, raw, calibrated))
         folds.append({'signalDate': day, 'cutoff': decision_at, **fitted['audit']})
-    current = fit_direction_before(rows, through, selection_policy=selection_policy)
+    current = fit_direction_before(rows, through, selection_policy=selection_policy, recipe=recipe)
     if current is None:
         return None
     labels, dates = [r['actualReturn'] > 0 for r in checks], [r['signalDate'] for r in checks]
     baselines = {'HISTORICAL_PRIOR': [r['baseline'] for r in checks]}
     historical = evaluate_direction([r['probability'] for r in checks], labels, dates, baselines)
+    historical['upCandidates'] = evaluate_candidates([{**r, 'actualUp': r['actualReturn'] > 0} for r in checks])
     raw = evaluate_direction([r['raw'] for r in checks], labels, dates, baselines)
     calibrated_audit = evaluate_direction([r['calibrated'] for r in checks], labels, dates, baselines)
     current['model']['calibrationGate'] = calibration_gate(checks, through)
     historical.update(task=TARGET, eligible=False, reason='历史开发诊断；次日涨跌需单独积累真实前瞻记录',
                       raw={key: raw[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')},
                       calibrated={key: calibrated_audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')})
-    protocol = CONTEXT_PROTOCOL if selection_policy == POLICY else PROTOCOL
+    protocol = CONTEXT_PROTOCOL if recipe == MULTISCALE_RECIPE else LEGACY_PROTOCOL if selection_policy == POLICY else PROTOCOL
     result = {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
         'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in checks),
         'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD', 'dateCoverage': coverage}}
