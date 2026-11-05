@@ -89,21 +89,9 @@ export function BriefReaderView({
               ))}
             </section>
           ) : null}
-          {researchContext?.contentIdeas?.length ? (
-            <section className="context-block">
-              <strong>内容选题</strong>
-              {researchContext.contentIdeas.map((idea) => (
-                <p key={`c-${idea.id}`}>
-                  {idea.title}
-                  {idea.scoreReason ? <><br />{idea.scoreReason}</> : null}
-                </p>
-              ))}
-            </section>
-          ) : null}
           {!researchContext || (
             researchContext.evidenceItems.length === 0
             && researchContext.learningTasks.length === 0
-            && researchContext.contentIdeas.length === 0
           ) ? <p className="muted">暂无研究补充信息。</p> : null}
         </aside>
 

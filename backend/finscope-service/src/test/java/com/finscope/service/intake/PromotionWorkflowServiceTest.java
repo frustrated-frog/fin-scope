@@ -1,6 +1,5 @@
 package com.finscope.service.intake;
 
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.domain.article.Article;
@@ -27,8 +26,6 @@ class PromotionWorkflowServiceTest {
     private EvidenceItemRepository evidenceItemRepository;
     @Mock
     private LearningTaskRepository learningTaskRepository;
-    @Mock
-    private ContentIdeaRepository contentIdeaRepository;
 
     private PromotionWorkflowService service;
 
@@ -38,7 +35,6 @@ class PromotionWorkflowServiceTest {
         ReflectionTestUtils.setField(service, "eventClusterService", eventClusterService);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
         ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
     }
 
     @Test
@@ -81,7 +77,6 @@ class PromotionWorkflowServiceTest {
         when(eventClusterService.attachArticle(any())).thenReturn(event);
         when(evidenceItemRepository.countByEventId(10L)).thenReturn(3);
         when(learningTaskRepository.countByEventId(10L)).thenReturn(2);
-        when(contentIdeaRepository.countByEventId(10L)).thenReturn(1);
 
         PromoteIntakeCandidateResponse response = service.attach(5L, "PROMOTED", article);
 
@@ -93,6 +88,5 @@ class PromotionWorkflowServiceTest {
         assertEquals("美联储降息预期升温", response.getEventTitle());
         assertEquals(3, response.getEvidenceCount());
         assertEquals(2, response.getLearningTaskCount());
-        assertEquals(1, response.getContentIdeaCount());
     }
 }

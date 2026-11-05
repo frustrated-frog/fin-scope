@@ -39,17 +39,7 @@ public final class ResearchEnums {
     public static final String LEARNING_DIFFICULTY_INTERMEDIATE = "INTERMEDIATE";
     public static final String LEARNING_DIFFICULTY_ADVANCED = "ADVANCED";
 
-    public static final String CONTENT_FORMAT_LONG_ARTICLE = "LONG_ARTICLE";
-    public static final String CONTENT_FORMAT_SHORT_VIDEO = "SHORT_VIDEO";
-    public static final String CONTENT_FORMAT_PODCAST = "PODCAST";
-    public static final String CONTENT_FORMAT_X_THREAD = "X_THREAD";
-    public static final String CONTENT_FORMAT_XIAOHONGSHU_NOTE = "XIAOHONGSHU_NOTE";
 
-    public static final String CONTENT_STATUS_IDEA = "IDEA";
-    public static final String CONTENT_STATUS_DRAFTING = "DRAFTING";
-    public static final String CONTENT_STATUS_READY = "READY";
-    public static final String CONTENT_STATUS_PUBLISHED = "PUBLISHED";
-    public static final String CONTENT_STATUS_ARCHIVED = "ARCHIVED";
 
     public static final String RUN_STATUS_PLANNED = "PLANNED";
     public static final String RUN_STATUS_RUNNING = "RUNNING";

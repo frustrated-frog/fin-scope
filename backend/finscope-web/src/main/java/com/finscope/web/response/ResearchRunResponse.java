@@ -22,7 +22,6 @@ public class ResearchRunResponse {
     private Integer eventCount;
     private Integer evidenceCount;
     private Integer learningTaskCount;
-    private Integer contentIdeaCount;
     private LocalDate briefDate;
     private String status;
     private String summary;
@@ -47,7 +46,6 @@ public class ResearchRunResponse {
         response.setEventCount(run.getEventCount());
         response.setEvidenceCount(run.getEvidenceCount());
         response.setLearningTaskCount(run.getLearningTaskCount());
-        response.setContentIdeaCount(run.getContentIdeaCount());
         response.setBriefDate(run.getBriefDate());
         response.setStatus(run.getStatus());
         response.setSummary(run.getSummary());
@@ -137,14 +135,6 @@ public class ResearchRunResponse {
 
     public void setLearningTaskCount(Integer learningTaskCount) {
         this.learningTaskCount = learningTaskCount;
-    }
-
-    public Integer getContentIdeaCount() {
-        return contentIdeaCount;
-    }
-
-    public void setContentIdeaCount(Integer contentIdeaCount) {
-        this.contentIdeaCount = contentIdeaCount;
     }
 
     public LocalDate getBriefDate() {

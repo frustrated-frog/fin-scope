@@ -569,7 +569,7 @@ function ResearchRunList({
           <span>来源</span>
           <span>事件</span>
           <span>证据</span>
-          <span>学习/选题</span>
+          <span>学习任务</span>
         </div>
         <span>操作</span>
       </div>
@@ -635,7 +635,7 @@ function ResearchRunRow({
         </span>
         <span className="research-run-number-cell">{run.eventCount ?? 0}</span>
         <span className="research-run-number-cell">{run.evidenceCount ?? 0}</span>
-        <span className="research-run-number-cell">{run.learningTaskCount ?? 0}/{run.contentIdeaCount ?? 0}</span>
+        <span className="research-run-number-cell">{run.learningTaskCount ?? 0}</span>
       </button>
       {run.status !== 'RUNNING' && (
         <button className="research-run-delete" type="button" aria-label={`删除研究运行 ${run.id}`} onClick={onDelete}>

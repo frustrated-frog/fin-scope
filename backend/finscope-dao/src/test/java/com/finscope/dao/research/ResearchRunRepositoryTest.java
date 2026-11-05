@@ -52,6 +52,31 @@ class ResearchRunRepositoryTest {
     }
 
     @Test
+    void savesAndUpdatesResearchResultsWithRetiredLegacyColumnPresent() {
+        jdbc.execute("ALTER TABLE research_run ADD COLUMN content_idea_count INTEGER NOT NULL DEFAULT 0");
+        ResearchRun value = run();
+        value.setBriefDate(LocalDate.of(2026, 7, 29));
+        value.setArticleCount(2);
+        value.setLearningTaskCount(3);
+        ResearchRun saved = repository.save(value);
+        jdbc.update("UPDATE research_run SET content_idea_count = 7 WHERE id = ?", saved.getId());
+        saved.setEvidenceCount(4);
+        saved.setStatus("COMPLETED");
+        saved.setSummary("研究完成");
+
+        ResearchRun updated = repository.updateResult(saved);
+
+        assertEquals(2, updated.getArticleCount());
+        assertEquals(3, updated.getLearningTaskCount());
+        assertEquals(4, updated.getEvidenceCount());
+        assertEquals(value.getBriefDate(), updated.getBriefDate());
+        assertEquals("COMPLETED", updated.getStatus());
+        assertEquals("研究完成", updated.getSummary());
+        assertEquals(7, jdbc.queryForObject("SELECT content_idea_count FROM research_run WHERE id = ?",
+                Integer.class, saved.getId()));
+    }
+
+    @Test
     void deletesOnlyTheSelectedRunAndItsScopedArtifacts() {
         ResearchRun deleted = repository.save(run());
         ResearchRun retained = repository.save(run());

@@ -54,7 +54,7 @@ public class InsightCardGenerator {
         // 基础字段
         card.setOneSentenceSummary(firstNonBlank(interpretation.getOneSentenceSummary(), empty(article.getSummary(), "")));
         card.setCoreEvent(firstNonBlank(interpretation.getCoreEvent(), card.getOneSentenceSummary()));
-        card.setImportance(firstNonBlank(interpretation.getImportance(), "这条内容适合沉淀为个人学习和后续选题素材。"));
+        card.setImportance(firstNonBlank(interpretation.getImportance(), "这条内容适合沉淀为个人学习和后续研究素材。"));
         card.setImpactTargets(joinTargets(interpretation.getImpactTargets()));
         card.setFollowUpQuestions(String.join("\n", interpretation.getLearningQuestions()));
 
@@ -172,7 +172,7 @@ public class InsightCardGenerator {
                 return "这条社媒长文把 OSINT 工具组合成公开信息检索和网络资产暴露面排查流程，价值在于沉淀工具边界、交叉验证方法和合法合规边界，而不是只记录传播热度。";
             }
             if (containsAny(text, "cloudflare", "workers", "serverless", "d1", "r2", "pages", "kv")) {
-                return "这条内容把 Cloudflare、Workers、D1、R2 等开发者基础设施串成低成本实践样本，能转化为技术学习路线、工具选型和自媒体选题。";
+                return "这条内容把 Cloudflare、Workers、D1、R2 等开发者基础设施串成低成本实践样本，能转化为技术学习路线、工具选型和长期研究笔记。";
             }
             return "社媒长文的价值在于捕捉真实创作者的实践经验和传播角度，可用于发现主题、验证用户关注点，并沉淀成后续知识卡片。";
         }
@@ -193,7 +193,7 @@ public class InsightCardGenerator {
         if ("公司".equals(category)) {
             return "可能改变单一公司预期，也可能映射到产业链上下游。";
         }
-        return "可能影响短期市场情绪、资金偏好和后续选题价值。";
+        return "可能影响短期市场情绪、资金偏好和后续研究价值。";
     }
 
     private String buildImpactTargets(Article article, String contentKind) {

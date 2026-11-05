@@ -302,7 +302,7 @@ const responses: Record<string, unknown> = {
     taskId: 'task-promote-1',
     status: 'COMPLETED',
     phase: 'COMPLETED',
-    message: '已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个',
+    message: '已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个',
     articleId: 3
   },
   '/api/tasks/task-manual': {
@@ -387,18 +387,6 @@ const responses: Record<string, unknown> = {
         status: 'TODO'
       }
     ],
-    contentIdeas: [
-      {
-        id: 1,
-        eventId: 1,
-        title: '为什么市场还没等到降息，黄金已经先涨了？',
-        angle: '用实际利率和预期差解释黄金先涨的逻辑。',
-        format: 'X_THREAD',
-        score: 84,
-        scoreReason: '证据强度够高，而且能沉淀成长期有效的宏观解释框架。',
-        outline: '1. 先看降息预期\n2. 再看实际利率\n3. 最后看资金流向'
-      }
-    ]
   },
   '/api/briefs/2026-06-23': {
     id: 2,
@@ -443,49 +431,6 @@ const responses: Record<string, unknown> = {
     { id: 2, eventId: 1, sourceTier: 'REGULATOR', evidenceType: 'TIMELINE', claim: '美联储官员释放偏鸽措辞。', confidence: 90 },
     { id: 3, eventId: 2, sourceTier: 'COMPANY', evidenceType: 'FACT', claim: '官方文档公布了多代理工作流能力。', confidence: 85 }
   ],
-  '/api/content-ideas': [
-    {
-      id: 1,
-      eventId: 1,
-      themeCode: 'china_macro',
-      title: '为什么市场还没等到降息，黄金已经先涨了？',
-      angle: '用实际利率和预期差解释黄金先涨的逻辑。',
-      format: 'X_THREAD',
-      audience: '宏观投资学习者',
-      score: 84,
-      scoreReason: '证据强度够高，而且能沉淀成长期有效的宏观解释框架。',
-      outline: '1. 先看降息预期\n2. 再看实际利率\n3. 最后看资金流向',
-      status: 'IDEA'
-    }
-  ],
-  '/api/content-ideas/paged?page=0&pageSize=8': {
-    items: [
-      {
-        id: 1,
-        eventId: 1,
-        themeCode: 'china_macro',
-        title: '为什么市场还没等到降息，黄金已经先涨了？',
-        angle: '用实际利率和预期差解释黄金先涨的逻辑。',
-        format: 'X_THREAD',
-        audience: '宏观投资学习者',
-        score: 84,
-        scoreReason: '证据强度够高，而且能沉淀成长期有效的宏观解释框架。',
-        outline: '1. 先看降息预期\n2. 再看实际利率\n3. 最后看资金流向',
-        status: 'IDEA'
-      }
-    ],
-    totalCount: 9,
-    page: 0,
-    pageSize: 8,
-    totalPages: 2
-  },
-  '/api/content-ideas/paged?page=1&pageSize=8': {
-    items: [],
-    totalCount: 9,
-    page: 1,
-    pageSize: 8,
-    totalPages: 2
-  },
   '/api/research/runs': [
     {
       id: 1,
@@ -497,10 +442,9 @@ const responses: Record<string, unknown> = {
       eventCount: 1,
       evidenceCount: 1,
       learningTaskCount: 2,
-      contentIdeaCount: 1,
       briefDate: '2026-06-25',
       status: 'COMPLETED',
-      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2, contentIdeas=1'
+      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2'
     }
   ],
   '/api/research/runs/1': {
@@ -514,10 +458,9 @@ const responses: Record<string, unknown> = {
       eventCount: 1,
       evidenceCount: 1,
       learningTaskCount: 2,
-      contentIdeaCount: 1,
       briefDate: '2026-06-25',
       status: 'COMPLETED',
-      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2, contentIdeas=1'
+      summary: 'sources=1, fetched=1, articles=1, events=1, evidence=1, learningTasks=2'
     },
     plannedSources: [
       {
@@ -592,11 +535,6 @@ beforeEach(() => {
     if (url === '/api/articles/ingest-url' && String(init?.body).includes('x-shell')) {
       return mockApiResponse({ taskId: 'task-fail', status: 'QUEUED', phase: 'QUEUED', message: '等待开始' });
     }
-    if (url === '/api/content-ideas/1/status' && init?.method === 'POST') {
-      const payload = JSON.parse(String(init.body));
-      state['/api/content-ideas'][0].status = payload.status;
-      return mockApiResponse(state['/api/content-ideas'][0]);
-    }
     if (url === '/api/intake/candidates/1/status' && init?.method === 'POST') {
       const payload = JSON.parse(String(init.body));
       const [candidate] = state['/api/intake/candidates?status=PENDING'];
@@ -623,7 +561,6 @@ beforeEach(() => {
         eventCount: 0,
         evidenceCount: 0,
         learningTaskCount: 0,
-        contentIdeaCount: 0,
         status: 'RUNNING',
         summary: 'Planned 3 sources for themes: 中国宏观, AI 创业'
       };
@@ -671,10 +608,9 @@ beforeEach(() => {
         eventCount: 2,
         evidenceCount: 5,
         learningTaskCount: 3,
-        contentIdeaCount: 2,
         briefDate: '2026-06-25',
         status: 'COMPLETED',
-        summary: 'sources=3, fetched=3, articles=4, events=2, evidence=5, learningTasks=3, contentIdeas=2'
+        summary: 'sources=3, fetched=3, articles=4, events=2, evidence=5, learningTasks=3'
       };
       state['/api/research/runs/2'] = {
         reads: 0,
@@ -972,7 +908,7 @@ test('intake workspace shows agent-reviewed Chinese candidates and promotes to a
   expect(fetch).toHaveBeenCalledWith('/api/intake/candidates/1/promote-async', expect.objectContaining({ method: 'POST' }));
   expect(fetch).toHaveBeenCalledWith('/api/tasks/task-promote-1', expect.any(Object));
   expect(await screen.findByText('已入文章库 #3')).toBeInTheDocument();
-  expect(screen.getAllByText('已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个，选题 2 个').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('已入文章库 #3；研究工作包已生成：事件 #1，美联储释放降息信号，证据 1 条，学习任务 3 个').length).toBeGreaterThan(0);
 });
 
 test('intake workspace supports saving candidates for later review', async () => {
@@ -1182,35 +1118,6 @@ test('facts and knowledge verifies a proposition only when it affects a recognit
   expect(screen.queryByRole('button', { name: 'Evidence' })).not.toBeInTheDocument();
 });
 
-test('content studio shows idea score and outline for generated topics', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Studio' }));
-
-  expect(await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
-  expect(screen.getByText('84')).toBeInTheDocument();
-  expect(screen.getByText('X 长帖')).toBeInTheDocument();
-  expect(screen.getByText('证据强度够高，而且能沉淀成长期有效的宏观解释框架。')).toBeInTheDocument();
-  expect(screen.getByText(/1\. 先看降息预期/)).toBeInTheDocument();
-});
-
-test('content studio loads ideas through backend pagination', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Studio' }));
-
-  expect(await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？')).toBeInTheDocument();
-  expect(fetch).toHaveBeenCalledWith('/api/content-ideas/paged?page=0&pageSize=8', expect.any(Object));
-  expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument();
-  expect(screen.getByText('共 9 个选题')).toBeInTheDocument();
-
-  await userEvent.click(screen.getByRole('button', { name: '下一页' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/content-ideas/paged?page=1&pageSize=8', expect.any(Object));
-  expect(await screen.findByText('当前筛选下暂无选题。')).toBeInTheDocument();
-  expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument();
-});
-
 test('agent runs table shows node start time', () => {
   render(
     <AgentRunsView
@@ -1255,7 +1162,7 @@ test('agent runs view refreshes itself while visible', async () => {
   expect(agentRunRequests).toBeGreaterThan(1);
 });
 
-test('brief reader shows research evidence, learning tasks and content ideas', async () => {
+test('brief reader shows research evidence and learning tasks', async () => {
   render(<App />);
 
   await userEvent.click(screen.getByRole('button', { name: 'Briefs' }));
@@ -1266,8 +1173,6 @@ test('brief reader shows research evidence, learning tasks and content ideas', a
   expect(screen.getByText('央行开展3000亿元MLF操作并下调利率10个基点')).toBeInTheDocument();
   expect(screen.getByText(/\[MEDIA\].*黄金ETF单周流入12亿美元。/)).toBeInTheDocument();
   expect(screen.getByText('为什么实际利率下行会推升黄金配置需求？')).toBeInTheDocument();
-  expect(screen.getByText((content) => content.includes('为什么市场还没等到降息，黄金已经先涨了？'))).toBeInTheDocument();
-  expect(screen.getByText((content) => content.includes('证据强度够高，而且能沉淀成长期有效的宏观解释框架。'))).toBeInTheDocument();
 });
 
 test('research workbench runs a full research job and shows agent trace', async () => {
@@ -1311,23 +1216,6 @@ test('dark theme keeps ghost buttons visually subordinate', () => {
   expect(styles).not.toMatch(/\[data-theme="dark"\]\s+\.ghost-button\s*{[^}]*background:\s*(?:#fff(?:fff)?|white)\b/is);
 });
 
-test('content studio updates idea status through the typed endpoint', async () => {
-  render(<App />);
-
-  await userEvent.click(screen.getByRole('button', { name: 'Studio' }));
-  await screen.findByText('为什么市场还没等到降息，黄金已经先涨了？');
-
-  await userEvent.selectOptions(screen.getByLabelText('内容选题状态-1'), 'DRAFTING');
-  await userEvent.click(screen.getByRole('button', { name: '保存选题状态' }));
-
-  expect(fetch).toHaveBeenCalledWith('/api/content-ideas/1/status', expect.objectContaining({
-    method: 'POST',
-    body: JSON.stringify({ status: 'DRAFTING' })
-  }));
-  expect(await screen.findByText('选题状态已更新')).toBeInTheDocument();
-});
-
-
 test('renders dashboard data while an unrelated startup request is pending', async () => {
   window.history.replaceState({}, '', '/');
   const originalFetch = vi.mocked(fetch).getMockImplementation()!;
@@ -1340,4 +1228,14 @@ test('renders dashboard data while an unrelated startup request is pending', asy
   render(<App />);
 
   expect(await screen.findByText('央行宣布下调存款准备金率')).toBeInTheDocument();
+});
+
+test('startup and workspace refresh do not request retired Studio endpoints', async () => {
+  render(<App />);
+
+  await screen.findByText('Articles');
+  expect(screen.queryByRole('button', { name: 'Studio' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '刷新' }));
+
+  expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes('/api/content-ideas'))).toBe(false);
 });

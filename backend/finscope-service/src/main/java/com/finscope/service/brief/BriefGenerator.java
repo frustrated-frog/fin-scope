@@ -3,7 +3,6 @@ package com.finscope.service.brief;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.insight.InsightCard;
 import com.finscope.domain.research.BriefResearchContext;
-import com.finscope.domain.research.ContentIdea;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
@@ -82,7 +81,7 @@ public class BriefGenerator {
         markdown.append("## 今日学习问题\n\n");
         markdown.append("- 今天哪些信息是旧事件的新增变量？\n");
         markdown.append("- 哪些概念需要补充到主题库？\n");
-        markdown.append("- 哪些内容未来可以发展成自媒体选题？\n");
+        markdown.append("- 哪些研究结论需要继续验证？\n");
         return markdown.toString();
     }
 
@@ -147,23 +146,10 @@ public class BriefGenerator {
             markdown.append("\n");
         }
 
-        markdown.append("## 可发展为自媒体选题\n\n");
-        if (context.getContentIdeas().isEmpty()) {
-            markdown.append("- 今日暂无新增内容选题。\n\n");
-        } else {
-            for (ContentIdea idea : context.getContentIdeas()) {
-                markdown.append("- **").append(nullToEmpty(idea.getTitle())).append("**（")
-                        .append(idea.getScore() == null ? 0 : idea.getScore()).append("分）\n");
-                markdown.append("  角度：").append(nullToEmpty(idea.getAngle())).append("\n");
-                markdown.append("  大纲：").append(nullToEmpty(idea.getOutline()).replace("\n", " / ")).append("\n");
-            }
-            markdown.append("\n");
-        }
-
         markdown.append("## 今日思考题\n\n");
         markdown.append("- 今天哪些事件已经从资讯变成了可复用的分析框架？\n");
         markdown.append("- 哪条证据最能改变你对该主题的理解？\n");
-        markdown.append("- 哪个选题最值得写成长期沉淀内容？\n");
+        markdown.append("- 哪些认识最值得写入长期知识笔记？\n");
         return markdown.toString();
     }
 

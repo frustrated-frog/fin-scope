@@ -33,10 +33,6 @@ public class PromoteIntakeCandidateResponse {
      */
     private Integer learningTaskCount;
     /**
-     * 内容选题数量。
-     */
-    private Integer contentIdeaCount;
-    /**
      * 工作流状态。
      */
     private String workflowStatus;

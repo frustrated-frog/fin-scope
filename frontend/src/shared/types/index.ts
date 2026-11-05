@@ -12,7 +12,6 @@ export type View =
   | 'investmentObservation'
   | 'evidence'
   | 'knowledge'
-  | 'contentStudio'
   | 'agents'
   | 'settings'
   | 'watchlist'
@@ -381,26 +380,11 @@ export type LearningTask = {
   whyNeeded?: string;
 };
 
-export type ContentIdea = {
-  id: number;
-  eventId: number;
-  themeCode: string;
-  title: string;
-  angle?: string;
-  format: string;
-  audience?: string;
-  score: number;
-  scoreReason?: string;
-  outline?: string;
-  status?: string;
-};
-
 export type BriefResearchContext = {
   briefDate: string;
   events: EventCluster[];
   evidenceItems: EvidenceItem[];
   learningTasks: LearningTask[];
-  contentIdeas: ContentIdea[];
 };
 
 export type SourceProfile = {
@@ -449,7 +433,6 @@ export type ResearchRun = {
   eventCount?: number;
   evidenceCount?: number;
   learningTaskCount?: number;
-  contentIdeaCount?: number;
   briefDate?: string;
   status: string;
   summary?: string;

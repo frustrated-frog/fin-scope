@@ -54,10 +54,6 @@ public class ResearchRun {
      */
     private Integer learningTaskCount;
     /**
-     * 内容选题数量。
-     */
-    private Integer contentIdeaCount;
-    /**
      * 简报日期。
      */
     private LocalDate briefDate;
@@ -172,14 +168,6 @@ public class ResearchRun {
 
     public void setLearningTaskCount(Integer learningTaskCount) {
         this.learningTaskCount = learningTaskCount;
-    }
-
-    public Integer getContentIdeaCount() {
-        return contentIdeaCount;
-    }
-
-    public void setContentIdeaCount(Integer contentIdeaCount) {
-        this.contentIdeaCount = contentIdeaCount;
     }
 
     public LocalDate getBriefDate() {

@@ -33,14 +33,6 @@ public class ThemeProfile {
      * 禁用来源层级列表。
      */
     private List<String> disallowedTiers = Collections.emptyList();
-    /**
-     * 是否启用创作策略。
-     */
-    private boolean creatorEnabled;
-    /**
-     * 偏好的内容形式列表。
-     */
-    private List<String> preferredFormats = Collections.emptyList();
 
     public String getCode() {
         return code;
@@ -96,22 +88,6 @@ public class ThemeProfile {
 
     public void setDisallowedTiers(List<String> disallowedTiers) {
         this.disallowedTiers = immutableCopy(disallowedTiers);
-    }
-
-    public boolean isCreatorEnabled() {
-        return creatorEnabled;
-    }
-
-    public void setCreatorEnabled(boolean creatorEnabled) {
-        this.creatorEnabled = creatorEnabled;
-    }
-
-    public List<String> getPreferredFormats() {
-        return preferredFormats;
-    }
-
-    public void setPreferredFormats(List<String> preferredFormats) {
-        this.preferredFormats = immutableCopy(preferredFormats);
     }
 
     private List<String> immutableCopy(List<String> values) {

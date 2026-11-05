@@ -79,7 +79,6 @@ class FinScopeApiIntegrationTest {
     void setUp() throws Exception {
         deleteIfExists("topic_article");
         deleteIfExists("topic_brief");
-        deleteIfExists("content_idea");
         deleteIfExists("learning_task");
         deleteIfExists("evidence_item");
         deleteIfExists("event_article_link");
@@ -109,7 +108,7 @@ class FinScopeApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM topic");
         jdbcTemplate.update("DELETE FROM sqlite_sequence WHERE name IN "
                 + "('agent_run','brief','article','fetch_run','source','topic','insight_card',"
-                + "'event_cluster','evidence_item','learning_task','content_idea','research_run','research_run_plan',"
+                + "'event_cluster','evidence_item','learning_task','research_run','research_run_plan',"
                 + "'research_run_output','research_report','research_mission_task','research_mission_gap',"
                 + "'thesis_finding','research_thesis',"
                 + "'fetch_batch','intake_candidate')");
@@ -320,7 +319,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.eventTitle", containsString("美联储")))
                 .andExpect(jsonPath("$.data.evidenceCount").value(greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.data.learningTaskCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.contentIdeaCount").value(greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.data.contentIdeaCount").doesNotExist())
                 .andExpect(jsonPath("$.data.workflowSummary", containsString("研究工作包")));
 
         mvc.perform(get("/api/articles/1"))
@@ -343,9 +342,6 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(greaterThanOrEqualTo(1)));
 
-        mvc.perform(get("/api/content-ideas"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(greaterThanOrEqualTo(1)));
 
         mvc.perform(get("/api/intake/candidates?status=PROMOTED"))
                 .andExpect(status().isOk())
@@ -378,6 +374,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.articleId").value(1))
                 .andExpect(jsonPath("$.data.workflowStatus").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.eventId").value(1))
+                .andExpect(jsonPath("$.data.contentIdeaCount").doesNotExist())
                 .andExpect(jsonPath("$.data.workflowSummary", containsString("研究工作包")));
 
         mvc.perform(get("/api/articles"))
@@ -778,7 +775,7 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void learningTasksAndContentIdeasAreGeneratedFromEvents() throws Exception {
+    void learningTasksAreGeneratedFromEvents() throws Exception {
         String firstUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
         String followUpUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
 
@@ -792,16 +789,6 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data[0].themeCode").value("china_macro"))
                 .andExpect(jsonPath("$.data[0].question").isNotEmpty())
                 .andExpect(jsonPath("$.data[0].status").value("SUGGESTED"));
-
-        mvc.perform(get("/api/content-ideas"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data[0].eventId").value(1))
-                .andExpect(jsonPath("$.data[0].title").isNotEmpty())
-                .andExpect(jsonPath("$.data[0].angle").isNotEmpty())
-                .andExpect(jsonPath("$.data[0].format").isNotEmpty())
-                .andExpect(jsonPath("$.data[0].score").value(greaterThanOrEqualTo(60)))
-                .andExpect(jsonPath("$.data[0].outline", containsString("1.")));
     }
 
     @Test
@@ -821,12 +808,6 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data[*].concepts").value(hasItem(containsString("黄金"))))
                 .andExpect(jsonPath("$.data[*].concepts").value(hasItem(containsString("MLF"))))
                 .andExpect(jsonPath("$.data[*].whyNeeded").value(hasItem(containsString("政策工具"))));
-
-        mvc.perform(get("/api/content-ideas"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[*].angle").value(hasItem(containsString("实际利率"))))
-                .andExpect(jsonPath("$.data[*].angle").value(hasItem(containsString("政策工具"))))
-                .andExpect(jsonPath("$.data[*].scoreReason").value(hasItem(containsString("政策信号"))));
     }
 
     @Test
@@ -875,51 +856,16 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void contentIdeaStatusAndDetailAreValidated() throws Exception {
-        seedResearchArtifacts();
-
-        mvc.perform(get("/api/content-ideas/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(1))
-                .andExpect(jsonPath("$.data.status").value(not(containsString("DRAFTING"))));
-
+    void studioEndpointsAreNoLongerAvailable() throws Exception {
+        for (String path : new String[]{"/api/content-ideas", "/api/content-ideas/paged", "/api/content-ideas/1"}) {
+            mvc.perform(get(path)).andExpect(status().isNotFound());
+        }
         mvc.perform(post("/api/content-ideas/1/status")
                         .contentType("application/json")
                         .content("{\"status\":\"DRAFTING\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(1))
-                .andExpect(jsonPath("$.data.status").value("DRAFTING"));
-
-        mvc.perform(post("/api/content-ideas/1/status")
-                        .contentType("application/json")
-                        .content("{\"status\":\"INVALID\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("FS-1002"))
-                .andExpect(jsonPath("$.message", containsString("不支持的内容选题状态：INVALID")));
-
-        mvc.perform(get("/api/content-ideas/999"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("FS-2001"))
-                .andExpect(jsonPath("$.message", containsString("内容选题不存在：999")));
-    }
-
-    @Test
-    void contentIdeasCanBePagedFromBackend() throws Exception {
-        seedResearchArtifacts();
-
-        mvc.perform(get("/api/content-ideas/paged?page=0&pageSize=1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(1))
-                .andExpect(jsonPath("$.data.totalCount").value(greaterThanOrEqualTo(2)))
-                .andExpect(jsonPath("$.data.page").value(0))
-                .andExpect(jsonPath("$.data.pageSize").value(1))
-                .andExpect(jsonPath("$.data.totalPages").value(greaterThanOrEqualTo(2)))
-                .andExpect(jsonPath("$.data.items[0].title").isNotEmpty());
-
-        mvc.perform(get("/api/content-ideas/paged?page=-1&pageSize=20"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("FS-1002"))
-                .andExpect(jsonPath("$.message").value("页码不能小于 0，且每页数量必须在 1 到 100 之间"));
+                .andExpect(status().isNotFound());
+        assertTrue(jdbcTemplate.queryForList(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_idea'").isEmpty());
     }
 
     @Test
@@ -938,7 +884,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.content", containsString("## 中国宏观")))
                 .andExpect(jsonPath("$.data.content", containsString("## 今日证据来源")))
                 .andExpect(jsonPath("$.data.content", containsString("## 今天要补的金融知识")))
-                .andExpect(jsonPath("$.data.content", containsString("## 可发展为自媒体选题")))
+                .andExpect(jsonPath("$.data.content", not(containsString("## 可发展为自媒体选题"))))
                 .andExpect(jsonPath("$.data.content", containsString("## 今日思考题")));
 
         mvc.perform(get("/api/briefs/" + LocalDate.now() + "/research-context"))
@@ -947,7 +893,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.events.length()").value(greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.data.evidenceItems.length()").value(greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.data.learningTasks.length()").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.contentIdeas.length()").value(greaterThanOrEqualTo(1)));
+                .andExpect(jsonPath("$.data.contentIdeas").doesNotExist());
     }
 
     @Test
@@ -1013,7 +959,7 @@ class FinScopeApiIntegrationTest {
                 .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(hasItem("article-interpret")))
                 .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(hasItem("evidence-extract")))
                 .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(hasItem("learning-generate")))
-                .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(hasItem("content-idea-generate")))
+                .andExpect(jsonPath("$.data.agentRuns[*].nodeName").value(not(hasItem("content-idea-generate"))))
                 .andExpect(jsonPath("$.data.agentRuns[*].researchRunId").value(hasItem(1)))
                 .andExpect(jsonPath("$.data.reportAvailable").value(true))
                 .andExpect(jsonPath("$.data.reportStatus", containsString("COMPLETED")))

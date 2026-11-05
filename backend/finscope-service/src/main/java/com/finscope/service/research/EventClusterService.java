@@ -6,7 +6,6 @@ import com.finscope.common.exception.InfrastructureException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.common.util.StringUtils;
 import com.finscope.dao.article.ArticleRepository;
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.LearningTaskRepository;
@@ -46,15 +45,11 @@ public class EventClusterService {
     @Resource
     private LearningTaskRepository learningTaskRepository;
     @Resource
-    private ContentIdeaRepository contentIdeaRepository;
-    @Resource
     private EventClassifier eventClassifier;
     @Resource
     private EvidenceService evidenceService;
     @Resource
     private LearningTaskService learningTaskService;
-    @Resource
-    private ContentIdeaService contentIdeaService;
     @Resource
     private ArticleCategoryPolicy articleCategoryPolicy;
     @Resource
@@ -101,7 +96,6 @@ public class EventClusterService {
         boolean meaningfulUpdate = ResearchEnums.NOVELTY_NEW.equals(decision.getNoveltyType())
                 || ResearchEnums.NOVELTY_FOLLOW_UP.equals(decision.getNoveltyType());
         learningTaskService.generateIfAbsent(event, article, meaningfulUpdate);
-        contentIdeaService.generateIfAbsent(event, article, meaningfulUpdate);
         eventClusterRepository.update(event);
         researchRunOutputService.recordCurrentRun(ResearchRunOutputService.EVENT, event.getId());
         return eventClusterRepository.findById(event.getId()).orElse(event);
@@ -162,7 +156,6 @@ public class EventClusterService {
         eventClusterRepository.moveLinks(source.getId(), target.getId());
         evidenceItemRepository.moveByEventId(source.getId(), target.getId());
         learningTaskRepository.moveByEventId(source.getId(), target.getId());
-        contentIdeaRepository.moveByEventId(source.getId(), target.getId());
         eventClusterRepository.refreshCounts(Arrays.asList(source.getId(), target.getId()));
 
         EventCluster archivedSource = detail(source.getId());

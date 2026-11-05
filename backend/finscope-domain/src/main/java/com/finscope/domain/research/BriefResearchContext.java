@@ -21,10 +21,6 @@ public class BriefResearchContext {
      * 学习任务列表。
      */
     private List<LearningTask> learningTasks = Collections.emptyList();
-    /**
-     * 内容选题列表。
-     */
-    private List<ContentIdea> contentIdeas = Collections.emptyList();
 
     public LocalDate getBriefDate() {
         return briefDate;
@@ -58,15 +54,7 @@ public class BriefResearchContext {
         this.learningTasks = learningTasks == null ? Collections.<LearningTask>emptyList() : learningTasks;
     }
 
-    public List<ContentIdea> getContentIdeas() {
-        return contentIdeas;
-    }
-
-    public void setContentIdeas(List<ContentIdea> contentIdeas) {
-        this.contentIdeas = contentIdeas == null ? Collections.<ContentIdea>emptyList() : contentIdeas;
-    }
-
     public boolean isEmpty() {
-        return events.isEmpty() && evidenceItems.isEmpty() && learningTasks.isEmpty() && contentIdeas.isEmpty();
+        return events.isEmpty() && evidenceItems.isEmpty() && learningTasks.isEmpty();
     }
 }

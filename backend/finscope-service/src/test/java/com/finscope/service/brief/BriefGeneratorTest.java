@@ -2,7 +2,6 @@ package com.finscope.service.brief;
 
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.BriefResearchContext;
-import com.finscope.domain.research.ContentIdea;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
@@ -69,15 +68,6 @@ class BriefGeneratorTest {
         task.setStatus(ResearchEnums.LEARNING_STATUS_TODO);
         context.setLearningTasks(Collections.singletonList(task));
 
-        ContentIdea idea = new ContentIdea();
-        idea.setEventId(1L);
-        idea.setTitle("黄金为什么会对降息预期提前反应");
-        idea.setAngle("用实际利率框架解释黄金的领先反应。");
-        idea.setFormat("THREAD");
-        idea.setScore(82);
-        idea.setOutline("1. 先看降息预期\n2. 再看实际利率\n3. 最后看资金流向");
-        context.setContentIdeas(Collections.singletonList(idea));
-
         String markdown = new BriefGenerator().generate(LocalDate.of(2026, 6, 23), Collections.<Article>emptyList(), context);
 
         assertTrue(markdown.contains("# 每日金融、投资、创业学习简报 - 2026-06-23"));
@@ -88,7 +78,7 @@ class BriefGeneratorTest {
         assertTrue(markdown.contains("中国宏观 / FOLLOW_UP / 重要性 86 / 证据 2"));
         assertTrue(markdown.contains("## 今日证据来源"));
         assertTrue(markdown.contains("## 今天要补的金融知识"));
-        assertTrue(markdown.contains("## 可发展为自媒体选题"));
+        assertFalse(markdown.contains("自媒体选题"));
         assertTrue(markdown.contains("## 今日思考题"));
         assertTrue(markdown.contains("黄金ETF单周流入12亿美元"));
         assertTrue(markdown.contains("为什么实际利率下行会推升黄金配置需求"));

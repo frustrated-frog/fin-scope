@@ -12,7 +12,7 @@
 /* Explicit surfaces avoid accidentally changing charts, inputs, menus and dialog masks. */
 .app-shell[data-theme] main.workspace :is(
   article, .panel, .list-item, .insight-field-item, .article-card, .article-category-segment,
-  .recognition-update, .studio-format-map, .studio-pagination, .discovery-run-note,
+  .recognition-update, .discovery-run-note,
   .market-intel-metrics, .market-intel-ledger, .market-intel-rule, .market-intel-evaluation,
   .global-company-command, .financials-archive,
   .discovery-head, .discovery-funnel, .discovery-provenance, .discovery-market-context,
@@ -35,8 +35,6 @@
   .event-card, .event-card-signal, .event-output-card, .thesis-card, .evidence-source-row,
   .knowledge-action-card, .knowledge-now-panel, .knowledge-topic-card,
   .learning-task-card, .verification-index-item, .recognition-agent-hero,
-  .studio-card, .studio-command-hero, .studio-hero-metrics, .studio-control-panel,
-  .studio-lead-card, .content-studio-card,
   .dashboard-pulse, .dashboard-sector-board, .dashboard-stock-table,
   .attribution-path-panel, .attribution-intel-panel, .attribution-track-card,
   .attribution-narrative-hero, .attribution-force-card,

@@ -3,7 +3,6 @@ package com.finscope.service.research;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.article.ArticleRepository;
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.LearningTaskRepository;
@@ -48,7 +47,6 @@ class EventClusterServiceTest {
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
         LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
-        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         EventCluster source = event(1L, ResearchEnums.EVENT_ACTIVE);
         EventCluster target = event(2L, ResearchEnums.EVENT_ACTIVE);
 
@@ -57,14 +55,13 @@ class EventClusterServiceTest {
         when(eventClusterRepository.update(any(EventCluster.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         EventCluster merged = service(eventClusterRepository, evidenceItemRepository,
-                learningTaskRepository, contentIdeaRepository).merge(1L, 2L);
+                learningTaskRepository).merge(1L, 2L);
 
         assertEquals(2L, merged.getId());
         assertEquals(ResearchEnums.EVENT_ARCHIVED, source.getStatus());
         verify(eventClusterRepository).moveLinks(1L, 2L);
         verify(evidenceItemRepository).moveByEventId(1L, 2L);
         verify(learningTaskRepository).moveByEventId(1L, 2L);
-        verify(contentIdeaRepository).moveByEventId(1L, 2L);
         verify(eventClusterRepository).refreshCounts(Arrays.asList(1L, 2L));
         verify(eventClusterRepository).update(source);
     }
@@ -125,7 +122,7 @@ class EventClusterServiceTest {
                 .thenReturn(1);
 
         EventCluster moved = service(eventClusterRepository, evidenceItemRepository,
-                mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class), articleRepository,
+                mock(LearningTaskRepository.class), articleRepository,
                 eventClassifier).moveArticle(1L, 2L, null, true);
 
         assertEquals(3L, moved.getId());
@@ -147,7 +144,7 @@ class EventClusterServiceTest {
 
         BusinessException sourceError = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository, mock(EvidenceItemRepository.class),
-                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        mock(LearningTaskRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
 
         assertEquals(ErrorCode.BUSINESS_CONFLICT, sourceError.getErrorCode());
@@ -160,7 +157,7 @@ class EventClusterServiceTest {
 
         BusinessException targetError = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository, mock(EvidenceItemRepository.class),
-                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        mock(LearningTaskRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(4L, 2L, 5L, null));
 
         assertEquals(ErrorCode.BUSINESS_CONFLICT, targetError.getErrorCode());
@@ -182,7 +179,7 @@ class EventClusterServiceTest {
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service(eventClusterRepository, evidenceItemRepository,
-                        mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class),
+                        mock(LearningTaskRepository.class),
                         articleRepository, mock(EventClassifier.class)).moveArticle(1L, 2L, 3L, null));
 
         assertEquals(ErrorCode.DATA_VERSION_CONFLICT, error.getErrorCode());
@@ -191,28 +188,25 @@ class EventClusterServiceTest {
 
     private EventClusterService service(EventClusterRepository eventClusterRepository) {
         return service(eventClusterRepository, mock(EvidenceItemRepository.class),
-                mock(LearningTaskRepository.class), mock(ContentIdeaRepository.class));
+                mock(LearningTaskRepository.class));
     }
 
     private EventClusterService service(EventClusterRepository eventClusterRepository,
                                         EvidenceItemRepository evidenceItemRepository,
-                                        LearningTaskRepository learningTaskRepository,
-                                        ContentIdeaRepository contentIdeaRepository) {
+                                        LearningTaskRepository learningTaskRepository) {
         return service(eventClusterRepository, evidenceItemRepository, learningTaskRepository,
-                contentIdeaRepository, mock(ArticleRepository.class), mock(EventClassifier.class));
+                mock(ArticleRepository.class), mock(EventClassifier.class));
     }
 
     private EventClusterService service(EventClusterRepository eventClusterRepository,
                                         EvidenceItemRepository evidenceItemRepository,
                                         LearningTaskRepository learningTaskRepository,
-                                        ContentIdeaRepository contentIdeaRepository,
                                         ArticleRepository articleRepository,
                                         EventClassifier eventClassifier) {
         EventClusterService service = new EventClusterService();
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
         ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
         ReflectionTestUtils.setField(service, "articleRepository", articleRepository);
         ReflectionTestUtils.setField(service, "eventClassifier", eventClassifier);
         return service;

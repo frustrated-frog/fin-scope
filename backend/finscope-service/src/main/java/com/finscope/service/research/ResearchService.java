@@ -4,7 +4,6 @@ import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
@@ -72,8 +71,6 @@ public class ResearchService {
     private EvidenceItemRepository evidenceItemRepository;
     @Resource
     private LearningTaskRepository learningTaskRepository;
-    @Resource
-    private ContentIdeaRepository contentIdeaRepository;
     @Resource
     private AgentRunRepository agentRunRepository;
     @Resource
@@ -147,7 +144,6 @@ public class ResearchService {
         run.setEventCount(0);
         run.setEvidenceCount(0);
         run.setLearningTaskCount(0);
-        run.setContentIdeaCount(0);
         run.setStatus(ResearchEnums.RUN_STATUS_RUNNING);
         run.setSummary(buildSummary(themes, plannedSources));
         run.setErrorMessage(null);
@@ -306,7 +302,6 @@ public class ResearchService {
         int eventBefore = eventClusterRepository.countAll();
         int evidenceBefore = evidenceItemRepository.countAll();
         int learningBefore = learningTaskRepository.countAll();
-        int ideaBefore = contentIdeaRepository.countAll();
         int fetchedSources = value(run.getFetchedSourceCount());
         int dynamicQueries = 0;
         List<String> errors = new ArrayList<String>();
@@ -456,7 +451,6 @@ public class ResearchService {
             run.setFetchedSourceCount(fetchedSources);
             refreshOutputCounts(run);
             run.setLearningTaskCount(delta(learningBefore, learningTaskRepository.countAll()));
-            run.setContentIdeaCount(delta(ideaBefore, contentIdeaRepository.countAll()));
             run.setBriefDate(null);
             run.setStatus(errors.isEmpty()
                     ? ResearchEnums.RUN_STATUS_COMPLETED
@@ -629,7 +623,6 @@ public class ResearchService {
                 + ", events=" + value(run.getEventCount())
                 + ", evidence=" + value(run.getEvidenceCount())
                 + ", learningTasks=" + value(run.getLearningTaskCount())
-                + ", contentIdeas=" + value(run.getContentIdeaCount())
                 + ", report=" + outputCount(run.getId(), ResearchRunOutputService.REPORT);
     }
 
@@ -667,7 +660,6 @@ public class ResearchService {
         run.setEventCount(0);
         run.setEvidenceCount(0);
         run.setLearningTaskCount(0);
-        run.setContentIdeaCount(0);
         run.setStatus(ResearchEnums.RUN_STATUS_FAILED);
         run.setSummary("No research sources were planned for this run.");
         run.setErrorMessage(message);

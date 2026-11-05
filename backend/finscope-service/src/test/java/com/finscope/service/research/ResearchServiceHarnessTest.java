@@ -3,7 +3,6 @@ package com.finscope.service.research;
 import com.finscope.common.enums.research.ResearchMode;
 import com.finscope.dao.agent.AgentRunRepository;
 import com.finscope.dao.article.ArticleRepository;
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
@@ -78,7 +77,6 @@ class ResearchServiceHarnessTest {
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
         LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
-        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
         ResearchRunOutputService researchRunOutputService = mock(ResearchRunOutputService.class);
@@ -95,7 +93,6 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
         ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
         ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
@@ -165,7 +162,6 @@ class ResearchServiceHarnessTest {
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
         LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
-        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
         ResearchRunOutputService researchRunOutputService = mock(ResearchRunOutputService.class);
@@ -181,7 +177,6 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
         ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
         ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
@@ -266,7 +261,6 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
         ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
         ReflectionTestUtils.setField(service, "learningTaskRepository", mock(LearningTaskRepository.class));
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", mock(ContentIdeaRepository.class));
         ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
@@ -342,7 +336,6 @@ class ResearchServiceHarnessTest {
         EventClusterRepository eventClusterRepository = mock(EventClusterRepository.class);
         EvidenceItemRepository evidenceItemRepository = mock(EvidenceItemRepository.class);
         LearningTaskRepository learningTaskRepository = mock(LearningTaskRepository.class);
-        ContentIdeaRepository contentIdeaRepository = mock(ContentIdeaRepository.class);
         AgentTraceService agentTraceService = mock(AgentTraceService.class);
         ResearchRunPlanService researchRunPlanService = mock(ResearchRunPlanService.class);
 
@@ -356,7 +349,6 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "eventClusterRepository", eventClusterRepository);
         ReflectionTestUtils.setField(service, "evidenceItemRepository", evidenceItemRepository);
         ReflectionTestUtils.setField(service, "learningTaskRepository", learningTaskRepository);
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", contentIdeaRepository);
         ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());
@@ -513,7 +505,6 @@ class ResearchServiceHarnessTest {
         ReflectionTestUtils.setField(service, "eventClusterRepository", mock(EventClusterRepository.class));
         ReflectionTestUtils.setField(service, "evidenceItemRepository", mock(EvidenceItemRepository.class));
         ReflectionTestUtils.setField(service, "learningTaskRepository", mock(LearningTaskRepository.class));
-        ReflectionTestUtils.setField(service, "contentIdeaRepository", mock(ContentIdeaRepository.class));
         ReflectionTestUtils.setField(service, "agentRunRepository", mock(AgentRunRepository.class));
         ReflectionTestUtils.setField(service, "agentHarness", new AgentHarness());
         ReflectionTestUtils.setField(service, "actionFingerprintService", new ActionFingerprintService());

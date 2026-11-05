@@ -6,7 +6,6 @@ import { AgentRunsView } from './features/agents/AgentRunsView';
 import { ArticleView } from './features/articles/ArticleView';
 import { BriefReaderView } from './features/briefs/BriefReaderView';
 import { BriefsView } from './features/briefs/BriefsView';
-import { ContentStudioView } from './features/content-studio/ContentStudioView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { FinancialsView } from './features/financials/FinancialsView';
@@ -34,14 +33,12 @@ import {
   Article,
   Brief,
   BriefResearchContext,
-  ContentIdea,
   Dashboard,
   DashboardHotspotRanking,
   EvidenceItem,
   EventCluster,
   FetchBatch,
   IntakeCandidate,
-  PageResponse,
   ResearchRun,
   ResearchRunDetail,
   ResearchEvaluation,
@@ -54,7 +51,6 @@ import {
 
 const AGENT_RUN_REFRESH_INTERVAL_MS = 3000;
 const RESEARCH_RUN_REFRESH_INTERVAL_MS = 750;
-const CONTENT_IDEA_PAGE_SIZE = 8;
 const RESEARCH_ACTIVE_STATUSES = new Set(['RUNNING']);
 
 function isResearchRunActive(status?: string) {
@@ -82,9 +78,6 @@ export default function App() {
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [activeTopicCount, setActiveTopicCount] = useState(0);
   const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
-  const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
-  const [contentIdeaPage, setContentIdeaPage] = useState<PageResponse<ContentIdea> | null>(null);
-  const [contentIdeaPageIndex, setContentIdeaPageIndex] = useState(0);
   const [researchRuns, setResearchRuns] = useState<ResearchRun[]>([]);
   const [researchTheses, setResearchTheses] = useState<ResearchThesis[]>([]);
   const [researchRunDetail, setResearchRunDetail] = useState<ResearchRunDetail | null>(null);
@@ -128,7 +121,6 @@ export default function App() {
         setKnowledgeOverview(overview);
         setActiveTopicCount(overview.activeTopicCount ?? 0);
       }),
-      api<ContentIdea[]>('/api/content-ideas').then(setContentIdeas),
       api<ResearchRun[]>('/api/research/runs').then(setResearchRuns),
       api<ResearchThesis[]>('/api/research/theses').then((theses) => {
         if (Array.isArray(theses)) {
@@ -145,15 +137,6 @@ export default function App() {
     }
   };
 
-  async function loadContentIdeaPage(page = contentIdeaPageIndex) {
-    const nextPage = Math.max(0, page);
-    const response = await api<PageResponse<ContentIdea>>(
-      `/api/content-ideas/paged?page=${nextPage}&pageSize=${CONTENT_IDEA_PAGE_SIZE}`
-    );
-    setContentIdeaPage(response);
-    setContentIdeaPageIndex(response.page);
-  }
-
   useEffect(() => {
     refresh().catch((error) => setMessage(error instanceof Error ? error.message : '初始化失败'));
   }, []);
@@ -164,14 +147,6 @@ export default function App() {
       api<DashboardHotspotRanking[]>('/api/dashboard/hotspots').then(setHotspotRankings)
     ]);
   });
-
-  useEffect(() => {
-    if (view !== 'contentStudio') {
-      return;
-    }
-    loadContentIdeaPage(contentIdeaPageIndex)
-      .catch((error) => setMessage(error instanceof Error ? error.message : '选题分页加载失败'));
-  }, [view, contentIdeaPageIndex]);
 
   useEffect(() => {
     if (view !== 'agents') {
@@ -265,8 +240,6 @@ export default function App() {
         return '投资认识工作台';
       case 'globalExpectations':
         return 'Global Expectations · 全球预期';
-      case 'contentStudio':
-        return 'Studio';
       case 'agents':
         return 'Agent Runs';
       case 'settings':
@@ -475,18 +448,6 @@ export default function App() {
     return candidates;
   }
 
-  async function updateContentIdeaStatus(ideaId: number, status: string) {
-    await api(`/api/content-ideas/${ideaId}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ status })
-    });
-    setMessage(`选题状态已更新为 ${status}`);
-    await refresh();
-    if (view === 'contentStudio') {
-      await loadContentIdeaPage(contentIdeaPageIndex);
-    }
-  }
-
   return (
     <AppShell
       view={view}
@@ -610,15 +571,6 @@ export default function App() {
         <KnowledgeView addToast={addToast} setMessage={setMessage} />
       )}
       {view === 'globalExpectations' && <GlobalExpectationsView addToast={addToast} />}
-      {view === 'contentStudio' && (
-        <ContentStudioView
-          contentIdeas={contentIdeaPage?.items ?? contentIdeas}
-          pagination={contentIdeaPage}
-          onPageChange={setContentIdeaPageIndex}
-          onIdeaStatusChange={updateContentIdeaStatus}
-          addToast={addToast}
-        />
-      )}
       {view === 'agents' && <AgentRunsView agentRuns={agentRuns} />}
       {view === 'settings' && <SettingsView setMessage={setMessage} />}
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}

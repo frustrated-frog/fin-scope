@@ -27,7 +27,6 @@ const navGroups: Array<{
       { id: 'agent', label: 'Agent', hint: '全域问答', code: 'AI' },
       { id: 'knowledge', label: 'Facts & Knowledge', hint: '事实与知识', code: 'KN' },
       { id: 'globalExpectations', label: 'Global Expectations', hint: '全球预期', code: 'GE' },
-      { id: 'contentStudio', label: 'Studio', hint: '内容输出', code: 'ST' },
       { id: 'majorEvents', label: 'Timeline', hint: '大事记', code: 'TL' }
     ]
   },

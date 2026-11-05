@@ -4,7 +4,6 @@ import com.finscope.dao.article.ArticleRepository;
 import com.finscope.dao.research.EventClusterRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.research.BriefResearchContext;
-import com.finscope.domain.research.ContentIdea;
 import com.finscope.domain.research.EventArticleLink;
 import com.finscope.domain.research.EventCluster;
 import com.finscope.domain.research.LearningTask;
@@ -28,8 +27,6 @@ public class BriefResearchContextService {
     private EvidenceService evidenceService;
     @Resource
     private LearningTaskService learningTaskService;
-    @Resource
-    private ContentIdeaService contentIdeaService;
 
     public BriefResearchContext build(LocalDate date) {
         BriefResearchContext context = new BriefResearchContext();
@@ -47,7 +44,6 @@ public class BriefResearchContextService {
         List<EventCluster> events = new ArrayList<EventCluster>();
         List<com.finscope.domain.research.EvidenceItem> evidenceItems = new ArrayList<com.finscope.domain.research.EvidenceItem>();
         List<LearningTask> learningTasks = new ArrayList<LearningTask>();
-        List<ContentIdea> contentIdeas = new ArrayList<ContentIdea>();
         for (Long eventId : eventIds) {
             EventCluster event = eventClusterRepository.findById(eventId).orElse(null);
             if (event == null) {
@@ -56,7 +52,6 @@ public class BriefResearchContextService {
             events.add(event);
             evidenceItems.addAll(evidenceService.listByEventId(eventId));
             learningTasks.addAll(learningTaskService.listByEventId(eventId));
-            contentIdeas.addAll(contentIdeaService.listByEventId(eventId));
         }
 
         events.sort(Comparator.comparing(BriefResearchContextService::eventImportance).reversed()
@@ -65,13 +60,10 @@ public class BriefResearchContextService {
                 .thenComparing(item -> nullSafe(item.getClaim())));
         learningTasks.sort(Comparator.comparing((LearningTask task) -> nullSafe(task.getThemeCode()))
                 .thenComparing(task -> nullSafe(task.getQuestion())));
-        contentIdeas.sort(Comparator.comparing(BriefResearchContextService::ideaScore).reversed()
-                .thenComparing(idea -> nullSafe(idea.getTitle())));
 
         context.setEvents(events);
         context.setEvidenceItems(evidenceItems);
         context.setLearningTasks(learningTasks);
-        context.setContentIdeas(contentIdeas);
         return context;
     }
 
@@ -81,10 +73,6 @@ public class BriefResearchContextService {
 
     private static int evidenceConfidence(com.finscope.domain.research.EvidenceItem evidenceItem) {
         return evidenceItem == null || evidenceItem.getConfidence() == null ? 0 : evidenceItem.getConfidence();
-    }
-
-    private static int ideaScore(ContentIdea contentIdea) {
-        return contentIdea == null || contentIdea.getScore() == null ? 0 : contentIdea.getScore();
     }
 
     private static String nullSafe(String value) {

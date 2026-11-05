@@ -38,7 +38,6 @@ public class ResearchRunRepository {
         run.setEventCount(rs.getInt("event_count"));
         run.setEvidenceCount(rs.getInt("evidence_count"));
         run.setLearningTaskCount(rs.getInt("learning_task_count"));
-        run.setContentIdeaCount(rs.getInt("content_idea_count"));
         run.setBriefDate(parseDate(rs.getString("brief_date")));
         run.setStatus(rs.getString("status"));
         run.setSummary(rs.getString("summary"));
@@ -56,8 +55,8 @@ public class ResearchRunRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO research_run(run_date,mode,theme_codes,source_count,fetched_source_count,article_count,"
-                            + "event_count,evidence_count,learning_task_count,content_idea_count,brief_date,status,"
-                            + "summary,error_message,thesis_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            + "event_count,evidence_count,learning_task_count,brief_date,status,"
+                            + "summary,error_message,thesis_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, run.getRunDate().toString());
             ps.setString(2, ResearchMode.defaultIfNull(run.getMode()).name());
@@ -68,18 +67,17 @@ public class ResearchRunRepository {
             ps.setInt(7, value(run.getEventCount()));
             ps.setInt(8, value(run.getEvidenceCount()));
             ps.setInt(9, value(run.getLearningTaskCount()));
-            ps.setInt(10, value(run.getContentIdeaCount()));
-            ps.setString(11, run.getBriefDate() == null ? null : run.getBriefDate().toString());
-            ps.setString(12, run.getStatus());
-            ps.setString(13, run.getSummary());
-            ps.setString(14, run.getErrorMessage());
+            ps.setString(10, run.getBriefDate() == null ? null : run.getBriefDate().toString());
+            ps.setString(11, run.getStatus());
+            ps.setString(12, run.getSummary());
+            ps.setString(13, run.getErrorMessage());
             if (run.getThesisId() == null) {
-                ps.setObject(15, null);
+                ps.setObject(14, null);
             } else {
-                ps.setLong(15, run.getThesisId());
+                ps.setLong(14, run.getThesisId());
             }
-            ps.setString(16, TimeUtil.text(run.getCreatedAt()));
-            ps.setString(17, TimeUtil.text(run.getUpdatedAt()));
+            ps.setString(15, TimeUtil.text(run.getCreatedAt()));
+            ps.setString(16, TimeUtil.text(run.getUpdatedAt()));
             return ps;
         }, keyHolder);
         run.setId(keyHolder.getKey().longValue());
@@ -125,10 +123,10 @@ public class ResearchRunRepository {
     public ResearchRun updateResult(ResearchRun run) {
         run.setUpdatedAt(LocalDateTime.now());
         jdbcTemplate.update("UPDATE research_run SET fetched_source_count=?, article_count=?, event_count=?, "
-                        + "evidence_count=?, learning_task_count=?, content_idea_count=?, brief_date=?, status=?, "
+                        + "evidence_count=?, learning_task_count=?, brief_date=?, status=?, "
                         + "summary=?, error_message=?, updated_at=? WHERE id=?",
                 value(run.getFetchedSourceCount()), value(run.getArticleCount()), value(run.getEventCount()),
-                value(run.getEvidenceCount()), value(run.getLearningTaskCount()), value(run.getContentIdeaCount()),
+                value(run.getEvidenceCount()), value(run.getLearningTaskCount()),
                 run.getBriefDate() == null ? null : run.getBriefDate().toString(), run.getStatus(), run.getSummary(),
                 run.getErrorMessage(), TimeUtil.text(run.getUpdatedAt()), run.getId());
         return findById(run.getId()).orElseThrow(() -> new IllegalStateException("更新后的研究运行不存在：" + run.getId()));

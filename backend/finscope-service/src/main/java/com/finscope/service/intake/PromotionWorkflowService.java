@@ -1,6 +1,5 @@
 package com.finscope.service.intake;
 
-import com.finscope.dao.research.ContentIdeaRepository;
 import com.finscope.dao.research.EvidenceItemRepository;
 import com.finscope.dao.research.LearningTaskRepository;
 import com.finscope.domain.article.Article;
@@ -19,8 +18,6 @@ public class PromotionWorkflowService {
     private EvidenceItemRepository evidenceItemRepository;
     @Resource
     private LearningTaskRepository learningTaskRepository;
-    @Resource
-    private ContentIdeaRepository contentIdeaRepository;
 
     public PromoteIntakeCandidateResponse attach(Long candidateId, String humanStatus, Article article) {
         PromoteIntakeCandidateResponse response = baseResponse(candidateId, humanStatus, article);
@@ -32,17 +29,15 @@ public class PromotionWorkflowService {
             EventCluster event = eventClusterService.attachArticle(article);
             int evidenceCount = evidenceItemRepository.countByEventId(event.getId());
             int learningTaskCount = learningTaskRepository.countByEventId(event.getId());
-            int contentIdeaCount = contentIdeaRepository.countByEventId(event.getId());
 
             response.setEventId(event.getId());
             response.setEventTitle(event.getCanonicalTitle());
             response.setEvidenceCount(evidenceCount);
             response.setLearningTaskCount(learningTaskCount);
-            response.setContentIdeaCount(contentIdeaCount);
             response.setWorkflowStatus("SUCCESS");
             response.setWorkflowSummary("研究工作包已生成：事件 #" + event.getId() + "，"
                     + firstNonBlank(event.getCanonicalTitle(), "未命名事件") + "，证据 " + evidenceCount
-                    + " 条，学习任务 " + learningTaskCount + " 个，选题 " + contentIdeaCount + " 个");
+                    + " 条，学习任务 " + learningTaskCount + " 个");
             return response;
         } catch (Exception ex) {
             markFailed(response, "研究工作包生成异常，请稍后重试");
@@ -57,7 +52,6 @@ public class PromotionWorkflowService {
         response.setArticleId(article == null ? null : article.getId());
         response.setEvidenceCount(0);
         response.setLearningTaskCount(0);
-        response.setContentIdeaCount(0);
         return response;
     }
 

@@ -443,23 +443,6 @@ public class DatabaseInitializer implements InitializingBean {
                 + "updated_at TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_learning_task_event ON learning_task(event_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_learning_task_status ON learning_task(status)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS content_idea ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "event_id INTEGER,"
-                + "theme_code TEXT NOT NULL,"
-                + "title TEXT NOT NULL,"
-                + "angle TEXT,"
-                + "format TEXT NOT NULL,"
-                + "audience TEXT,"
-                + "score INTEGER NOT NULL DEFAULT 0,"
-                + "score_reason TEXT,"
-                + "outline TEXT,"
-                + "status TEXT NOT NULL,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_event ON content_idea(event_id)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_score ON content_idea(score)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_content_idea_status ON content_idea(status)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "run_date TEXT NOT NULL,"
@@ -471,7 +454,6 @@ public class DatabaseInitializer implements InitializingBean {
                 + "event_count INTEGER NOT NULL DEFAULT 0,"
                 + "evidence_count INTEGER NOT NULL DEFAULT 0,"
                 + "learning_task_count INTEGER NOT NULL DEFAULT 0,"
-                + "content_idea_count INTEGER NOT NULL DEFAULT 0,"
                 + "brief_date TEXT,"
                 + "thesis_id INTEGER,"
                 + "status TEXT NOT NULL,"
@@ -485,7 +467,6 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("research_run", "event_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "evidence_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "learning_task_count", "INTEGER NOT NULL DEFAULT 0");
-        ensureColumn("research_run", "content_idea_count", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("research_run", "brief_date", "TEXT");
         ensureColumn("research_run", "thesis_id", "INTEGER");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_date ON research_run(run_date)");
