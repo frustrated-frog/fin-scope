@@ -1,0 +1,8 @@
+.overnight-error-audit { margin-top: 28px; }
+.overnight-error-audit p { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.overnight-error-audit summary { cursor: pointer; padding: 12px 0; color: var(--ink); font-size: 13px; }
+.overnight-error-audit summary:focus-visible { outline: 2px solid var(--overnight-blue); outline-offset: 4px; }
+.overnight-error-table { overflow-x: auto; max-height: 320px; }
+.overnight-error-table table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.overnight-error-table th, .overnight-error-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.overnight-error-table th { color: var(--muted); font-weight: 500; }

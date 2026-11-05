@@ -1,5 +1,6 @@
 import type { OvernightMode } from './overnightTypes';
 import type { OvernightDirectionForward, OvernightDirectionMetrics } from './overnightDirectionTypes';
+import type { ErrorAudit } from './overnightErrorTypes';
 
 export interface OvernightJointPrediction {
   status: string; adopted: boolean; qualified: boolean; artifactId: string;
@@ -29,6 +30,7 @@ export interface OvernightJointState {
   forward?: { requiredDays: number; computedAt: string; groups: OvernightJointGroup[] };
   closeDirectionForward?: OvernightDirectionForward;
   contextDirectionForward?: OvernightDirectionForward;
+  errorAudit?: ErrorAudit;
   contextSnapshots?: Array<{ signalDate: string; cutoff: string; observedAt: string;
     receivedAt: string; capturedSymbols: number; expectedSymbols: number }>;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;

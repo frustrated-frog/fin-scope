@@ -86,11 +86,11 @@ def test_holdings_are_diagnosed_separately_including_skipped_positions():
 
 
 def selection_rows():
-    rows = [{'signalDate': f'2026-09-{d:02}', 'instrumentCode': str(i), 'actualReturn': .01 if i < 8 else -.01,
+    rows = [{'signalDate': f'2026-09-{d:02}', 'instrumentCode': str(i), 'actualReturn': .01 if i < 12 else -.01,
              'candidateMember': True, 'candidateExpectedCount': 20} for d in range(1, 20) for i in range(20)]
-    # Specialist finds three winners, ignores the other five: no broad up recall requirement.
-    probabilities = {'PRIOR': np.full(len(rows), .4),
-                     'SPECIALIST': np.array([.7 if int(r['instrumentCode']) < 3 else .4 for r in rows])}
+    # Finds three winners, misses nine: the broad direction rule rejects it.
+    probabilities = {'PRIOR': np.full(len(rows), .6),
+                     'SPECIALIST': np.array([.7 if int(r['instrumentCode']) < 3 else .49 for r in rows])}
     return rows, probabilities
 
 
@@ -100,6 +100,8 @@ def test_specialist_optimizes_top_candidates_without_requiring_whole_pool_accura
     assert chosen == 'SPECIALIST'
     assert detail['scope'] == 'ACTUAL_CANDIDATE_OVERLAP'
     assert detail['candidates'][chosen]['precision'] == 1
+    from finscope_market_data.overnight.direction_selection import select_direction
+    assert select_direction(probabilities, rows)[0] == 'PRIOR'
 
 
 def test_missing_real_cohorts_and_low_coverage_cannot_fall_back_to_research_winners():

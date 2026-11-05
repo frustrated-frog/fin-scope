@@ -1,5 +1,6 @@
 import type { OvernightJointState } from './overnightJointTypes';
 import type { OvernightMode } from './overnightTypes';
+import { OvernightErrorAudit } from './OvernightErrorAudit';
 
 
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -20,5 +21,6 @@ export function OvernightPerformance({ state, mode }: { state?: OvernightJointSt
         <small>历史比例基准使用预测时的上涨比例；同一天多只股票仍计一个交易日。</small>
       </article>)}</div>
     </section>
+    <OvernightErrorAudit audit={state?.errorAudit} mode={mode} />
   </div>;
 }

@@ -64,6 +64,12 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
       <p>{phases[challenger.forwardStatus ?? 'ACCUMULATING']} · {challenger.forwardDays ?? 0} / 60 个交易日。需同时优于现有方案和简单基准。</p>
       <p>研究池不代表全市场。环境数据在判断前自动采集，缺失时保留缺口；历史缺少的指数、行业信息不会用今天的数据补填。</p>
     </details>}
+    {direction.upSelection && <details><summary>看涨候选专用对照 <span>独立验证中</span></summary>
+      <p>{direction.upSelection.reason}</p>
+      <p>{direction.upSelection.selectedModel === 'PRIOR' ? '真实候选历史或选择优势不足，暂时保留基准。'
+        : direction.upSelection.upProbability == null ? '等待有效模型与数据。'
+          : `专用方案上涨概率 ${percent(direction.upSelection.upProbability)}，不替换当前主判断。`}</p>
+    </details>}
   </section>;
 }
 

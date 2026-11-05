@@ -15,6 +15,7 @@ export interface OvernightCloseDirection {
   forwardDays?: number; forwardStatus?: string; validated?: boolean; artifactId?: string;
   challenger?: OvernightContextDirection;
   activeSource?: string;
+  upSelection?: Omit<OvernightCloseDirection, 'upSelection' | 'challenger'>;
 }
 
 export interface OvernightContextDirection extends Omit<OvernightCloseDirection, 'challenger'> {
