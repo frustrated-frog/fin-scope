@@ -9,7 +9,7 @@ import numpy as np
 from finscope_market_data.overnight.candidate_evaluation import evaluate_ranking
 from finscope_market_data.overnight.context_research import MODEL_FEATURES
 from finscope_market_data.overnight.direction_dataset import TARGET
-from finscope_market_data.overnight.direction_learning import covered_matured_rows, temporal_parts, TEST_DAYS
+from finscope_market_data.overnight.direction_learning import covered_matured_rows, temporal_parts, TEST_DAYS, SELECTION_DAYS
 from finscope_market_data.overnight.direction_candidates import training_weights
 from finscope_market_data.overnight.joint_dataset import TRAIN_DAYS, CALIBRATION_DAYS
 from finscope_market_data.overnight.joint_learning import TREE_PARAMETERS, booster
@@ -90,7 +90,7 @@ def fit_tail_ranking(rows, through, cutoff, *, include_checks=False):
     validate_panel(rows)
     matured, coverage = covered_matured_rows(rows, through)
     days = sorted({r['signalDate'] for r in matured})
-    if len(days) < TRAIN_DAYS + 20 + CALIBRATION_DAYS + TEST_DAYS + 3:
+    if len(days) < TRAIN_DAYS + SELECTION_DAYS + CALIBRATION_DAYS + TEST_DAYS + 3:
         return None
     checks, folds = [], []
     for day in days[-TEST_DAYS:]:

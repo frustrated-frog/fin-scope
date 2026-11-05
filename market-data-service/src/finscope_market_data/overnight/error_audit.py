@@ -9,6 +9,7 @@ from finscope_market_data.overnight.candidate_cohort import scheduled_cohorts
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
 from finscope_market_data.overnight.joint_dataset import date_weights
+from finscope_market_data.overnight.tail_ranking_research import valid_forecast, summarize_ranking
 
 
 def slice_metrics(rows):
@@ -66,6 +67,8 @@ def build_error_audit(store, meta, contexts, now):
                 'board': 'GEM' if code.startswith('3') else 'MAIN',
                 'confidence': 'HIGH' if abs(direction['upProbability'] - .5) >= .1 else 'LOW',
                 'upSelection': (report.get('closeDirection') or {}).get('upSelection')}
+            ranking = (report.get('closeDirection') or {}).get('tailRanking')
+            row['tailRanking'] = ranking if ranking and valid_forecast(ranking, direction, report) else None
             group['rows'].append(row)
         if len(group['rows']) - before == len(cohort['candidates']):
             group['complete'].append(day)
@@ -102,7 +105,8 @@ def summarize(key, group):
         'completeDays': len(group['complete']), 'cohortCount': len(group['cohorts']),
         'metrics': slice_metrics(rows) if rows else None, 'slices': slices,
         'upCandidates': evaluate_candidates(complete),
-        'selectionComparison': selection_comparison(complete)}
+        'selectionComparison': selection_comparison(complete),
+        'rankingComparison': summarize_ranking(complete) if mode == 'TAIL_ENTRY' else None}
 
 
 def selection_comparison(rows):

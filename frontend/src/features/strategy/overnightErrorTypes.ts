@@ -10,5 +10,7 @@ export interface ErrorAudit {
   groups: Array<{ key: string; mode: OvernightMode; cutoff: string; scheduledCount: number; settledCount: number;
     coverage: number; completeDays: number; missing: Record<string, number>; metrics: ErrorScore | null;
     upCandidates: Candidates; slices: Array<ErrorScore & { dimension: string; value: string }>;
+    rankingComparison?: { pairedDays: number; pairedRows: number; missingPairedDays: number;
+      results: Record<'CLASSIFIER' | 'RANKER' | 'MOMENTUM' | 'UNIFORM', Candidates> } | null;
     selectionComparison: { pairedDays: number; incumbent: Candidates; challenger: Candidates } }>;
 }

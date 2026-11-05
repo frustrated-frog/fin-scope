@@ -21,6 +21,8 @@ from finscope_market_data.overnight.candidate_dataset import extend_candidate_ro
 from finscope_market_data.overnight.market_ablation import evaluate_market_groups
 from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PROTOCOL
 
+from finscope_market_data.overnight.tail_ranking import PROTOCOL as RANKING_PROTOCOL, fit_tail_ranking
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +54,7 @@ class OvernightJointWorker:
         if len(ready) < MIN_SYMBOLS:
             return
         for profile in profiles(context):
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{profile.key}'
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue
@@ -89,6 +91,12 @@ class OvernightJointWorker:
                         specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts)
                     except Exception:
                         logger.exception('Up-candidate training failed; retaining direction models')
+                ranking = None
+                if context_rows and profile.mode == 'TAIL_ENTRY':
+                    try:
+                        ranking = fit_tail_ranking(context_rows, now.isoformat(), profile.cutoff)
+                    except Exception:
+                        logger.exception('Tail ranking experiment failed; retaining incumbent models')
                 market_models, market_audit = {}, None
                 try:
                     market_audit = evaluate_market_groups(direction_rows, self.research.contexts, profile.cutoff, now, models=market_models)
@@ -98,7 +106,7 @@ class OvernightJointWorker:
                     'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows + context_rows + selection_rows),
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
-                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'marketModels': market_models, 'trainingJobKey': job['key']},
+                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking, 'marketModels': market_models, 'trainingJobKey': job['key']},
                     {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,
                      'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}
                                           for (day, cutoff), value in selection_cohorts.items()]}, claim=job)

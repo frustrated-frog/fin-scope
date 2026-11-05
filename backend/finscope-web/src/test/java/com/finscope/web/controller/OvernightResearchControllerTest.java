@@ -67,6 +67,29 @@ class OvernightResearchControllerTest {
     }
 
     @Test
+    void preservesShadowRankingScoresWithoutConvertingThemToProbabilities() throws Exception {
+        ArrayNode reports = fixture();
+        ObjectNode direction = ((ObjectNode) reports.get(1)).putObject("closeDirection");
+        direction.put("upProbability", 0.61);
+        ObjectNode ranking = direction.putObject("tailRanking");
+        ranking.put("protocol", "overnight-binary-up-ranking-v1");
+        ranking.put("status", "SHADOW");
+        ranking.put("rankScore", -1.25);
+        ranking.put("classifierProbability", 0.55);
+        ranking.put("validated", false);
+        when(http.get(anyString(), any(), anyMap(), anyInt(), anyInt()))
+                .thenReturn(response(reports.toString()));
+
+        mvc.perform(get("/api/quant/overnight/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].closeDirection.upProbability").value(0.61))
+                .andExpect(jsonPath("$.data[1].closeDirection.tailRanking.rankScore").value(-1.25))
+                .andExpect(jsonPath("$.data[1].closeDirection.tailRanking.classifierProbability").value(0.55))
+                .andExpect(jsonPath("$.data[1].closeDirection.tailRanking.validated").value(false))
+                .andExpect(jsonPath("$.data[1].closeDirection.tailRanking.upProbability").doesNotExist());
+    }
+
+    @Test
     void generatesThePythonReportWithoutLosingItsDecisionPriceOrProvenance() throws Exception {
         var report = fixture().get(1);
         when(http.postJson(anyString(), any(), anyString(), anyMap(), anyInt()))

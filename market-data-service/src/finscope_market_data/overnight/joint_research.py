@@ -1,5 +1,6 @@
 """Attach frozen challengers and adopt only a qualified past-only forward protocol."""
 from datetime import datetime
+import logging
 
 from finscope_market_data.overnight.engine import group_bars
 from finscope_market_data.overnight.direction_dataset import PROTOCOL as DIRECTION_PROTOCOL, TARGET as DIRECTION_TARGET, direction_features
@@ -12,6 +13,10 @@ from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.context_research import attach_context_direction
 from finscope_market_data.overnight.up_selection import attach_up_selection
 from finscope_market_data.overnight.market_research import attach_market_direction
+from finscope_market_data.overnight.tail_ranking_research import attach_tail_ranking
+
+
+logger = logging.getLogger(__name__)
 
 
 class OvernightJointResearch:
@@ -41,6 +46,12 @@ class OvernightJointResearch:
         attach_context_direction(report, request, grouped, artifact, self.contexts, self.meta)
         attach_up_selection(report, grouped, request, artifact, self.contexts)
         attach_market_direction(report, request, grouped, artifact, self.contexts)
+        try:
+            attach_tail_ranking(report, grouped, request, artifact, self.contexts)
+        except Exception:
+            logger.exception('Tail ranking attachment failed; preserving main direction')
+            report['closeDirection']['tailRanking'] = {'status': 'UNAVAILABLE', 'validated': False,
+                'reason': '独立排序暂不可用，主预测保留'}
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return

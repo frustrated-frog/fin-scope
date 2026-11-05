@@ -29,6 +29,19 @@ export function OvernightErrorAudit({ audit, mode }: { audit?: ErrorAudit; mode:
             <td>{percent(row.accuracy)}</td><td>{row.falseUpCount}</td><td>{row.missedUpCount}</td>
             <td>{row.dayCount} 日 / {row.sampleCount} 例{row.status === 'SMALL_SAMPLE' ? ' · 小样本' : ''}</td></tr>)}</tbody></table></div>}
         <p>看涨候选专用方案：{group.selectionComparison.pairedDays} 个完整同日对照。原方案 / 新方案的候选上涨比例：{percent(group.selectionComparison.incumbent.precision)} / {percent(group.selectionComparison.challenger.precision)}。仍在独立验证。</p>
+        {group.rankingComparison && <div aria-label="上涨排序独立对照">
+          <p><b>哪种方法更会选出上涨股票</b></p>
+          {group.rankingComparison.pairedDays > 0 ? <>
+            <p>{group.rankingComparison.pairedDays} 个完整同日对照 · {group.rankingComparison.pairedRows} 只次。各方法从同一候选池取前 3 只。</p>
+            <div className="overnight-error-table"><table>
+              <thead><tr><th>选择方法</th><th>次日实际上涨比例</th></tr></thead>
+              <tbody>{([['RANKER', '上涨排序'], ['CLASSIFIER', '同输入分类'], ['MOMENTUM', '当日涨幅排序'], ['UNIFORM', '同池平均']] as const).map(([key, name]) =>
+                <tr key={key}><td>{name}</td><td>{percent(group.rankingComparison?.results[key].precision)}</td></tr>)}</tbody>
+            </table></div>
+            <p>这是已入选股票的实际结果，不是单只股票的上涨概率；新方案仍在验证，不替换主判断。</p>
+          </> : <p>等待新版排序与分类预测同时留档，并完成次日核验。暂不显示准确率。</p>}
+          {group.rankingComparison.missingPairedDays > 0 && <p>{group.rankingComparison.missingPairedDays} 个结果完整日缺少整批配对预测，未计入对照。</p>}
+        </div>}
       </details>
     </article>)}</div>
   </section>;

@@ -32,3 +32,21 @@ test('keeps holdings and old targets out of tail diagnostics', () => {
   rerender(<OvernightErrorAudit audit={{ ...audit, target: 'OLD' }} mode="TAIL_ENTRY" />);
   expect(screen.getByText(/等待已到期的候选/)).toBeVisible();
 });
+
+test('shows paired ranking results only after complete forward dates', async () => {
+  const ranking: NonNullable<ErrorAudit['groups'][number]['rankingComparison']> = { pairedDays: 0, pairedRows: 0, missingPairedDays: 2,
+    results: { RANKER: candidates, CLASSIFIER: candidates, MOMENTUM: candidates, UNIFORM: candidates } };
+  const value: ErrorAudit = { ...audit, groups: [{ ...audit.groups[0], rankingComparison: ranking }] };
+  const { rerender } = render(<OvernightErrorAudit audit={value} mode="TAIL_ENTRY" />);
+  await userEvent.click(screen.getByText('查看错判分布与数据缺口'));
+  expect(screen.getByText(/等待新版排序与分类预测同时留档/)).toBeVisible();
+  expect(screen.getByText(/2 个结果完整日缺少整批配对预测/)).toBeVisible();
+  expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+  ranking.pairedDays = 1;
+  ranking.pairedRows = 6;
+  ranking.results.RANKER = { ...candidates, precision: .5 };
+  rerender(<OvernightErrorAudit audit={value} mode="TAIL_ENTRY" />);
+  expect(screen.getByText('同输入分类')).toBeVisible();
+  expect(screen.getByText(/1 个完整同日对照 · 6 只次/)).toBeVisible();
+  expect(screen.getByText(/不是单只股票的上涨概率/)).toBeVisible();
+});
