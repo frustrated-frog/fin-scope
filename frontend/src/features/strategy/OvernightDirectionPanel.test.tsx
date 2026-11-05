@@ -127,12 +127,13 @@ test('keeps multiscale research behind details and displays candidate coverage w
 test('shows independent validation completion without presenting a failed refresh as current', async () => {
   const state: OvernightJointState = { protocol: 'test', poolSize: 120, targetSize: 120, readySymbols: 20,
     minimumSymbols: 20, models: [], jobs: [], validationWorker: { status: 'PARTIAL',
-      lastTickAt: '2026-11-05T21:40:00', lastCompletedAt: '2026-11-05T21:30:00', intervalSeconds: 300 } };
+      lastTickAt: '2026-11-05T21:40:00', lastCompletedAt: '2026-11-05T21:30:00.123456', intervalSeconds: 300 } };
   const { rerender } = render(<OvernightDirectionSummary state={state} mode="TAIL_ENTRY" />);
   await userEvent.click(screen.getByText('次日涨跌独立验证'));
   expect(screen.getByLabelText('验证统计刷新状态')).toHaveTextContent('最近完成 2026-11-05 21:30:00');
   expect(screen.getByLabelText('验证统计刷新状态')).toHaveTextContent('部分刷新失败，保留上次结果');
   expect(screen.getByLabelText('验证统计刷新状态')).not.toHaveTextContent('21:40:00');
+  expect(screen.getByLabelText('验证统计刷新状态')).not.toHaveTextContent('.123456');
   rerender(<OvernightDirectionSummary state={{ ...state, validationWorker: { ...state.validationWorker!,
     status: 'RUNNING', lastCompletedAt: null } }} mode="TAIL_ENTRY" />);
   expect(screen.getByLabelText('验证统计刷新状态')).toHaveTextContent('尚未完成 · 正在刷新');
