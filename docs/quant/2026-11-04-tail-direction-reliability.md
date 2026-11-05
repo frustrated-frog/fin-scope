@@ -68,7 +68,7 @@ PYTHONPATH=src .venv/bin/python -m finscope_market_data.overnight.archive_transf
 
 今日列表只展示股票、明日判断、上涨概率和依据；历史比例回退显示“证据不足”，不冒充个股模型预测。详情及复盘围绕参考价到次日收盘展开，旧口径显式标注；费用、净收益与多个退出时点不再占据日常预测主流程。
 
-Vite 开发模式可热更新前端。Python 当前在 Docker 中，源码未挂载；更新运行版本需要从项目根目录执行 `docker compose up -d --build --no-deps market-data`。该命令保留命名数据卷，禁止删除数据卷。无需改动或重新编译 Java DTO。本轮没有将事后生成的结果补记成当时预测。
+Vite 开发模式可热更新前端。Python 当前在 Docker 中，源码未挂载；更新运行版本需要从项目根目录执行 `docker compose up -d --build --no-deps market-data`。该命令保留命名数据卷，禁止删除数据卷。Java 也必须同步支持 v6 版本与 `acquisition` 字段，并重新编译、重启；此前遗漏导致的档案接口故障已在 [2026-11-05 修复记录](2026-11-05-overnight-contract-repair.md) 中说明。本轮没有将事后生成的结果补记成当时预测。
 
 ## 提交自检
 

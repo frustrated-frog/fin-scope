@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
@@ -81,4 +81,46 @@ test('shows missing direction instead of confusing legacy profitability with nex
   expect(screen.queryByText('75.0%')).not.toBeInTheDocument();
   expect(screen.queryByText('费用假设')).not.toBeInTheDocument();
   expect(screen.queryByText(/净收益/)).not.toBeInTheDocument();
+});
+
+test('keeps archives during contract or connection errors and recovers after the service is repaired', async () => {
+  let failure: string | undefined;
+  const refresh: Array<() => void> = [];
+  const interval = vi.spyOn(window, 'setInterval').mockImplementation(callback => {
+    refresh.push(callback as () => void);
+    return 0;
+  });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).endsWith('/stock-account')) {
+      return apiResponse({ positions: [] });
+    }
+    if (String(input).endsWith('/automation')) {
+      return apiResponse({ enabled: true, jobs: [], serverTime: '2026-09-16T14:31:00' });
+    }
+    if (failure) {
+      return new Response(JSON.stringify({ success: false, code: failure, message: '外部服务返回数据异常',
+        data: null, traceId: 'contract-test', timestamp: '2026-09-16T06:31:00Z' }), { status: 502 });
+    }
+    return apiResponse([{ ...blocked, id: 'retained' }]);
+  }));
+  try {
+    render(<OvernightStrategyPanel />);
+    await userEvent.setup().click(screen.getByRole('button', { name: '历史复盘' }));
+    await waitFor(() => expect(document.querySelectorAll('.overnight-review-row')).toHaveLength(1));
+    failure = 'FS-3003';
+    await act(async () => { refresh.forEach(callback => callback()); });
+    expect(await screen.findByText(/预测档案格式不兼容/)).toBeVisible();
+    expect(screen.queryByText(/页面会自动重试/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.overnight-review-row')).toHaveLength(1);
+    failure = 'FS-3001';
+    await act(async () => { refresh.forEach(callback => callback()); });
+    expect(await screen.findByText(/档案暂时读取失败/)).toBeVisible();
+    expect(document.querySelectorAll('.overnight-review-row')).toHaveLength(1);
+    failure = undefined;
+    await act(async () => { refresh.forEach(callback => callback()); });
+    await waitFor(() => expect(screen.queryByText(/档案暂时读取失败/)).not.toBeInTheDocument());
+    expect(document.querySelectorAll('.overnight-review-row')).toHaveLength(1);
+  } finally {
+    interval.mockRestore();
+  }
 });

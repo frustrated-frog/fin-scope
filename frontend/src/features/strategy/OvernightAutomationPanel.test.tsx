@@ -128,7 +128,7 @@ test('shows the latest decision window and lets earlier forecasts be inspected s
   render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
   expect(await screen.findByText('605058.SH · 14:45')).toBeVisible();
   expect(screen.queryByText('605058.SH · 14:30')).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '14:30', exact: true }));
+  await userEvent.click(screen.getByRole('button', { name: '14:30' }));
   expect(screen.getByText('605058.SH · 14:30')).toBeVisible();
   expect(screen.queryByText('605058.SH · 14:45')).not.toBeInTheDocument();
 });

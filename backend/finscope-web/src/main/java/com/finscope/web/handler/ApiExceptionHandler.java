@@ -3,6 +3,7 @@ package com.finscope.web.handler;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.web.config.RequestLoggingFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -35,6 +36,21 @@ import java.util.Set;
 @RestControllerAdvice
 @Slf4j
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(ProviderContractException.class)
+    public ResponseEntity<ApiResponse<Void>> handleProviderContract(
+            ProviderContractException ex, HttpServletRequest request) {
+        ErrorCode code;
+        if ("SCHEMA_DRIFT".equals(ex.getErrorType())) {
+            code = ErrorCode.EXTERNAL_RESPONSE_INVALID;
+        } else if ("TIMEOUT".equals(ex.getErrorType()) || "HTTP_408".equals(ex.getErrorType())
+                || "HTTP_504".equals(ex.getErrorType())) {
+            code = ErrorCode.EXTERNAL_SERVICE_TIMEOUT;
+        } else {
+            code = ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE;
+        }
+        return buildResponse(code, code.getDefaultMessage(), ex, request);
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex,

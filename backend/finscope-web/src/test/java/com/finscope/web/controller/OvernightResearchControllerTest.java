@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.quant.PythonOvernightClient;
 import com.finscope.service.quant.overnight.OvernightResearchService;
 import com.finscope.service.strategy.holding.StockAccountService;
@@ -25,6 +26,7 @@ import java.time.Instant;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -75,6 +77,37 @@ class OvernightResearchControllerTest {
                 .andExpect(jsonPath("$.data.referencePrice").value(report.get("referencePrice").doubleValue()))
                 .andExpect(jsonPath("$.data.inputFingerprint").value(report.get("inputFingerprint").asText()))
                 .andExpect(jsonPath("$.data.acquisition.status").value("AVAILABLE"));
+    }
+
+    @Test
+    void rejectsUnknownVersionsAndMissingAuditEvidenceAsContractErrors() throws Exception {
+        for (String field : new String[] {"modelVersion", "inputFingerprint", "status"}) {
+            ArrayNode reports = fixture();
+            ((ObjectNode) reports.get(0)).put(field, "invalid");
+            when(http.get(anyString(), any(), anyMap(), anyInt(), anyInt()))
+                    .thenReturn(response(reports.toString()));
+            mvc.perform(get("/api/quant/overnight/history"))
+                    .andExpect(status().isBadGateway())
+                    .andExpect(jsonPath("$.code").value("FS-3003"))
+                    .andExpect(jsonPath("$.message").value("外部服务返回数据异常"))
+                    .andExpect(jsonPath("$.data").doesNotExist());
+        }
+    }
+
+    @Test
+    void distinguishesTimeoutFromAnUnavailableProviderWithoutLeakingInternalErrors() throws Exception {
+        when(http.get(anyString(), any(), anyMap(), anyInt(), anyInt()))
+                .thenThrow(new ProviderContractException("TIMEOUT", "private upstream details", true));
+        mvc.perform(get("/api/quant/overnight/history"))
+                .andExpect(status().isGatewayTimeout())
+                .andExpect(jsonPath("$.code").value("FS-3002"))
+                .andExpect(jsonPath("$.message").value("外部服务响应超时，请稍后重试"));
+        doThrow(new ProviderContractException("CONNECTION_ERROR", "private upstream details", true))
+                .when(http).get(anyString(), any(), anyMap(), anyInt(), anyInt());
+        mvc.perform(get("/api/quant/overnight/history"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("FS-3001"))
+                .andExpect(jsonPath("$.message").value("外部服务暂不可用，请稍后重试"));
     }
 
     private FinanceHttpResponse response(String body) {

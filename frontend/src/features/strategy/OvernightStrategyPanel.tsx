@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '../../shared/api/client';
+import { api, ApiError } from '../../shared/api/client';
 import { HoldingAnalysisDrawer, type HoldingAnalysis } from './HoldingAnalysisDrawer';
 import type { OvernightMode, OvernightPosition, OvernightReport } from './overnightTypes';
 import './OvernightStrategyPanel.css';
@@ -54,7 +54,9 @@ export function OvernightStrategyPanel() {
         }
       } catch (reason) {
         if (active) {
-          setHistoryError(`档案读取失败：${reason instanceof Error ? reason.message : '连接异常'}。页面会自动重试。`);
+          setHistoryError(reason instanceof ApiError && reason.code === 'FS-3003'
+            ? '预测档案格式不兼容，需检查服务版本与数据。已有记录会保留，服务修复后自动恢复。'
+            : `档案暂时读取失败：${reason instanceof Error ? reason.message : '连接异常'}。已有记录会保留，页面会自动重试。`);
         }
       } finally {
         pending = false;
