@@ -2,6 +2,8 @@ export interface OvernightDirectionMetrics {
   sampleCount: number; dayCount: number; accuracy: number; balancedAccuracy?: number | null;
   brierScore: number; predictedUpRate?: number;
   comparisons: Record<string, { accuracy: number; brierScore: number }>;
+  upCandidates?: { topK: number; selectedDays: number; dayCount: number; selectionCount: number;
+    precision: number | null; dayCoverage: number; poolUpRate: number | null; lift: number | null };
 }
 
 export interface OvernightCloseDirection {
@@ -18,6 +20,7 @@ export interface OvernightCloseDirection {
 export interface OvernightContextDirection extends Omit<OvernightCloseDirection, 'challenger'> {
   incumbentProbability?: number; contextAt?: string; contextReceivedAt?: string;
   contextSymbols?: number; industryAvailable?: boolean; indexCount?: number;
+  historyWindows?: number[]; featureCount?: number;
 }
 
 export interface OvernightDirectionOutcome {

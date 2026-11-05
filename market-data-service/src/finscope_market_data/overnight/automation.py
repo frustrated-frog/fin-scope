@@ -13,6 +13,7 @@ from finscope_market_data.overnight.history_backfill import DESIRED_DAYS
 
 logger = logging.getLogger(__name__)
 SLOTS = (('14:20', '14:30'), ('14:40', '14:45'))
+MAX_EVALUATION_CANDIDATES = 18
 
 
 class OvernightAutomation:
@@ -101,12 +102,16 @@ class OvernightAutomation:
             job = self.store.claim(scan_key, now, {**metadata, 'phase': 'DISCOVER'})
             if job:
                 try:
-                    result = self.scanner.scan(now, context['candidateLimit'])
+                    # Evaluate a wider bounded pool before ordering by direction.
+                    # Keep the original display preference and three-worker limit.
+                    evaluation_limit = min(MAX_EVALUATION_CANDIDATES, context['candidateLimit'] * 3)
+                    result = self.scanner.scan(now, evaluation_limit)
                     completed = self.clock()
                     if completed >= cutoff_at:
                         self.store.finish(job, completed, status='MISSED', reason='候选扫描完成时已过决策时点')
                     else:
-                        self.store.finish(job, completed, status='COMPLETED', snapshotAt=completed.isoformat(), **result)
+                        self.store.finish(job, completed, status='COMPLETED', snapshotAt=completed.isoformat(),
+                                          evaluationLimit=evaluation_limit, displayLimit=context['candidateLimit'], **result)
                 except Exception as error:
                     self.store.finish(job, self.clock(), status='FAILED', reason=f'候选扫描失败：{type(error).__name__}: {error}')
             scan = self.store.job(scan_key)
@@ -131,7 +136,8 @@ class OvernightAutomation:
             results = list(pool.map(self._generate, requests))
         summary = prediction_summary(results)
         self.store.finish(job, self.clock(), **summary, candidates=scan['candidates'], results=results,
-                          snapshotAt=scan['snapshotAt'], ranking=rank_candidates(results))
+                          snapshotAt=scan['snapshotAt'], ranking=rank_candidates(results),
+                          displayLimit=context['candidateLimit'])
 
     def _generate(self, request):
         cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}')
@@ -142,9 +148,13 @@ class OvernightAutomation:
             # every archive for every stock in the time-critical acquisition batch.
             report = self.service.generate(request, freeze_all=True, settle_cached=False, cohort='AUTOMATIC')
             primary = next((target.get('joint') for target in report.get('targets', []) if target['target'] == '10:00'), None)
+            direction = report.get('closeDirection') or {}
             return {'instrumentCode': request.instrument_code, 'status': report['status'],
                 'reportId': report['id'], 'evidenceKind': report['evidenceKind'], 'warnings': report['warnings'],
-                'joint': primary, 'directionAvailable': report.get('closeDirection', {}).get('upProbability') is not None,
+                'joint': primary, 'directionAvailable': direction.get('upProbability') is not None,
+                'direction': {key: direction[key] for key in (
+                    'protocol', 'target', 'status', 'reason', 'selectedModel', 'upProbability',
+                    'validated', 'referenceAt', 'referencePrice') if key in direction},
                 'acquisition': report.get('acquisition')}
         except Exception as error:
             return {'instrumentCode': request.instrument_code, 'status': 'FAILED',

@@ -132,3 +132,37 @@ test('shows the latest decision window and lets earlier forecasts be inspected s
   expect(screen.getByText('605058.SH · 14:30')).toBeVisible();
   expect(screen.queryByText('605058.SH · 14:45')).not.toBeInTheDocument();
 });
+
+test('ranks the wider pool by frozen direction and keeps extra candidates accessible', async () => {
+  const results = Array.from({ length: 8 }, (_, i) => ({ instrumentCode: `60000${i}.SH`,
+    reportId: `forecast-${i}`, status: 'WATCH', evidenceKind: 'FORWARD', direction: {
+      target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', selectedModel: i === 7 ? 'PRIOR' : 'SHAPE_TREE',
+      upProbability: i === 7 ? .99 : .51 + i * .05, validated: false,
+    } }));
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, jobs: [{ ...state.jobs[0],
+    candidates: [], displayLimit: 3, results }] })));
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={[]} renderReport={() => null} />);
+  expect(await screen.findByText('81.0%')).toBeVisible();
+  const candidates = document.querySelectorAll('.overnight-candidate');
+  expect(candidates).toHaveLength(3);
+  expect(candidates[0]).toHaveTextContent('600006.SH');
+  expect(candidates[1]).toHaveTextContent('600005.SH');
+  expect(screen.queryByText('99.0%')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '查看其余 5 只' }));
+  expect(document.querySelectorAll('.overnight-candidate')).toHaveLength(8);
+  expect(screen.getByText('尚未发现模型优势')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '收起更多候选' }));
+  expect(document.querySelectorAll('.overnight-candidate')).toHaveLength(3);
+});
+
+test('an available full archive takes precedence over the compact job snapshot', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse({ ...state, jobs: [{ ...state.jobs[0], results: [{
+    instrumentCode: '605058.SH', reportId: 'fresh', status: 'WATCH', direction: {
+      target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', selectedModel: 'SHAPE_TREE', upProbability: .99,
+    } }] }] })));
+  const records = [{ id: 'fresh', closeDirection: { target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE',
+    selectedModel: 'SHAPE_TREE', upProbability: .57 } }];
+  render(<OvernightAutomationPanel mode="TAIL_ENTRY" records={records as import('./overnightTypes').OvernightReport[]} renderReport={() => null} />);
+  expect(await screen.findByText('57.0%')).toBeVisible();
+  expect(screen.queryByText('99.0%')).not.toBeInTheDocument();
+});

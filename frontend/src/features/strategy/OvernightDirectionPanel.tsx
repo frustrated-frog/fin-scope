@@ -17,6 +17,7 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
   const history = direction.historical;
   const actual = report.outcome?.closeDirection;
   const challenger = direction.challenger;
+  const challengerName = challenger?.historyWindows?.length ? '多周期增强' : '环境增强';
   const prior = direction.selectedModel === 'PRIOR';
   const title = probability == null ? '次日涨跌正在准备' : prior ? '历史参考，尚无模型优势'
     : probability >= .5 ? '模型偏向上涨' : '模型偏向未上涨';
@@ -30,7 +31,7 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
       </dl>
       {direction.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE' ? <p>比较 {report.targetDate ?? '次一交易日'} 收盘价与本次 {report.cutoff} 参考价 ¥{direction.referencePrice?.toFixed(2) ?? report.referencePrice?.toFixed(2) ?? '—'}。仅使用判断时点及之前的数据。</p> : <p>旧版口径：比较 {report.targetDate ?? '次一交易日'} 与 {report.signalDate} 的收盘价，不扣交易成本。本次预测仅使用截至 {report.cutoff} 的数据。</p>}
       {!direction.validated && <p className="overnight-direction-status">{phases[direction.forwardStatus ?? 'ACCUMULATING']} · {direction.forwardDays ?? 0} / 60 个交易日。当前结果保留观察。</p>}
-      {direction.activeSource === 'CONTEXT_DIRECTION' && <p className="overnight-direction-status">已采用通过前瞻对照的环境增强方案，持续监测表现。</p>}
+      {direction.activeSource === 'CONTEXT_DIRECTION' && <p className="overnight-direction-status">已采用通过前瞻对照的{challengerName}方案，持续监测表现。</p>}
       {actual?.status === 'SETTLED' && <div className="overnight-direction-outcome"><b>次日实际{actual.actualUp ? '上涨' : actual.actualReturn === 0 ? '持平' : '下跌'} {percent(actual.actualReturn)}</b>
         <span>{actual.correct ? '本次方向判断命中' : '本次方向判断未命中'}</span></div>}
       <details><summary>查看涨跌验证依据</summary>
@@ -40,22 +41,24 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
           <div><dt>两类平均识别率</dt><dd>{percent(history.balancedAccuracy)}</dd></div>
           <div><dt>历史预测上涨比例</dt><dd>{percent(history.predictedUpRate)}</dd></div>
           <div><dt>历史检验范围</dt><dd>{history.dayCount} 日 · {history.sampleCount} 例</dd></div>
+          {history.upCandidates && <div><dt>历史看涨前 {history.upCandidates.topK} 只 · 实际上涨比例</dt><dd>{percent(history.upCandidates.precision)} · {history.upCandidates.selectedDays} / {history.upCandidates.dayCount} 日有候选</dd></div>}
         </dl>}
         <p>两类平均识别率分别考虑上涨和未上涨，始终猜同一类只能得到 50%。历史开发成绩不能替代真实前瞻验证。</p>
         <p>{direction.probabilitySource === 'INTERCEPT' ? '当前概率采用已到期预测支持的偏差校准。' : '当前为模型原始概率；校准尚未同时证明改善方向命中和概率误差。'}</p>
       </details>
     </>}
     {challenger && <details className="overnight-context-comparison">
-      <summary>环境增强对照 <span>{challenger.validated ? '通过前瞻对照' : '独立验证中'}</span></summary>
+      <summary>{challengerName}对照 <span>{challenger.validated ? '通过前瞻对照' : '独立验证中'}</span></summary>
       <p>{challenger.reason}</p>
       {challenger.upProbability != null && <>
         <dl className="overnight-direction-metrics">
-          <div><dt>现有方案 / 环境增强的上涨概率</dt><dd>{percent(challenger.incumbentProbability ?? probability)} / {percent(challenger.upProbability)}</dd></div>
+          <div><dt>现有方案 / {challengerName}的上涨概率</dt><dd>{percent(challenger.incumbentProbability ?? probability)} / {percent(challenger.upProbability)}</dd></div>
           <div><dt>环境行情时点 / 收到时点</dt><dd>{challenger.contextAt?.slice(11, 16) ?? '—'} / {challenger.contextReceivedAt?.slice(11, 19) ?? '—'}</dd></div>
           <div><dt>研究池覆盖 / 指数行情</dt><dd>{challenger.contextSymbols ?? '—'} 只 / {challenger.indexCount ?? '—'} 个</dd></div>
           <div><dt>同行业样本</dt><dd>{challenger.industryAvailable ? '可用' : '覆盖不足，未使用'}</dd></div>
-          {actual?.status === 'SETTLED' && <div><dt>环境增强的次日方向判断</dt><dd>{(challenger.upProbability >= .5) === actual.actualUp ? '命中' : '未命中'}</dd></div>}
+          {actual?.status === 'SETTLED' && <div><dt>{challengerName}的次日方向判断</dt><dd>{(challenger.upProbability >= .5) === actual.actualUp ? '命中' : '未命中'}</dd></div>}
         </dl>
+        {!!challenger.historyWindows?.length && <p>结合过去 {challenger.historyWindows.join(' / ')} 个交易日的趋势、波动与量价关系，自动比较常规训练和近期加权方案。</p>}
         {challenger.selectedModel === 'PRIOR' && <p>候选方案仍采用历史上涨比例，尚未发现学习优势。</p>}
       </>}
       <p>{phases[challenger.forwardStatus ?? 'ACCUMULATING']} · {challenger.forwardDays ?? 0} / 60 个交易日。需同时优于现有方案和简单基准。</p>

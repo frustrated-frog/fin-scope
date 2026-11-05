@@ -24,6 +24,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
   const [tool, setTool] = useState<'runtime' | 'research'>();
   const [selected, setSelected] = useState<string>();
   const [chosenWindow, setChosenWindow] = useState('');
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => { setSelected(undefined); }, [mode]);
   useEffect(() => {
     let active = true;
@@ -64,7 +65,18 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
   const activeWindow = windows.includes(chosenWindow) ? chosenWindow : windows[windows.length - 1];
   const pool = latest.find(job => job.phase === 'DISCOVER' && job.status === 'COMPLETED');
   const results = research.filter(job => job.cutoff === activeWindow)
-    .flatMap(job => (job.results ?? []).map(result => ({ job, result })));
+    .flatMap(job => (job.results ?? []).map(result => ({ job, result,
+      report: records.find(record => record.id === result.reportId) })))
+    .map(row => {
+      const direction = row.report?.closeDirection ?? row.result.direction;
+      const score = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
+        && direction.selectedModel !== 'PRIOR' && row.result.evidenceKind !== 'RETROSPECTIVE'
+        && row.report?.evidenceKind !== 'RETROSPECTIVE' ? direction.upProbability ?? -1 : -1;
+      return { ...row, direction, score };
+    }).sort((a, b) => b.score - a.score || a.result.instrumentCode.localeCompare(b.result.instrumentCode));
+  const displayLimit = research.find(job => job.cutoff === activeWindow)?.displayLimit ?? state?.candidateLimit ?? 6;
+  const visibleResults = mode === 'TAIL_ENTRY' && !expanded ? results.slice(0, displayLimit) : results;
+  useEffect(() => { setExpanded(false); }, [mode, activeWindow, latestDay]);
   const problem = latest.find(job => ['FAILED', 'MISSED', 'INTERRUPTED', 'SKIPPED', 'NO_PREDICTION'].includes(job.status));
   const heartbeatAge = state?.heartbeat ? Date.parse(`${state.serverTime}+08:00`) - Date.parse(`${state.heartbeat.lastTickAt}+08:00`) : Infinity;
   const running = state?.jobs.some(job => job.status === 'RUNNING');
@@ -106,10 +118,9 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
       {!!pool?.candidates?.length && <small>{pool.candidates.map(item => item.instrumentName || item.instrumentCode).join(' · ')}</small>}
     </div>}
     {research.some(job => job.key.includes('|RECOVERY|')) && <p className="overnight-auto-notice">含人工事后补跑：候选采集晚于原决策窗口，仅供复盘，不是当时已生成的预测。</p>}
-    <div className="overnight-candidate-list">{results.map(({ job, result }) => {
+    {mode === 'TAIL_ENTRY' && results.length > 0 && <p className="overnight-auto-detail-note">已研究 {results.length} 只，按次日上涨概率排列；历史比例和证据不足项列后。排序不代表已验证有效。</p>}
+    <div className="overnight-candidate-list">{visibleResults.map(({ job, result, direction }) => {
       const candidate = job.candidates?.find(item => item.instrumentCode === result.instrumentCode);
-      const report = records.find(item => item.id === result.reportId);
-      const direction = report?.closeDirection;
       const currentTarget = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE';
       const prior = direction?.selectedModel === 'PRIOR';
       const probability = currentTarget && !prior ? direction?.upProbability : undefined;
@@ -121,6 +132,10 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
         <span className="overnight-candidate-state"><b>查看依据 ↗</b></span>
       </button>;
     })}</div>
+    {mode === 'TAIL_ENTRY' && results.length > displayLimit && <div className="overnight-window-filter">
+      <button type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+        {expanded ? '收起更多候选' : `查看其余 ${results.length - displayLimit} 只`}
+      </button></div>}
     </>}
     {selectedResult && <OvernightSheet title={`${selectedResult.job.candidates?.find(item => item.instrumentCode === selectedResult.result.instrumentCode)?.instrumentName ?? selectedResult.job.instrumentName ?? selectedResult.result.instrumentCode} · ${selectedResult.job.cutoff}`} onClose={() => setSelected(undefined)}>
       <p>数据窗口 {selectedResult.job.signalDate} {selectedResult.job.cutoff} · 入选观察不等于看涨。</p>

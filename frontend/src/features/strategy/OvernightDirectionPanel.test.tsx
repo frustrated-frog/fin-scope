@@ -110,3 +110,16 @@ test('explains the frozen decision price instead of using the later close as ref
   expect(screen.queryByText(/旧版口径/)).not.toBeInTheDocument();
   expect(screen.queryByText(/¥120.00/)).not.toBeInTheDocument();
 });
+
+test('keeps multiscale research behind details and displays candidate coverage with precision', async () => {
+  render(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
+    historical: { ...report.closeDirection!.historical!, upCandidates: { topK: 3, selectedDays: 2, dayCount: 20,
+      selectionCount: 6, precision: .6667, dayCoverage: .1, poolUpRate: .4, lift: .2667 } },
+    challenger: { protocol: 'v4', target: 'test', status: 'SHADOW', reason: '自动对照中', upProbability: .62,
+      historyWindows: [5, 10, 20], featureCount: 68 } } }} />);
+  expect(screen.getByText('58.0%')).toBeVisible();
+  await userEvent.click(screen.getByText('多周期增强对照'));
+  expect(screen.getByText(/过去 5 \/ 10 \/ 20 个交易日/)).toBeVisible();
+  await userEvent.click(screen.getByText('查看涨跌验证依据'));
+  expect(screen.getByText('66.7% · 2 / 20 日有候选')).toBeVisible();
+});

@@ -47,6 +47,50 @@ def test_discovers_without_a_manual_list_and_freezes_at_each_cutoff(flow):
     assert auto.store.job('2026-09-21|TAIL|14:30')['results'][0]['status'] == 'INSUFFICIENT_DATA'
 
 
+def test_automation_evaluates_wider_pool_and_keeps_every_frozen_result(flow):
+    auto, now, calls, _ = flow
+    limits = []
+    def scan(at, limit):
+        limits.append(limit)
+        return {'candidates': [{'instrumentCode': f'600{i:03}.SH'} for i in range(limit)]}
+    auto.scanner.scan = scan
+    auto.tick()
+    assert limits == [18]
+    now[0] = now[0].replace(minute=30)
+    auto.tick()
+    job = auto.store.job('2026-09-21|TAIL|14:30')
+    assert len(calls) == len(job['results']) == 18
+    assert job['displayLimit'] == 6
+    assert job['attemptedCount'] == 18
+
+
+def test_expanded_pool_does_not_generate_after_window_deadline(flow):
+    auto, now, calls, _ = flow
+    from finscope_market_data.overnight.models import OvernightRequest
+    now[0] = now[0].replace(minute=35)
+    result = auto._generate(OvernightRequest(instrument_code='605058.SH', signal_date=now[0].date(),
+        mode='TAIL_ENTRY', cutoff='14:30', cost_bps=20))
+    assert result['status'] == 'MISSED'
+    assert not calls
+
+
+def test_job_keeps_frozen_direction_even_when_report_leaves_recent_archive(flow):
+    auto, now, _, _ = flow
+    direction = {'protocol': 'test', 'target': 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE', 'status': 'SHADOW',
+                 'selectedModel': 'SHAPE_TREE', 'upProbability': .61, 'validated': False,
+                 'referenceAt': '2026-09-21T14:30:00', 'referencePrice': 12.5,
+                 'historical': {'privateLargeAudit': 123}}
+    auto.service.generate = lambda *args, **kwargs: {'id': 'frozen', 'status': 'WATCH', 'evidenceKind': 'FORWARD',
+        'warnings': [], 'closeDirection': direction}
+    auto.tick()
+    now[0] = now[0].replace(minute=30)
+    auto.tick()
+    result = auto.store.job('2026-09-21|TAIL|14:30')['results'][0]
+    assert result['direction']['upProbability'] == .61
+    assert result['direction']['referencePrice'] == 12.5
+    assert 'historical' not in result['direction']
+
+
 def test_restart_retains_claims_and_records_downtime_without_late_predictions(flow):
     auto, now, calls, scans = flow
     auto.tick()
@@ -200,11 +244,21 @@ def test_backup_scan_preserves_freshness_and_does_not_invent_volume_ratio():
     result = scanner.scan(now, 6)
     assert result['sourceCode'] == 'TENCENT_LIVE'
     assert result['candidates'][0]['volumeRatio'] is None
-    assert result['candidates'][0]['selectionLane'] == 'BROAD_RESEARCH'
+    assert result['candidates'][0]['selectionLane'] == 'PRICE_STRENGTH'
     assert result['observations'][0]['ruleRejectionReasons'] == ['MISSING_VOLUME_RATIO']
     frame.loc[0, 'observed_at'] -= timedelta(days=1)
     with pytest.raises(ValueError, match='时间戳'):
         scanner.scan(now, 6)
+
+
+def test_backup_scan_uses_price_strength_and_retains_exploration():
+    rows = [quote(f'600{i:03}', f10=None, f3=1 + i / 10) for i in range(30)]
+    result = OvernightCandidateScanner.select(rows, datetime(2026, 9, 21, 14, 20), 18, allow_missing_ratio=True)
+    assert len(result['candidates']) == 18
+    assert sum(row['selectionLane'] == 'PRICE_STRENGTH' for row in result['candidates']) == 12
+    assert sum(row['selectionLane'] == 'BROAD_RESEARCH' for row in result['candidates']) == 6
+    assert result['candidates'][0]['instrumentCode'] == '600029.SH'
+    assert all(row['volumeRatio'] is None for row in result['candidates'])
 
 
 def test_successful_primary_scan_does_not_fetch_backup():

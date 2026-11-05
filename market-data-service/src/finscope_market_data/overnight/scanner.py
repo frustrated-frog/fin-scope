@@ -43,7 +43,8 @@ class OvernightCandidateScanner:
             if self.fallback is None:
                 raise
             # Tencent does not supply a verified volume ratio in our adapter.
-            # Such quotes may enter the existing broad research lane only.
+            # Price strength and independent exploration remain usable; never
+            # pretend the missing volume-ratio condition has passed.
             frame = self.fallback.fetch(now.date())
             rows = [{'f12': row['code'][2:], 'f14': row['name'], 'f2': row['trade'],
                      'f3': row['change_pct'], 'f6': row['amount'], 'f15': row['high'],
@@ -52,7 +53,7 @@ class OvernightCandidateScanner:
             rows = sorted(rows, key=lambda row: -row['f6'])[:200] + sorted(rows, key=lambda row: -row['f3'])[:200]
             result = self.select(rows, self.clock(), limit, allow_missing_ratio=True)
             result.update(sourceCode='TENCENT_LIVE',
-                scope='腾讯有效报价中成交额与涨幅各前 200 条；量比缺失，仅纳入广泛研究候选',
+                scope='腾讯有效报价中成交额与涨幅各前 200 条；量比缺失，按价格强度与分散研究选取',
                 warnings=[f'东方财富扫描失败（{type(primary_error).__name__}），已切换腾讯；未补造量比',
                           *frame.attrs.get('warnings', [])])
             return result
@@ -117,6 +118,13 @@ class OvernightCandidateScanner:
         selected = [{**row, 'selectionLane': 'MOMENTUM'} for row in sorted(candidates.values(),
             key=lambda r: (-r['priorityScore'], r['instrumentCode']))[:limit - exploration]]
         chosen = {row['instrumentCode'] for row in selected}
+        if allow_missing_ratio:
+            strength = [row for code, row in observations.items() if code not in chosen
+                        and row['rejectionReasons'] == ['MISSING_VOLUME_RATIO']]
+            strength.sort(key=lambda row: (-row['priorityScore'], row['instrumentCode']))
+            for row in strength[:max(0, limit - exploration - len(selected))]:
+                selected.append({**broad[row['instrumentCode']], 'selectionLane': 'PRICE_STRENGTH'})
+                chosen.add(row['instrumentCode'])
         remainder = sorted((row for code, row in broad.items() if code not in chosen),
             key=lambda row: hashlib.sha256(f"{now.date()}|{row['instrumentCode']}".encode()).hexdigest())
         selected.extend({**row, 'selectionLane': 'BROAD_RESEARCH'} for row in remainder[:limit - len(selected)])

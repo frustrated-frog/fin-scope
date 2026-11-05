@@ -39,12 +39,12 @@ export interface OvernightAutomationJob {
   key: string; signalDate: string; cutoff: string; mode: OvernightMode; phase: 'DISCOVER' | 'PREDICT';
   status: string; reason?: string; startedAt: string; finishedAt?: string; attempts: number;
   instrumentCode?: string; instrumentName?: string; snapshotAt?: string; scope?: string;
-  observedCount?: number; freshCount?: number;
+  observedCount?: number; freshCount?: number; displayLimit?: number; evaluationLimit?: number;
   candidates?: Array<{ instrumentCode: string; instrumentName: string; changePct?: number; volumeRatio?: number; selectionLane?: string }>;
   ranking?: { status: string; target: string; opportunityStatus: string; evaluatedCount: number;
     candidates: Array<OvernightJointPrediction & { instrumentCode: string; reportId: string }> };
   results?: Array<{ instrumentCode: string; status: string; reportId?: string; reason?: string;
-    evidenceKind?: string; warnings?: string[] }>;
+    evidenceKind?: string; warnings?: string[]; direction?: OvernightCloseDirection }>;
 }
 export interface OvernightAutomationState {
   enabled: boolean; candidateLimit: number; serverTime: string; calendarAvailable: boolean; tradingDay: boolean;
