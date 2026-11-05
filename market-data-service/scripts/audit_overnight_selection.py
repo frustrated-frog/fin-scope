@@ -4,6 +4,12 @@ from collections import Counter, defaultdict
 import gzip
 import hashlib
 import json
+import platform
+import sys
+
+import numpy
+import sklearn
+import lightgbm
 from pathlib import Path
 
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
@@ -31,7 +37,7 @@ def scores(rows):
             'daily': [{'day': day, **evaluate_candidates(values)} for day, values in sorted(daily.items())]}
 
 
-def replay(path):
+def replay(path, checks_dir=None):
     content = path.read_bytes()
     frozen = json.loads(gzip.decompress(content))
     artifact, panel = frozen['artifact'], frozen['panel']
@@ -60,6 +66,17 @@ def replay(path):
         if a['actualReturn'] != b['actualReturn'] or a['exitAt'] != b['exitAt']:
             raise ValueError('Mismatched labels')
     aligned = {name: [values[key] for key in identities] for name, values in maps.items()}
+    if checks_dir is not None:
+        checks_dir.mkdir(parents=True, exist_ok=True)
+        evidence = {'protocol': 'frozen-selection-checks-v1', 'artifactId': artifact['id'],
+            'inputSha256': hashlib.sha256(content).hexdigest(), 'cutoff': cutoff,
+            'scope': 'FROZEN_RESEARCH_POOL_NOT_ACTUAL_DISCOVERY_COHORT',
+            'features': {name: artifact['closeDirection' if name == 'INCUMBENT' else 'contextDirection']['features'] for name in fits},
+            'environment': {'python': sys.version, 'system': platform.system(), 'machine': platform.machine(),
+                            'numpy': numpy.__version__, 'sklearn': sklearn.__version__, 'lightgbm': lightgbm.__version__},
+            'checks': aligned, 'folds': {name: fit['audit']['folds'] for name, fit in fits.items()}}
+        (checks_dir / f'{cutoff.replace(":", "")}-checks.json.gz').write_bytes(
+            gzip.compress(json.dumps(evidence, allow_nan=False, separators=(',', ':')).encode()))
     # Rank only on decision-time intraday return, fixed before reading results.
     daily = defaultdict(list)
     for row in aligned['INCUMBENT']:
@@ -91,6 +108,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--inputs', nargs='+', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--checks-dir', type=Path)
     args = parser.parse_args()
     result = {'protocol': 'frozen-selection-audit-v1', 'topK': 3, 'threshold': .5,
               'limitations': ['Historical development diagnostic; not an independent holdout',
@@ -98,7 +116,7 @@ def main():
                              'No model parameters or live gates changed'], 'results': []}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     for path in args.inputs:
-        result['results'].append(replay(path))
+        result['results'].append(replay(path, args.checks_dir))
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
         print('saved', path.name, flush=True)
 
