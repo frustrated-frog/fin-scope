@@ -47,6 +47,20 @@ class AutomationStore:
             row = db.execute('SELECT payload FROM overnight_automation_job WHERE key=?', (key,)).fetchone()
         return json.loads(row[0]) if row else None
 
+    def iter_jobs(self, phase):
+        """Evidence scans must not inherit the UI's latest-100 truncation."""
+        cursor = ''
+        while True:
+            with self.store.connect() as db:
+                rows = db.execute('''SELECT key, payload FROM overnight_automation_job
+                    WHERE key>? AND json_extract(payload, '$.phase')=? ORDER BY key LIMIT 200''',
+                    (cursor, phase)).fetchall()
+            if not rows:
+                return
+            for key, payload in rows:
+                cursor = key
+                yield json.loads(payload)
+
     def claim(self, key, now, metadata):
         with self.store.connect() as db:
             db.execute('BEGIN IMMEDIATE')

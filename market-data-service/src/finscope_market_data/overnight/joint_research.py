@@ -10,6 +10,7 @@ from finscope_market_data.overnight.joint_store import OvernightJointStore
 from finscope_market_data.overnight.universe import POOL_KEY
 from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.context_research import attach_context_direction
+from finscope_market_data.overnight.up_selection import attach_up_selection
 
 
 class OvernightJointResearch:
@@ -37,6 +38,7 @@ class OvernightJointResearch:
         grouped = group_bars([bar for bar in bars if bar.ended_at <= cutoff])
         self.attach_direction(report, request, grouped, artifact)
         attach_context_direction(report, request, grouped, artifact, self.contexts, self.meta)
+        attach_up_selection(report, grouped, request, artifact, self.contexts)
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return
@@ -96,5 +98,6 @@ class OvernightJointResearch:
                 'models': self.models.summaries(now), 'forward': self.meta.get('jointForward'),
                 'closeDirectionForward': self.meta.get('closeDirectionForward'),
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
+                'errorAudit': self.meta.get('errorAudit'),
                 'contextSnapshots': self.contexts.recent(),
                 'jobs': [{k: v for k, v in row.items() if k != 'token'} for row in self.meta.jobs(limit=6, phase='JOINT')]}

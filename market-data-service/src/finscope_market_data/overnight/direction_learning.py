@@ -16,6 +16,7 @@ from finscope_market_data.overnight.direction_candidates import (
     BASE_RECIPE, MULTISCALE_RECIPE, RECENCY_HALF_LIFE, candidate_probabilities, fit_candidates,
 )
 from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, LEGACY_PROTOCOL, select_direction
+from finscope_market_data.overnight.up_selection import POLICY as UP_POLICY, PROTOCOL as UP_PROTOCOL, select_up_candidates
 
 SELECTION_DAYS = 20
 TEST_DAYS = 20
@@ -23,7 +24,7 @@ MIN_DATE_COVERAGE = .75
 
 
 def covered_matured_rows(rows, through):
-    matured = [row for row in rows if row['exitAt'] < through]
+    matured = [row for row in rows if row['exitAt'] < through and not row.get('candidateOnly')]
     symbols, by_date = set(), defaultdict(set)
     for row in matured:
         symbols.add(row['instrumentCode'])
@@ -63,12 +64,16 @@ def predict_direction(model, features):
 
 
 def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE_RECIPE):
-    if selection_policy not in ('BRIER', POLICY):
+    if selection_policy not in ('BRIER', POLICY, UP_POLICY):
         raise ValueError('未知方向模型选择协议')
     parts = temporal_parts(rows, through)
     if parts is None:
         return None
     training, selection, calibration = parts
+    if selection_policy == UP_POLICY:
+        start, end = min(r['signalDate'] for r in selection), min(r['signalDate'] for r in calibration)
+        selection = selection + [r for r in rows if r.get('candidateOnly') and start <= r['signalDate'] < end
+                                 and r['exitAt'][:10] < end and r['exitAt'] < through]
     candidates = fit_candidates(training, recipe)
     sy = np.array([r['actualReturn'] > 0 for r in selection])
     weights = date_weights(selection)
@@ -78,6 +83,8 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE
     selection_audit = {'policy': 'BRIER'}
     if selection_policy == POLICY:
         selected, selection_audit = select_direction(probabilities, selection)
+    elif selection_policy == UP_POLICY:
+        selected, selection_audit = select_up_candidates(probabilities, selection)
     # Selection labels may now train the chosen recipe; calibration remains separate.
     model = fit_candidates(training + selection, recipe)
     model['selected'] = selected
@@ -133,7 +140,7 @@ def fit_direction(rows, through, cutoff, *, selection_policy='BRIER', recipe=BAS
     historical.update(task=TARGET, eligible=False, reason='历史开发诊断；次日涨跌需单独积累真实前瞻记录',
                       raw={key: raw[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')},
                       calibrated={key: calibrated_audit[key] for key in ('accuracy', 'balancedAccuracy', 'brierScore', 'auc', 'predictedUpRate')})
-    protocol = CONTEXT_PROTOCOL if recipe == MULTISCALE_RECIPE else LEGACY_PROTOCOL if selection_policy == POLICY else PROTOCOL
+    protocol = UP_PROTOCOL if selection_policy == UP_POLICY else CONTEXT_PROTOCOL if recipe == MULTISCALE_RECIPE else LEGACY_PROTOCOL if selection_policy == POLICY else PROTOCOL
     result = {'protocol': protocol, 'target': TARGET, 'model': current['model'], 'audit': {**current['audit'],
         'testStart': min(dates), 'testThrough': max(r['exitAt'] for r in checks),
         'historical': historical, 'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD', 'dateCoverage': coverage}}

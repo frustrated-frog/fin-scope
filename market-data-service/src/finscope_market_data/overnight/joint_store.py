@@ -21,7 +21,7 @@ class OvernightJointStore:
         if artifact['labelsThrough'] >= artifact['createdAt']:
             raise ValueError('训练标签尚未到期')
         fitted_models = list(artifact['targets'].values())
-        for name in ('closeDirection', 'contextDirection'):
+        for name in ('closeDirection', 'contextDirection', 'upSelection'):
             if artifact.get(name):
                 fitted_models.append(artifact[name])
         for target in fitted_models:
@@ -67,7 +67,7 @@ class OvernightJointStore:
             artifact = self.latest(key, now)
             if artifact:
                 directions = {name: {key: value for key, value in artifact[name].items() if key != 'model'}
-                              if artifact.get(name) else None for name in ('closeDirection', 'contextDirection')}
+                              if artifact.get(name) else None for name in ('closeDirection', 'contextDirection', 'upSelection')}
                 result.append({key: value for key, value in artifact.items() if key not in ('targets', 'context', *directions)} | {
                     'targets': [{'target': target, **value['audit']} for target, value in artifact['targets'].items()],
                     **directions})
