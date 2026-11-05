@@ -155,3 +155,28 @@ def test_specialist_comparison_uses_whole_paired_days():
     reports[-1]['closeDirection']['upSelection'] = {'protocol': UP_PROTOCOL, 'upProbability': .7}
     comparison = audit(reports)['groups'][0]['selectionComparison']
     assert comparison['pairedDays'] == 1 and not comparison['eligible']
+
+
+def test_specialist_trains_serializes_and_attaches_without_replacing_incumbent(history_rows):
+    import json
+    from test_overnight import history, request
+    from test_overnight_context import snapshot
+    from finscope_market_data.overnight.engine import group_bars
+    from finscope_market_data.overnight.up_selection import fit_up_selection, attach_up_selection, PROTOCOL as UP_PROTOCOL
+    fitted = fit_up_selection(history_rows, '2026-07-01T12:00:00', '14:30', {})
+    fitted = json.loads(json.dumps(fitted, allow_nan=False))
+    assert fitted['protocol'] == UP_PROTOCOL
+    assert fitted['model']['selected'] == 'PRIOR'
+    assert fitted['audit']['selection']['reason'] == 'INSUFFICIENT_CANDIDATE_HISTORY'
+    bars = history(35)
+    day = bars[-1].ended_at.date()
+    context = {**snapshot(str(day)), 'universeFingerprint': 'pool'}
+    artifact = {'id': 'model', 'universeFingerprint': 'pool', 'upSelection': fitted}
+    report = {'dataThrough': f'{day}T14:30:00', 'closeDirection': {'upProbability': .61}}
+    attach_up_selection(report, group_bars(bars), request(day), artifact, SimpleNamespace(at=lambda *args: context))
+    assert report['closeDirection']['upProbability'] == .61
+    specialist = report['closeDirection']['upSelection']
+    assert specialist['protocol'] == UP_PROTOCOL
+    assert specialist['selectedModel'] == 'PRIOR'
+    assert specialist['status'] == 'SHADOW' and not specialist['validated']
+    assert 0 <= specialist['upProbability'] <= 1
