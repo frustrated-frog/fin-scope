@@ -28,6 +28,7 @@ public class OvernightResearchReport {
     private String entryRule;
     private String executionStatus;
     private String sourceCode;
+    private Map<String, Object> acquisition;
     private List<Map<String, Object>> targets;
     private List<String> warnings;
     private Map<String, Object> request;

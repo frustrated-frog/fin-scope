@@ -138,7 +138,8 @@ public class PythonOvernightClient {
                     || "overnight-local-v2".equals(report.getModelVersion())
                     || "overnight-local-v3-calibrated".equals(report.getModelVersion())
                     || "overnight-local-v4-evidence-gated".equals(report.getModelVersion())
-                    || "overnight-v5-shared-evidence".equals(report.getModelVersion()))
+                    || "overnight-v5-shared-evidence".equals(report.getModelVersion())
+                    || "overnight-v6-decision-direction".equals(report.getModelVersion()))
                 || report.getInputFingerprint() == null
                 || !report.getInputFingerprint().matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException("隔夜研究缺少日期、版本或审计证据");

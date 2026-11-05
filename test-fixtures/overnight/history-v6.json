@@ -1,0 +1,156 @@
+[
+  {
+    "modelVersion": "overnight-v6-decision-direction",
+    "mode": "AFTER_CLOSE_HOLDING",
+    "instrumentCode": "605058.SH",
+    "signalDate": "2026-01-08",
+    "cutoff": "15:00",
+    "generatedAt": "2026-01-08T15:00:30",
+    "dataThrough": "2026-01-08T15:00:00",
+    "inputFingerprint": "f5bc113e2c33938dda33068ab437586c0158eef0ce7f2d4d4c01d8f24e4deeca",
+    "targetDate": "2026-01-09",
+    "referencePrice": 20.091396159259567,
+    "costBps": 20,
+    "costBasis": 20.0,
+    "quantity": 100.0,
+    "evidenceKind": "FORWARD",
+    "entryRule": "EXISTING_POSITION_CLOSE_REFERENCE",
+    "executionStatus": "UNVERIFIED",
+    "status": "INSUFFICIENT_DATA",
+    "targets": [
+      {
+        "target": "OPEN",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 3,
+        "minimumSamples": 82,
+        "missingSamples": 79
+      },
+      {
+        "target": "10:00",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 3,
+        "minimumSamples": 82,
+        "missingSamples": 79
+      },
+      {
+        "target": "14:30",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 3,
+        "minimumSamples": 82,
+        "missingSamples": 79
+      },
+      {
+        "target": "CLOSE",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 2,
+        "minimumSamples": 82,
+        "missingSamples": 80
+      }
+    ],
+    "warnings": [
+      "价格代理不保证成交；未验证停牌、涨跌停队列与公司行为，暂不生成买入或卖出指令。"
+    ],
+    "sourceCode": "SYNTHETIC_FALLBACK",
+    "acquisition": {
+      "status": "AVAILABLE",
+      "source": "SYNTHETIC_FALLBACK",
+      "receivedAt": "2026-01-08T15:00:30",
+      "dataThrough": "2026-01-08T15:00:00",
+      "fallbackReasons": [
+        {
+          "source": "SYNTHETIC_PRIMARY",
+          "code": "TIMEOUT"
+        }
+      ]
+    },
+    "id": "ffa2e2fa6b2336c90ed7f4b96f0fec4027413a80d0654bf6e9d3a13ee3f737b8",
+    "request": {
+      "instrumentCode": "605058.SH",
+      "signalDate": "2026-01-08",
+      "mode": "AFTER_CLOSE_HOLDING",
+      "cutoff": "15:00",
+      "costBps": 20.0,
+      "costBasis": 20.0,
+      "quantity": 100.0,
+      "positionOpenedOn": "2026-01-05"
+    },
+    "outcome": null
+  },
+  {
+    "modelVersion": "overnight-v6-decision-direction",
+    "mode": "TAIL_ENTRY",
+    "instrumentCode": "605058.SH",
+    "signalDate": "2026-01-08",
+    "cutoff": "14:30",
+    "generatedAt": "2026-01-08T14:30:30",
+    "dataThrough": "2026-01-08T14:30:00",
+    "inputFingerprint": "7601f077ac15135e48d2cd4bc6f5317ea267f83f75f9279d601f7d269e6d3b5f",
+    "targetDate": "2026-01-09",
+    "referencePrice": 20.128697006461213,
+    "costBps": 20,
+    "costBasis": null,
+    "quantity": null,
+    "evidenceKind": "FORWARD",
+    "entryRule": "NEXT_5MIN_OPEN",
+    "executionStatus": "UNVERIFIED",
+    "status": "INSUFFICIENT_DATA",
+    "targets": [
+      {
+        "target": "OPEN",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 3,
+        "minimumSamples": 82,
+        "missingSamples": 79
+      },
+      {
+        "target": "10:00",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 3,
+        "minimumSamples": 82,
+        "missingSamples": 79
+      },
+      {
+        "target": "14:30",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 2,
+        "minimumSamples": 82,
+        "missingSamples": 80
+      },
+      {
+        "target": "CLOSE",
+        "status": "INSUFFICIENT_DATA",
+        "sampleCount": 2,
+        "minimumSamples": 82,
+        "missingSamples": 80
+      }
+    ],
+    "warnings": [
+      "价格代理不保证成交；未验证停牌、涨跌停队列与公司行为，暂不生成买入或卖出指令。"
+    ],
+    "sourceCode": "SYNTHETIC_FALLBACK",
+    "acquisition": {
+      "status": "AVAILABLE",
+      "source": "SYNTHETIC_FALLBACK",
+      "receivedAt": "2026-01-08T14:30:30",
+      "dataThrough": "2026-01-08T14:30:00",
+      "fallbackReasons": [
+        {
+          "source": "SYNTHETIC_PRIMARY",
+          "code": "TIMEOUT"
+        }
+      ]
+    },
+    "id": "f3cff66c2422fa4ae46976a9624f736ef1169075b70cb1751e2baaf19ab8c1ce",
+    "request": {
+      "instrumentCode": "605058.SH",
+      "signalDate": "2026-01-08",
+      "mode": "TAIL_ENTRY",
+      "cutoff": "14:30",
+      "costBps": 20.0,
+      "costBasis": null,
+      "quantity": null,
+      "positionOpenedOn": null
+    },
+    "outcome": null
+  }
+]

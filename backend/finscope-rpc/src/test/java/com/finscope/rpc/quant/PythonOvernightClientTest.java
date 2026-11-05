@@ -125,6 +125,8 @@ class PythonOvernightClientTest {
                 client("TAIL_ENTRY", "overnight-local-v4-evidence-gated").generate(input).getModelVersion());
         assertEquals("overnight-v5-shared-evidence",
                 client("TAIL_ENTRY", "overnight-v5-shared-evidence").generate(input).getModelVersion());
+        assertEquals("overnight-v6-decision-direction",
+                client("TAIL_ENTRY", "overnight-v6-decision-direction").generate(input).getModelVersion());
         assertEquals(20, report.getTargets().get(0).get("calibrationCount"));
         assertEquals(Map.of("status", "BASELINE_NOT_BEATEN"), report.getTargets().get(0).get("reliability"));
         assertEquals("SHADOW", report.getJointResearch().get("status"));
