@@ -1,5 +1,6 @@
 """Point-in-time broad quotes; missing data is never reconstructed after close."""
 from datetime import datetime
+from itertools import groupby
 import math
 import statistics
 from zoneinfo import ZoneInfo
@@ -71,15 +72,16 @@ def market_groups(code, snapshot):
 
 def paired_market_panels(rows, contexts, cutoff):
     panels = {group: ([], []) for group in GROUPS}
-    cache = {}
-    for row in rows:
-        day = row['signalDate']
-        if day not in cache:
-            cache[day] = contexts.at(day, cutoff, datetime.fromisoformat(f'{day}T{cutoff}:00'))
-        if not cache[day]:
+    ordered = sorted(rows, key=lambda row: (row['signalDate'], row['instrumentCode']))
+    # A broad snapshot contains thousands of quotes: retain only one date,
+    # not the entire multi-month training history, in memory.
+    for day, daily_rows in groupby(ordered, key=lambda row: row['signalDate']):
+        snapshot = contexts.at(day, cutoff, datetime.fromisoformat(f'{day}T{cutoff}:00'))
+        if not snapshot:
             continue
-        for group, values in market_groups(row['instrumentCode'], cache[day]).items():
-            base, enhanced = panels[group]
-            base.append(row)
-            enhanced.append({**row, 'features': [*row['features'], *values]})
+        for row in daily_rows:
+            for group, values in market_groups(row['instrumentCode'], snapshot).items():
+                base, enhanced = panels[group]
+                base.append(row)
+                enhanced.append({**row, 'features': [*row['features'], *values]})
     return panels

@@ -22,6 +22,8 @@ from finscope_market_data.overnight.up_selection import PROTOCOL as UP_PROTOCOL,
 from finscope_market_data.overnight.candidate_dataset import extend_candidate_rows
 
 from finscope_market_data.overnight.market_ablation import evaluate_market_groups
+from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PROTOCOL
+from finscope_market_data.overnight.market_validation import summarize_market_forward
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ class OvernightJointWorker:
         audit = meta.get('errorAudit') or {}
         if not audit.get('computedAt') or now - datetime.fromisoformat(audit['computedAt']) >= timedelta(minutes=5):
             meta.put('errorAudit', build_error_audit(self.automation.service.store, meta, self.research.contexts, now))
+            meta.put('marketForward', summarize_market_forward(self.automation.service.store, meta, now))
         if '13:00' <= now.strftime('%H:%M') < '18:00':
             return
         meta.put('jointForward', summarize_forward(self.automation.service.store, now, meta))
@@ -60,7 +63,7 @@ class OvernightJointWorker:
         if len(ready) < MIN_SYMBOLS:
             return
         for profile in profiles(context):
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{profile.key}'
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue
@@ -97,19 +100,21 @@ class OvernightJointWorker:
                         specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts)
                     except Exception:
                         logger.exception('Up-candidate training failed; retaining direction models')
+                market_models, market_audit = {}, None
                 try:
-                    market_audit = evaluate_market_groups(direction_rows, self.research.contexts, profile.cutoff, now)
-                    meta.put(f'marketAblation:{profile.cutoff}', market_audit)
+                    market_audit = evaluate_market_groups(direction_rows, self.research.contexts, profile.cutoff, now, models=market_models)
                 except Exception:
                     logger.exception('Market group evaluation failed; retaining incumbent models')
                 artifact = self.research.models.publish({'protocol': PROTOCOL, 'profile': profile.dump(),
                     'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows + context_rows + selection_rows),
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
-                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'trainingJobKey': job['key']},
+                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'marketModels': market_models, 'trainingJobKey': job['key']},
                     {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,
                      'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}
                                           for (day, cutoff), value in selection_cohorts.items()]}, claim=job)
+                if market_audit is not None:
+                    meta.put(f'marketAblation:{profile.cutoff}', market_audit)
                 meta.finish(job, self.clock(), status='COMPLETED', artifactId=artifact['id'], **data_audit)
             except Exception as error:
                 logger.exception('Shared overnight training failed for %s', profile.key)

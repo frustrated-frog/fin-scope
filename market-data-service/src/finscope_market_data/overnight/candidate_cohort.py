@@ -29,3 +29,17 @@ def mark_cohort(rows, cohorts, cutoff):
              if (row['signalDate'], cutoff) in cohorts else None,
              'candidateExpectedCount': len(cohorts[(row['signalDate'], cutoff)]['candidates'])
              if (row['signalDate'], cutoff) in cohorts else 0} for row in rows]
+
+
+def scheduled_cohorts(meta, through):
+    """Tail scans and scheduled holdings, including jobs that failed to predict."""
+    cohorts = frozen_cohorts(meta, through)
+    for job in meta.iter_jobs('PREDICT'):
+        if job.get('mode') != 'AFTER_CLOSE_HOLDING' or not job.get('instrumentCode'):
+            continue
+        day = job['signalDate']
+        if f'{day}T15:00:00' >= through or job.get('startedAt', '') >= through:
+            continue
+        cohort = cohorts.setdefault((day, '15:00'), {'candidates': {}, 'fingerprint': f'HOLDINGS|{day}'})
+        cohort['candidates'][job['instrumentCode']] = {'selectionLane': 'HOLDING'}
+    return cohorts

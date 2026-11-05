@@ -31,6 +31,10 @@ export interface OvernightJointState {
   closeDirectionForward?: OvernightDirectionForward;
   contextDirectionForward?: OvernightDirectionForward;
   errorAudit?: ErrorAudit;
+  marketAblation?: Array<{ cutoff: string; groups: Array<{ group: string; status: string; dayCount: number; requiredDays: number }> }>;
+  marketForward?: { groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
+    dayCount: number; requiredDays: number; pairedCount: number; scheduledCount: number;
+    metrics?: { accuracy: number; comparisons: Record<string, { accuracy: number }> } | null }> };
   contextSnapshots?: Array<{ signalDate: string; cutoff: string; observedAt: string;
     receivedAt: string; capturedSymbols: number; expectedSymbols: number;
     market?: { quality: string; capturedSymbols?: number; expectedSymbols?: number; reason?: string } }>;

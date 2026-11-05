@@ -11,6 +11,7 @@ from finscope_market_data.overnight.universe import POOL_KEY
 from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.context_research import attach_context_direction
 from finscope_market_data.overnight.up_selection import attach_up_selection
+from finscope_market_data.overnight.market_research import attach_market_direction
 
 
 class OvernightJointResearch:
@@ -39,6 +40,7 @@ class OvernightJointResearch:
         self.attach_direction(report, request, grouped, artifact)
         attach_context_direction(report, request, grouped, artifact, self.contexts, self.meta)
         attach_up_selection(report, grouped, request, artifact, self.contexts)
+        attach_market_direction(report, request, grouped, artifact, self.contexts)
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return
@@ -99,6 +101,7 @@ class OvernightJointResearch:
                 'closeDirectionForward': self.meta.get('closeDirectionForward'),
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
+                'marketForward': self.meta.get('marketForward'),
                 'contextSnapshots': self.contexts.recent(),
                 'marketAblation': [value for cutoff in ('14:30', '14:45', '15:00')
                                    if (value := self.meta.get(f'marketAblation:{cutoff}'))],

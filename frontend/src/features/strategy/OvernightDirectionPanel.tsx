@@ -1,3 +1,4 @@
+import { OvernightMarketProgress } from './OvernightMarketProgress';
 import type { OvernightReport, OvernightMode } from './overnightTypes';
 import type { OvernightJointState } from './overnightJointTypes';
 import './OvernightDirectionPanel.css';
@@ -93,6 +94,7 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
     <p>广泛市场数据：{snapshot?.market?.quality === 'SUFFICIENT'
       ? `已留存 ${snapshot.market.capturedSymbols} / ${snapshot.market.expectedSymbols} 只有效报价，正在积累独立对照。`
       : '等待有效交易时段积累；缺失数据不会用盘后行情补填。'}</p>
+    <OvernightMarketProgress state={state} mode={mode} />
     {contextGroups.map(group => <div className="overnight-direction-summary-row" key={`context-${group.key}`}>
       <b>{group.cutoff} 环境增强对照</b><span>{phases[group.status] ?? '等待结果'} · {group.dayCount} / {group.requiredDays} 日</span>
       <small>候选 / 现有方案命中率 {percent(group.metrics?.accuracy)} / {percent(group.metrics?.comparisons.INCUMBENT?.accuracy)} · 可核验 {percent(group.coverage)}</small>

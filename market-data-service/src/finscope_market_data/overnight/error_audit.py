@@ -5,7 +5,7 @@ from datetime import datetime
 import numpy as np
 
 from finscope_market_data.forecast.trading_calendar import next_session
-from finscope_market_data.overnight.candidate_cohort import frozen_cohorts
+from finscope_market_data.overnight.candidate_cohort import scheduled_cohorts
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
 from finscope_market_data.overnight.joint_dataset import date_weights
@@ -32,15 +32,7 @@ def market_state(snapshot):
 
 
 def build_error_audit(store, meta, contexts, now):
-    cohorts = frozen_cohorts(meta, now.isoformat())
-    # Holdings have no discovery scan; retain scheduled ledger jobs, including
-    # failed/skipped ones, as their denominator. Revisions count a stock once.
-    for job in meta.iter_jobs('PREDICT'):
-        if job.get('mode') != 'AFTER_CLOSE_HOLDING' or not job.get('instrumentCode'):
-            continue
-        day = job['signalDate']
-        cohort = cohorts.setdefault((day, '15:00'), {'candidates': {}, 'fingerprint': f'HOLDINGS|{day}'})
-        cohort['candidates'][job['instrumentCode']] = {'selectionLane': 'HOLDING'}
+    cohorts = scheduled_cohorts(meta, now.isoformat())
     reports = {}
     for report in sorted(store.iter_history(), key=lambda r: (r['generatedAt'], r['id'])):
         if (report.get('evidenceKind') != 'FORWARD' or report['generatedAt'] >= now.isoformat()
