@@ -1,5 +1,7 @@
 import type { OvernightJointState } from './overnightJointTypes';
 import type { OvernightMode } from './overnightTypes';
+import { OvernightSelectionProgress } from './OvernightSelectionProgress';
+import { selectionProtocol } from './overnightSelectionTypes';
 
 const protocol = 'overnight-fresh-direction-v1';
 const labels = { FRESH: '最新样本训练', CALIBRATED: '滚动概率校准', INDEX: '增加指数走势' };
@@ -33,6 +35,10 @@ export function OvernightFreshProgress({ state, mode }: { state: OvernightJointS
             {!forward?.metrics && !!forward?.scheduledCount && <small>已配对 {forward.pairedCount} / {forward.scheduledCount} 条，尚无完整日期可统计；缺失记录仍保留。</small>}
           </div>;
         })}
+        {(research.stockSelection?.protocol === selectionProtocol || state.selectionForward?.protocol === selectionProtocol)
+          && <OvernightSelectionProgress cutoff={model.profile.cutoff} historical={research.stockSelection?.historical}
+            forward={state.selectionForward?.protocol === selectionProtocol
+              ? state.selectionForward.groups.find(row => row.mode === mode && row.cutoff === model.profile.cutoff) : undefined} />}
       </div>;
     })}
     <p>三项改动分别检验。指数使用此前已完成的日线；没有有效历史的股票日不伪造输入，次日统计保留缺口。</p>

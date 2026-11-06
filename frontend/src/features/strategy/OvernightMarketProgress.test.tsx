@@ -8,10 +8,19 @@ const state: OvernightJointState = { protocol: 'test', poolSize: 120, targetSize
 
 test('missing training and validation stay explicit, never become zero accuracy', () => {
   render(<OvernightMarketProgress state={state} mode="TAIL_ENTRY" />);
-  expect(screen.getAllByText('积累训练数据')).toHaveLength(6);
+  expect(screen.getAllByText('积累训练数据')).toHaveLength(8);
   expect(screen.getByText('14:30 · 市场整体强弱')).toBeVisible();
   expect(screen.queryByText(/15:00/)).not.toBeInTheDocument();
   expect(screen.queryByText(/命中率/)).not.toBeInTheDocument();
+});
+
+test('relative strength shows actual aligned coverage and its separate training requirement', () => {
+  render(<OvernightMarketProgress state={{ ...state, contextSnapshots: [{ signalDate: '2026-11-06', cutoff: '14:30',
+    observedAt: '2026-11-06T14:20:00', receivedAt: '2026-11-06T14:21:00', capturedSymbols: 100, expectedSymbols: 120,
+    relativeStrength: { protocol: 'overnight-relative-strength-v1', capturedIndices: 2, expectedIndices: 3, pairedSymbols: 0 },
+  }] }} mode="TAIL_ENTRY" />);
+  expect(screen.getByText(/最近采集 2026-11-06 14:20 · 指数 2 \/ 3 个 · 已对齐 0 只股票/)).toBeVisible();
+  expect(screen.getAllByText(/有效历史 0 \/ 164 日/)).toHaveLength(2);
 });
 
 test('holds timing and separates trained history from actual complete-day results', () => {

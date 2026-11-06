@@ -1,6 +1,7 @@
 """Paired freshness/index challengers; never replace an incumbent from backtests."""
 import hashlib
 import json
+import logging
 
 import numpy as np
 
@@ -9,9 +10,11 @@ from finscope_market_data.overnight.direction_dataset import FEATURES, TARGET, d
 from finscope_market_data.overnight.direction_learning import direction_prediction
 from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARCH_DAYS, TEST_DAYS, fit_fresh_direction
 from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
+from finscope_market_data.overnight.selection_research import train_index_only, attach_selection
 
 GROUPS = ('FRESH', 'CALIBRATED', 'INDEX')
 INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
+logger = logging.getLogger(__name__)
 
 
 def train_fresh_research(rows, history, through, cutoff):
@@ -51,6 +54,14 @@ def train_fresh_research(rows, history, through, cutoff):
     indexed['audit']['historical']['comparisons'].update(comparison['comparisons'])
     result['models'].update(INDEX=indexed, INDEX_BASELINE=matched)
     result['indexAudit']['status'] = 'SHADOW'
+    try:
+        index_only, selection = train_index_only(enhanced, through, cutoff, left, right)
+        result['stockSelection'] = selection
+        if index_only:
+            result['models']['INDEX_ONLY'] = index_only
+    except Exception:
+        logger.exception('Index-only experiment failed; preserving existing freshness models')
+        result['stockSelection'] = {'status': 'FAILED', 'reason': '仅指数对照训练失败，保留已有模型'}
     return result
 
 
@@ -99,3 +110,8 @@ def attach_fresh_research(report, request, grouped, artifact, history):
             indexHistoryReceivedAt=received if name == 'INDEX' else None,
             indexHistoryFingerprint=history_fingerprint(history) if name == 'INDEX' else None,
             reason='新训练方案独立留档，尚未证明优于当前预测')
+    try:
+        attach_selection(parent, research, index)
+    except Exception:
+        logger.exception('Selection attachment failed; preserving existing direction forecasts')
+        parent['stockSelectionModels'] = []

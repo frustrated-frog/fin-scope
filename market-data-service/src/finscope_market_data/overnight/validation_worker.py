@@ -11,6 +11,7 @@ from finscope_market_data.overnight.error_audit import build_error_audit
 from finscope_market_data.overnight.joint_validation import summarize_forward
 from finscope_market_data.overnight.market_validation import summarize_market_forward
 from finscope_market_data.overnight.fresh_validation import summarize_fresh_forward
+from finscope_market_data.overnight.selection_validation import summarize_selection_forward
 
 logger = logging.getLogger(__name__)
 REFRESH_INTERVAL = timedelta(minutes=5)
@@ -51,6 +52,7 @@ class OvernightValidationWorker:
             'errorAudit': lambda: build_error_audit(store, meta, self.research.contexts, now),
             'marketForward': lambda: summarize_market_forward(store, meta, now),
             'freshForward': lambda: summarize_fresh_forward(store, meta, now),
+            'selectionForward': lambda: summarize_selection_forward(store, meta, now),
             'jointForward': lambda: summarize_forward(store, now, meta),
             'closeDirectionForward': lambda: summarize_direction(store, now, meta),
             'contextDirectionForward': lambda: summarize_direction(store, now, meta, challenger=True),

@@ -67,6 +67,13 @@ def test_real_paired_models_share_selection_and_labels(research):
         assert a['trainingRows'] == b['trainingRows']
     assert 'MATCHED_BASELINE' in right['audit']['historical']['comparisons']
     assert not right['audit']['historical']['eligible']
+    only = research['models']['INDEX_ONLY']
+    assert len(only['features']) == 9
+    assert only['audit']['trainingThrough'] == right['audit']['trainingThrough']
+    selection = research['stockSelection']['historical']
+    assert selection['dayCount'] == 20 and not selection['eligible']
+    for day in selection['days']:
+        assert day['forced']['INDEX_ONLY'] == pytest.approx(day['poolUpRate'])
 
 
 def test_actual_publication_reload_attachment_preserves_incumbent(tmp_path, research, index_history):
@@ -93,10 +100,15 @@ def test_actual_publication_reload_attachment_preserves_incumbent(tmp_path, rese
     assert parent['freshModels'][0]['matchedBaselineProbability'] == expected['rawUpProbability']
     assert parent['freshModels'][0]['liveProbability'] == .61
     assert parent['freshModels'][1]['matchedBaselineProbability'] == parent['freshModels'][0]['upProbability']
+    frozen_selection = parent['stockSelectionModels'][0]
+    assert frozen_selection['protocol'] == 'overnight-same-day-selection-v1'
+    assert frozen_selection['upProbability'] == parent['freshModels'][2]['upProbability']
+    assert 0 <= frozen_selection['indexOnlyProbability'] <= 1
     late = deepcopy(index_history)
     late[INDEX_CODES[0]]['receivedAt'] = decision.isoformat()
     attach_fresh_research(value, request(day), group_bars(bars), loaded, late)
     assert parent['freshModels'][2]['status'] == 'MISSING_FEATURES'
+    assert parent['stockSelectionModels'] == []
     assert parent['freshModels'][0]['status'] == 'SHADOW'
     loaded['createdAt'] = decision.isoformat()
     attach_fresh_research(value, request(day), group_bars(bars), loaded, index_history)

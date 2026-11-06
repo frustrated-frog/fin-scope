@@ -3,9 +3,9 @@ from finscope_market_data.overnight.fresh_research import GROUPS, PROTOCOL
 from finscope_market_data.overnight.market_validation import missing_reason, summarize_market_forward
 
 
-def invalid_fresh_forecast(report, forecast, outcome, decision, target_at, now):
+def invalid_fresh_forecast(report, forecast, outcome, decision, target_at, now, *, protocol=PROTOCOL):
     reason = missing_reason(report, forecast, outcome, decision, target_at, now,
-                            protocol=PROTOCOL, require_context=False)
+                            protocol=protocol, require_context=False)
     if reason:
         return reason
     if (not forecast.get('featureFingerprint') or not forecast.get('trainingThrough')

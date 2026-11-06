@@ -4,12 +4,14 @@ from itertools import groupby
 import math
 import statistics
 from zoneinfo import ZoneInfo
+from finscope_market_data.overnight.relative_strength import FEATURES as RELATIVE_FEATURES, relative_features
 
 PROTOCOL = 'overnight-market-context-v1'
 GROUPS = {
     'MARKET': ('MARKET_RETURN', 'MARKET_UP_SHARE', 'MARKET_DISPERSION'),
     'SENTIMENT': ('STRONG_3_SHARE', 'WEAK_3_SHARE', 'STRONG_FADE_SHARE'),
     'INDUSTRY': ('BROAD_PEER_RETURN', 'BROAD_PEER_UP_SHARE', 'RELATIVE_BROAD_PEER_RETURN'),
+    'RELATIVE': RELATIVE_FEATURES,
 }
 
 
@@ -44,18 +46,20 @@ def market_snapshot(frame, observed, received):
 
 
 def market_groups(code, snapshot):
+    relative = relative_features(code, snapshot)
+    result = {'RELATIVE': relative} if relative is not None else {}
     market = snapshot.get('market') or {}
     if market.get('protocol') != PROTOCOL or market.get('quality') != 'SUFFICIENT':
-        return {}
+        return result
     quotes = market['quotes']
     peers = {key: value for key, value in quotes.items() if key != code}
     if len(peers) < 2:
-        return {}
+        return result
     returns = [row['return'] for row in peers.values()]
-    result = {'MARKET': [statistics.mean(returns), sum(v > 0 for v in returns) / len(returns), statistics.pstdev(returns)],
+    result.update({'MARKET': [statistics.mean(returns), sum(v > 0 for v in returns) / len(returns), statistics.pstdev(returns)],
               'SENTIMENT': [sum(v >= .03 for v in returns) / len(returns),
                             sum(v <= -.03 for v in returns) / len(returns),
-                            sum(row['return'] >= .03 and row['drawdown'] <= -.02 for row in peers.values()) / len(peers)]}
+                            sum(row['return'] >= .03 and row['drawdown'] <= -.02 for row in peers.values()) / len(peers)]})
     active = {}
     for item in sorted(snapshot.get('memberships', []), key=lambda value: (value['available_on'], value['industry'])):
         if item['available_on'] <= snapshot['signalDate']:
