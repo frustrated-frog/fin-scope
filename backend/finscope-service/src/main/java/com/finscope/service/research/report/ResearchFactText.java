@@ -1,5 +1,7 @@
 package com.finscope.service.research.report;
 
+import com.finscope.common.util.WebContentText;
+
 /**
  * Cleans research facts and limits prompt size only at complete sentence boundaries.
  */
@@ -23,11 +25,9 @@ final class ResearchFactText {
     }
 
     private static String clean(String value) {
-        return (value == null ? "" : value)
+        return WebContentText.clean(value)
                 .replaceAll("!\\[([^\\]]*)]\\([^)]*\\)", "$1")
                 .replaceAll("\\[([^\\]]+)]\\([^)]*\\)", "$1")
-                .replaceAll("(?is)(?:移动版|网页版).*?正文\\s*", "")
-                .replaceAll("(?is)您当前的位置\\s*[：:]?\\s*[^。！？!?]{0,300}?正文\\s*", "")
                 .replaceAll("(?i)\\[S\\d+\\]\\s*(?:-\\s*\\d+\\s*/)?\\s*\\[?", "")
                 .replaceAll("\\[\\s*]\\s*\\([^)]*\\)", "")
                 .replaceAll("https?://\\S+", "")

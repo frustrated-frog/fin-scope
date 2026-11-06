@@ -17,6 +17,17 @@ class WebArticleExtractorTest {
     private final WebArticleExtractor extractor = new WebArticleExtractor();
 
     @Test
+    void doesNotDeleteAnArticleContainerBecauseItContainsAnEditorCredit() {
+        String html = "<article><div><p>长鑫科技公布研发进展，新增产能用于存储芯片业务，研发投入保持稳定。</p>"
+                + "<span>责任编辑：张三</span></div></article>";
+        Source source = new Source();
+        source.setUrl("https://example.com/report");
+        RawItem item = new WebArticleExtractor().extract(Jsoup.parse(html), source);
+        assertTrue(item.getBody().contains("新增产能"));
+        assertFalse(item.getBody().contains("张三"));
+    }
+
+    @Test
     void extractsFederalReserveArticleFromOfficialPage() {
         String url = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm";
         RawItem item = extractor.extract(document(url, federalReserveHtml()), source(url));
@@ -81,7 +92,7 @@ class WebArticleExtractorTest {
                 "2026-07-30T08:30:00-04:00")), source(url));
 
         assertEquals("U.S. GDP Increased in the Second Quarter", item.getTitle());
-        assertTrue(item.getBody().contains("Consumer spending and private investment contributed"));
+        assertTrue(item.getBody().contains("Consumer spending and private investment contributed"), item.getBody());
         assertEquals("web:profile:bea", item.getExtractionMethod());
     }
 
@@ -96,7 +107,7 @@ class WebArticleExtractorTest {
                 "2026-06-18T12:00:00Z")), source(url));
 
         assertEquals("Monetary Policy Summary", item.getTitle());
-        assertTrue(item.getBody().contains("monitor inflationary pressures closely"));
+        assertTrue(item.getBody().contains("monitor inflationary pressures closely"), item.getBody());
         assertEquals("web:profile:bank-of-england", item.getExtractionMethod());
     }
 

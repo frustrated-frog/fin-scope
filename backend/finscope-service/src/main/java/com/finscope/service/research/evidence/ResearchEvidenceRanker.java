@@ -23,8 +23,13 @@ public class ResearchEvidenceRanker {
             for (String term : terms) {
                 if (text.contains(term)) score += term.length() >= 4 ? 4 : 2;
             }
-            score += numberCount(text);
-            if (score > 0) scored.add(new ScoredChunk(chunk, score));
+            if (score > 0) {
+                score += numberCount(text);
+                if (subject != null && !subject.trim().isEmpty() && text.contains(normalize(subject))) {
+                    score += 12;
+                }
+                scored.add(new ScoredChunk(chunk, score));
+            }
         }
         scored.sort(Comparator.comparingInt(ScoredChunk::getScore).reversed()
                 .thenComparingInt(item -> item.getChunk().getIndex()));

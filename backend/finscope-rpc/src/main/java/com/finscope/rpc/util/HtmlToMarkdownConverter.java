@@ -341,6 +341,9 @@ public final class HtmlToMarkdownConverter {
     private static void processLink(Element element, MarkdownBuilder builder, Deque<ListContext> listStack) {
         String href = element.attr("href").trim();
         String text = element.text().trim();
+        if (text.isEmpty()) {
+            return;
+        }
 
         if (href.isEmpty()) {
             // 没有链接地址，只显示文本

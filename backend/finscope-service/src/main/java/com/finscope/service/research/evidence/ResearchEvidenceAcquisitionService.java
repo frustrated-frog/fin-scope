@@ -1,6 +1,7 @@
 package com.finscope.service.research.evidence;
 
 import com.finscope.domain.research.ResearchSourceDocument;
+import com.finscope.common.util.WebContentText;
 import com.finscope.rpc.research.ResearchSourceReader;
 import org.springframework.stereotype.Service;
 
@@ -26,7 +27,7 @@ public class ResearchEvidenceAcquisitionService {
         String snippet = text(searchSnippet);
         try {
             ResearchSourceDocument document = sourceReader.read(url);
-            List<ResearchEvidenceChunk> selected = ranker.rank(chunker.chunk(document.getBody()), query,
+            List<ResearchEvidenceChunk> selected = ranker.rank(chunker.chunk(WebContentText.clean(document.getBody())), query,
                     subject, MAX_SELECTED_CHUNKS);
             if (selected.isEmpty()) {
                 return fallback(snippet, "NO_RELEVANT_CHUNK", "snippet:fallback:no-relevant-chunk");
@@ -57,5 +58,5 @@ public class ResearchEvidenceAcquisitionService {
                 snippet.length());
     }
 
-    private String text(String value) { return value == null ? "" : value.trim(); }
+    private String text(String value) { return WebContentText.clean(value); }
 }

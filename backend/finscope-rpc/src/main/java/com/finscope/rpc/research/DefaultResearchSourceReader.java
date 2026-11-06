@@ -1,6 +1,7 @@
 package com.finscope.rpc.research;
 
 import com.finscope.domain.fetch.RawItem;
+import com.finscope.common.util.WebContentText;
 import com.finscope.domain.research.ResearchSourceDocument;
 import com.finscope.domain.source.Source;
 import com.finscope.rpc.acquisition.AcquisitionRequest;
@@ -63,10 +64,11 @@ public class DefaultResearchSourceReader implements ResearchSourceReader {
         source.setType("WEB");
         source.setUrl(response.getFinalUri().toString());
         RawItem item = articleExtractor.extract(document, source);
-        if (item.getBody() == null || item.getBody().trim().length() < 40) {
+        String body = WebContentText.clean(item.getBody());
+        if (body.length() < 40) {
             throw new IllegalStateException("网页正文过短，不能作为全文证据");
         }
-        return new ResearchSourceDocument(response.getFinalUri().toString(), item.getTitle(), item.getBody(),
+        return new ResearchSourceDocument(response.getFinalUri().toString(), item.getTitle(), body,
                 "WEB_PAGE", item.getExtractionMethod(), "FETCHED");
     }
 

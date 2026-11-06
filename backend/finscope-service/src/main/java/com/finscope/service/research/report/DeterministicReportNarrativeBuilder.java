@@ -35,8 +35,7 @@ public class DeterministicReportNarrativeBuilder {
                                     ResearchReportBlueprint blueprint,
                                     List<ResearchEvidenceDossier> evidence) {
         StringBuilder out = new StringBuilder();
-        out.append("围绕“").append(value(thesis.getQuestion())).append("”，当前可以形成的阶段性答案是：")
-                .append(value(blueprint.getDirectAnswer())).append(' ');
+        out.append(value(blueprint.getDirectAnswer())).append("\n\n");
         for (ResearchReportBlueprint.KeyInsight item : blueprint.getKeyInsights()) {
             out.append(value(item.getFinding())).append("。其研究含义是")
                     .append(value(item.getMeaning())).append(' ').append(refs(item.getEvidenceRefs())).append(' ');

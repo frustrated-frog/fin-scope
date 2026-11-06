@@ -58,6 +58,19 @@ class ResearchEvidenceAcquisitionServiceTest {
         assertTrue(chunks.stream().allMatch(chunk -> chunk.getText().length() <= 105));
     }
 
+    @Test
+    void doesNotRankAnUnrelatedNumericPageAsEvidence() {
+        ResearchSourceReader reader = url -> new ResearchSourceDocument(url, "站点菜单",
+                "用户登录次数12345，联系电话67890。", "text/html", "web:generic-score", "FETCHED");
+        ResearchEvidenceAcquisitionService service = new ResearchEvidenceAcquisitionService(
+                reader, new ResearchEvidenceChunker(), new ResearchEvidenceRanker());
+        ResearchEvidenceAcquisitionResult result = service.acquire("https://example.com/a",
+                "长鑫科技研发投入", "长鑫科技研发投入增长20%。", "长鑫科技");
+        assertEquals("SEARCH_SNIPPET", result.getContentOrigin());
+        assertEquals("NO_RELEVANT_CHUNK", result.getFetchStatus());
+        assertFalse(result.getContent().contains("12345"));
+    }
+
     private String paragraphs() {
         return "公司园区介绍。天气晴朗，园区食堂更新菜单，员工活动将在周五举行。\n\n"
                 + "长鑫科技披露 IPO 募集资金将投入先进制程研发、存储芯片产能建设与技术平台升级，"

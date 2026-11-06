@@ -211,6 +211,55 @@ class ResearchEvidenceSelectorTest {
         assertFalse(selected.getClaim().contains("（已截断）"));
     }
 
+    @Test
+    void appliesCompanyGateToStoredArticlesDespiteStrongExtractedClaims() {
+        Article unrelated = article(8L, "证券时报", "兆易创新回应股价异动", "兆易创新经营正常，控股股东持股降至7%。");
+        com.finscope.domain.research.EvidenceItem evidence = new com.finscope.domain.research.EvidenceItem();
+        evidence.setArticleId(8L);
+        evidence.setClaim("长鑫科技未来增长");
+        evidence.setConfidence(99);
+
+        assertTrue(selector.select(thesisForChangxin(), Collections.singletonList(unrelated),
+                Collections.singletonList(evidence)).isEmpty());
+    }
+
+    @Test
+    void keepsCompanyRelationshipButDoesNotImportAnotherCompanysOperatingFacts() {
+        Article related = article(8L, "证券时报", "兆易创新：仅持长鑫科技1.8%股权",
+                "移动版 网页版) [](/) * 首页 * 快讯 * 新闻 您当前的位置：证券时报 > 公司 > 正文 兆易创新仅持长鑫科技1.8%股权。");
+        related.setBody("兆易创新仅持长鑫科技1.8%股权。兆易创新生产经营正常，控股股东持股降至7%。");
+
+        ResearchEvidenceCard card = selector.select(thesisForChangxin(), Collections.singletonList(related),
+                Collections.emptyList()).get(0);
+        String fact = new ResearchEvidenceDossierBuilder().build(Collections.singletonList(card)).get(0).getFactExcerpt();
+
+        assertTrue(fact.contains("1.8%股权"));
+        assertFalse(fact.contains("7%"));
+        assertFalse(fact.contains("首页"));
+        assertTrue(related.getBody().contains("7%"), "原始文章必须保持不变");
+    }
+
+    @Test
+    void rejectsCompanyMentionOnlyInRelatedNavigation() {
+        ResearchSearchEvidence item = searchEvidence("兆易创新经营公告",
+                "首页 资讯 快讯 行情 日历 APP VIP会员 登录 注册 长鑫科技", 0.99D);
+        item.setSearchSnippet("兆易创新生产经营正常，股东减持。");
+        assertTrue(selector.select(thesisForChangxin(), Collections.emptyList(), Collections.emptyList(),
+                Collections.singletonList(item)).isEmpty());
+    }
+
+    @Test
+    void requiresTransactionEvidenceForAnExplicitBlockTradeQuestion() {
+        ResearchThesis thesis = thesisForChangxin();
+        thesis.setQuestion("围绕长鑫科技今日大宗交易成交4.3亿元，哪些事实已确认？");
+        Article ipo = article(1L, "财经媒体", "长鑫科技IPO募资", "长鑫科技首次公开发行股票。");
+        Article trade = article(2L, "交易所", "长鑫科技今日大宗交易", "长鑫科技大宗交易成交4.3亿元。");
+        List<ResearchEvidenceCard> selected = selector.select(thesis, java.util.Arrays.asList(ipo, trade),
+                Collections.emptyList());
+        assertEquals(1, selected.size());
+        assertEquals(2L, selected.get(0).getArticle().getId());
+    }
+
     private ResearchSearchEvidence searchEvidence(String title, String content, double score) {
         ResearchSearchEvidence value = new ResearchSearchEvidence();
         value.setId(72L);

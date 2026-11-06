@@ -33,6 +33,7 @@ public class WebArticleExtractor {
     };
     private static final String[] GENERIC_REMOVE_SELECTORS = {
             "script", "style", "noscript", "nav", "aside", "footer", "header", "iframe",
+            "[role=navigation]", ".nav", ".navbar", ".navigation", ".menu", ".sidebar",
             ".share", ".social", ".recommend", ".related", ".advert", ".ad", ".breadcrumb"
     };
     private static final String[] NOISE_TEXT_MARKERS = {
@@ -146,7 +147,9 @@ public class WebArticleExtractor {
             }
             String trimmed = text.trim();
             for (String marker : NOISE_TEXT_MARKERS) {
-                if (trimmed.contains(marker)) {
+                if ((trimmed.startsWith(marker) || ("责任编辑".equals(marker) && trimmed.contains(marker)
+                        && trimmed.length() < 80 && !trimmed.matches(".*[。！？].*")))
+                        && element.children().select("p").isEmpty() && trimmed.length() < 180) {
                     element.remove();
                     break;
                 }

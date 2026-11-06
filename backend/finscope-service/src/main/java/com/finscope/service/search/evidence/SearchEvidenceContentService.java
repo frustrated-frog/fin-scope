@@ -1,6 +1,7 @@
 package com.finscope.service.search.evidence;
 
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
+import com.finscope.common.util.WebContentText;
 import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionService;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,6 @@ public class SearchEvidenceContentService {
     }
 
     private String text(String value) {
-        return value == null ? "" : value.trim();
+        return WebContentText.clean(value);
     }
 }

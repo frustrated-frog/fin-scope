@@ -1,6 +1,8 @@
 package com.finscope.service.research.report;
 
 import com.finscope.domain.article.Article;
+import com.finscope.common.util.WebContentText;
+import java.util.regex.Pattern;
 import com.finscope.domain.research.EvidenceItem;
 import com.finscope.domain.research.ResearchThesis;
 import com.finscope.domain.research.ResearchSourceIdentity;
@@ -48,8 +50,13 @@ public class ResearchEvidenceSelector {
         List<String> subjectKeywords = subjectKeywords(thesis);
         List<ResearchEvidenceCard> candidates = new ArrayList<ResearchEvidenceCard>();
         Set<String> fingerprints = new HashSet<String>();
-        for (Article article : articles == null ? Collections.<Article>emptyList() : articles) {
-            if (article == null) {
+        for (Article original : articles == null ? Collections.<Article>emptyList() : articles) {
+            if (original == null) {
+                continue;
+            }
+            Article article = prepareArticle(original, thesis);
+            if (isCompanyResearch(thesis) && (!mentionsCompany(article, thesis.getSubjectName())
+                    || !matchesQuestionFocus(article, thesis))) {
                 continue;
             }
             String fingerprint = normalize(firstNonBlank(article.getTitle(), article.getUrl()));
@@ -58,21 +65,25 @@ public class ResearchEvidenceSelector {
             }
             EvidenceItem evidence = evidenceByArticle.get(article.getId());
             int score = relevanceScore(article, evidence, subjectKeywords);
+            if (isCompanyResearch(thesis)) {
+                score = Math.max(score, 28);
+            }
             if (score < 25) {
                 continue;
             }
             String text = combinedText(article, evidence);
             String stance = stance(article, text);
-            String claim = evidence != null && !isBlank(evidence.getClaim())
+            String claim = !isCompanyResearch(thesis) && evidence != null && !isBlank(evidence.getClaim())
                     ? evidence.getClaim().trim() : firstNonBlank(article.getSummary(), article.getTitle());
             candidates.add(new ResearchEvidenceCard(article, evidence, stance, Math.min(score, 100), cleanClaim(claim)));
         }
         for (ResearchSearchEvidence search : searchEvidence == null
                 ? Collections.<ResearchSearchEvidence>emptyList() : searchEvidence) {
-            Article article = transientArticle(search);
+            Article article = prepareArticle(transientArticle(search), thesis);
             String fingerprint = normalize(firstNonBlank(article.getUrl(), article.getTitle()));
             if (!fingerprints.add(fingerprint)) continue;
-            if (isCompanyResearch(thesis) && !mentionsCompany(article, thesis.getSubjectName())) continue;
+            if (isCompanyResearch(thesis) && (!mentionsCompany(article, thesis.getSubjectName())
+                    || !matchesQuestionFocus(article, thesis))) continue;
             int score = relevanceScore(article, null, subjectKeywords);
             int providerScore = search.getRelevanceScore() == null ? 0
                     : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 100D);
@@ -80,8 +91,8 @@ public class ResearchEvidenceSelector {
             String stance = searchStance(search.getIntent(), article);
             candidates.add(new ResearchEvidenceCard(article, null, stance,
                     Math.min(100, Math.max(score, providerScore)),
-                    cleanClaim(firstNonBlank(search.getSearchSnippet(),
-                            firstNonBlank(search.getContent(), search.getTitle()))),
+                    cleanClaim(firstNonBlank(article.getSummary(),
+                            firstNonBlank(article.getBody(), article.getTitle()))),
                     firstNonBlank(search.getSourceDomain(), ResearchSourceIdentity.resolve(article)),
                     firstNonBlank(search.getSourceTier(), "T3")));
         }
@@ -104,6 +115,17 @@ public class ResearchEvidenceSelector {
         return selected;
     }
 
+    private boolean matchesQuestionFocus(Article article, ResearchThesis thesis) {
+        String question = normalize(thesis.getQuestion());
+        String text = normalize(article.getTitle() + " " + article.getSummary() + " " + article.getBody());
+        for (String event : Arrays.asList("大宗交易", "财资中心", "股东减持", "股份回购")) {
+            if (question.contains(event) && !text.contains(event)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private Article transientArticle(ResearchSearchEvidence search) {
         Article article = new Article();
         article.setSourceName(firstNonBlank(search.getSourceDomain(), search.getProvider()));
@@ -121,12 +143,73 @@ public class ResearchEvidenceSelector {
     }
 
     private boolean mentionsCompany(Article article, String subjectName) {
-        String text = normalize(firstNonBlank(article.getTitle(), "") + " "
-                + firstNonBlank(article.getSummary(), "") + " " + firstNonBlank(article.getBody(), ""));
+        return containsCompany(article.getTitle(), subjectName)
+                || containsCompany(article.getSummary(), subjectName)
+                || containsCompany(article.getBody(), subjectName);
+    }
+
+    private boolean containsCompany(String text, String subjectName) {
+        String normalized = normalize(text);
         for (String alias : companyAliases(subjectName)) {
-            if (alias.length() >= 2 && text.contains(alias)) return true;
+            if (alias.length() < 2) {
+                continue;
+            }
+            if (alias.matches("[a-z0-9 .]+")) {
+                if (Pattern.compile("(?<![a-z0-9])" + Pattern.quote(alias) + "(?![a-z0-9])")
+                        .matcher(normalized).find()) {
+                    return true;
+                }
+            } else if (normalized.contains(alias)) {
+                return true;
+            }
         }
         return false;
+    }
+
+    private Article prepareArticle(Article source, ResearchThesis thesis) {
+        Article article = new Article();
+        article.setId(source.getId());
+        article.setSourceName(source.getSourceName());
+        article.setTitle(WebContentText.clean(source.getTitle()));
+        article.setUrl(source.getUrl());
+        article.setPublishedAt(source.getPublishedAt());
+        article.setSummary(WebContentText.clean(source.getSummary()));
+        article.setBody(WebContentText.clean(source.getBody()));
+        if (isCompanyResearch(thesis)) {
+            String summary = companySentences(article.getSummary(), thesis.getSubjectName());
+            String body = companySentences(article.getBody(), thesis.getSubjectName());
+            if (!isPrimaryCompanyTitle(article.getTitle(), thesis.getSubjectName())) {
+                article.setSummary(summary);
+            }
+            article.setBody(body);
+            if (isBlank(article.getSummary())) {
+                article.setSummary(firstNonBlank(body, article.getTitle()));
+            }
+        }
+        return article;
+    }
+
+    private boolean isPrimaryCompanyTitle(String title, String subjectName) {
+        String normalized = normalize(title);
+        for (String alias : companyAliases(subjectName)) {
+            if (alias.length() >= 2 && normalized.startsWith(alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String companySentences(String text, String subjectName) {
+        StringBuilder result = new StringBuilder();
+        for (String sentence : text.split("(?<=[。！？!?；;])|\\n+")) {
+            if (containsCompany(sentence, subjectName)) {
+                if (result.length() > 0) {
+                    result.append(' ');
+                }
+                result.append(sentence.trim());
+            }
+        }
+        return result.toString();
     }
 
     private Set<String> companyAliases(String subjectName) {
