@@ -64,6 +64,13 @@ class FinScopeApiIntegrationTest {
     private MockMvc mvc;
 
     @Resource
+    private com.finscope.rpc.source.SourceAdapterRegistry adapterRegistry;
+    @Resource
+    private com.finscope.service.article.ArticleIngestCoordinator articleIngestCoordinator;
+    @Resource
+    private com.finscope.dao.source.SourceRepository sourceRepository;
+
+    @Resource
     private JdbcTemplate jdbcTemplate;
 
     @Value("${finscope.data-root}")
@@ -96,8 +103,6 @@ class FinScopeApiIntegrationTest {
         deleteIfExists("research_run_plan");
         deleteIfExists("research_run");
         deleteIfExists("research_thesis");
-        deleteIfExists("intake_candidate");
-        deleteIfExists("fetch_batch");
         deleteIfExists("insight_card");
         deleteIfExists("async_task");
         jdbcTemplate.update("DELETE FROM agent_run");
@@ -225,213 +230,6 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void legacySourceFetchRoutesToIntakeAndDoesNotCreateArticles() throws Exception {
-        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").isNumber())
-                .andExpect(jsonPath("$.data.name").value("测试财经RSS"));
-
-        mvc.perform(post("/api/sources/1/fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.candidateCount").value(1));
-
-        mvc.perform(get("/api/articles"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-
-        mvc.perform(get("/api/intake/candidates?status=PENDING"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].originalTitle").value("美联储释放降息信号 黄金走强"));
-
-        mvc.perform(post("/api/sources/1/fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.duplicateCount").value(greaterThanOrEqualTo(1)));
-
-        mvc.perform(get("/api/articles"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-    }
-
-    @Test
-    void sourceFetchPromoteThenBriefFlowWorks() throws Exception {
-        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/sources/1/fetch"))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleId").value(1));
-
-        mvc.perform(post("/api/briefs/generate"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.briefDate").value(LocalDate.now().toString()))
-                .andExpect(jsonPath("$.data.markdownPath", containsString("daily-briefs")));
-
-        mvc.perform(get("/api/briefs/" + LocalDate.now()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", containsString("美联储释放降息信号")));
-    }
-
-    @Test
-    void intakeFetchCreatesReviewedCandidatesAndPromotesToArticle() throws Exception {
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
-                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.maxItemsPerRun").value(1))
-                .andExpect(jsonPath("$.data.scheduleTimes").value("08:30"));
-
-        mvc.perform(post("/api/sources/1/intake-fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.candidateCount").value(1))
-                .andExpect(jsonPath("$.data.agentReviewedCount").value(1))
-                .andExpect(jsonPath("$.data.batchSummaryText", containsString("本批共 1 条候选")));
-
-        mvc.perform(get("/api/intake/candidates?status=PENDING"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].chineseTitle", containsString("美联储")))
-                .andExpect(jsonPath("$.data[0].decisionSummary", containsString("值得")))
-                .andExpect(jsonPath("$.data[0].agentStatus").value("FALLBACK"))
-                .andExpect(jsonPath("$.data[0].humanStatus").value("PENDING"));
-
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.candidateId").value(1))
-                .andExpect(jsonPath("$.data.articleId").value(1))
-                .andExpect(jsonPath("$.data.status").value("PROMOTED"))
-                .andExpect(jsonPath("$.data.workflowStatus").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.eventId").value(1))
-                .andExpect(jsonPath("$.data.eventTitle", containsString("美联储")))
-                .andExpect(jsonPath("$.data.evidenceCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.learningTaskCount").value(greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.contentIdeaCount").doesNotExist())
-                .andExpect(jsonPath("$.data.workflowSummary", containsString("研究工作包")));
-
-        mvc.perform(get("/api/articles/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.title", containsString("美联储")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("情报卡片")));
-
-        mvc.perform(get("/api/events"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].canonicalTitle", containsString("美联储")))
-                .andExpect(jsonPath("$.data[0].articleCount").value(1))
-                .andExpect(jsonPath("$.data[0].evidenceCount").value(greaterThanOrEqualTo(1)));
-
-        mvc.perform(get("/api/evidence"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(greaterThanOrEqualTo(1)));
-
-        mvc.perform(get("/api/learning-tasks"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(greaterThanOrEqualTo(1)));
-
-
-        mvc.perform(get("/api/intake/candidates?status=PROMOTED"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].promotedArticleId").value(1));
-    }
-
-    @Test
-    void intakePromoteIsIdempotentAndReturnsExistingResearchWorkflow() throws Exception {
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
-                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/sources/1/intake-fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.candidateCount").value(1));
-
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleId").value(1))
-                .andExpect(jsonPath("$.data.workflowStatus").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.eventId").value(1));
-
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleId").value(1))
-                .andExpect(jsonPath("$.data.workflowStatus").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.eventId").value(1))
-                .andExpect(jsonPath("$.data.contentIdeaCount").doesNotExist())
-                .andExpect(jsonPath("$.data.workflowSummary", containsString("研究工作包")));
-
-        mvc.perform(get("/api/articles"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
-
-        mvc.perform(get("/api/events"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].articleCount").value(1));
-    }
-
-    @Test
-    void intakeFetchStoresSuccessfulAgentReviewStatusAndModel() throws Exception {
-        when(llmChatClient.isConfigured()).thenReturn(true);
-        when(llmChatClient.modelName()).thenReturn("fake-intake-model");
-        when(llmChatClient.complete(anyString(), anyString())).thenReturn(candidateReviewJson());
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-        String sourceJson = "{\"name\":\"宏观网页\",\"type\":\"WEB\",\"url\":\"" + articleUrl + "\",\"enabled\":true,"
-                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":1,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/sources/1/intake-fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.candidateCount").value(1));
-
-        mvc.perform(get("/api/intake/candidates?status=PENDING"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].chineseTitle").value("美联储降息信号推动黄金走强"))
-                .andExpect(jsonPath("$.data[0].decisionSummary", containsString("一针见血")))
-                .andExpect(jsonPath("$.data[0].agentStatus").value("SUCCESS"))
-                .andExpect(jsonPath("$.data[0].agentModel").value("fake-intake-model"));
-    }
-
-    @Test
-    void intakeFetchWithNoCandidatesMarksBatchFailed() throws Exception {
-        String emptyRssUrl = "http://localhost:" + server.getAddress().getPort() + "/empty-rss";
-        String sourceJson = "{\"name\":\"空 RSS\",\"type\":\"RSS\",\"url\":\"" + emptyRssUrl + "\",\"enabled\":true,"
-                + "\"scheduledEnabled\":false,\"scheduleTimes\":\"08:30\",\"maxItemsPerRun\":5,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":3,\"tags\":\"测试\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/sources/1/intake-fetch"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("FAILED"))
-                .andExpect(jsonPath("$.data.candidateCount").value(0))
-                .andExpect(jsonPath("$.data.errorMessage", containsString("没有产出候选")));
-    }
-
-    @Test
     void vaultBriefMarkdownIsIndexedWhenDatabaseIsEmpty() throws Exception {
         Path dailyBriefs = Paths.get(dataRoot, "vault/daily-briefs");
         Files.createDirectories(dailyBriefs);
@@ -452,108 +250,6 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", containsString("## 今日摘要")))
                 .andExpect(jsonPath("$.data.content", containsString("资本效率")));
-    }
-
-    @Test
-    void manualUrlCanBeIngestedAsInsightCardAndUsedByBrief() throws Exception {
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-
-        ingestUrlAndWait(articleUrl, "手动研究", "宏观,黄金");
-
-        mvc.perform(get("/api/articles/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.title").value("美联储暗示降息 黄金ETF获得资金流入"))
-                .andExpect(jsonPath("$.data.sourceName").value("手动研究"))
-                .andExpect(jsonPath("$.data.insightCard.oneSentenceSummary", containsString("美联储")))
-                .andExpect(jsonPath("$.data.insightCard.coreEvent", containsString("降息")))
-                .andExpect(jsonPath("$.data.insightCard.importance", containsString("利率预期")))
-                .andExpect(jsonPath("$.data.insightCard.impactTargets", containsString("黄金")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("### 后续观察")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("### 可沉淀主题")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("解读来源：FALLBACK")));
-
-        mvc.perform(get("/api/articles"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].insightCard.coreEvent", containsString("降息")));
-
-        mvc.perform(get("/api/agent-runs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[*].nodeName").value(hasItem("article-interpret")))
-                .andExpect(jsonPath("$.data[*].status").value(hasItem("FALLBACK")))
-                .andExpect(jsonPath("$.data[*].output").value(hasItem(containsString("FALLBACK"))));
-
-        mvc.perform(post("/api/briefs/generate"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", containsString("## 今日新变量")))
-                .andExpect(jsonPath("$.data.content", containsString("## 今天要补的金融知识")));
-    }
-
-    @Test
-    void manualUrlIngestReturnsTaskIdAndTaskEventuallyCompletes() throws Exception {
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-
-        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + articleUrl + "\",\"sourceName\":\"手动研究\",\"tags\":\"宏观,黄金\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.taskId").isNotEmpty())
-                .andExpect(jsonPath("$.data.status").value("QUEUED"))
-                .andReturn();
-
-        String taskId = extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
-        String completed = waitForTask(taskId);
-
-        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
-        assertTrue(completed.contains("\"phase\":\"COMPLETED\""));
-        assertTrue(completed.contains("\"article\""));
-        assertTrue(completed.contains("\"articleId\":1"));
-    }
-
-    @Test
-    void manualUrlIngestExposesLlmPhaseWhileCardGenerationIsRunning() throws Exception {
-        CountDownLatch llmStarted = new CountDownLatch(1);
-        CountDownLatch releaseLlm = new CountDownLatch(1);
-        when(llmChatClient.isConfigured()).thenReturn(true);
-        when(llmChatClient.modelName()).thenReturn("fake-openai-model");
-        when(llmChatClient.complete(anyString(), anyString())).thenAnswer(invocation -> {
-            llmStarted.countDown();
-            assertTrue(releaseLlm.await(3, TimeUnit.SECONDS));
-            return cloudflareInterpretationJson();
-        });
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/cloudflare";
-
-        String taskId = submitIngestTask(articleUrl, "技术观察", "技术工具");
-        assertTrue(llmStarted.await(3, TimeUnit.SECONDS));
-
-        try {
-            mvc.perform(get("/api/tasks/" + taskId))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.status").value("RUNNING"))
-                    .andExpect(jsonPath("$.data.phase").value("LLM"))
-                    .andExpect(jsonPath("$.data.message").value("正在生成情报卡片"));
-        } finally {
-            releaseLlm.countDown();
-        }
-        String completed = waitForTask(taskId);
-        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
-    }
-
-    @Test
-    void manualUrlIngestOnlyCapturesEvidenceForFinanceAndMarketCategories() throws Exception {
-        String selfImprovementUrl = "http://localhost:" + server.getAddress().getPort() + "/article";
-        String financeUrl = "http://localhost:" + server.getAddress().getPort() + "/fed-followup";
-
-        ingestUrlAndWaitWithCategory(selfImprovementUrl, "手动研究", "自我提升");
-
-        mvc.perform(get("/api/evidence"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-
-        ingestUrlAndWaitWithCategory(financeUrl, "CNBC", "金融");
-
-        mvc.perform(get("/api/evidence"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
     }
 
     @Test
@@ -905,10 +601,8 @@ class FinScopeApiIntegrationTest {
         String counterSource = "{\"name\":\"Macro Risk\",\"type\":\"RSS\",\"url\":\"" + researchRssB + "\",\"enabled\":true,"
                 + "\"fetchFrequencyMinutes\":60,\"credibility\":5,\"tags\":\"china_macro,macro\"}";
 
-        mvc.perform(post("/api/sources").contentType("application/json").content(macroSource))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/sources").contentType("application/json").content(counterSource))
-                .andExpect(status().isOk());
+        sourceRepository.save(new com.fasterxml.jackson.databind.ObjectMapper().readValue(macroSource, com.finscope.domain.source.Source.class));
+        sourceRepository.save(new com.fasterxml.jackson.databind.ObjectMapper().readValue(counterSource, com.finscope.domain.source.Source.class));
 
         mvc.perform(post("/api/research/theses")
                         .contentType("application/json")
@@ -1017,109 +711,6 @@ class FinScopeApiIntegrationTest {
     }
 
     @Test
-    void recommendedNewsSourcesCanBeInstalledIdempotently() throws Exception {
-        mvc.perform(post("/api/sources/recommended-news"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(4))
-                .andExpect(jsonPath("$.data[*].name").value(hasItem("BBC Business")))
-                .andExpect(jsonPath("$.data[*].name").value(hasItem("Federal Reserve Press Releases")))
-                .andExpect(jsonPath("$.data[*].name").value(hasItem("TechCrunch")))
-                .andExpect(jsonPath("$.data[*].name").value(hasItem("Google News 中文科技与半导体")));
-
-        mvc.perform(post("/api/sources/recommended-news"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(4));
-
-        mvc.perform(get("/api/sources"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(4));
-    }
-
-    @Test
-    void deletingArticleCleansResearchArtifactsAndCounts() throws Exception {
-        seedResearchArtifacts();
-
-        mvc.perform(get("/api/events/1/evidence"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2));
-
-        mvc.perform(delete("/api/articles/batch")
-                        .contentType("application/json")
-                        .content("{\"ids\":[1]}"))
-                .andExpect(status().isOk());
-
-        mvc.perform(get("/api/events/1/articles"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
-        mvc.perform(get("/api/events/1/evidence"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
-        mvc.perform(get("/api/events/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleCount").value(1))
-                .andExpect(jsonPath("$.data.evidenceCount").value(1));
-    }
-
-    @Test
-    void configuredAgentInterpretsArticleCardsTopicsAndTrace() throws Exception {
-        when(llmChatClient.isConfigured()).thenReturn(true);
-        when(llmChatClient.modelName()).thenReturn("fake-openai-model");
-        when(llmChatClient.complete(anyString(), anyString())).thenReturn(cloudflareInterpretationJson());
-        String articleUrl = "http://localhost:" + server.getAddress().getPort() + "/cloudflare";
-
-        ingestUrlAndWait(articleUrl, "技术观察", "技术工具");
-
-        mvc.perform(get("/api/articles/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.insightCard.oneSentenceSummary", containsString("Cloudflare 免费额度")))
-                .andExpect(jsonPath("$.data.insightCard.importance", containsString("低成本独立开发")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("### 可沉淀主题")))
-                .andExpect(jsonPath("$.data.insightCard.cardMarkdown", containsString("Cloudflare 免费基础设施实践")));
-
-        mvc.perform(post("/api/topics/from-article/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.name").value("Cloudflare 免费基础设施实践"))
-                .andExpect(jsonPath("$.data.terms", containsString("Workers")))
-                .andExpect(jsonPath("$.data.terms", containsString("D1")))
-                .andExpect(jsonPath("$.data.learningQuestions", containsString("免费额度")))
-                .andExpect(jsonPath("$.data.learningQuestions", containsString("供应商锁定")));
-
-        mvc.perform(get("/api/agent-runs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].nodeName").value("article-interpret"))
-                .andExpect(jsonPath("$.data[0].status").value("SUCCESS"))
-                .andExpect(jsonPath("$.data[0].input", containsString("fake-openai-model")))
-                .andExpect(jsonPath("$.data[0].output", containsString("Cloudflare 免费基础设施实践")));
-    }
-
-    @Test
-    void manualUrlRejectsUnreadableDynamicShell() throws Exception {
-        String shellUrl = "http://localhost:" + server.getAddress().getPort() + "/x-shell";
-
-        String taskId = submitIngestTask(shellUrl, "手动研究", "市场");
-        String failed = waitForTask(taskId);
-
-        assertTrue(failed.contains("\"status\":\"FAILED\""));
-        assertTrue(failed.contains("\"errorMessage\""));
-        assertTrue(failed.contains("URL:"));
-    }
-
-    @Test
-    void invalidManualUrlReturnsStructuredErrorWithRequestId() throws Exception {
-        mvc.perform(post("/api/articles/ingest-url")
-                        .header("X-Request-Id", "test-trace-001")
-                        .contentType("application/json")
-                        .content("{\"url\":\"ftp://example.com/article\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(header().string("X-Request-Id", "test-trace-001"))
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.code").value("FS-1002"))
-                .andExpect(jsonPath("$.message").value("仅支持 HTTP 或 HTTPS URL"))
-                .andExpect(jsonPath("$.traceId").value("test-trace-001"))
-                .andExpect(jsonPath("$.timestamp").exists());
-    }
-
-    @Test
     void missingTopicReturnsNotFoundErrorCodeAndGeneratedRequestId() throws Exception {
         mvc.perform(get("/api/topics/9999"))
                 .andExpect(status().isNotFound())
@@ -1150,100 +741,6 @@ class FinScopeApiIntegrationTest {
         }
     }
 
-    @Test
-    void corsAllowsFallbackViteDevPort() throws Exception {
-        mvc.perform(get("/api/sources").header("Origin", "http://localhost:5174"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5174"));
-    }
-
-    @Test
-    void articleAndBriefCanBeCompoundedIntoTopicNotes() throws Exception {
-        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/sources/1/fetch"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleId").value(1));
-        mvc.perform(post("/api/briefs/generate"))
-                .andExpect(status().isOk());
-
-        mvc.perform(post("/api/topics/from-article/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.name").value("美联储"))
-                .andExpect(jsonPath("$.data.articleCount").value(1))
-                .andExpect(jsonPath("$.data.terms", containsString("美联储")))
-                .andExpect(jsonPath("$.data.learningQuestions", containsString("美联储")))
-                .andExpect(jsonPath("$.data.markdownPath", containsString("vault/topics")));
-
-        mvc.perform(post("/api/topics/from-brief/" + LocalDate.now()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
-
-        mvc.perform(get("/api/topics/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.topic.name").value("美联储"))
-                .andExpect(jsonPath("$.data.linkedArticles[0].title").value("美联储释放降息信号 黄金走强"))
-                .andExpect(jsonPath("$.data.linkedBriefs.length()", greaterThanOrEqualTo(1)))
-                .andExpect(jsonPath("$.data.markdown", containsString("美联储")))
-                .andExpect(jsonPath("$.data.markdown", containsString("### 核心事件")))
-                .andExpect(jsonPath("$.data.markdown", containsString("### 后续观察")));
-
-        mvc.perform(post("/api/topics/1/notes")
-                        .contentType("application/json")
-                        .content("{\"status\":\"REVIEWING\",\"note\":\"我理解的核心变量是利率预期。\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("REVIEWING"))
-                .andExpect(jsonPath("$.data.markdownPath", containsString("vault/topics")));
-        boolean noteWritten = Files.walk(Paths.get(dataRoot, "vault/topics"))
-                .filter(Files::isRegularFile)
-                .anyMatch(path -> {
-                    try {
-                        return new String(Files.readAllBytes(path), "UTF-8").contains("我理解的核心变量是利率预期。");
-                    } catch (Exception ex) {
-                        return false;
-                    }
-                });
-        assertTrue(noteWritten);
-    }
-
-    @Test
-    void topicCanBeDeletedWithoutDeletingLinkedContent() throws Exception {
-        String sourceJson = "{\"name\":\"测试财经RSS\",\"type\":\"RSS\",\"url\":\"" + rssUrl + "\",\"enabled\":true,"
-                + "\"fetchFrequencyMinutes\":60,\"credibility\":4,\"tags\":\"宏观,市场\"}";
-
-        mvc.perform(post("/api/sources").contentType("application/json").content(sourceJson))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/sources/1/fetch"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/intake/candidates/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.articleId").value(1));
-        mvc.perform(post("/api/briefs/generate"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/topics/from-article/1"))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/topics/from-brief/" + LocalDate.now()))
-                .andExpect(status().isOk());
-
-        mvc.perform(delete("/api/topics/1"))
-                .andExpect(status().isNoContent());
-
-        mvc.perform(get("/api/topics"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-        mvc.perform(get("/api/articles/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.title").value("美联储释放降息信号 黄金走强"));
-        mvc.perform(get("/api/briefs/" + LocalDate.now()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.title", containsString("每日")));
-    }
-
     private void deleteIfExists(String table) {
         try {
             jdbcTemplate.update("DELETE FROM " + table);
@@ -1261,55 +758,14 @@ class FinScopeApiIntegrationTest {
     }
 
     private void ingestUrlAndWait(String url, String sourceName, String tags) throws Exception {
-        String taskId = submitIngestTask(url, sourceName, tags);
-        String completed = waitForTask(taskId);
-        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
-    }
-
-    private void ingestUrlAndWaitWithCategory(String url, String sourceName, String category) throws Exception {
-        String taskId = submitIngestTaskWithCategory(url, sourceName, category);
-        String completed = waitForTask(taskId);
-        assertTrue(completed.contains("\"status\":\"COMPLETED\""));
-    }
-
-    private String submitIngestTask(String url, String sourceName, String tags) throws Exception {
-        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + url + "\",\"sourceName\":\"" + sourceName + "\",\"tags\":\"" + tags + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.taskId").isNotEmpty())
-                .andReturn();
-        return extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
-    }
-
-    private String submitIngestTaskWithCategory(String url, String sourceName, String category) throws Exception {
-        MvcResult submitted = mvc.perform(post("/api/articles/ingest-url")
-                        .contentType("application/json")
-                        .content("{\"url\":\"" + url + "\",\"sourceName\":\"" + sourceName
-                                + "\",\"category\":\"" + category + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.taskId").isNotEmpty())
-                .andReturn();
-        return extractJsonString(submitted.getResponse().getContentAsString(), "taskId");
-    }
-
-    private String waitForTask(String taskId) throws Exception {
-        for (int attempt = 0; attempt < 30; attempt++) {
-            MvcResult result = mvc.perform(get("/api/tasks/" + taskId))
-                    .andExpect(status().isOk())
-                    .andReturn();
-            String body = result.getResponse().getContentAsString();
-            if (body.contains("\"status\":\"COMPLETED\"") || body.contains("\"status\":\"FAILED\"")) {
-                return body;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw ex;
-            }
+        com.finscope.domain.source.Source source = new com.finscope.domain.source.Source();
+        source.setName(sourceName);
+        source.setType("WEB");
+        source.setUrl(url);
+        source.setTags(tags);
+        for (com.finscope.domain.fetch.RawItem item : adapterRegistry.get(source).fetch(source)) {
+            articleIngestCoordinator.ingest(source, item);
         }
-        throw new AssertionError("Task did not finish in time: " + taskId);
     }
 
     private String waitForResearchRun(Long runId) throws Exception {

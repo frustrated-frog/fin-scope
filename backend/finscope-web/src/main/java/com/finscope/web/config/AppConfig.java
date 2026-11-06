@@ -121,17 +121,6 @@ public class AppConfig {
                 Arrays.<WebSearchProvider>asList(tavily, anySearch, firecrawl), executor, fusionService);
     }
 
-    @Bean(name = "ingestTaskExecutor")
-    public Executor ingestTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setThreadNamePrefix("ingest-task-");
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(50);
-        executor.initialize();
-        return executor;
-    }
-
     @Bean(name = "industryChainExecutor")
     public Executor industryChainExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

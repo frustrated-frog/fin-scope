@@ -2,9 +2,6 @@ export type View =
   | 'dashboard'
   | 'agent'
   | 'marketPulse'
-  | 'sources'
-  | 'intake'
-  | 'article'
   | 'briefs'
   | 'briefReader'
   | 'research'
@@ -189,75 +186,6 @@ export type StockSupplyChainView = {
   refreshRun: StockSupplyChainRefreshRun | null;
 };
 
-export type Source = {
-  id?: number;
-  name: string;
-  type: string;
-  url: string;
-  enabled: boolean;
-  fetchFrequencyMinutes: number;
-  credibility: number;
-  tags?: string;
-  maxItemsPerRun?: number;
-  scheduleTimes?: string;
-  scheduledEnabled?: boolean;
-};
-
-export type FetchBatch = {
-  id: number;
-  sourceId?: number;
-  sourceName?: string;
-  triggerType: string;
-  status: string;
-  startedAt?: string;
-  endedAt?: string;
-  lookbackDays?: number;
-  maxItemsRequested?: number;
-  rawItemCount?: number;
-  candidateCount?: number;
-  agentReviewedCount?: number;
-  duplicateCount?: number;
-  lowValueCount?: number;
-  errorMessage?: string;
-  batchSummaryJson?: string;
-  batchSummaryText?: string;
-};
-
-export type IntakeCandidate = {
-  id: number;
-  batchId: number;
-  sourceId?: number;
-  sourceName?: string;
-  sourceType?: string;
-  originalTitle?: string;
-  originalUrl?: string;
-  originalSummary?: string;
-  originalBody?: string;
-  contentType?: string;
-  extractionMethod?: string;
-  extractionQualityScore?: number;
-  publishedAt?: string;
-  fetchedAt?: string;
-  chineseTitle?: string;
-  decisionSummary?: string;
-  keyFactsJson?: string;
-  whyItMatters?: string;
-  noveltyJudgment?: string;
-  riskFlagsJson?: string;
-  agentScore?: number;
-  agentRecommendation?: string;
-  agentReason?: string;
-  agentModel?: string;
-  agentStatus?: string;
-  agentErrorMessage?: string;
-  agentReviewJson?: string;
-  humanStatus?: string;
-  humanNote?: string;
-  promotedArticleId?: number;
-  duplicateOfCandidateId?: number;
-  duplicateOfArticleId?: number;
-};
-
 export type InsightCard = {
   id?: number;
   oneSentenceSummary?: string;
@@ -304,29 +232,6 @@ export type MajorEvent = {
   id: number; originType: 'NEWS_ITEM' | 'ARTICLE' | 'RADAR_EVENT'; originKey: string;
   title: string; summary?: string; sourceName?: string; sourceUrl?: string;
   categoryCode?: string; occurredDate: string; note?: string; createdAt: string; updatedAt: string;
-};
-
-export type AsyncTask = {
-  taskId: string;
-  type?: string;
-  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-  phase?: 'QUEUED' | 'FETCHING' | 'PARSING' | 'PERSISTING' | 'LLM' | 'COMPLETED' | 'FAILED';
-  message?: string;
-  errorMessage?: string;
-  articleId?: number;
-  article?: Article;
-};
-
-export type TaskProgressEvent = {
-  eventId: string;
-  taskId: string;
-  type: 'SNAPSHOT' | 'PHASE' | 'DONE' | 'ERROR' | 'HEARTBEAT';
-  status?: AsyncTask['status'];
-  phase?: AsyncTask['phase'];
-  message?: string;
-  errorMessage?: string;
-  articleId?: number;
-  occurredAt?: string;
 };
 
 export type Brief = {

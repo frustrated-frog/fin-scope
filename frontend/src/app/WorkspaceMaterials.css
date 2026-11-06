@@ -11,8 +11,7 @@
 
 /* Explicit surfaces avoid accidentally changing charts, inputs, menus and dialog masks. */
 .app-shell[data-theme] main.workspace :is(
-  article, .panel, .list-item, .insight-field-item, .article-card, .article-category-segment,
-  .recognition-update, .discovery-run-note,
+  article, .panel, .list-item, .insight-field-item, .recognition-update, .discovery-run-note,
   .market-intel-metrics, .market-intel-ledger, .market-intel-rule, .market-intel-evaluation,
   .global-company-command, .financials-archive,
   .discovery-head, .discovery-funnel, .discovery-provenance, .discovery-market-context,
@@ -23,11 +22,7 @@
   .market-transition-trajectory, .market-transition-selected, .market-transition-handoff,
   .ic-library, .ic-dynamics, .ic-limitations, .ic-semantic-dossier, .ic-driver-columns,
   .ic-phrase-list,
-  .source-material, .source-control-card, .source-item, .source-command-hero,
-  .source-command-overview, .source-board-metrics, .intake-batch-row,
-  .article-control-hero, .article-signal-panel, .article-stream-panel,
-  .article-ingest-panel, .article-queue-panel, .article-empty-panel, .article-hero-readouts,
-  .article-card-expanded, .brief-reader-hero, .brief-reader-overview,
+  .brief-reader-hero, .brief-reader-overview,
   .research-material, .research-thesis-card, .research-thesis-stage,
   .research-decision-stage, .research-finding-card, .research-control-panel,
   .research-detail-panel, .research-run-row, .research-task-card,
@@ -77,8 +72,7 @@
 
 .app-shell[data-theme] main.workspace :is(
   .knowledge-header, .daily-research-header, .evidence-workbench-head,
-  .knowledge-nav-item, .article-card-header,
-  .market-intel-metric-grid > div, .market-intel-evaluation-stats > div,
+  .knowledge-nav-item, .market-intel-metric-grid > div, .market-intel-evaluation-stats > div,
   .market-pulse-momentum-card dl > div
 ):not(:where([role="dialog"] *, .glass-workspace *)) {
   background: var(--workspace-glass-inset);

@@ -2,11 +2,9 @@ import { DashboardMarketOverview } from './DashboardMarketOverview';
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import {
   AgentRun,
-  Article,
   Dashboard,
   DashboardHotspotItem,
   DashboardHotspotRanking,
-  IntakeCandidate,
   ResearchRun,
   View
 } from '../../shared/types';
@@ -15,10 +13,8 @@ import { KnowledgeOverview } from '../knowledge/knowledgeTypes';
 type DashboardViewProps = {
   dashboard: Dashboard | null;
   hotspotRankings: DashboardHotspotRanking[];
-  articles: Article[];
   researchRuns: ResearchRun[];
   agentRuns: AgentRun[];
-  intakeCandidates: IntakeCandidate[];
   knowledgeOverview: KnowledgeOverview | null;
   marketRefreshRevision?: number;
   onChangeView: (view: View) => void;
@@ -31,10 +27,8 @@ const ACTIVE_AGENT_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
 export function DashboardView({
   dashboard,
   hotspotRankings,
-  articles,
   researchRuns,
   agentRuns,
-  intakeCandidates,
   knowledgeOverview,
   marketRefreshRevision = 0,
   onChangeView,
@@ -56,27 +50,11 @@ export function DashboardView({
     );
   }
 
-  const newArticleCount = articles.filter((article) => article.noveltyType === 'NEW').length;
-  const pendingCandidates = intakeCandidates.filter((candidate) => (candidate.humanStatus || 'PENDING') === 'PENDING');
   const dueReviewCount = knowledgeOverview?.dueReviewCount ?? 0;
   const activeRuns = researchRuns.filter((run) => ACTIVE_RUN_STATUSES.has(run.status));
   const activeAgentCount = agentRuns.filter((run) => ACTIVE_AGENT_STATUSES.has(run.status)).length;
   const normalizedHotspotRankings = normalizeHotspotRankings(hotspotRankings);
   const pulseItems = [
-    {
-      label: '新信息',
-      value: newArticleCount,
-      detail: newArticleCount ? '等待归并进事件与证据链' : '文章池暂未出现新的高新意内容',
-      tone: 'fresh',
-      view: 'article' as View
-    },
-    {
-      label: '候选待看',
-      value: pendingCandidates.length,
-      detail: pendingCandidates.length ? '等待确认是否进入研究流' : '当前候选队列已清空',
-      tone: 'attention',
-      view: 'intake' as View
-    },
     {
       label: '到期复习',
       value: dueReviewCount,
@@ -169,8 +147,6 @@ const HOTSPOT_BOARD_META: Array<Pick<DashboardHotspotRanking, 'categoryCode' | '
 
 function pulseWorkspaceName(view: View) {
   const labels: Partial<Record<View, string>> = {
-    article: '文章工作区',
-    intake: '候选队列',
     knowledge: '知识工作台',
     research: '研究工作区'
   };

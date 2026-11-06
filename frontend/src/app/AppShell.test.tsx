@@ -12,7 +12,6 @@ test('groups the workspace and exposes the knowledge workbench', () => {
       view="knowledge"
       currentTitle="投资认识工作台"
       theme="light"
-      articlesCount={2}
       topicsCount={3}
       message="准备就绪"
       toasts={[]}
@@ -24,6 +23,9 @@ test('groups the workspace and exposes the knowledge workbench', () => {
     </AppShell>
   );
 
+  expect(screen.queryByRole('button', { name: 'Sources' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Intake' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Article' })).not.toBeInTheDocument();
   expect(screen.getByText('研究流')).toBeInTheDocument();
   expect(screen.getByText('知识与判断')).toBeInTheDocument();
   expect(screen.getByText('系统')).toBeInTheDocument();
@@ -53,7 +55,6 @@ test('exposes the full Agent workspace under knowledge and judgment', () => {
       view="agent"
       currentTitle="Agent · 全域问答"
       theme="dark"
-      articlesCount={31}
       topicsCount={4}
       message="准备就绪"
       toasts={[]}
@@ -82,7 +83,6 @@ test('removes the topbar gap for full-canvas workspaces', () => {
       view="industryChain"
       currentTitle="Industry Graph · 产业链图谱"
       theme="dark"
-      articlesCount={31}
       topicsCount={4}
       message="已打开产业链图谱"
       toasts={[]}
@@ -101,7 +101,6 @@ test('removes the topbar gap for full-canvas workspaces', () => {
       view="agent"
       currentTitle="Agent · 全域问答"
       theme="dark"
-      articlesCount={31}
       topicsCount={4}
       message="已打开 Agent"
       toasts={[]}

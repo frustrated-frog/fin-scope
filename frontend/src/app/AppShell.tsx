@@ -12,9 +12,6 @@ const navGroups: Array<{
     label: '研究流',
     items: [
       { id: 'dashboard', label: 'Dashboard', hint: '今日总览', code: 'OV' },
-      { id: 'sources', label: 'Sources', hint: '信源配置', code: 'SO' },
-      { id: 'intake', label: 'Intake', hint: '候选筛选', code: 'IN' },
-      { id: 'article', label: 'Article', hint: '文章研究', code: 'AR' },
       { id: 'briefs', label: 'Briefs', hint: '每日简报', code: 'BR' },
       { id: 'research', label: 'Research', hint: '研究运行', code: 'RE' },
       { id: 'news', label: 'News Wire', hint: '实时资讯', code: 'NW' },
@@ -54,7 +51,6 @@ export function AppShell({
   view,
   currentTitle,
   theme,
-  articlesCount,
   topicsCount,
   message,
   toasts,
@@ -66,7 +62,6 @@ export function AppShell({
   view: View;
   currentTitle: string;
   theme: 'light' | 'dark';
-  articlesCount: number;
   topicsCount: number;
   message: string;
   toasts: ToastItem[];
@@ -97,7 +92,7 @@ export function AppShell({
         </div>
         <div className="sidebar-signal">
           <span className="signal-label">Pipeline</span>
-          <strong>Sources / Intake / Article / Brief / Knowledge</strong>
+          <strong>Research / Evidence / Brief / Knowledge</strong>
           <div className="signal-flow" aria-hidden="true">
             <span />
             <span />
@@ -139,10 +134,6 @@ export function AppShell({
           </div>
           <div className="topbar-actions">
             <div className="topbar-readouts" role="group" aria-label="数据概览">
-              <div className="topbar-readout" aria-label={`文章数量 ${articlesCount}`}>
-                <span>Articles</span>
-                <strong>{articlesCount}</strong>
-              </div>
               <div className="topbar-readout" aria-label={view === 'knowledge' ? `认识档案 ${topicsCount}` : `主题数量 ${topicsCount}`}>
                 <span>{view === 'knowledge' ? 'Files' : 'Topics'}</span>
                 <strong>{topicsCount}</strong>

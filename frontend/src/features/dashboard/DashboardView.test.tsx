@@ -77,7 +77,6 @@ test('frames the research pulse as a ready command surface while retaining metri
   const focus = screen.getByText('当前焦点').parentElement;
   expect(focus).not.toBeNull();
   expect(within(focus as HTMLElement).getByRole('status')).toHaveTextContent('研究队列已就绪');
-  expect(screen.getByRole('button', { name: /新信息.*打开文章工作区/ })).toHaveClass('dashboard-pulse-item');
   expect(screen.getByRole('button', { name: /运行中.*打开研究工作区/ })).toHaveClass('dashboard-pulse-item');
 });
 
@@ -86,10 +85,8 @@ function renderDashboard(onOpenRadarEvent = vi.fn()) {
     <DashboardView
       dashboard={dashboard}
       hotspotRankings={hotspotRankings}
-      articles={[]}
       researchRuns={[]}
       agentRuns={[]}
-      intakeCandidates={[]}
       knowledgeOverview={null}
       onChangeView={vi.fn()}
       onOpenRadarEvent={onOpenRadarEvent}

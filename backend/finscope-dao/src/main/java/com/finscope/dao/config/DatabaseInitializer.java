@@ -86,21 +86,6 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_fetch_run ON raw_snapshot(fetch_run_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_source_time ON raw_snapshot(source_id,fetched_at)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_raw_snapshot_hash ON raw_snapshot(body_sha256)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS async_task ("
-                + "id TEXT PRIMARY KEY,"
-                + "type TEXT NOT NULL,"
-                + "status TEXT NOT NULL,"
-                + "phase TEXT NOT NULL,"
-                + "message TEXT,"
-                + "request_url TEXT,"
-                + "article_id INTEGER,"
-                + "error_message TEXT,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL,"
-                + "started_at TEXT,"
-                + "ended_at TEXT)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_async_task_status ON async_task(status)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_async_task_article ON async_task(article_id)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS article ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "source_id INTEGER,"
@@ -838,72 +823,6 @@ public class DatabaseInitializer implements InitializingBean {
                 + "ON research_run_plan(research_run_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_research_run_plan_status "
                 + "ON research_run_plan(status)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS fetch_batch ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "source_id INTEGER,"
-                + "source_name TEXT,"
-                + "trigger_type TEXT NOT NULL,"
-                + "status TEXT NOT NULL,"
-                + "started_at TEXT NOT NULL,"
-                + "ended_at TEXT,"
-                + "lookback_days INTEGER NOT NULL DEFAULT 3,"
-                + "max_items_requested INTEGER NOT NULL DEFAULT 10,"
-                + "raw_item_count INTEGER NOT NULL DEFAULT 0,"
-                + "candidate_count INTEGER NOT NULL DEFAULT 0,"
-                + "agent_reviewed_count INTEGER NOT NULL DEFAULT 0,"
-                + "duplicate_count INTEGER NOT NULL DEFAULT 0,"
-                + "low_value_count INTEGER NOT NULL DEFAULT 0,"
-                + "error_message TEXT,"
-                + "batch_summary_json TEXT,"
-                + "batch_summary_text TEXT,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_fetch_batch_source ON fetch_batch(source_id)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_fetch_batch_status ON fetch_batch(status)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_fetch_batch_started ON fetch_batch(started_at)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS intake_candidate ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "batch_id INTEGER NOT NULL,"
-                + "source_id INTEGER,"
-                + "source_name TEXT,"
-                + "source_type TEXT,"
-                + "original_title TEXT,"
-                + "original_url TEXT,"
-                + "original_summary TEXT,"
-                + "original_body TEXT,"
-                + "content_type TEXT,"
-                + "extraction_method TEXT,"
-                + "extraction_quality_score INTEGER NOT NULL DEFAULT 0,"
-                + "published_at TEXT,"
-                + "fetched_at TEXT NOT NULL,"
-                + "chinese_title TEXT,"
-                + "decision_summary TEXT,"
-                + "key_facts_json TEXT,"
-                + "why_it_matters TEXT,"
-                + "novelty_judgment TEXT,"
-                + "risk_flags_json TEXT,"
-                + "agent_score INTEGER NOT NULL DEFAULT 0,"
-                + "agent_recommendation TEXT,"
-                + "agent_reason TEXT,"
-                + "agent_model TEXT,"
-                + "agent_status TEXT NOT NULL,"
-                + "agent_error_message TEXT,"
-                + "agent_review_json TEXT,"
-                + "human_status TEXT NOT NULL,"
-                + "human_note TEXT,"
-                + "promoted_article_id INTEGER,"
-                + "promoted_at TEXT,"
-                + "duplicate_of_candidate_id INTEGER,"
-                + "duplicate_of_article_id INTEGER,"
-                + "url_fingerprint TEXT,"
-                + "title_fingerprint TEXT,"
-                + "body_fingerprint TEXT,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_intake_candidate_batch ON intake_candidate(batch_id)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_intake_candidate_source ON intake_candidate(source_id)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_intake_candidate_human_status ON intake_candidate(human_status)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_intake_candidate_url ON intake_candidate(url_fingerprint)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS export_manifest ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "file_name TEXT NOT NULL,"

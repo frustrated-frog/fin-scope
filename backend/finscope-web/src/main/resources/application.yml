@@ -114,8 +114,6 @@ finscope:
     model-enabled: false
     refresh-initial-delay-ms: 2000
     refresh-interval-ms: 60000
-  intake:
-    scheduled-review-model-enabled: false
   quant:
     market-data-sync-cron: 0 30 18 * * MON-FRI
   next-session-prediction:

@@ -3,13 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from './app/AppShell';
 import { AgentView } from './features/agent/AgentView';
 import { AgentRunsView } from './features/agents/AgentRunsView';
-import { ArticleView } from './features/articles/ArticleView';
 import { BriefReaderView } from './features/briefs/BriefReaderView';
 import { BriefsView } from './features/briefs/BriefsView';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EvidenceView } from './features/evidence/EvidenceView';
 import { FinancialsView } from './features/financials/FinancialsView';
-import { IntakeView } from './features/intake/IntakeView';
 import { InvestmentObservationView } from './features/investment-observation/InvestmentObservationView';
 import { IndustryChainView } from './features/industry-chain/IndustryChainView';
 import { MarketIntelView } from './features/market-intel/MarketIntelView';
@@ -21,7 +19,6 @@ import { KnowledgeView } from './features/knowledge/KnowledgeView';
 import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
-import { SourcesView } from './features/sources/SourcesView';
 import { WatchlistView } from './features/watchlist/WatchlistView';
 import { StrategyView } from './features/strategy/StrategyView';
 import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
@@ -30,21 +27,17 @@ import type { StockDiscoveryMarketContext } from './shared/types/marketContext';
 import { useViewRevision } from './shared/api/useViewRevision';
 import {
   AgentRun,
-  Article,
   Brief,
   BriefResearchContext,
   Dashboard,
   DashboardHotspotRanking,
   EvidenceItem,
   EventCluster,
-  FetchBatch,
-  IntakeCandidate,
   ResearchRun,
   ResearchRunDetail,
   ResearchEvaluation,
   ResearchReport,
   ResearchThesis,
-  Source,
   ToastItem,
   View
 } from './shared/types';
@@ -66,11 +59,6 @@ export default function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [marketRefreshRevision, setMarketRefreshRevision] = useState(0);
   const [hotspotRankings, setHotspotRankings] = useState<DashboardHotspotRanking[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [fetchBatches, setFetchBatches] = useState<FetchBatch[]>([]);
-  const [intakeCandidates, setIntakeCandidates] = useState<IntakeCandidate[]>([]);
-  const [intakeStatus, setIntakeStatus] = useState('PENDING');
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [selectedBrief, setSelectedBrief] = useState<Brief | null>(null);
   const [selectedBriefContext, setSelectedBriefContext] = useState<BriefResearchContext | null>(null);
@@ -112,8 +100,6 @@ export default function App() {
     const results = await Promise.allSettled([
       api<Dashboard>('/api/dashboard').then(setDashboard),
       api<DashboardHotspotRanking[]>('/api/dashboard/hotspots').then(setHotspotRankings),
-      api<Source[]>('/api/sources').then(setSources),
-      api<Article[]>('/api/articles').then(setArticles),
       api<Brief[]>('/api/briefs').then(setBriefs),
       api<EventCluster[]>('/api/events').then(setEvents),
       api<EvidenceItem[]>('/api/evidence').then(setEvidenceItems),
@@ -127,9 +113,7 @@ export default function App() {
           setResearchTheses(theses);
         }
       }),
-      api<AgentRun[]>('/api/agent-runs').then(setAgentRuns),
-      api<FetchBatch[]>('/api/intake/batches').then(setFetchBatches),
-      api<IntakeCandidate[]>(`/api/intake/candidates?status=${intakeStatus}`).then(setIntakeCandidates)
+      api<AgentRun[]>('/api/agent-runs').then(setAgentRuns)
     ]);
     const failureCount = results.filter((result) => result.status === 'rejected').length;
     if (failureCount) {
@@ -220,12 +204,6 @@ export default function App() {
         return 'Dashboard';
       case 'agent':
         return 'Agent · 全域问答';
-      case 'sources':
-        return 'Sources';
-      case 'intake':
-        return 'Intake';
-      case 'article':
-        return 'Article';
       case 'briefs':
         return 'Briefs';
       case 'research':
@@ -441,19 +419,11 @@ export default function App() {
     }
   }
 
-  async function loadIntakeCandidates(status: string) {
-    setIntakeStatus(status);
-    const candidates = await api<IntakeCandidate[]>(`/api/intake/candidates?status=${status}`);
-    setIntakeCandidates(candidates);
-    return candidates;
-  }
-
   return (
     <AppShell
       view={view}
       currentTitle={currentTitle}
       theme={theme}
-      articlesCount={articles.length}
       topicsCount={activeTopicCount}
       message={message}
       toasts={toasts}
@@ -467,40 +437,14 @@ export default function App() {
           dashboard={dashboard}
           hotspotRankings={hotspotRankings}
           marketRefreshRevision={marketRefreshRevision}
-          articles={articles}
           researchRuns={researchRuns}
           agentRuns={agentRuns}
-          intakeCandidates={intakeCandidates}
           knowledgeOverview={knowledgeOverview}
           onChangeView={setView}
           onOpenRadarEvent={(eventId) => {
             setDashboardRadarEventId(eventId);
             setView('news');
           }}
-        />
-      )}
-      {view === 'sources' && (
-        <SourcesView
-          sources={sources}
-          fetchBatches={fetchBatches}
-          onChanged={refresh}
-          addToast={addToast}
-        />
-      )}
-      {view === 'intake' && (
-        <IntakeView
-          batches={fetchBatches}
-          candidates={intakeCandidates}
-          status={intakeStatus}
-          onStatusChange={loadIntakeCandidates}
-          onChanged={refresh}
-          addToast={addToast}
-        />
-      )}
-      {view === 'article' && (
-        <ArticleView
-          onWorkspaceChanged={refresh}
-          addToast={addToast}
         />
       )}
       {view === 'briefs' && (
