@@ -81,6 +81,17 @@ public class DeterministicResearchPolicy {
         if (context.getTasks() == null || context.getTasks().isEmpty()) {
             return legacySearch(context, intent, gap);
         }
+        for (ResearchMissionTask task : context.getTasks()) {
+            if (task.getTaskKey().startsWith("adaptive_quality_") && ready(context, task) && isSearch(task)) {
+                try {
+                    return validated(toolDecision(task, gap), context);
+                } catch (IllegalArgumentException repeated) {
+                    if (repeated.getMessage() == null || !repeated.getMessage().contains("动作指纹已经执行")) {
+                        throw repeated;
+                    }
+                }
+            }
+        }
         for (ResearchMissionTask task : orderedReadyTasks(context, intent)) {
             try {
                 return validated(toolDecision(task, gap), context);

@@ -34,6 +34,9 @@ public class ResearchEvidenceGapAnalyzer {
         if (value.isSufficient()) {
             return "NONE";
         }
+        if (value.getQuality() != null && !value.getQuality().complete()) {
+            return value.getQuality().getRecoveryIntent();
+        }
         if (value.getCounterCount() == 0) {
             return "COUNTER";
         }

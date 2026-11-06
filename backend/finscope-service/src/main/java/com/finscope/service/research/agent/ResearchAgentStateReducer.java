@@ -105,7 +105,8 @@ public class ResearchAgentStateReducer {
                           ResearchAgentDecision decision,
                           ResearchToolObservation observation) {
         String value = safe(previous) + " | #" + decision.getIteration() + " "
-                + safe(decision.getDecisionSummary()) + " -> " + safe(observation.getObservationSummary());
+                + safe(decision.getDecisionSummary()) + " -> " + safe(observation.getObservationSummary())
+                + "；质量反馈：" + safe(observation.getNewInformation());
         return limit(value, MAX_MEMORY_CHARACTERS);
     }
 

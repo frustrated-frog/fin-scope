@@ -199,7 +199,7 @@ class ResearchAgentLoopServiceTest {
         });
         ResearchAgentLoopService loop = new ResearchAgentLoopService(
                 agents, contexts, decisionAgent, new ResearchToolRetryExecutor(dispatcher),
-                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService),
+                new ResearchAgentTurnService(agents, new ResearchAgentStateReducer(agents), runtimeService, missionService),
                 new ResearchAgentStateReducer(agents),
                 finishVerifier, missionService, runtimeService);
 

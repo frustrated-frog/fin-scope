@@ -164,6 +164,7 @@ public class ResearchAgentContextBuilder {
             if (observation != null) {
                 prompt.append("  Observation[").append(observation.getStatus()).append("]：")
                         .append(limit(safe(observation.getObservationSummary()), 800))
+                        .append("；质量反馈=").append(limit(safe(observation.getNewInformation()), 1_600))
                         .append("；evidenceDelta=").append(observation.getEvidenceDelta())
                         .append("；sourceDelta=").append(observation.getSourceDelta()).append('\n');
             }

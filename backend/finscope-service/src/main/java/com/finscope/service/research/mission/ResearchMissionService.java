@@ -8,6 +8,8 @@ import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.research.mission.ResearchMissionRepository;
 import com.finscope.domain.research.ResearchRun;
 import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.quality.ResearchTaskContract;
+import com.finscope.domain.research.quality.ResearchQualityAssessment;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchToolObservation;
 import com.finscope.domain.research.mission.ResearchMission;
@@ -55,6 +57,9 @@ public class ResearchMissionService {
         if (run == null || run.getId() == null) {
             throw new BusinessException(BizErrorCode.RESEARCH_RUN_REQUIRED);
         }
+        if (thesis != null) {
+            reportService.initializeContract(run, thesis);
+        }
         String goal = thesis == null || blank(thesis.getQuestion()) ? "形成可验证的阶段性研究结论"
                 : thesis.getQuestion().trim();
         String subject = thesis == null || blank(thesis.getSubjectName()) ? "研究对象"
@@ -74,13 +79,14 @@ public class ResearchMissionService {
         int maxActions = repository.findMission(run.getId())
                 .map(ResearchMission::getMaxActions).orElse(12);
         ResearchPlanningInput input = new ResearchPlanningInput();
-        input.setQuestion(thesis.getQuestion());
+        ResearchTaskContract contract = reportService.initializeContract(run, thesis);
+        input.setQuestion(contract.getQuestion());
         input.setSubjectType(thesis.getSubjectType());
-        input.setSubjectName(thesis.getSubjectName());
-        input.setSubjectCode(thesis.getSubjectCode());
+        input.setSubjectName(contract.getSubject());
+        input.setSubjectCode(contract.getSubjectCode());
         input.setThemeCodes(run.getThemeCodes());
         input.setMaxActions(maxActions);
-        input.setCurrentDate(run.getRunDate() == null ? LocalDate.now() : run.getRunDate());
+        input.setCurrentDate(LocalDate.parse(contract.getAsOfDate()));
         ResearchPlanningResult result = planningAgent.plan(input);
 
         List<ResearchMissionTask> tasks = new ArrayList<ResearchMissionTask>();
@@ -144,12 +150,34 @@ public class ResearchMissionService {
         EvidenceSufficiency sufficiency = reportService.assessSufficiency(runId);
         ResearchMissionGap gap = gapAnalyzer.assess(runId, afterTaskKey, sufficiency);
         repository.appendGap(gap);
+        if (!gap.isSufficient() && sufficiency.getQuality() != null) {
+            scheduleQualityRecovery(runId, sufficiency.getQuality());
+        }
         if (gap.isSufficient()) {
             repository.skipPendingTasksByTool(runId, "public_news_search", "SUFFICIENT_EVIDENCE");
             repository.skipPendingTasksByTool(runId, "research_material_search", "SUFFICIENT_EVIDENCE");
             completeSufficientAssessment(runId, gap);
         }
         return gap;
+    }
+
+    private void scheduleQualityRecovery(Long runId, ResearchQualityAssessment quality) {
+        if (quality.complete() || blank(quality.getRecoveryQuery())) {
+            return;
+        }
+        ResearchMissionTask task = new ResearchMissionTask();
+        task.setResearchRunId(runId);
+        task.setTaskKey("adaptive_quality_" + quality.getFingerprint().substring(0, 12));
+        task.setTitle("修复任务事实与来源缺口");
+        task.setQuestion(quality.getContract().getQuestion());
+        task.setTaskType("SEARCH");
+        task.setToolCode("public_news_search");
+        task.setIntent(quality.getRecoveryIntent());
+        task.setDependencies(new ArrayList<String>());
+        task.setQueryText(quality.getRecoveryQuery());
+        task.setRationale(compact(String.join("；", quality.getFeedback()), 240));
+        task.setExpectedEvidence("同主体、同事件、同日期且有原文支持的独立披露");
+        repository.upsertAdaptiveTask(runId, task);
     }
 
     public boolean isFinished(Long runId, String taskKey) {

@@ -8,6 +8,8 @@ import com.finscope.domain.research.evaluation.ResearchEvaluationMetric;
 import com.finscope.domain.research.agent.ResearchAgentTrajectoryMetrics;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
+import com.finscope.domain.research.quality.ResearchQualityAssessment;
+import com.finscope.domain.research.quality.StructuredResearchFact;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -19,7 +21,65 @@ import java.util.Set;
 
 @Component
 public class ResearchEvaluationScorer {
-    public static final String VERSION = "deep-research-rules-v4";
+    public static final String VERSION = "deep-research-rules-v5";
+
+    public void appendQualityMetrics(ResearchEvaluation evaluation, ResearchQualityAssessment quality, ResearchReport report) {
+        List<ResearchEvaluationMetric> metrics = new ArrayList<ResearchEvaluationMetric>(evaluation.getMetrics());
+        if (quality == null) {
+            metrics.add(metric("task_fact_coverage", "任务事实覆盖", 0, 100, "quality=missing", "为研究运行建立任务契约与证据审计"));
+            evaluation.setMetrics(metrics);
+            if (report != null) {
+                List<String> issues = new ArrayList<String>(evaluation.getCriticalIssues());
+                issues.add("MISSING_FACT_AUDIT");
+                evaluation.setCriticalIssues(issues);
+                evaluation.setGateStatus("BLOCK");
+            }
+            return;
+        }
+        metrics.add(rateMetric("task_fact_coverage", "任务事实覆盖", quality.getTaskCoverage(), "按任务契约补齐事实与事件日期"));
+        long located = quality.getFacts().stream().filter(f -> f.getQuoteStart() >= 0 && f.getQuoteEnd() > f.getQuoteStart()).count();
+        double quoteRate = quality.getFacts().isEmpty() ? 0D : (double) located / quality.getFacts().size();
+        metrics.add(rateMetric("quote_location_support", "原文引文可定位率", quoteRate, "候选事实必须逐字绑定留存正文位置"));
+        long rejected = quality.getFacts().stream().filter(f -> !f.isVerified()).count();
+        metrics.add(metric("rejected_fact_candidates", "被拒候选事实", (int) rejected, quality.getFacts().size(),
+                "rejected=" + rejected + ", total=" + quality.getFacts().size(), "此项为拒绝数量统计，拒绝后应调整搜索；不计入总分"));
+        metrics.add(metric("independent_source_groups", "转载合并后的来源组", quality.getIndependentSourceCount(),
+                Math.max(2, quality.getIndependentSourceCount()), "groups=" + quality.getIndependentSourceCount(), "寻找独立原始披露"));
+        metrics.add(metric("unresolved_value_conflicts", "未解决数值冲突", quality.getConflicts().isEmpty() ? 100 : 0, 100,
+                quality.getConflicts().toString(), "同主体、同日期、同指标、同口径核对并解决冲突"));
+        if (!quality.complete()) {
+            List<String> issues = new ArrayList<String>(evaluation.getCriticalIssues());
+            issues.add("TASK_CONTRACT_NOT_SATISFIED");
+            evaluation.setCriticalIssues(issues);
+            evaluation.setGateStatus("BLOCK");
+        }
+        evaluation.setMetrics(metrics);
+        evaluation.setSummary(evaluation.getSummary() + ", taskCoverage=" + decimal(quality.getTaskCoverage())
+                + ", unresolvedConflicts=" + quality.getConflicts().size());
+    }
+
+    public void appendQualityRecoveryMetric(ResearchEvaluation evaluation, List<ResearchQualityAssessment> history) {
+        int rejectedRounds = 0;
+        int recoveredRounds = 0;
+        for (int index = 0; index + 1 < history.size(); index++) {
+            ResearchQualityAssessment before = history.get(index);
+            ResearchQualityAssessment after = history.get(index + 1);
+            if (!before.complete()) {
+                rejectedRounds++;
+                if (after.getTaskCoverage() > before.getTaskCoverage()
+                        || after.getIndependentSourceCount() > before.getIndependentSourceCount()
+                        || after.getConflicts().size() < before.getConflicts().size()) {
+                    recoveredRounds++;
+                }
+            }
+        }
+        if (rejectedRounds > 0) {
+            List<ResearchEvaluationMetric> metrics = new ArrayList<ResearchEvaluationMetric>(evaluation.getMetrics());
+            metrics.add(rateMetric("quality_feedback_recovery", "质量反馈后的证据改善率", (double) recoveredRounds / rejectedRounds,
+                    "拒绝后下一次审计应增加任务覆盖、独立来源或减少冲突；该指标不等同于因果归因"));
+            evaluation.setMetrics(metrics);
+        }
+    }
 
     public ResearchEvaluation score(ResearchEvaluationSnapshot snapshot) {
         ResearchRun run = snapshot.getRun();

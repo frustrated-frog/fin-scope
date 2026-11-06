@@ -21,6 +21,22 @@ import static org.mockito.Mockito.when;
 
 class ResearchFinishVerifierTest {
     @Test
+    void rejectsUnansweredTaskEvenWhenEvidenceCountsPass() {
+        ResearchReportService reports = mock(ResearchReportService.class);
+        ResearchMissionRepository missions = mock(ResearchMissionRepository.class);
+        ResearchRuntimeRepository runtimes = mock(ResearchRuntimeRepository.class);
+        com.finscope.domain.research.quality.ResearchQualityAssessment quality = new com.finscope.domain.research.quality.ResearchQualityAssessment();
+        quality.setIndependentSourceCount(4);
+        quality.getMissingConditions().add("任务事实缺失：AMOUNT");
+        when(reports.assessSufficiency(71L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3).withQuality(quality));
+        when(missions.findMission(71L)).thenReturn(Optional.of(mission(null)));
+        when(runtimes.findCheckpoint(71L)).thenReturn(Optional.of(runtime("RUNNING")));
+        ResearchFinishVerdict verdict = new ResearchFinishVerifier(reports, missions, runtimes).verify(71L);
+        assertFalse(verdict.isAccepted());
+        assertEquals("TASK_CONTRACT_INCOMPLETE", verdict.getReasonCode());
+        assertTrue(verdict.getMissingConditions().contains("任务事实缺失：AMOUNT"));
+    }
+    @Test
     void acceptsOnlySufficientConsistentResearchState() {
         ResearchReportService reports = mock(ResearchReportService.class);
         ResearchMissionRepository missions = mock(ResearchMissionRepository.class);

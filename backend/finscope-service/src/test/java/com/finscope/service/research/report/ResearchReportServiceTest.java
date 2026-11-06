@@ -33,6 +33,43 @@ class ResearchReportServiceTest {
     Path tempDir;
 
     @Test
+    void preservesLongGapReportWithoutPromotingWrongDateFacts() {
+        RunScopedResearchContextService contexts = mock(RunScopedResearchContextService.class);
+        ResearchReportRepository reports = mock(ResearchReportRepository.class);
+        ResearchSearchEvidenceRepository searches = mock(ResearchSearchEvidenceRepository.class);
+        ResearchReportSynthesisAgent synthesis = mock(ResearchReportSynthesisAgent.class);
+        ResearchRun run = new ResearchRun();
+        run.setId(17L);
+        run.setRunDate(java.time.LocalDate.of(2026, 11, 6));
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setId(4L);
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("长鑫科技");
+        thesis.setQuestion("长鑫科技今日大宗交易有哪些已确认事实？");
+        Article article = new Article();
+        article.setId(25L);
+        article.setTitle("长鑫科技大宗交易");
+        article.setUrl("https://disclosure.example.com/a");
+        article.setBody("2026年8月6日，长鑫科技大宗交易成交额9.9亿元。");
+        when(contexts.load(17L)).thenReturn(new RunScopedResearchContext(run, thesis,
+                Collections.emptyList(), Collections.singletonList(article), Collections.emptyList(), Collections.emptyList()));
+        when(searches.findByRunId(17L)).thenReturn(Collections.emptyList());
+        when(reports.upsert(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        ResearchReportService service = reportService(contexts, new ResearchEvidenceSelector(), new ResearchReportGenerator(),
+                synthesis, reports, mock(ResearchThesisRepository.class), searches, new VaultWriter(tempDir), mock(ResearchRunOutputService.class));
+        ResearchReport report = service.generate(17L);
+        assertEquals("COMPLETED_WITH_GAPS", report.getStatus());
+        assertEquals("LOW", report.getConfidence());
+        assertEquals(0, report.getEvidenceCount());
+        assertTrue(report.getCharacterCount() >= new ResearchReportGenerator().generate(thesis,
+                Collections.emptyList(), EvidenceSufficiency.fromCounts(0, 0, 0, 0)).getMarkdown().length());
+        assertTrue(report.getContentMarkdown().contains("任务契约与事实校验"));
+        assertTrue(report.getWarningMessage().contains("事件日期"));
+        org.junit.jupiter.api.Assertions.assertFalse(report.getContentMarkdown().contains("9.9亿元"));
+        verify(synthesis, never()).refine(any(), anyList(), any());
+    }
+
+    @Test
     void generatesPersistsAndProjectsAnIndependentRunScopedReport() throws Exception {
         RunScopedResearchContextService contextService = mock(RunScopedResearchContextService.class);
         ResearchReportRepository repository = mock(ResearchReportRepository.class);
@@ -50,7 +87,7 @@ class ResearchReportServiceTest {
         article.setId(24L);
         article.setSourceName("行业媒体");
         article.setTitle("半导体设备订单增长");
-        article.setSummary("晶圆厂资本开支上调");
+        article.setSummary("半导体设备需求增长，晶圆厂资本开支上调");
         article.setUrl("https://example.com/24");
         when(contextService.load(14L)).thenReturn(new RunScopedResearchContext(run, thesis,
                 Collections.emptyList(), Collections.singletonList(article), Collections.emptyList(), Collections.emptyList()));
@@ -72,6 +109,7 @@ class ResearchReportServiceTest {
         assertTrue(report.getMarkdownPath().endsWith("research-reports/thesis-1/run-14.md"));
         assertTrue(Files.exists(Paths.get(report.getMarkdownPath())));
         assertTrue(report.getCharacterCount() <= 12000);
+        assertTrue(report.getCharacterCount() >= ResearchReportPolicy.TARGET_REPORT_MIN_CHARACTERS);
         verify(outputService).record(14L, ResearchRunOutputService.REPORT, 7L);
         verify(thesisRepository).update(thesis);
     }
@@ -125,7 +163,7 @@ class ResearchReportServiceTest {
         when(contextService.load(16L)).thenReturn(new RunScopedResearchContext(run, thesis,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
         when(searchEvidenceRepository.findByRunId(16L)).thenReturn(Collections.singletonList(
-                searchEvidence("SUPPORT", "长鑫科技上市后扩大研发投入", "融资支持先进制程研发")));
+                searchEvidence("SUPPORT", "长鑫科技上市后扩大研发投入", "长鑫科技融资支持先进制程研发")));
         when(repository.upsert(any(ResearchReport.class))).thenAnswer(invocation -> {
             ResearchReport value = invocation.getArgument(0);
             value.setId(9L);
@@ -175,6 +213,19 @@ class ResearchReportServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(service, "vaultWriter", vault);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "outputService", outputs);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "archivedEventSource", archived);
+        com.finscope.dao.research.quality.ResearchQualityRepository qualityRepository = mock(com.finscope.dao.research.quality.ResearchQualityRepository.class);
+        when(qualityRepository.initializeContract(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(qualityRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        com.finscope.service.research.quality.ResearchQualityEngine engine = new com.finscope.service.research.quality.ResearchQualityEngine();
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "verifier", new com.finscope.service.research.quality.ResearchFactVerifier());
+        org.springframework.test.util.ReflectionTestUtils.setField(engine, "lineage", new com.finscope.service.research.quality.ResearchSourceLineage());
+        com.finscope.service.research.quality.ResearchQualityService quality = new com.finscope.service.research.quality.ResearchQualityService();
+        org.springframework.test.util.ReflectionTestUtils.setField(quality, "repository", qualityRepository);
+        org.springframework.test.util.ReflectionTestUtils.setField(quality, "contractBuilder", new com.finscope.service.research.quality.ResearchTaskContractBuilder());
+        org.springframework.test.util.ReflectionTestUtils.setField(quality, "engine", engine);
+        org.springframework.test.util.ReflectionTestUtils.setField(quality, "candidateAgent", mock(com.finscope.service.research.quality.ResearchFactCandidateAgent.class));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "qualityService", quality);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "qualityRenderer", new com.finscope.service.research.quality.ResearchQualityReportRenderer());
         return service;
     }
 

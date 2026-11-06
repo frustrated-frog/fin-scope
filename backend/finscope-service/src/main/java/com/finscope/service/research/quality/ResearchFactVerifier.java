@@ -2,6 +2,7 @@ package com.finscope.service.research.quality;
 
 import com.finscope.common.enums.research.ResearchEvidenceIssue;
 import com.finscope.common.enums.research.ResearchFactKind;
+import com.finscope.common.util.WebContentText;
 import com.finscope.domain.research.quality.*;
 import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
@@ -17,11 +18,12 @@ public class ResearchFactVerifier {
     private static final Pattern NUMBER = Pattern.compile("(?<![\\d.])([0-9]+(?:\\.[0-9]+)?)\\s*(亿|万|千)?\\s*(元|股|%|％)");
     private static final Pattern SENTENCE = Pattern.compile("[^。！？!?\\n]+[。！？!?]?");
     private static final Pattern PERIOD = Pattern.compile("20\\d{2}年?(?:[一二三四1-4]季(?:度)?|上半年|下半年|全年|年度)");
+    private static final Pattern EVENT_DATE = Pattern.compile("(?:发生日期|事件日期|交易日期)\\s*[:：]\\s*((?:20\\d{2})[-年/](?:\\d{1,2})[-月/](?:\\d{1,2})日?)");
 
     public List<StructuredResearchFact> extract(ResearchTaskContract contract, ResearchEvidenceDocument doc) {
         List<StructuredResearchFact> facts = new ArrayList<>();
         String raw = text(doc.getText());
-        Matcher sentences = SENTENCE.matcher(raw);
+        Matcher sentences = SENTENCE.matcher(WebContentText.clean(raw));
         while (sentences.find() && facts.size() < 24) {
             String quote = sentences.group().trim();
             if (!matchesEntity(contract, quote) || !matchesEvent(contract, quote)) {
@@ -68,14 +70,33 @@ public class ResearchFactVerifier {
         if (!matchesEvent(contract, quote) || fact.getKind() == null || !matchesKind(fact.getKind(), quote)) {
             fact.getIssues().add(ResearchEvidenceIssue.EVENT_MISMATCH);
         }
+        if (!eventBelongsToSubject(contract, quote)) {
+            fact.getIssues().add(ResearchEvidenceIssue.ENTITY_MISMATCH);
+        }
+        if (!WebContentText.clean(quote).equals(quote)) {
+            fact.getIssues().add(ResearchEvidenceIssue.NOISY_CONTENT);
+        }
         // Dates and scopes are always derived from the cited text, not trusted from the model.
         Set<String> dates = dates(quote);
-        if (dates.isEmpty() && dates(text(doc.getText())).size() == 1) {
-            dates = dates(text(doc.getText()));
+        if (dates.isEmpty()) {
+            Matcher explicitDate = EVENT_DATE.matcher(text(doc.getText()));
+            if (explicitDate.find()) {
+                dates = dates(explicitDate.group(1));
+                if (explicitDate.find()) {
+                    dates = Collections.emptySet();
+                }
+            }
         }
         fact.setEventDate(dates.size() == 1 ? dates.iterator().next() : null);
         Matcher period = PERIOD.matcher(quote);
-        fact.setScope(period.find() ? period.group() : fact.getEventDate());
+        String scope = quote.matches("(?s).*(单笔|一笔|该笔).*" ) ? "SINGLE_TRADE"
+                : quote.matches("(?s).*(累计|合计|总额|全日|当日).*" ) ? "DAILY_TOTAL"
+                : "REPORTED_EVENT";
+        if (fact.getKind() == ResearchFactKind.PRICE) {
+            scope += quote.contains("均价") ? "_AVERAGE_PRICE" : "_TRADE_PRICE";
+        }
+        fact.setScope(period.find() ? period.group() + "|" + scope
+                : fact.getEventDate() == null ? null : fact.getEventDate() + "|" + scope);
         if (contract.isDateRequired()) {
             if (fact.getEventDate() == null) {
                 fact.getIssues().add(ResearchEvidenceIssue.DATE_MISSING);
@@ -89,6 +110,9 @@ public class ResearchFactVerifier {
         }
         if (fact.getKind() != null && numeric(fact.getKind()) && !hasExactNumber(fact, quote)) {
             fact.getIssues().add(ResearchEvidenceIssue.NUMBER_MISMATCH);
+        }
+        if (fact.getKind() != null && numeric(fact.getKind()) && !belongsToSubject(contract, fact, quote)) {
+            fact.getIssues().add(ResearchEvidenceIssue.ENTITY_MISMATCH);
         }
         if (doc.isSnippetOnly()) {
             fact.getIssues().add(ResearchEvidenceIssue.SNIPPET_ONLY);
@@ -163,6 +187,41 @@ public class ResearchFactVerifier {
         return false;
     }
 
+    private boolean belongsToSubject(ResearchTaskContract contract, StructuredResearchFact fact, String quote) {
+        int number = text(fact.getValue()).isBlank() ? -1 : quote.indexOf(fact.getValue());
+        if (number < 0) {
+            return false;
+        }
+        return nearestSubject(contract, quote.substring(0, number));
+    }
+
+    private boolean eventBelongsToSubject(ResearchTaskContract contract, String quote) {
+        if ("研究命题".equals(contract.getEvent())) {
+            return true;
+        }
+        Matcher action = Pattern.compile("股价上涨".equals(contract.getEvent())
+                ? "上涨|涨幅|涨超|均涨|收涨" : Pattern.quote(contract.getEvent())).matcher(quote);
+        return action.find() && nearestSubject(contract, quote.substring(0, action.start()));
+    }
+
+    private boolean nearestSubject(ResearchTaskContract contract, String before) {
+        int target = -1;
+        for (String alias : contract.getAliases()) {
+            if (alias != null && !alias.isBlank()) {
+                target = Math.max(target, before.toLowerCase(Locale.ROOT).lastIndexOf(alias.toLowerCase(Locale.ROOT)));
+            }
+        }
+        // Known cross-entity contamination must not survive merely by sharing a sentence.
+        for (String other : List.of("特斯拉", "Tesla", "兆易创新", "微软", "Microsoft", "亚马逊", "Amazon",
+                "英伟达", "NVIDIA", "长鑫科技", "长电科技", "杭电股份")) {
+            if (contract.getAliases().stream().noneMatch(other::equalsIgnoreCase)
+                    && before.toLowerCase(Locale.ROOT).lastIndexOf(other.toLowerCase(Locale.ROOT)) > target) {
+                return false;
+            }
+        }
+        return target >= 0;
+    }
+
     private ResearchFactKind numberKind(String unit, String quote) {
         if ("股".equals(unit)) {
             return ResearchFactKind.VOLUME;
@@ -185,7 +244,8 @@ public class ResearchFactVerifier {
 
     private Set<String> dates(String text) {
         Set<String> dates = new LinkedHashSet<>();
-        Matcher matcher = DATE.matcher(text);
+        String eventText = text.replaceAll("(?:发布时间|发布日期|更新时间|更新于|抓取时间)\\s*[:：]?\\s*20\\d{2}[-年/]\\d{1,2}[-月/]\\d{1,2}日?", "");
+        Matcher matcher = DATE.matcher(eventText);
         while (matcher.find()) {
             try {
                 dates.add(LocalDate.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)),

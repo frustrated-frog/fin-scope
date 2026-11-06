@@ -1,0 +1,275 @@
+[
+  {
+    "id": "valid-facts",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": false,
+    "expectedSourceGroups": 1,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元"
+    ]
+  },
+  {
+    "id": "wrong-company",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，兆易创新大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": false,
+    "expectedCoverage": 0,
+    "expectedConflict": false,
+    "expectedSourceGroups": 0,
+    "allowedNumbers": []
+  },
+  {
+    "id": "old-event-republished-today",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年8月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true,
+        "publishedDate": "2026-11-06"
+      }
+    ],
+    "expectedAccepted": false,
+    "expectedCoverage": 0,
+    "expectedConflict": false,
+    "expectedSourceGroups": 0,
+    "allowedNumbers": []
+  },
+  {
+    "id": "undated-event",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true,
+        "publishedDate": "2026-11-06"
+      }
+    ],
+    "expectedAccepted": false,
+    "expectedCoverage": 0,
+    "expectedConflict": false,
+    "expectedSourceGroups": 0,
+    "allowedNumbers": []
+  },
+  {
+    "id": "navigation-only",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "首页 快讯 新闻 登录 注册 手机版 网页版",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": false,
+    "expectedCoverage": 0,
+    "expectedConflict": false,
+    "expectedSourceGroups": 0,
+    "allowedNumbers": []
+  },
+  {
+    "id": "snippet-only",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true,
+        "snippetOnly": true
+      }
+    ],
+    "expectedAccepted": false,
+    "expectedCoverage": 0,
+    "expectedConflict": false,
+    "expectedSourceGroups": 0,
+    "allowedNumbers": []
+  },
+  {
+    "id": "syndicated-cross-domain",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "来源：界面新闻\n2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      },
+      {
+        "reference": "b",
+        "url": "https://b.cn/article",
+        "text": "来源：界面新闻\n2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": false,
+    "expectedSourceGroups": 1,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元"
+    ]
+  },
+  {
+    "id": "amount-conflict",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      },
+      {
+        "reference": "b",
+        "url": "https://b.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额5.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": true,
+    "expectedSourceGroups": 2,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元",
+      "AMOUNT:5.3:亿元"
+    ]
+  },
+  {
+    "id": "equivalent-unit",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      },
+      {
+        "reference": "b",
+        "url": "https://b.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额43000万元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": false,
+    "expectedSourceGroups": 2,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元",
+      "AMOUNT:43000:万元"
+    ]
+  },
+  {
+    "id": "recovery-after-rejection",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": false,
+    "expectedSourceGroups": 1,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元"
+    ],
+    "beforeDocuments": [
+      {
+        "reference": "before",
+        "url": "https://wrong.cn/article",
+        "text": "2026年11月6日，兆易创新大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ]
+  },
+  {
+    "id": "forged-model-candidate",
+    "subject": "长鑫科技",
+    "question": "长鑫科技今日大宗交易有哪些事实？",
+    "asOfDate": "2026-11-06",
+    "documents": [
+      {
+        "reference": "a",
+        "url": "https://a.cn/article",
+        "text": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "selected": true
+      }
+    ],
+    "expectedAccepted": true,
+    "expectedCoverage": 1,
+    "expectedConflict": false,
+    "expectedSourceGroups": 1,
+    "allowedNumbers": [
+      "VOLUME:828.08:万股",
+      "AMOUNT:4.3:亿元",
+      "PRICE:51.96:元"
+    ],
+    "candidates": [
+      {
+        "evidenceRef": "a",
+        "kind": "AMOUNT",
+        "quote": "2026年11月6日，长鑫科技大宗交易成交828.08万股，成交额4.3亿元，成交均价51.96元。",
+        "value": "8.6",
+        "unit": "亿元"
+      }
+    ]
+  }
+]

@@ -25,6 +25,7 @@ class ResearchAgentStateReducerTest {
         ResearchAgentDecision decision = decision("MODEL");
         ResearchToolObservation observation = observation("NO_PROGRESS", 0, 0);
         observation.setId(80L);
+        observation.setNewInformation("日期不符：下一轮查询 2026-11-06 原始披露");
         reducer.reduceAndPersist(state, decision, observation);
 
         assertEquals(1, state.getDecisionCount());
@@ -32,6 +33,7 @@ class ResearchAgentStateReducerTest {
         assertEquals(80L, state.getLastObservationId());
         assertEquals(Collections.singletonList("fingerprint-1"), state.getAttemptedFingerprints());
         assertTrue(state.getMemorySummary().contains("没有新增证据"));
+        assertTrue(state.getMemorySummary().contains("2026-11-06 原始披露"));
         verify(repository).updateState(state, 3);
     }
 

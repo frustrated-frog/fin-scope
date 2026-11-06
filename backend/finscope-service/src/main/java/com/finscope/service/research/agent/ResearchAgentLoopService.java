@@ -202,11 +202,6 @@ public class ResearchAgentLoopService {
         }
         ResearchAgentState reduced = turnService.commitToolTurn(runId, nodeId, start.isStarted(),
                 state, decision, observation);
-        if (external && !"TERMINAL_ERROR".equals(observation.getStatus())
-                && !"RETRYABLE_ERROR".equals(observation.getStatus())
-                && !"FAILED".equals(observation.getStatus())) {
-            missionService.assess(runId, "agent-decision-" + decision.getId());
-        }
         if ("TERMINAL_ERROR".equals(observation.getStatus())
                 || "RETRYABLE_ERROR".equals(observation.getStatus())) {
             return new ToolStep(reduced, external && start.isStarted() ? 1 : 0,

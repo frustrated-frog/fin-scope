@@ -56,7 +56,8 @@ public class ResearchFinishVerifier {
         if (missing.isEmpty()) {
             return new ResearchFinishVerdict(true, "ACCEPTED", missing);
         }
-        String reason = !methodMissing.isEmpty() ? "METHOD_INCOMPLETE"
+        String reason = evidence.getQuality() != null && !evidence.getQuality().complete() ? "TASK_CONTRACT_INCOMPLETE"
+                : !methodMissing.isEmpty() ? "METHOD_INCOMPLETE"
                 : !evidence.isSufficient() ? "EVIDENCE_INSUFFICIENT"
                 : mission.getActiveTaskKey() != null ? "ACTIVE_TASK"
                 : "RUNTIME_INCONSISTENT";

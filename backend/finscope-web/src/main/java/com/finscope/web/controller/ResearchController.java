@@ -135,6 +135,12 @@ public class ResearchController {
         return ApiResponses.success(researchReportService.detailByRunId(id));
     }
 
+    @GetMapping("/{id}/quality")
+    public ApiResponse<com.finscope.domain.research.quality.ResearchQualityAssessment> quality(@PathVariable Long id) {
+        return ApiResponses.success(researchReportService.findQuality(id).orElseThrow(
+                () -> new com.finscope.common.exception.ResourceNotFoundException("研究运行尚无证据质量审计：" + id)));
+    }
+
     /**
      * 重新生成研究报告。
      *

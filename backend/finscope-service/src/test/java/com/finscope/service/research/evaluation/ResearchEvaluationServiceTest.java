@@ -51,7 +51,7 @@ class ResearchEvaluationServiceTest {
         when(outputs.findDistinctArticleSourceIdentities(7L)).thenReturn(Arrays.asList("one", "two", "three"));
         when(searches.findByRunId(7L)).thenReturn(Collections.<ResearchSearchEvidence>emptyList());
         when(evaluations.save(any(ResearchEvaluation.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        ResearchEvaluationService service = new ResearchEvaluationService(runs, reports, runtime, outputs, searches,
+        ResearchEvaluationService service = service(runs, reports, runtime, outputs, searches,
                 evaluations, new ResearchEvaluationScorer());
 
         ResearchEvaluation first = service.evaluate(7L);
@@ -78,7 +78,7 @@ class ResearchEvaluationServiceTest {
         when(evaluations.save(any(ResearchEvaluation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(searches.findByRunId(7L)).thenReturn(Collections.<ResearchSearchEvidence>emptyList());
         when(outputs.findDistinctArticleSourceIdentities(7L)).thenReturn(Collections.<String>emptyList());
-        ResearchEvaluationService service = new ResearchEvaluationService(runs, reports, runtime, outputs, searches,
+        ResearchEvaluationService service = service(runs, reports, runtime, outputs, searches,
                 evaluations, new ResearchEvaluationScorer());
 
         ResearchEvaluation evaluation = service.evaluate(7L);
@@ -111,14 +111,14 @@ class ResearchEvaluationServiceTest {
                 search("a.example.com"), search("b.example.com"),
                 search("c.example.com"), search("a.example.com")));
         when(evaluations.save(any(ResearchEvaluation.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        ResearchEvaluationService service = new ResearchEvaluationService(runs, reports, runtime, outputs,
+        ResearchEvaluationService service = service(runs, reports, runtime, outputs,
                 searches, evaluations, new ResearchEvaluationScorer());
 
         ResearchEvaluation evaluation = service.evaluate(7L);
 
         assertEquals("PASS", evaluation.getGateStatus());
         assertEquals(100, evaluation.getScore());
-        assertEquals("deep-research-rules-v4", evaluation.getEvaluatorVersion());
+        assertEquals("deep-research-rules-v5", evaluation.getEvaluatorVersion());
         org.junit.jupiter.api.Assertions.assertFalse(
                 evaluation.getCriticalIssues().contains("REPORT_OUTPUT_MISMATCH"));
     }
@@ -167,4 +167,26 @@ class ResearchEvaluationServiceTest {
         event.setNodeId(node);
         return event;
     }
+    private ResearchEvaluationService service(ResearchRunRepository runs, ResearchReportRepository reports,
+            ResearchRuntimeRepository runtime, ResearchRunOutputRepository outputs,
+            ResearchSearchEvidenceRepository searches, ResearchEvaluationRepository evaluations,
+            ResearchEvaluationScorer scorer) {
+        ResearchEvaluationService service = new ResearchEvaluationService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "runRepository", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "reportRepository", reports);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "runtimeRepository", runtime);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "outputRepository", outputs);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "searchEvidenceRepository", searches);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "evaluationRepository", evaluations);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "scorer", scorer);
+        com.finscope.service.research.quality.ResearchQualityService qualityService = mock(com.finscope.service.research.quality.ResearchQualityService.class);
+        com.finscope.domain.research.quality.ResearchQualityAssessment quality = new com.finscope.domain.research.quality.ResearchQualityAssessment();
+        quality.setTaskCoverage(1D);
+        quality.setIndependentSourceCount(2);
+        quality.setFingerprint("quality-fixture");
+        when(qualityService.findLatest(any())).thenReturn(Optional.of(quality));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "qualityService", qualityService);
+        return service;
+    }
+
 }

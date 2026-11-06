@@ -6,6 +6,13 @@ import com.finscope.dao.research.ResearchSearchEvidenceRepository;
 import com.finscope.dao.research.ResearchThesisRepository;
 import com.finscope.domain.research.ResearchReport;
 import com.finscope.domain.research.ThesisFinding;
+import com.finscope.domain.article.Article;
+import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchThesis;
+import com.finscope.domain.research.ResearchSearchEvidence;
+import com.finscope.domain.research.quality.*;
+import com.finscope.service.research.quality.ResearchQualityService;
+import com.finscope.service.research.quality.ResearchQualityReportRenderer;
 import com.finscope.service.research.ResearchRunOutputService;
 import com.finscope.service.vault.VaultWriter;
 import org.springframework.stereotype.Service;
@@ -41,21 +48,37 @@ public class ResearchReportService {
 
     @Resource
     private ResearchArchivedEventSource archivedEventSource;
+    @Resource
+    private ResearchQualityService qualityService;
+    @Resource
+    private ResearchQualityReportRenderer qualityRenderer;
 
     public ResearchReport generate(Long runId) {
         RunScopedResearchContext context = contextService.load(runId);
         if (context.getThesis() == null) {
             throw new IllegalStateException("A research thesis is required to generate a thesis report");
         }
-        List<ResearchEvidenceCard> evidence = evidenceSelector.select(context.getThesis(), archivedEventSource.articlesFor(context),
-                context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId));
-        if (evidence.isEmpty()) {
+        List<Article> articles = archivedEventSource.articlesFor(context);
+        List<ResearchSearchEvidence> search = searchEvidenceRepository.findByRunId(runId);
+        List<ResearchEvidenceCard> selected = evidenceSelector.select(context.getThesis(), articles,
+                context.getEvidenceItems(), search);
+        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), context.getThesis(), articles,
+                search, selected, true);
+        List<ResearchEvidenceCard> evidence = qualityEvidence(selected, quality);
+        if (selected.isEmpty()) {
             throw new InsufficientResearchEvidenceException(
                     "研究运行没有可引用的有效证据，已阻止生成结论报告");
         }
-        EvidenceSufficiency sufficiency = EvidenceSufficiency.assess(evidence);
+        EvidenceSufficiency sufficiency = EvidenceSufficiency.assess(evidence).withQuality(quality);
         GeneratedResearchReport fallback = reportGenerator.generate(context.getThesis(), evidence, sufficiency);
-        GeneratedResearchReport generated = synthesisAgent.refine(context.getThesis(), evidence, fallback);
+        GeneratedResearchReport narrative = sufficiency.isSufficient()
+                ? synthesisAgent.refine(context.getThesis(), evidence, fallback) : fallback;
+        String boundary = quality.complete() ? "" : "当前研究尚有未解决的任务事实、日期、来源或数值缺口，以下结论仅为阶段性判断。";
+        GeneratedResearchReport generated = new GeneratedResearchReport(narrative.getTitle(),
+                boundary + narrative.getConclusion(), narrative.getConclusionDirection(),
+                sufficiency.isSufficient() ? narrative.getConfidence() : "LOW",
+                boundary + narrative.getExecutiveSummary(), narrative.getMarkdown() + qualityRenderer.render(quality),
+                narrative.getGenerationMode(), narrative.getWarning());
         try {
             Path path = vaultWriter.writeResearchReport(context.getThesis().getId(), runId, generated.getMarkdown());
             ResearchReport report = new ResearchReport();
@@ -120,8 +143,49 @@ public class ResearchReportService {
         if (context.getThesis() == null) {
             return EvidenceSufficiency.assess(java.util.Collections.<ResearchEvidenceCard>emptyList());
         }
-        return EvidenceSufficiency.assess(evidenceSelector.select(context.getThesis(), archivedEventSource.articlesFor(context),
-                context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId)));
+        List<Article> articles = archivedEventSource.articlesFor(context);
+        List<ResearchSearchEvidence> search = searchEvidenceRepository.findByRunId(runId);
+        List<ResearchEvidenceCard> selected = evidenceSelector.select(context.getThesis(), articles,
+                context.getEvidenceItems(), search);
+        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), context.getThesis(), articles,
+                search, selected, false);
+        return EvidenceSufficiency.assess(qualityEvidence(selected, quality)).withQuality(quality);
+    }
+
+    public ResearchTaskContract initializeContract(ResearchRun run, ResearchThesis thesis) {
+        return qualityService.initialize(run, thesis);
+    }
+
+    public Optional<ResearchQualityAssessment> findQuality(Long runId) {
+        return qualityService.findLatest(runId);
+    }
+
+    private List<ResearchEvidenceCard> qualityEvidence(List<ResearchEvidenceCard> selected,
+                                                       ResearchQualityAssessment quality) {
+        List<ResearchEvidenceCard> accepted = new ArrayList<>();
+        for (ResearchEvidenceCard card : selected) {
+            ResearchEvidenceReview review = quality.getEvidence().stream()
+                    .filter(item -> java.util.Objects.equals(item.getUrl(), card.getArticle().getUrl()) && item.isAccepted())
+                    .findFirst().orElse(null);
+            if (review == null) {
+                continue;
+            }
+            String quotes = quality.getFacts().stream()
+                    .filter(fact -> fact.isVerified() && review.getEvidenceRef().equals(fact.getEvidenceRef()))
+                    .map(StructuredResearchFact::getQuote).distinct().collect(java.util.stream.Collectors.joining("\n"));
+            Article original = card.getArticle();
+            Article clean = new Article();
+            clean.setId(original.getId());
+            clean.setTitle(original.getTitle());
+            clean.setUrl(original.getUrl());
+            clean.setSourceName(original.getSourceName());
+            clean.setPublishedAt(original.getPublishedAt());
+            clean.setSummary(quotes);
+            clean.setBody(quotes);
+            accepted.add(new ResearchEvidenceCard(clean, card.getEvidenceItem(), card.getStance(),
+                    card.getRelevanceScore(), quotes, review.getSourceGroup(), card.getSourceTier()));
+        }
+        return accepted;
     }
 
     private int sourceCount(List<ResearchEvidenceCard> evidence) {

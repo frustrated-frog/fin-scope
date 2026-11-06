@@ -1,6 +1,7 @@
 package com.finscope.service.research.report;
 
 import com.finscope.domain.research.ResearchSourceIdentity;
+import com.finscope.domain.research.quality.ResearchQualityAssessment;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,6 +16,25 @@ public class EvidenceSufficiency {
     private final int supportCount;
     private final int counterCount;
     private final List<String> warnings;
+    private ResearchQualityAssessment quality;
+
+    public EvidenceSufficiency withQuality(ResearchQualityAssessment assessment) {
+        List<String> combined = new ArrayList<String>(warnings);
+        combined.addAll(assessment.getMissingConditions());
+        combined.addAll(assessment.getConflicts());
+        if (!assessment.complete()) {
+            combined.addAll(assessment.getFeedback());
+        }
+        combined = new ArrayList<String>(new java.util.LinkedHashSet<String>(combined));
+        EvidenceSufficiency result = new EvidenceSufficiency(sufficient && assessment.complete(),
+                evidenceCount, assessment.getIndependentSourceCount(), supportCount, counterCount, combined);
+        result.quality = assessment;
+        return result;
+    }
+
+    public ResearchQualityAssessment getQuality() {
+        return quality;
+    }
 
     private EvidenceSufficiency(boolean sufficient,
                                 int evidenceCount,

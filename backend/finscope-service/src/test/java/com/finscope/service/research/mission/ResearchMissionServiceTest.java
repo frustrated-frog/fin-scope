@@ -31,6 +31,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResearchMissionServiceTest {
+    @Test
+    void schedulesDateBoundRecoveryFromRejectedEvidence() {
+        com.finscope.domain.research.quality.ResearchQualityAssessment quality = new com.finscope.domain.research.quality.ResearchQualityAssessment();
+        quality.setContract(new com.finscope.service.research.quality.ResearchTaskContractBuilder().build(run(), thesis()));
+        quality.setFingerprint("0123456789abcdef");
+        quality.setRecoveryIntent("UPDATE");
+        quality.setRecoveryQuery("长鑫科技 2026-11-06 大宗交易 原始公告");
+        quality.getMissingConditions().add("事件日期未核实");
+        quality.getFeedback().add("日期不符，限定时间窗读取原始披露");
+        when(reportService.assessSufficiency(21L)).thenReturn(EvidenceSufficiency.fromCounts(8, 4, 5, 3).withQuality(quality));
+        ResearchMissionGap gap = service.assess(21L, "bad-date");
+        ArgumentCaptor<ResearchMissionTask> task = ArgumentCaptor.forClass(ResearchMissionTask.class);
+        verify(repository).upsertAdaptiveTask(eq(21L), task.capture());
+        assertEquals("UPDATE", gap.getRecommendedIntent());
+        assertEquals("adaptive_quality_0123456789ab", task.getValue().getTaskKey());
+        assertTrue(task.getValue().getQueryText().contains("2026-11-06"));
+        org.junit.jupiter.api.Assertions.assertFalse(gap.isSufficient());
+    }
     private ResearchMissionRepository repository;
     private ResearchPlanningAgent planningAgent;
     private ResearchReportService reportService;
@@ -41,6 +59,8 @@ class ResearchMissionServiceTest {
         repository = mock(ResearchMissionRepository.class);
         planningAgent = mock(ResearchPlanningAgent.class);
         reportService = mock(ResearchReportService.class);
+        when(reportService.initializeContract(any(), any())).thenAnswer(invocation ->
+                new com.finscope.service.research.quality.ResearchTaskContractBuilder().build(invocation.getArgument(0), invocation.getArgument(1)));
         service = new ResearchMissionService(repository, planningAgent, reportService,
                 new ResearchEvidenceGapAnalyzer(), new ResearchToolRegistry());
     }

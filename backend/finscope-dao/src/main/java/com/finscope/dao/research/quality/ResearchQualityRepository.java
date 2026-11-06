@@ -45,6 +45,14 @@ public class ResearchQualityRepository {
         return read("SELECT assessment_json FROM research_quality_assessment WHERE research_run_id=? ORDER BY id DESC LIMIT 1", runId);
     }
 
+    public List<ResearchQualityAssessment> findHistory(Long runId) {
+        List<ResearchQualityAssessment> history = jdbcTemplate.query(
+                "SELECT assessment_json FROM research_quality_assessment WHERE research_run_id=? ORDER BY id DESC LIMIT 100",
+                (rs, index) -> decode(rs.getString(1), ResearchQualityAssessment.class), runId);
+        java.util.Collections.reverse(history);
+        return history;
+    }
+
     public boolean reserveModelAttempt(Long runId) {
         return jdbcTemplate.update("INSERT OR IGNORE INTO research_fact_extraction_attempt(research_run_id) VALUES(?)", runId) == 1;
     }

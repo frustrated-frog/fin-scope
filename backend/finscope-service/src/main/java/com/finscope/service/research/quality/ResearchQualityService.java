@@ -59,6 +59,10 @@ public class ResearchQualityService {
         return repository.findLatest(runId);
     }
 
+    public List<ResearchQualityAssessment> findHistory(Long runId) {
+        return repository.findHistory(runId);
+    }
+
     private List<ResearchEvidenceDocument> documents(List<Article> articles, List<ResearchSearchEvidence> search,
                                                      List<ResearchEvidenceCard> selected) {
         Set<String> accepted = new HashSet<>();

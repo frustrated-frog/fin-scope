@@ -13,6 +13,24 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DeterministicResearchPolicyTest {
+    @Test
+    void prioritizesQualityRepairInsteadOfRepeatingGenericSearch() {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        ResearchMissionTask task = new ResearchMissionTask();
+        task.setTaskKey("adaptive_quality_0123456789ab");
+        task.setTitle("修复事件日期");
+        task.setToolCode("public_news_search");
+        task.setIntent("UPDATE");
+        task.setStatus("PENDING");
+        task.setDependencies(Collections.emptyList());
+        task.setQueryText("长鑫科技 2026-11-06 大宗交易 原始公告");
+        task.setRationale("排除旧事件，核对事件日期");
+        task.setExpectedEvidence("同主体同日期披露");
+        context.setTasks(Collections.singletonList(task));
+        ResearchAgentDecision decision = policy.decide(context);
+        assertEquals(task.getTaskKey(), decision.getMissionTaskKey());
+        assertTrue(decision.getArgumentsJson().contains("2026-11-06"));
+    }
     private final ResearchDecisionValidator validator = new ResearchDecisionValidator();
     private final DeterministicResearchPolicy policy = new DeterministicResearchPolicy(validator);
 

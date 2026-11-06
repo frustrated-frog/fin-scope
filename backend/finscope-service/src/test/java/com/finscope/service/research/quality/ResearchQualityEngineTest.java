@@ -61,6 +61,27 @@ class ResearchQualityEngineTest {
     }
 
     @Test
+    void rejectsOtherCompanyActionEvenWhenTargetSharesTheSentence() {
+        ResearchRun run = new ResearchRun();
+        run.setId(1L);
+        run.setRunDate(LocalDate.of(2026, 11, 6));
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("微软今日涨超5%是否确认？");
+        ResearchQualityAssessment result = assess(builder.build(run, thesis), List.of(
+                doc("a", "a.cn", "2026年11月6日，微软发布公告，特斯拉股价上涨6%。")));
+        assertEquals(0D, result.getTaskCoverage());
+    }
+
+    @Test
+    void cleanedFactsDoNotReintroduceNavigationIntoReportQuotes() {
+        String raw = "移动版 网页版) 首页 新闻 视频 投资 基金 服务 您当前的位置：证券时报 > 公司 > 正文 长鑫科技大宗交易成交额4.3亿元。";
+        ResearchQualityAssessment result = assess(contract("长鑫科技大宗交易"), List.of(doc("a", "a.cn", raw)));
+        assertTrue(result.getFacts().stream().filter(StructuredResearchFact::isVerified)
+                .allMatch(fact -> !fact.getQuote().contains("首页")));
+    }
+
+    @Test
     void publicationDateCannotRepairAnOldOrUndatedEvent() {
         ResearchEvidenceDocument old = doc("a", "a.cn", "2026年8月6日，长鑫科技大宗交易成交额4.3亿元。");
         old.setPublishedDate("2026-11-06");
@@ -71,6 +92,23 @@ class ResearchQualityEngineTest {
         undated.setPublishedDate("2026-11-06");
         assertTrue(assess(contract("长鑫科技今日大宗交易"), List.of(undated)).getFacts().stream()
                 .allMatch(f -> f.getIssues().contains(ResearchEvidenceIssue.DATE_MISSING)));
+    }
+
+    @Test
+    void publicationMetadataInBodyCannotSupplyEventDate() {
+        ResearchEvidenceDocument doc = doc("a", "a.cn", "发布时间：2026年11月6日\n长鑫科技大宗交易成交额4.3亿元。");
+        ResearchQualityAssessment result = assess(contract("长鑫科技今日大宗交易"), List.of(doc));
+        assertEquals(0D, result.getTaskCoverage());
+    }
+
+    @Test
+    void doesNotTreatSingleTradeAsConflictingWithDailyTotal() {
+        ResearchQualityAssessment result = assess(contract("长鑫科技大宗交易"), List.of(
+                doc("a", "a.cn", "2026年11月6日，长鑫科技大宗交易单笔成交额1亿元。"),
+                doc("b", "b.cn", "2026年11月6日，长鑫科技大宗交易当日累计成交额4.3亿元。")));
+        assertTrue(result.getConflicts().isEmpty());
+        assertTrue(result.getFacts().stream().anyMatch(f -> f.getScope().contains("SINGLE_TRADE")));
+        assertTrue(result.getFacts().stream().anyMatch(f -> f.getScope().contains("DAILY_TOTAL")));
     }
 
     @Test

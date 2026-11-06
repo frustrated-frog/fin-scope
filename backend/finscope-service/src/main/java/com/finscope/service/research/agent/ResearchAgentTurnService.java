@@ -4,6 +4,7 @@ import com.finscope.dao.research.agent.ResearchAgentRepository;
 import com.finscope.domain.research.agent.ResearchAgentDecision;
 import com.finscope.domain.research.agent.ResearchAgentState;
 import com.finscope.domain.research.agent.ResearchToolObservation;
+import com.finscope.domain.research.mission.ResearchMissionGap;
 import com.finscope.service.research.runtime.ResearchRuntimeService;
 import com.finscope.service.research.mission.ResearchMissionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +42,6 @@ public class ResearchAgentTurnService {
                                              ResearchAgentState state,
                                              ResearchAgentDecision decision,
                                              ResearchToolObservation observation) {
-        repository.appendObservation(observation);
         boolean failed = isFailure(observation);
         if (runtimeStarted) {
             if (failed) {
@@ -57,7 +57,16 @@ public class ResearchAgentTurnService {
                 observation.getErrorType() == null ? decision.getValidationError() : observation.getErrorType());
         if (missionService != null) {
             missionService.recordAgentToolResult(runId, decision, observation);
+            if (!failed && ("public_news_search".equals(decision.getToolCode())
+                    || "research_material_search".equals(decision.getToolCode()))) {
+                ResearchMissionGap gap = missionService.assess(runId, "agent-decision-" + decision.getId());
+                if (gap != null) {
+                    observation.setNewInformation((observation.getNewInformation() == null ? "" : observation.getNewInformation())
+                            + "；证据校验反馈：" + String.join("；", gap.getWarnings()));
+                }
+            }
         }
+        repository.appendObservation(observation);
         ResearchAgentState reduced = reducer.reduceAndPersist(state, decision, observation);
         if (failed) {
             reducer.recordAbort(reduced, decision);

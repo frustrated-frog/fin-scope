@@ -33,33 +33,27 @@ import javax.annotation.Resource;
 
 @Service
 public class ResearchEvaluationService {
-    private final ResearchRunRepository runRepository;
-    private final ResearchReportRepository reportRepository;
-    private final ResearchRuntimeRepository runtimeRepository;
-    private final ResearchRunOutputRepository outputRepository;
-    private final ResearchSearchEvidenceRepository searchEvidenceRepository;
-    private final ResearchEvaluationRepository evaluationRepository;
-    private final ResearchEvaluationScorer scorer;
+    @Resource
+    private ResearchRunRepository runRepository;
+    @Resource
+    private ResearchReportRepository reportRepository;
+    @Resource
+    private ResearchRuntimeRepository runtimeRepository;
+    @Resource
+    private ResearchRunOutputRepository outputRepository;
+    @Resource
+    private ResearchSearchEvidenceRepository searchEvidenceRepository;
+    @Resource
+    private ResearchEvaluationRepository evaluationRepository;
+    @Resource
+    private ResearchEvaluationScorer scorer;
     @Resource
     private ResearchAgentRepository researchAgentRepository;
     @Resource
     private ResearchTrajectoryEvaluator trajectoryEvaluator;
 
-    public ResearchEvaluationService(ResearchRunRepository runRepository,
-                                     ResearchReportRepository reportRepository,
-                                     ResearchRuntimeRepository runtimeRepository,
-                                     ResearchRunOutputRepository outputRepository,
-                                     ResearchSearchEvidenceRepository searchEvidenceRepository,
-                                     ResearchEvaluationRepository evaluationRepository,
-                                     ResearchEvaluationScorer scorer) {
-        this.runRepository = runRepository;
-        this.reportRepository = reportRepository;
-        this.runtimeRepository = runtimeRepository;
-        this.outputRepository = outputRepository;
-        this.searchEvidenceRepository = searchEvidenceRepository;
-        this.evaluationRepository = evaluationRepository;
-        this.scorer = scorer;
-    }
+    @Resource
+    private com.finscope.service.research.quality.ResearchQualityService qualityService;
 
     @Transactional
     public ResearchEvaluation evaluate(Long runId) {
@@ -78,8 +72,11 @@ public class ResearchEvaluationService {
                 new ResearchEvaluationSnapshot(run, report, checkpoint, events, evidenceCount, sourceCount));
         ResearchAgentTrajectoryMetrics trajectory = trajectory(runId);
         scorer.appendTrajectoryMetric(evaluation, trajectory);
-        evaluation.setInputFingerprint(fingerprint(run, report, checkpoint, events, trajectory,
-                evidenceCount, sourceCount));
+        com.finscope.domain.research.quality.ResearchQualityAssessment quality = qualityService.findLatest(runId).orElse(null);
+        scorer.appendQualityMetrics(evaluation, quality, report);
+        scorer.appendQualityRecoveryMetric(evaluation, qualityService.findHistory(runId));
+        evaluation.setInputFingerprint(sha256(fingerprint(run, report, checkpoint, events, trajectory,
+                evidenceCount, sourceCount) + (quality == null ? "|quality=missing" : "|quality=" + quality.getFingerprint())));
         return evaluationRepository.save(evaluation);
     }
 

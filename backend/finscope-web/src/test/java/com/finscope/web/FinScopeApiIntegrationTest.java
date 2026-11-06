@@ -84,6 +84,9 @@ class FinScopeApiIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        deleteIfExists("research_quality_assessment");
+        deleteIfExists("research_task_contract");
+        deleteIfExists("research_fact_extraction_attempt");
         deleteIfExists("topic_article");
         deleteIfExists("topic_brief");
         deleteIfExists("learning_task");
@@ -685,8 +688,15 @@ class FinScopeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.score").isNumber())
                 .andExpect(jsonPath("$.data.gateStatus").value("PASS"))
-                .andExpect(jsonPath("$.data.metrics.length()").value(7))
-                .andExpect(jsonPath("$.data.metrics[*].metricCode").value(hasItem("agent_trajectory")));
+                .andExpect(jsonPath("$.data.metrics.length()").value(greaterThanOrEqualTo(12)))
+                .andExpect(jsonPath("$.data.metrics[*].metricCode").value(hasItem("agent_trajectory")))
+                .andExpect(jsonPath("$.data.metrics[*].metricCode").value(hasItem("task_fact_coverage")));
+
+        mvc.perform(get("/api/research/runs/1/quality"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.contract.question").value("宏观政策变化如何影响黄金？"))
+                .andExpect(jsonPath("$.data.taskCoverage").value(1.0))
+                .andExpect(jsonPath("$.data.independentSourceCount").value(2));
 
         mvc.perform(get("/api/research/runs/1/evaluations/latest"))
                 .andExpect(status().isOk())
@@ -824,13 +834,14 @@ class FinScopeApiIntegrationTest {
                 : new String[][]{
                 {"美元走强令黄金价格回落", "美元指数上行，黄金价格出现回落风险。"},
                 {"黄金消费需求放缓且库存增加", "高金价限制消费，黄金需求放缓并出现库存压力。"},
-                {"利率维持高位或导致黄金配置下调", "降息延迟可能带来黄金配置下调与资金流出风险。"},
-                {"黄金矿产供应增加带来下滑风险", "矿产黄金供应扩张，需求放缓可能带来价格下滑风险。"}};
+                {"利率维持高位伴随黄金配置下调", "降息延迟，黄金配置下调并出现资金流出风险。"},
+                {"黄金矿产供应增加带来下滑风险", "矿产黄金供应扩张，需求放缓并出现价格下滑风险。"}};
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
                 .append("<rss version=\"2.0\"><channel><title>").append(source).append("</title>");
         for (int index = 0; index < items.length; index++) {
             xml.append("<item><title>").append(items[index][0]).append("</title>")
-                    .append("<link>https://example.com/research-").append(stance).append('-').append(index).append("</link>")
+                    .append("<link>https://").append(support ? "support.example.com" : "risk.example.org")
+                    .append("/research-").append(stance).append('-').append(index).append("</link>")
                     .append("<description>").append(items[index][1]).append("</description>")
                     .append("<pubDate>").append(DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC))).append("</pubDate>")
                     .append("</item>");
