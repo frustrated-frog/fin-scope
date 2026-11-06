@@ -12,6 +12,7 @@ import javax.annotation.Resource;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -82,6 +83,17 @@ public class InstrumentRepository {
 
     public List<Instrument> findAll() {
         return jdbcTemplate.query("SELECT * FROM instrument ORDER BY id DESC", mapper);
+    }
+
+    /** 只取本地同市场、同行业股票样本，不触发外部搜索或补齐。 */
+    public List<Instrument> findSectorPeers(String sectorCode, String market, Long excludeId, int limit) {
+        if (sectorCode == null || sectorCode.isBlank() || market == null || market.isBlank()
+                || excludeId == null || limit <= 0) {
+            return Collections.emptyList();
+        }
+        return jdbcTemplate.query("SELECT * FROM instrument WHERE type='STOCK' AND sector_code=? "
+                        + "AND market=? AND id<>? ORDER BY id DESC LIMIT ?",
+                mapper, sectorCode, market, excludeId, Math.min(limit, 8));
     }
 
     public Instrument update(Instrument instrument) {
