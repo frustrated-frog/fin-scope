@@ -3,6 +3,8 @@ package com.finscope.service.research.report;
 import com.finscope.dao.majorevent.MajorEventRepository;
 import com.finscope.domain.article.Article;
 import com.finscope.domain.majorevent.MajorEvent;
+import com.finscope.domain.research.ResearchRun;
+import com.finscope.domain.research.ResearchThesis;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -20,15 +22,21 @@ public class ResearchArchivedEventSource {
 
     public List<Article> articlesFor(RunScopedResearchContext context) {
         List<Article> result = new ArrayList<>(context.getArticles());
-        if (context.getThesis() == null || context.getRun().getCreatedAt() == null) {
+        result.addAll(archivedArticlesFor(context.getRun(), context.getThesis()));
+        return result;
+    }
+
+    public List<Article> archivedArticlesFor(ResearchRun run, ResearchThesis thesis) {
+        List<Article> result = new ArrayList<>();
+        if (thesis == null || run.getCreatedAt() == null) {
             return result;
         }
-        String question = context.getThesis().getQuestion();
+        String question = thesis.getQuestion();
         Matcher match = EVENT_QUESTION.matcher(question == null ? "" : question);
         if (!match.matches()) {
             return result;
         }
-        MajorEvent event = repository.findUniqueTitleBefore(match.group(1), context.getRun().getCreatedAt()).orElse(null);
+        MajorEvent event = repository.findUniqueTitleBefore(match.group(1), run.getCreatedAt()).orElse(null);
         if (event == null || event.getSummary() == null || event.getSummary().isBlank()) {
             return result;
         }

@@ -224,6 +224,7 @@ class ResearchReportServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(quality, "contractBuilder", new com.finscope.service.research.quality.ResearchTaskContractBuilder());
         org.springframework.test.util.ReflectionTestUtils.setField(quality, "engine", engine);
         org.springframework.test.util.ReflectionTestUtils.setField(quality, "candidateAgent", mock(com.finscope.service.research.quality.ResearchFactCandidateAgent.class));
+        org.springframework.test.util.ReflectionTestUtils.setField(quality, "archivedEventSource", archived);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "qualityService", quality);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "qualityRenderer", new com.finscope.service.research.quality.ResearchQualityReportRenderer());
         return service;

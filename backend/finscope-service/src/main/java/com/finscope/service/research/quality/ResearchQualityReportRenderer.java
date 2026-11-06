@@ -19,6 +19,8 @@ public class ResearchQualityReportRenderer {
                 .append("；研究截止日期：").append(contract.getAsOfDate()).append("。\n\n")
                 .append("事件时间窗：").append(contract.getDateFrom() == null ? "问题未指定，保留各项事实的独立日期"
                         : contract.getDateFrom() + " 至 " + contract.getDateTo()).append("。网页发布时间不代替事件日期。\n\n")
+                .append("时间依据：").append(cell(contract.getDateResolution()))
+                .append(contract.getDateAnchorUrl() == null ? "" : "；归档事件来源：" + cell(contract.getDateAnchorUrl())).append("。\n\n")
                 .append("任务事实覆盖率：").append(Math.round(quality.getTaskCoverage() * 100)).append("%；合并转载后的来源组：")
                 .append(quality.getIndependentSourceCount()).append("。覆盖率表示原文与任务的匹配程度，不等同于投资结论的正确概率。\n\n")
                 .append("### 已核验事实与原文位置\n\n")
@@ -35,7 +37,7 @@ public class ResearchQualityReportRenderer {
             StructuredResearchFact fact = facts.get(0);
             String kinds = facts.stream().map(item -> item.getKind().getLabel()).distinct().collect(Collectors.joining("、"));
             String numbers = facts.stream().filter(item -> item.getValue() != null)
-                    .map(item -> item.getValue() + item.getUnit()).distinct().collect(Collectors.joining("；"));
+                    .map(item -> item.getValueRelation().getLabel() + item.getValue() + item.getUnit()).distinct().collect(Collectors.joining("；"));
             out.append("| ").append(cell(fact.getEvidenceRef())).append(" | ").append(kinds)
                     .append(" | ").append(cell(numbers.isBlank() ? "定性事实" : numbers))
                     .append(" | ").append(cell(fact.getEventDate())).append(" / ")

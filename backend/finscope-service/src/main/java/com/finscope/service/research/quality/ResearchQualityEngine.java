@@ -70,7 +70,7 @@ public class ResearchQualityEngine {
         result.setCoveredFacts(new ArrayList<>(covered));
         for (ResearchFactKind kind : contract.getRequiredFacts()) {
             if (!covered.contains(kind)) {
-                result.getMissingConditions().add("任务事实缺失：" + kind);
+                result.getMissingConditions().add("任务事实缺失：" + kind.getLabel());
             }
         }
         result.setTaskCoverage((double) contract.getRequiredFacts().stream().filter(covered::contains).count()
@@ -88,21 +88,26 @@ public class ResearchQualityEngine {
     }
 
     private void detectConflicts(ResearchQualityAssessment result) {
-        Map<String, StructuredResearchFact> observed = new LinkedHashMap<>();
+        Map<String, List<StructuredResearchFact>> observed = new LinkedHashMap<>();
         for (StructuredResearchFact fact : result.getFacts()) {
             if (!fact.isVerified() || !verifier.numeric(fact.getKind()) || fact.getScope() == null
                     || fact.getEventDate() == null) {
                 continue;
             }
             String key = fact.getSubject() + "|" + fact.getKind() + "|" + fact.getEventDate() + "|" + fact.getScope();
-            StructuredResearchFact previous = observed.putIfAbsent(key, fact);
-            if (previous != null && !verifier.normalizedValue(previous).equals(verifier.normalizedValue(fact))) {
-                String conflict = key + "：" + previous.getValue() + previous.getUnit() + "（" + previous.getEvidenceRef()
-                        + "）与" + fact.getValue() + fact.getUnit() + "（" + fact.getEvidenceRef() + "）不一致，须回查原始披露";
-                if (!result.getConflicts().contains(conflict)) {
-                    result.getConflicts().add(conflict);
+            List<StructuredResearchFact> previousFacts = observed.computeIfAbsent(key, ignored -> new ArrayList<>());
+            for (StructuredResearchFact previous : previousFacts) {
+                if (verifier.conflictingValues(previous, fact)) {
+                    String conflict = fact.getSubject() + "在" + fact.getEventDate() + "的" + fact.getKind().getLabel()
+                            + "（同一统计口径）：" + previous.getValueRelation().getLabel() + previous.getValue() + previous.getUnit()
+                            + "（" + previous.getEvidenceRef() + "）与" + fact.getValueRelation().getLabel() + fact.getValue()
+                            + fact.getUnit() + "（" + fact.getEvidenceRef() + "）不一致，须回查原始披露";
+                    if (!result.getConflicts().contains(conflict)) {
+                        result.getConflicts().add(conflict);
+                    }
                 }
             }
+            previousFacts.add(fact);
         }
     }
 
@@ -131,7 +136,9 @@ public class ResearchQualityEngine {
         }
         if (!result.getConflicts().isEmpty()) {
             result.getFeedback().add("数值冲突：按同一日期和口径回查公告，解决前禁止自动完成");
-            repair = " " + text(result.getContract().getDateFrom()) + " 成交额 成交量 成交均价 原始公告 更正";
+            String metrics = result.getFacts().stream().filter(fact -> fact.isVerified() && verifier.numeric(fact.getKind()))
+                    .map(fact -> fact.getKind().getLabel()).distinct().collect(java.util.stream.Collectors.joining(" "));
+            repair = " " + text(result.getContract().getDateFrom()) + " " + metrics + " 原始披露 更正";
         }
         result.getFeedback().addAll(result.getMissingConditions());
         String query = (focus + repair).replaceAll("\\s+", " ").trim();

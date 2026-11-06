@@ -1,6 +1,5 @@
 package com.finscope.service.research.report;
 
-import com.finscope.domain.research.ResearchSourceIdentity;
 import com.finscope.domain.research.quality.ResearchQualityAssessment;
 
 import java.util.ArrayList;

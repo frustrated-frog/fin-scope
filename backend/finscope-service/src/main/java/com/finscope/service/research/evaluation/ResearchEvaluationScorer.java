@@ -9,7 +9,6 @@ import com.finscope.domain.research.agent.ResearchAgentTrajectoryMetrics;
 import com.finscope.domain.research.runtime.ResearchRuntimeCheckpoint;
 import com.finscope.domain.research.runtime.ResearchRuntimeEvent;
 import com.finscope.domain.research.quality.ResearchQualityAssessment;
-import com.finscope.domain.research.quality.StructuredResearchFact;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

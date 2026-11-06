@@ -6,6 +6,7 @@ import com.finscope.domain.article.Article;
 import com.finscope.domain.research.*;
 import com.finscope.domain.research.quality.*;
 import com.finscope.service.research.report.ResearchEvidenceCard;
+import com.finscope.service.research.report.ResearchArchivedEventSource;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
@@ -22,11 +23,41 @@ public class ResearchQualityService {
     private ResearchQualityEngine engine;
     @Resource
     private ResearchFactCandidateAgent candidateAgent;
+    @Resource
+    private ResearchArchivedEventSource archivedEventSource;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ResearchTaskContract initialize(ResearchRun run, ResearchThesis thesis) {
         return repository.findContract(run.getId()).orElseGet(
-                () -> repository.initializeContract(contractBuilder.build(run, thesis)));
+                () -> repository.initializeContract(buildContract(run, thesis)));
+    }
+
+    private ResearchTaskContract buildContract(ResearchRun run, ResearchThesis thesis) {
+        ResearchTaskContract contract = contractBuilder.build(run, thesis);
+        // The archive adapter resolves only an exact, uniquely quoted event predating this run.
+        // Its publishedAt field carries occurredDate from the archive, not web publication metadata.
+        List<Article> archived = archivedEventSource.archivedArticlesFor(run, thesis);
+        if (archived.size() == 1 && archived.get(0).getPublishedAt() != null) {
+            Article event = archived.get(0);
+            String date = event.getPublishedAt().toLocalDate().toString();
+            contract.setDateFrom(date);
+            contract.setDateTo(date);
+            contract.setDateRequired(true);
+            contract.setDateResolution("精确引用的归档事件发生日；标题中的今日指事件当日");
+            contract.setDateAnchorUrl(event.getUrl());
+        }
+        return contract;
+    }
+
+    public ResearchThesis taskThesis(ResearchRun run, ResearchThesis current) {
+        ResearchTaskContract contract = initialize(run, current);
+        ResearchThesis task = new ResearchThesis();
+        task.setId(current.getId());
+        task.setSubjectType(contract.getSubjectType());
+        task.setSubjectName(contract.getSubject());
+        task.setSubjectCode(contract.getSubjectCode());
+        task.setQuestion(contract.getQuestion());
+        return task;
     }
 
     public ResearchQualityAssessment assess(ResearchRun run, ResearchThesis thesis, List<Article> articles,

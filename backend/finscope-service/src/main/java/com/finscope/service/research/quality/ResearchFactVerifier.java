@@ -2,6 +2,7 @@ package com.finscope.service.research.quality;
 
 import com.finscope.common.enums.research.ResearchEvidenceIssue;
 import com.finscope.common.enums.research.ResearchFactKind;
+import com.finscope.common.enums.research.ResearchValueRelation;
 import com.finscope.common.util.WebContentText;
 import com.finscope.domain.research.quality.*;
 import org.springframework.stereotype.Component;
@@ -97,6 +98,9 @@ public class ResearchFactVerifier {
         }
         fact.setScope(period.find() ? period.group() + "|" + scope
                 : fact.getEventDate() == null ? null : fact.getEventDate() + "|" + scope);
+        if (fact.getEventDate() != null && fact.getEventDate().compareTo(contract.getAsOfDate()) > 0) {
+            fact.getIssues().add(ResearchEvidenceIssue.DATE_MISMATCH);
+        }
         if (contract.isDateRequired()) {
             if (fact.getEventDate() == null) {
                 fact.getIssues().add(ResearchEvidenceIssue.DATE_MISSING);
@@ -110,6 +114,11 @@ public class ResearchFactVerifier {
         }
         if (fact.getKind() != null && numeric(fact.getKind()) && !hasExactNumber(fact, quote)) {
             fact.getIssues().add(ResearchEvidenceIssue.NUMBER_MISMATCH);
+        }
+        fact.setValueRelation(relation(fact, quote));
+        if (fact.getKind() != null && numeric(fact.getKind())
+                && quote.matches("(?s).*\\d+(?:\\.\\d+)?\\s*(?:亿|万|千)?\\s*[~～—至-]\\s*\\d+(?:\\.\\d+)?\\s*(?:亿|万|千)?\\s*(?:元|股|[%％]).*")) {
+            fact.getIssues().add(ResearchEvidenceIssue.SCOPE_UNKNOWN);
         }
         if (fact.getKind() != null && numeric(fact.getKind()) && !belongsToSubject(contract, fact, quote)) {
             fact.getIssues().add(ResearchEvidenceIssue.ENTITY_MISMATCH);
@@ -175,20 +184,75 @@ public class ResearchFactVerifier {
                 ResearchFactKind.CHANGE_RATE).contains(kind);
     }
 
+    public boolean conflictingValues(StructuredResearchFact left, StructuredResearchFact right) {
+        if (left.getValueRelation() == ResearchValueRelation.APPROXIMATE || right.getValueRelation() == ResearchValueRelation.APPROXIMATE) {
+            return false;
+        }
+        ValueInterval first = interval(left);
+        ValueInterval second = interval(right);
+        return before(first, second) || before(second, first);
+    }
+
+    private ValueInterval interval(StructuredResearchFact fact) {
+        BigDecimal value = new BigDecimal(normalizedValue(fact));
+        return switch (fact.getValueRelation()) {
+            case GREATER_THAN -> new ValueInterval(value, null, false, false);
+            case AT_LEAST -> new ValueInterval(value, null, true, false);
+            case LESS_THAN -> new ValueInterval(null, value, false, false);
+            case AT_MOST -> new ValueInterval(null, value, false, true);
+            default -> new ValueInterval(value, value, true, true);
+        };
+    }
+
+    private boolean before(ValueInterval first, ValueInterval second) {
+        if (first.maximum() == null || second.minimum() == null) {
+            return false;
+        }
+        int comparison = first.maximum().compareTo(second.minimum());
+        return comparison < 0 || (comparison == 0 && !(first.maximumInclusive() && second.minimumInclusive()));
+    }
+
+    private ResearchValueRelation relation(StructuredResearchFact fact, String quote) {
+        int start = numberStart(fact, quote);
+        String prefix = start < 0 ? "" : quote.substring(Math.max(0, start - 6), start).trim();
+        if (prefix.matches(".*(不超过|至多|不高于)$")) {
+            return ResearchValueRelation.AT_MOST;
+        }
+        if (prefix.matches(".*(至少|不低于|不少于)$")) {
+            return ResearchValueRelation.AT_LEAST;
+        }
+        if (prefix.matches(".*(超过|涨超|高于|大于)$")) {
+            return ResearchValueRelation.GREATER_THAN;
+        }
+        if (prefix.matches(".*(低于|不到|不足|小于)$")) {
+            return ResearchValueRelation.LESS_THAN;
+        }
+        if (prefix.matches(".*(约|近|大约)$")) {
+            return ResearchValueRelation.APPROXIMATE;
+        }
+        return ResearchValueRelation.EXACT;
+    }
+
+    private record ValueInterval(BigDecimal minimum, BigDecimal maximum, boolean minimumInclusive, boolean maximumInclusive) { }
+
     private boolean hasExactNumber(StructuredResearchFact fact, String quote) {
+        return numberStart(fact, quote) >= 0;
+    }
+
+    private int numberStart(StructuredResearchFact fact, String quote) {
         Matcher numbers = NUMBER.matcher(quote);
         while (numbers.find()) {
             if (numbers.group(1).equals(fact.getValue())
                     && (text(numbers.group(2)) + numbers.group(3)).equals(fact.getUnit())
                     && numberKind(numbers.group(3), quote.substring(0, numbers.start())) == fact.getKind()) {
-                return true;
+                return numbers.start();
             }
         }
-        return false;
+        return -1;
     }
 
     private boolean belongsToSubject(ResearchTaskContract contract, StructuredResearchFact fact, String quote) {
-        int number = text(fact.getValue()).isBlank() ? -1 : quote.indexOf(fact.getValue());
+        int number = numberStart(fact, quote);
         if (number < 0) {
             return false;
         }

@@ -42,7 +42,13 @@ public class ResearchFactCandidateAgent {
                     + "quote(逐字复制连续原文，必须包含主体和事件)、value(原始数字字符串)、unit(原始单位)。"
                     + "问题中的数字不是事实，禁止补全、改写引文和推断不存在的日期。无证据返回[]。", input.toString(), 20_000, 1_800);
             List<StructuredResearchFact> candidates = mapper.readValue(output, new TypeReference<List<StructuredResearchFact>>() { });
-            return candidates == null ? Collections.emptyList() : candidates.subList(0, Math.min(12, candidates.size()));
+            if (candidates == null) {
+                return Collections.emptyList();
+            }
+            return candidates.stream().filter(Objects::nonNull)
+                    .filter(candidate -> candidate.getEvidenceRef() != null && candidate.getKind() != null
+                            && candidate.getQuote() != null && !candidate.getQuote().isBlank())
+                    .limit(12).collect(java.util.stream.Collectors.toList());
         } catch (Exception error) {
             // Deterministic extraction remains available; never log provider response or credentials.
             log.warn("research_fact_candidates runId={} fallback=RULES errorType={}",

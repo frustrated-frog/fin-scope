@@ -77,6 +77,7 @@ class ResearchQualityEngineTest {
     void cleanedFactsDoNotReintroduceNavigationIntoReportQuotes() {
         String raw = "移动版 网页版) 首页 新闻 视频 投资 基金 服务 您当前的位置：证券时报 > 公司 > 正文 长鑫科技大宗交易成交额4.3亿元。";
         ResearchQualityAssessment result = assess(contract("长鑫科技大宗交易"), List.of(doc("a", "a.cn", raw)));
+        assertTrue(result.getFacts().stream().anyMatch(StructuredResearchFact::isVerified));
         assertTrue(result.getFacts().stream().filter(StructuredResearchFact::isVerified)
                 .allMatch(fact -> !fact.getQuote().contains("首页")));
     }
@@ -102,6 +103,14 @@ class ResearchQualityEngineTest {
     }
 
     @Test
+    void excludesEventsAfterResearchCutoffEvenWithoutAnExplicitTimeWindow() {
+        ResearchQualityAssessment result = assess(contract("长鑫科技大宗交易"), List.of(
+                doc("a", "a.cn", "2026年11月7日，长鑫科技大宗交易成交额4.3亿元。")));
+        assertEquals(0D, result.getTaskCoverage());
+        assertTrue(result.getFacts().stream().allMatch(f -> f.getIssues().contains(ResearchEvidenceIssue.DATE_MISMATCH)));
+    }
+
+    @Test
     void doesNotTreatSingleTradeAsConflictingWithDailyTotal() {
         ResearchQualityAssessment result = assess(contract("长鑫科技大宗交易"), List.of(
                 doc("a", "a.cn", "2026年11月6日，长鑫科技大宗交易单笔成交额1亿元。"),
@@ -109,6 +118,27 @@ class ResearchQualityEngineTest {
         assertTrue(result.getConflicts().isEmpty());
         assertTrue(result.getFacts().stream().anyMatch(f -> f.getScope().contains("SINGLE_TRADE")));
         assertTrue(result.getFacts().stream().anyMatch(f -> f.getScope().contains("DAILY_TOTAL")));
+    }
+
+    @Test
+    void distinguishesPriceChangeBoundsFromExactNumbersAndChecksAllPairs() {
+        ResearchRun run = new ResearchRun();
+        run.setId(1L);
+        run.setRunDate(LocalDate.of(2026, 11, 6));
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("微软今日股价上涨是否确认？");
+        ResearchTaskContract contract = builder.build(run, thesis);
+        ResearchEvidenceDocument bound = doc("a", "a.cn", "2026-11-06，微软股价涨超5%。");
+        ResearchEvidenceDocument exact = doc("b", "b.cn", "2026-11-06，微软股价上涨6%。");
+        ResearchQualityAssessment compatible = assess(contract, List.of(bound, exact));
+        assertEquals(1D, compatible.getTaskCoverage());
+        assertTrue(compatible.getConflicts().isEmpty());
+        assertTrue(compatible.getFacts().stream().anyMatch(f -> f.getValueRelation() == ResearchValueRelation.GREATER_THAN));
+        ResearchEvidenceDocument different = doc("c", "c.cn", "2026-11-06，微软股价上涨7%。");
+        assertFalse(assess(contract, List.of(bound, exact, different)).getConflicts().isEmpty());
+        ResearchEvidenceDocument inconsistent = doc("d", "d.cn", "2026-11-06，微软股价上涨4%。");
+        assertFalse(assess(contract, List.of(bound, inconsistent)).getConflicts().isEmpty());
     }
 
     @Test
@@ -165,7 +195,7 @@ class ResearchQualityEngineTest {
         ResearchQualityAssessment result = assess(contract("按空间、盈利模式、竞争、治理、估值和反方验证研究长鑫科技"),
                 List.of(doc("a", "a.cn", "长鑫科技主营业务为存储芯片。长鑫科技竞争对手增加。")));
         assertTrue(result.getCoveredFacts().contains(ResearchFactKind.PROFIT_MODEL));
-        assertTrue(result.getMissingConditions().stream().anyMatch(s -> s.contains("VALUATION")));
+        assertTrue(result.getMissingConditions().stream().anyMatch(s -> s.contains("估值")));
         assertTrue(result.getTaskCoverage() < 1D);
     }
 

@@ -19,6 +19,7 @@ public class ResearchTaskContractBuilder {
         contract.setResearchRunId(run.getId());
         contract.setQuestion(text(thesis.getQuestion()));
         contract.setSubject(text(thesis.getSubjectName()));
+        contract.setSubjectType(thesis.getSubjectType());
         contract.setSubjectCode(text(thesis.getSubjectCode()));
         contract.getAliases().add(contract.getSubject());
         if (!contract.getSubjectCode().isBlank()) {
@@ -49,6 +50,7 @@ public class ResearchTaskContractBuilder {
             contract.setDateTo(date.toString());
         }
         contract.setDateRequired(contract.getDateFrom() != null);
+        contract.setDateResolution(contract.isDateRequired() ? "按问题日期及运行日期解析" : "未限定事件日期");
         String question = contract.getQuestion();
         contract.setEvent(contains(question, "大宗交易") ? "大宗交易"
                 : contains(question, "财资中心") ? "财资中心"

@@ -58,11 +58,13 @@ public class ResearchReportService {
         if (context.getThesis() == null) {
             throw new IllegalStateException("A research thesis is required to generate a thesis report");
         }
-        List<Article> articles = archivedEventSource.articlesFor(context);
+        ResearchThesis taskThesis = qualityService.taskThesis(context.getRun(), context.getThesis());
+        List<Article> articles = new ArrayList<>(context.getArticles());
+        articles.addAll(archivedEventSource.archivedArticlesFor(context.getRun(), taskThesis));
         List<ResearchSearchEvidence> search = searchEvidenceRepository.findByRunId(runId);
-        List<ResearchEvidenceCard> selected = evidenceSelector.select(context.getThesis(), articles,
+        List<ResearchEvidenceCard> selected = evidenceSelector.select(taskThesis, articles,
                 context.getEvidenceItems(), search);
-        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), context.getThesis(), articles,
+        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), taskThesis, articles,
                 search, selected, true);
         List<ResearchEvidenceCard> evidence = qualityEvidence(selected, quality);
         if (selected.isEmpty()) {
@@ -70,9 +72,9 @@ public class ResearchReportService {
                     "研究运行没有可引用的有效证据，已阻止生成结论报告");
         }
         EvidenceSufficiency sufficiency = EvidenceSufficiency.assess(evidence).withQuality(quality);
-        GeneratedResearchReport fallback = reportGenerator.generate(context.getThesis(), evidence, sufficiency);
+        GeneratedResearchReport fallback = reportGenerator.generate(taskThesis, evidence, sufficiency);
         GeneratedResearchReport narrative = sufficiency.isSufficient()
-                ? synthesisAgent.refine(context.getThesis(), evidence, fallback) : fallback;
+                ? synthesisAgent.refine(taskThesis, evidence, fallback) : fallback;
         String boundary = quality.complete() ? "" : "当前研究尚有未解决的任务事实、日期、来源或数值缺口，以下结论仅为阶段性判断。";
         GeneratedResearchReport generated = new GeneratedResearchReport(narrative.getTitle(),
                 boundary + narrative.getConclusion(), narrative.getConclusionDirection(),
@@ -143,11 +145,13 @@ public class ResearchReportService {
         if (context.getThesis() == null) {
             return EvidenceSufficiency.assess(java.util.Collections.<ResearchEvidenceCard>emptyList());
         }
-        List<Article> articles = archivedEventSource.articlesFor(context);
+        ResearchThesis taskThesis = qualityService.taskThesis(context.getRun(), context.getThesis());
+        List<Article> articles = new ArrayList<>(context.getArticles());
+        articles.addAll(archivedEventSource.archivedArticlesFor(context.getRun(), taskThesis));
         List<ResearchSearchEvidence> search = searchEvidenceRepository.findByRunId(runId);
-        List<ResearchEvidenceCard> selected = evidenceSelector.select(context.getThesis(), articles,
+        List<ResearchEvidenceCard> selected = evidenceSelector.select(taskThesis, articles,
                 context.getEvidenceItems(), search);
-        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), context.getThesis(), articles,
+        ResearchQualityAssessment quality = qualityService.assess(context.getRun(), taskThesis, articles,
                 search, selected, false);
         return EvidenceSufficiency.assess(qualityEvidence(selected, quality)).withQuality(quality);
     }
