@@ -95,7 +95,7 @@ def summarize(key, group):
     days = len({r['signalDate'] for r in rows})
     metrics = evaluate_direction([r['probability'] for r in rows], [r['actualUp'] for r in rows],
         [r['signalDate'] for r in rows], {'MATCHED_BASELINE': [r['baseline'] for r in rows],
-                                       'LIVE_FORECAST': [r['live'] for r in rows]}, family_size=9) if rows else None
+                                       'LIVE_FORECAST': [r['live'] for r in rows]}, family_size=3 * len(GROUPS)) if rows else None
     return {'key': '|'.join(key), 'mode': mode, 'cutoff': cutoff, 'group': name,
             'status': 'RESEARCH_ONLY' if days >= 60 else 'ACCUMULATING', 'eligible': False,
             'dayCount': days, 'requiredDays': 60, 'scheduledDays': group['days'],

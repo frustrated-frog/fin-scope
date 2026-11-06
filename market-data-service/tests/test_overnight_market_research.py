@@ -40,7 +40,7 @@ def audit(values, now=datetime(2026, 9, 23), holdings=None, scans=None):
 
 def test_full_actual_cohort_is_paired_and_never_adopted():
     groups = audit(reports())['groups']
-    assert len(groups) == 3
+    assert len(groups) == 4
     for group in groups:
         assert group['dayCount'] == 1 and group['pairedCount'] == group['scheduledCount'] == 3
         assert group['metrics']['accuracy'] == 1

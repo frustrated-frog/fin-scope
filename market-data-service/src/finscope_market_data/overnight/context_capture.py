@@ -9,11 +9,12 @@ from finscope_market_data.forecast.industry_features import load_industry_member
 from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.models import DataCapability, StockSymbol
 from finscope_market_data.overnight.automation_models import AutomationContext
-from finscope_market_data.overnight.context_features import INDEX_CODES, context_time, stock_context
+from finscope_market_data.overnight.context_features import INDEX_CODES, context_time
 from finscope_market_data.overnight.context_store import OvernightContextStore
 from finscope_market_data.overnight.engine import group_bars
 from finscope_market_data.overnight.universe import POOL_KEY
 from finscope_market_data.overnight.market_context import market_snapshot
+from finscope_market_data.overnight.relative_strength import PROTOCOL as RELATIVE_PROTOCOL, minute_state, coverage
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class OvernightContextCapture:
                 snapshot['universeFingerprint'] = universe['fingerprint']
                 snapshot['memberships'] = [asdict(row) for row in load_industry_memberships(self.membership_path, self.history_path)]
                 snapshot['receivedAt'] = self.clock().isoformat()
+                snapshot['relativeStrength'] = coverage(snapshot)
                 snapshot.update(expectedSymbols=len(codes), capturedSymbols=len(snapshot['pool']))
                 complete = len(snapshot['pool']) >= 20 and len(snapshot['pool']) / len(codes) >= .75
                 snapshot['quality'] = 'SUFFICIENT' if complete else 'INSUFFICIENT_COVERAGE'
@@ -64,19 +66,20 @@ class OvernightContextCapture:
                 meta.finish(job, self.clock(), status='FAILED', reason='环境快照未在有效窗口完成；保留数据缺口')
 
     async def collect(self, codes, observed, cutoff, deadline):
-        pool, indices, failures = {}, {}, []
+        pool, indices, index_minutes, failures = {}, {}, {}, []
         slots = asyncio.Semaphore(6)
 
-        async def stock(code):
+        async def minutes(code, target):
             async with slots:
                 if self.clock() >= deadline:
                     return
                 try:
-                    bars = await asyncio.wait_for(self.automation.service.provider.fetch_async(code, observed), timeout=16)
-                    value = stock_context(group_bars(bars), observed.date(), cutoff)
+                    bars = await asyncio.wait_for(self.automation.service.provider.fetch_async(code, observed),
+                        timeout=min(16, (deadline - self.clock()).total_seconds()))
+                    value = minute_state(group_bars(bars), observed.date(), cutoff)
                     if value is not None and self.clock() <= deadline:
-                        pool[code] = {**value, 'receivedAt': self.clock().isoformat(),
-                                      'source': self.automation.service.provider.source}
+                        target[code] = {**value, 'receivedAt': self.clock().isoformat(),
+                                      'source': getattr(bars, 'source', self.automation.service.provider.source)}
                     else:
                         failures.append(code)
                 except Exception:
@@ -121,9 +124,11 @@ class OvernightContextCapture:
             except Exception as error:
                 market = {'quality': 'UNAVAILABLE', 'reason': f'行情采集失败：{type(error).__name__}'}
 
-        await asyncio.gather(broad_market(), *(stock(code) for code in codes), *(index(code) for code in INDEX_CODES))
+        await asyncio.gather(broad_market(), *(minutes(code, index_minutes) for code in INDEX_CODES),
+                             *(index(code) for code in INDEX_CODES), *(minutes(code, pool) for code in codes))
         return {'signalDate': str(observed.date()), 'cutoff': cutoff, 'observedAt': observed.isoformat(),
-                'pool': pool, 'indices': indices, 'market': market, 'failures': sorted(set(failures)),
+                'pool': pool, 'indices': indices, 'indexMinutes': index_minutes,
+                'relativeStrength': {'protocol': RELATIVE_PROTOCOL}, 'market': market, 'failures': sorted(set(failures)),
                 'scope': '固定研究股票池，并非全市场涨跌家数'}
 
     async def run(self, stop):

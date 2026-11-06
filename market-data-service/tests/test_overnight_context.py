@@ -98,11 +98,13 @@ def test_automatic_capture_receives_before_decision_and_does_not_run_after_hours
     asyncio.run(task.tick())
     frozen = task.contexts.at(day, '14:30', now[0])
     assert len(frozen['pool']) == 20 and len(frozen['indices']) == 3
-    assert len(calls) == 20
+    assert len(calls) == 23
+    assert frozen['relativeStrength']['pairedSymbols'] == 20
+    assert frozen['relativeStrength']['capturedIndices'] == 3
     asyncio.run(task.tick())
     now[0] = now[0].replace(hour=18)
     asyncio.run(task.tick())
-    assert len(calls) == 20
+    assert len(calls) == 23
 
 
 def test_stale_index_and_missing_timestamp_are_never_fresh_context(tmp_path):

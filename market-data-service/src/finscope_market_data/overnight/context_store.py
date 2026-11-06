@@ -16,7 +16,9 @@ class OvernightContextStore:
         decision = f"{value['signalDate']}T{value['cutoff']}:00"
         if value['receivedAt'] > decision or value['observedAt'] >= decision:
             raise ValueError('环境快照未在预测截止前收到')
-        for row in list(value['pool'].values()) + list(value.get('indices', {}).values()) + list((value.get('market') or {}).get('quotes', {}).values()):
+        observations = [*value['pool'].values(), *value.get('indices', {}).values(),
+                        *value.get('indexMinutes', {}).values(), *(value.get('market') or {}).get('quotes', {}).values()]
+        for row in observations:
             if not value['observedAt'] <= row['observedAt'] <= row['receivedAt'] <= value['receivedAt']:
                 raise ValueError('环境数据的行情或接收时间无效')
         digest = hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
@@ -38,7 +40,7 @@ class OvernightContextStore:
                               (limit,)).fetchall()
         result = []
         for row in rows:
-            item = {key: value for key, value in json.loads(row[0]).items() if key not in ('pool', 'indices', 'memberships')}
+            item = {key: value for key, value in json.loads(row[0]).items() if key not in ('pool', 'indices', 'indexMinutes', 'memberships')}
             if 'market' in item:
                 item['market'] = {key: value for key, value in item['market'].items() if key != 'quotes'}
             result.append(item)
