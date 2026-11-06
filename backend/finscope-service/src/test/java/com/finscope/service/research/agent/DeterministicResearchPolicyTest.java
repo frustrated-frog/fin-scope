@@ -83,4 +83,11 @@ class DeterministicResearchPolicyTest {
         assertTrue(decision.getArgumentsJson().contains("000001"));
         assertEquals("NO_GAP", decision.getTargetGap());
     }
+    @Test
+    void keepsTheResearchGoalInRuleFallbackQueries() {
+        ResearchDecisionContext context = ResearchAgentTestFixtures.counterGapContext();
+        context.getMission().setGoal("长鑫科技大宗交易成交4.3亿元意味着什么？");
+        assertTrue(policy.decide(context).getArgumentsJson().contains("大宗交易"));
+    }
+
 }

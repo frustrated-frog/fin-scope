@@ -45,19 +45,28 @@ final class ResearchFactText {
         int boundary = -1;
         int end = Math.min(value.length(), maximum);
         for (int index = 0; index < end; index++) {
-            if (isBoundary(value.charAt(index))) boundary = index + 1;
+            if (isBoundary(value, index)) {
+                boundary = index + 1;
+            }
         }
         return boundary;
     }
 
     private static int nextBoundary(String value, int start, int end) {
         for (int index = Math.max(0, start); index < end; index++) {
-            if (isBoundary(value.charAt(index))) return index + 1;
+            if (isBoundary(value, index)) {
+                return index + 1;
+            }
         }
         return -1;
     }
 
-    private static boolean isBoundary(char value) {
+    private static boolean isBoundary(String text, int index) {
+        char value = text.charAt(index);
+        if (value == '.' && index > 0 && index + 1 < text.length()
+                && Character.isDigit(text.charAt(index - 1)) && Character.isDigit(text.charAt(index + 1))) {
+            return false;
+        }
         return value == '。' || value == '！' || value == '？' || value == '.' || value == '!'
                 || value == '?' || value == '；' || value == ';';
     }

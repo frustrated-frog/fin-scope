@@ -55,6 +55,9 @@ public class ResearchEvidenceSelector {
                 continue;
             }
             Article article = prepareArticle(original, thesis);
+            if (isBlank(article.getSummary()) && isBlank(article.getBody())) {
+                continue;
+            }
             if (isCompanyResearch(thesis) && (!mentionsCompany(article, thesis.getSubjectName())
                     || !matchesQuestionFocus(article, thesis))) {
                 continue;
@@ -80,10 +83,15 @@ public class ResearchEvidenceSelector {
         for (ResearchSearchEvidence search : searchEvidence == null
                 ? Collections.<ResearchSearchEvidence>emptyList() : searchEvidence) {
             Article article = prepareArticle(transientArticle(search), thesis);
+            if (isBlank(article.getSummary()) && isBlank(article.getBody())) {
+                continue;
+            }
             String fingerprint = normalize(firstNonBlank(article.getUrl(), article.getTitle()));
             if (!fingerprints.add(fingerprint)) continue;
             if (isCompanyResearch(thesis) && (!mentionsCompany(article, thesis.getSubjectName())
-                    || !matchesQuestionFocus(article, thesis))) continue;
+                    || !matchesQuestionFocus(article, thesis))) {
+                continue;
+            }
             int score = relevanceScore(article, null, subjectKeywords);
             int providerScore = search.getRelevanceScore() == null ? 0
                     : (int) Math.round(Math.max(0D, Math.min(1D, search.getRelevanceScore())) * 100D);
@@ -116,8 +124,16 @@ public class ResearchEvidenceSelector {
     }
 
     private boolean matchesQuestionFocus(Article article, ResearchThesis thesis) {
+        return matchesQuestionFocus(article.getTitle() + " " + article.getSummary() + " " + article.getBody(), thesis);
+    }
+
+    private boolean matchesQuestionFocus(String value, ResearchThesis thesis) {
         String question = normalize(thesis.getQuestion());
-        String text = normalize(article.getTitle() + " " + article.getSummary() + " " + article.getBody());
+        String text = normalize(value);
+        if ((question.contains("涨超") || question.contains("均涨"))
+                && !(text.contains("股") && text.matches("(?s).*(上涨|收涨|涨超|上行|走高|涨幅(?:达|为|超过|超)?\\s*\\d+).*"))) {
+            return false;
+        }
         for (String event : Arrays.asList("大宗交易", "财资中心", "股东减持", "股份回购")) {
             if (question.contains(event) && !text.contains(event)) {
                 return false;
@@ -176,17 +192,36 @@ public class ResearchEvidenceSelector {
         article.setSummary(WebContentText.clean(source.getSummary()));
         article.setBody(WebContentText.clean(source.getBody()));
         if (isCompanyResearch(thesis)) {
+            article.setSummary(focusSentences(article.getSummary(), thesis));
+            article.setBody(focusSentences(article.getBody(), thesis));
             String summary = companySentences(article.getSummary(), thesis.getSubjectName());
             String body = companySentences(article.getBody(), thesis.getSubjectName());
-            if (!isPrimaryCompanyTitle(article.getTitle(), thesis.getSubjectName())) {
+            if (!isPrimaryCompanyTitle(article.getTitle(), thesis.getSubjectName())
+                    || !matchesQuestionFocus("", thesis)) {
                 article.setSummary(summary);
             }
             article.setBody(body);
             if (isBlank(article.getSummary())) {
-                article.setSummary(firstNonBlank(body, article.getTitle()));
+                article.setSummary(body);
             }
         }
         return article;
+    }
+
+    private String focusSentences(String text, ResearchThesis thesis) {
+        if (matchesQuestionFocus("", thesis)) {
+            return text;
+        }
+        StringBuilder result = new StringBuilder();
+        for (String sentence : text.split("(?<=[。！？!?；;])|\\n+")) {
+            if (matchesQuestionFocus(sentence, thesis)) {
+                if (result.length() > 0) {
+                    result.append(' ');
+                }
+                result.append(sentence.trim());
+            }
+        }
+        return result.toString();
     }
 
     private boolean isPrimaryCompanyTitle(String title, String subjectName) {

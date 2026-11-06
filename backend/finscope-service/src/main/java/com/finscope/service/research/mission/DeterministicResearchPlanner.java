@@ -76,7 +76,7 @@ public class DeterministicResearchPlanner {
         tasks.add(task(supportTaskKey, stockCode.isEmpty() ? "支持证据搜索" : "产业链交叉核对",
                 stockCode.isEmpty() ? "哪些最新事实支持该命题？" : "客户、供应商和竞争对手的事实是否印证公司披露？",
                 "SEARCH", "public_news_search", "SUPPORT", dependencies(stockCode, "professional_context", "baseline_scan"),
-                stockCode.isEmpty() ? subject + " 资本开支 订单 需求 最新公告"
+                stockCode.isEmpty() ? subject + " " + question.substring(0, Math.min(90, question.length())) + " 最新公告"
                         : subject + (companyQuality
                         ? " 商业模式 客户 供应商 竞争对手 壁垒 资本配置 交叉验证"
                         : " 客户 供应商 竞争对手 订单 需求 交叉验证"),

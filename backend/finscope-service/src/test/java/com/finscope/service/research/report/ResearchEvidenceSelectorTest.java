@@ -260,6 +260,62 @@ class ResearchEvidenceSelectorTest {
         assertEquals(2L, selected.get(0).getArticle().getId());
     }
 
+    @Test
+    void doesNotAnswerAStockRallyQuestionWithUnrelatedOperatingNews() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("围绕微软股票涨超5%，哪些事实已确认？");
+        Article unrelated = article(1L, "财经媒体", "微软面临云业务诉讼", "微软面临诉讼风险，尚未公布进展。");
+        Article related = article(2L, "财经媒体", "微软股价收涨5%", "微软股票当日收涨5%，市场交易活跃。");
+        List<ResearchEvidenceCard> result = selector.select(thesis, java.util.Arrays.asList(unrelated, related),
+                Collections.emptyList());
+        assertEquals(1, result.size());
+        assertEquals(2L, result.get(0).getArticle().getId());
+    }
+
+    @Test
+    void rejectsACompanyDataPageWithOnlyNavigationAndNoFacts() {
+        ResearchSearchEvidence item = searchEvidence("长鑫科技股票_数据_资料_信息",
+                "股权质押 并购重组 股票回购 重大合同 关联交易 十大股东 股东户数 限售解禁", 0.99D);
+        assertTrue(selector.select(thesisForChangxin(), Collections.emptyList(), Collections.emptyList(),
+                Collections.singletonList(item)).isEmpty());
+    }
+
+    @Test
+    void keepsOnlyTheEventRelevantSentencesEvenWhenTheArticleMentionsOtherFacts() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("微软股票涨超5%意味着什么？");
+        Article article = article(1L, "财经媒体", "微软近期动态",
+                "微软云业务面临证券诉讼。微软股票当日收涨5%，交易活跃。");
+        ResearchEvidenceCard card = selector.select(thesis, Collections.singletonList(article),
+                Collections.emptyList()).get(0);
+        assertEquals("微软股票当日收涨5%，交易活跃。", card.getClaim());
+        assertFalse(card.getClaim().contains("诉讼"));
+    }
+
+    @Test
+    void doesNotMistakeTheWordGainInANegativeQuoteForARally() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("微软股票涨超5%意味着什么？");
+        Article article = article(1L, "行情", "微软股价下跌3.8%", "微软股价下跌3.8%，公司涨幅跑输行业。");
+        assertTrue(selector.select(thesis, Collections.singletonList(article), Collections.emptyList()).isEmpty());
+    }
+
+    @Test
+    void requiresTheSameSentenceToMatchBothTheCompanyAndTheEvent() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectType("COMPANY");
+        thesis.setSubjectName("微软");
+        thesis.setQuestion("微软股票涨超5%意味着什么？");
+        Article article = article(1L, "财经媒体", "微软等公司动态", "微软面临诉讼。特斯拉股价上涨4%。");
+        assertTrue(selector.select(thesis, Collections.singletonList(article), Collections.emptyList()).isEmpty());
+    }
+
     private ResearchSearchEvidence searchEvidence(String title, String content, double score) {
         ResearchSearchEvidence value = new ResearchSearchEvidence();
         value.setId(72L);

@@ -232,7 +232,9 @@ public class DeterministicReportBlueprintBuilder {
                 + directionLabel(direction) + "”判断。";
         if (!evidence.isEmpty()) answer += "最直接的事实基础是" + shortFact(evidence.get(0).getFactExcerpt(), 140);
         ResearchEvidenceDossier counter = first(evidence, "COUNTER");
-        if (counter != null) answer += "同时，" + shortFact(counter.getFactExcerpt(), 110) + "，因此结论仍有明确边界。";
+        if (counter != null && counter != evidence.get(0)) {
+            answer += "同时，" + shortFact(counter.getFactExcerpt(), 110) + "，因此结论仍有明确边界。";
+        }
         if (!sufficient) answer += "当前资料尚未覆盖全部必要方向，不能据此形成高置信度结论。";
         return answer;
     }

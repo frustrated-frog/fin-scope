@@ -101,6 +101,8 @@ function presentGenerationMode(mode: string) {
 }
 
 function presentReportStatus(status: string) {
+  if (status === 'INVALIDATED') return '证据校验未通过';
+  if (status === 'COMPLETED_WITH_GAPS') return '报告存在证据缺口';
   if (status === 'COMPLETED') return '报告已完成';
   if (status === 'PARTIAL_SUCCESS') return '报告部分完成';
   return status;

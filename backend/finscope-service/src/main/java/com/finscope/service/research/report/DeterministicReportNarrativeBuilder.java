@@ -4,6 +4,8 @@ import com.finscope.domain.research.ResearchThesis;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 
 @Component
@@ -36,7 +38,11 @@ public class DeterministicReportNarrativeBuilder {
                                     List<ResearchEvidenceDossier> evidence) {
         StringBuilder out = new StringBuilder();
         out.append(value(blueprint.getDirectAnswer())).append("\n\n");
+        Set<String> seenInsights = new LinkedHashSet<>();
         for (ResearchReportBlueprint.KeyInsight item : blueprint.getKeyInsights()) {
+            if (!seenInsights.add(value(item.getFinding()) + value(item.getMeaning()))) {
+                continue;
+            }
             out.append(value(item.getFinding())).append("。其研究含义是")
                     .append(value(item.getMeaning())).append(' ').append(refs(item.getEvidenceRefs())).append(' ');
         }

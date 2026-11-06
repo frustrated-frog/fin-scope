@@ -22,4 +22,10 @@ class ResearchFactTextTest {
 
         assertEquals(text.substring(0, 10), ResearchFactText.completeExcerpt(text, 10));
     }
+    @Test
+    void neverTreatsADecimalPointAsTheEndOfAFact() {
+        String text = "公司仅持长鑫科技1.8%股权，不存在控制关系。";
+        assertEquals(text, ResearchFactText.completeExcerpt(text, 10));
+    }
+
 }

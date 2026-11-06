@@ -221,7 +221,7 @@ class ResearchPlanningAgentTest {
 
         assertEquals("CONTROLLED", result.getPlanningMode());
         assertEquals(null, result.getFallbackReason());
-        assertEquals("AI算力 资本开支 订单 需求 最新公告",
+        assertEquals("AI算力 AI资本开支能否持续？ 最新公告",
                 result.getDraft().task("search_support").getQueryText());
         assertEquals("AI算力 资本开支 风险 下调 延迟 反方证据",
                 result.getDraft().task("search_counter").getQueryText());

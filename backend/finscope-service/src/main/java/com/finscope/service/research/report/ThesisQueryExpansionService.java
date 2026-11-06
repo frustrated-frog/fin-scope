@@ -16,6 +16,8 @@ public class ThesisQueryExpansionService {
             throw new IllegalArgumentException("Research query round must be between 1 and 3");
         }
         String subject = value(thesis.getSubjectName(), thesis.getQuestion());
+        String question = value(thesis.getQuestion(), subject).replaceAll("\\s+", " ");
+        subject = subject + " " + question.substring(0, Math.min(100, question.length()));
         String primary;
         String counter;
         if (round == 1) {

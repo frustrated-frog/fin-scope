@@ -11,6 +11,7 @@ import com.finscope.service.vault.VaultWriter;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
+import javax.annotation.Resource;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -19,42 +20,34 @@ import java.util.ArrayList;
 
 @Service
 public class ResearchReportService {
-    private final RunScopedResearchContextService contextService;
-    private final ResearchEvidenceSelector evidenceSelector;
-    private final ResearchReportGenerator reportGenerator;
-    private final ResearchReportSynthesisAgent synthesisAgent;
-    private final ResearchReportRepository reportRepository;
-    private final ResearchThesisRepository thesisRepository;
-    private final ResearchSearchEvidenceRepository searchEvidenceRepository;
-    private final VaultWriter vaultWriter;
-    private final ResearchRunOutputService outputService;
+    @Resource
+    private RunScopedResearchContextService contextService;
+    @Resource
+    private ResearchEvidenceSelector evidenceSelector;
+    @Resource
+    private ResearchReportGenerator reportGenerator;
+    @Resource
+    private ResearchReportSynthesisAgent synthesisAgent;
+    @Resource
+    private ResearchReportRepository reportRepository;
+    @Resource
+    private ResearchThesisRepository thesisRepository;
+    @Resource
+    private ResearchSearchEvidenceRepository searchEvidenceRepository;
+    @Resource
+    private VaultWriter vaultWriter;
+    @Resource
+    private ResearchRunOutputService outputService;
 
-    public ResearchReportService(RunScopedResearchContextService contextService,
-                                 ResearchEvidenceSelector evidenceSelector,
-                                 ResearchReportGenerator reportGenerator,
-                                 ResearchReportSynthesisAgent synthesisAgent,
-                                 ResearchReportRepository reportRepository,
-                                 ResearchThesisRepository thesisRepository,
-                                 ResearchSearchEvidenceRepository searchEvidenceRepository,
-                                 VaultWriter vaultWriter,
-                                 ResearchRunOutputService outputService) {
-        this.contextService = contextService;
-        this.evidenceSelector = evidenceSelector;
-        this.reportGenerator = reportGenerator;
-        this.synthesisAgent = synthesisAgent;
-        this.reportRepository = reportRepository;
-        this.thesisRepository = thesisRepository;
-        this.searchEvidenceRepository = searchEvidenceRepository;
-        this.vaultWriter = vaultWriter;
-        this.outputService = outputService;
-    }
+    @Resource
+    private ResearchArchivedEventSource archivedEventSource;
 
     public ResearchReport generate(Long runId) {
         RunScopedResearchContext context = contextService.load(runId);
         if (context.getThesis() == null) {
             throw new IllegalStateException("A research thesis is required to generate a thesis report");
         }
-        List<ResearchEvidenceCard> evidence = evidenceSelector.select(context.getThesis(), context.getArticles(),
+        List<ResearchEvidenceCard> evidence = evidenceSelector.select(context.getThesis(), archivedEventSource.articlesFor(context),
                 context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId));
         if (evidence.isEmpty()) {
             throw new InsufficientResearchEvidenceException(
@@ -127,7 +120,7 @@ public class ResearchReportService {
         if (context.getThesis() == null) {
             return EvidenceSufficiency.assess(java.util.Collections.<ResearchEvidenceCard>emptyList());
         }
-        return EvidenceSufficiency.assess(evidenceSelector.select(context.getThesis(), context.getArticles(),
+        return EvidenceSufficiency.assess(evidenceSelector.select(context.getThesis(), archivedEventSource.articlesFor(context),
                 context.getEvidenceItems(), searchEvidenceRepository.findByRunId(runId)));
     }
 

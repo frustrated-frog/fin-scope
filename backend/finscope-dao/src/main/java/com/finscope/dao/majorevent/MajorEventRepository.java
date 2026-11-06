@@ -82,6 +82,12 @@ public class MajorEventRepository {
         return jdbc.query(sql.toString(), mapper, args.toArray());
     }
 
+    public Optional<MajorEvent> findUniqueTitleBefore(String title, LocalDateTime cutoff) {
+        List<MajorEvent> matches = jdbc.query("SELECT * FROM major_event WHERE title=? AND created_at<=? "
+                + "ORDER BY id DESC LIMIT 2", mapper, title, TimeUtil.text(cutoff));
+        return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+    }
+
     public Optional<MajorEvent> findById(Long id) {
         List<MajorEvent> values = jdbc.query("SELECT * FROM major_event WHERE id=?", mapper, id);
         return values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));

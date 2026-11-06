@@ -123,6 +123,12 @@ public class DeterministicResearchPolicy {
                 }
             }
         }
+        String goal = context.getMission() == null ? null : context.getMission().getGoal();
+        if (goal != null && !goal.isBlank()) {
+            String focus = goal.replaceAll("\\s+", " ").trim();
+            subject = subject.substring(0, Math.min(40, subject.length())) + " "
+                    + focus.substring(0, Math.min(90, focus.length()));
+        }
         String[][] queries = "COUNTER".equals(intent)
                 ? new String[][]{{subject + " 风险 下调 延迟 反方证据", "寻找反方证据"},
                 {subject + " 指引 下修 订单 资本开支 公司公告", "寻找反方一手材料"}}

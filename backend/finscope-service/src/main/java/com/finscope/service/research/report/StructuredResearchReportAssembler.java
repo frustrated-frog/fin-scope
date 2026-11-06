@@ -24,7 +24,11 @@ public class StructuredResearchReportAssembler {
                 .append("\n\n**置信度依据：** ").append(text(blueprint.getConfidenceBasis())).append("\n\n");
 
         heading(out, "关键认识");
+        java.util.Set<String> seenInsights = new LinkedHashSet<>();
         for (ResearchReportBlueprint.KeyInsight item : safe(blueprint.getKeyInsights())) {
+            if (!seenInsights.add(text(item.getFinding()) + text(item.getMeaning()))) {
+                continue;
+            }
             out.append("- **").append(text(item.getFinding())).append("**：")
                     .append(text(item.getMeaning())).append(' ').append(refs(item.getEvidenceRefs())).append("\n");
         }

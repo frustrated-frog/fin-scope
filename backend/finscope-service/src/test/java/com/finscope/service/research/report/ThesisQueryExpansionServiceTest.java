@@ -24,4 +24,15 @@ class ThesisQueryExpansionServiceTest {
         assertEquals("RSS", sources.get(0).getType());
         assertEquals(5, sources.get(0).getMaxItemsPerRun());
     }
+    @Test
+    void retainsTheSpecificEventRatherThanSearchingOnlyForTheCompany() {
+        ResearchThesis thesis = new ResearchThesis();
+        thesis.setSubjectName("长鑫科技");
+        thesis.setQuestion("长鑫科技大宗交易成交4.3亿元意味着什么？");
+        String query = java.net.URLDecoder.decode(new ThesisQueryExpansionService().queries(thesis, 1)
+                .get(0).getUrl(), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(query.contains("大宗交易"));
+        assertTrue(query.contains("4.3亿元"));
+    }
+
 }

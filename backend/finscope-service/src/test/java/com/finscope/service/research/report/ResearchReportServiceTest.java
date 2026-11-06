@@ -62,7 +62,7 @@ class ResearchReportServiceTest {
         });
         ResearchReportSynthesisAgent synthesisAgent = mock(ResearchReportSynthesisAgent.class);
         when(synthesisAgent.refine(any(), anyList(), any())).thenAnswer(invocation -> invocation.getArgument(2));
-        ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
+        ResearchReportService service = reportService(contextService, new ResearchEvidenceSelector(),
                 new ResearchReportGenerator(), synthesisAgent, repository,
                 thesisRepository, searchEvidenceRepository, new VaultWriter(tempDir), outputService);
 
@@ -94,7 +94,7 @@ class ResearchReportServiceTest {
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
         when(searchEvidenceRepository.findByRunId(15L)).thenReturn(Collections.emptyList());
         VaultWriter vaultWriter = mock(VaultWriter.class);
-        ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
+        ResearchReportService service = reportService(contextService, new ResearchEvidenceSelector(),
                 new ResearchReportGenerator(), mock(ResearchReportSynthesisAgent.class), repository,
                 thesisRepository, searchEvidenceRepository, vaultWriter, outputService);
 
@@ -133,7 +133,7 @@ class ResearchReportServiceTest {
         });
         ResearchReportSynthesisAgent synthesis = mock(ResearchReportSynthesisAgent.class);
         when(synthesis.refine(any(), anyList(), any())).thenAnswer(invocation -> invocation.getArgument(2));
-        ResearchReportService service = new ResearchReportService(contextService, new ResearchEvidenceSelector(),
+        ResearchReportService service = reportService(contextService, new ResearchEvidenceSelector(),
                 new ResearchReportGenerator(), synthesis, repository, thesisRepository,
                 searchEvidenceRepository, new VaultWriter(tempDir), outputService);
 
@@ -157,4 +157,25 @@ class ResearchReportServiceTest {
         value.setRelevanceScore(0.95D);
         return value;
     }
+    private ResearchReportService reportService(RunScopedResearchContextService contextService,
+            ResearchEvidenceSelector evidenceSelector, ResearchReportGenerator generator,
+            ResearchReportSynthesisAgent synthesis, ResearchReportRepository repository,
+            ResearchThesisRepository theses, ResearchSearchEvidenceRepository searches,
+            VaultWriter vault, ResearchRunOutputService outputs) {
+        ResearchReportService service = new ResearchReportService();
+        ResearchArchivedEventSource archived = mock(ResearchArchivedEventSource.class);
+        when(archived.articlesFor(any())).thenAnswer(invocation -> ((RunScopedResearchContext) invocation.getArgument(0)).getArticles());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "contextService", contextService);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "evidenceSelector", evidenceSelector);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "reportGenerator", generator);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "synthesisAgent", synthesis);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "reportRepository", repository);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "thesisRepository", theses);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "searchEvidenceRepository", searches);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "vaultWriter", vault);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "outputService", outputs);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "archivedEventSource", archived);
+        return service;
+    }
+
 }
