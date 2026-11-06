@@ -12,6 +12,7 @@ import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlist
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
 import { WatchlistFundHoldingsDrawer } from './WatchlistFundHoldingsDrawer';
 import { WatchlistStockChanges } from './WatchlistStockChanges';
+import { WatchlistResearchScan } from './WatchlistResearchScan';
 
 type AttributionInstrument = {
   code: string;
@@ -497,6 +498,8 @@ export function WatchlistView({
           openInstrumentDetail(item);
         }
       }} />
+
+      <WatchlistResearchScan items={items} ready={dashboard.investments.phase === 'ready'} onOpen={openInstrumentDetail} />
 
       {loadError && (
         <p className="watchlist-load-error" role="alert">

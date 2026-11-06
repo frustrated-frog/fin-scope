@@ -163,14 +163,14 @@ test('shows a perceptible refresh state and reports unchanged fresh data', async
   await user.click(screen.getByRole('button', { name: '刷新行情' }));
 
   expect(screen.getByRole('button', { name: /刷新中/ })).toBeDisabled();
-  expect(screen.getByRole('status')).toHaveTextContent('正在从行情源获取最新数据');
+  expect(document.querySelector('.watchlist-refresh-status')).toHaveTextContent('正在从行情源获取最新数据');
   expect(api).toHaveBeenCalledWith('/api/watchlist?refresh=true');
   expect(api).toHaveBeenCalledWith('/api/market-indices?refresh=true');
 
   resolveWatchlist([item]);
   resolveIndices([]);
 
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('已刷新，行情暂无变化'));
+  await waitFor(() => expect(document.querySelector('.watchlist-refresh-status')).toHaveTextContent('已刷新，行情暂无变化'));
   expect(screen.getByRole('button', { name: '刷新行情' })).toBeEnabled();
 });
 
