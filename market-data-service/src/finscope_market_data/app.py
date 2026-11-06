@@ -26,6 +26,7 @@ from finscope_market_data.overnight.provider import OvernightMinuteProvider
 from finscope_market_data.overnight.store import OvernightStore
 from finscope_market_data.overnight.service import OvernightService
 from finscope_market_data.overnight.history_backfill import OvernightHistoryBackfill
+from finscope_market_data.overnight.index_history import OvernightIndexHistory
 from finscope_market_data.overnight.joint_research import OvernightJointResearch
 from finscope_market_data.overnight.joint_worker import OvernightJointWorker
 from finscope_market_data.overnight.validation_worker import OvernightValidationWorker
@@ -235,6 +236,7 @@ def create_app(
             market_loader=tencent_market.fetch)
         context_task = asyncio.create_task(context_capture.run(capture_stop))
         action_task = asyncio.create_task(OvernightActionVerification(automation, BaostockActionProvider()).run(capture_stop))
+        index_history_task = asyncio.create_task(OvernightIndexHistory(automation, application.state.router).run(capture_stop))
         try:
             yield
         finally:
@@ -246,6 +248,7 @@ def create_app(
             await joint_task
             await context_task
             await action_task
+            await index_history_task
             close_errors: list[Exception] = []
             close_discovery = getattr(application.state.discovery, "close", None)
             if callable(close_discovery):

@@ -22,6 +22,8 @@ from finscope_market_data.overnight.market_ablation import evaluate_market_group
 from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PROTOCOL
 
 from finscope_market_data.overnight.tail_ranking import PROTOCOL as RANKING_PROTOCOL, fit_tail_ranking
+from finscope_market_data.overnight.fresh_research import PROTOCOL as FRESH_PROTOCOL, train_fresh_research
+from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY, history_revision
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,9 @@ class OvernightJointWorker:
         if len(ready) < MIN_SYMBOLS:
             return
         for profile in profiles(context):
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{profile.key}'
+            index_history = meta.get(INDEX_HISTORY_KEY) or {}
+            revision = history_revision(index_history)
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{revision}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue
@@ -102,13 +106,19 @@ class OvernightJointWorker:
                     market_audit = evaluate_market_groups(direction_rows, self.research.contexts, profile.cutoff, now, models=market_models)
                 except Exception:
                     logger.exception('Market group evaluation failed; retaining incumbent models')
+                fresh = None
+                try:
+                    fresh = train_fresh_research(direction_rows, index_history, now.isoformat(), profile.cutoff)
+                except Exception:
+                    logger.exception('Fresh direction experiment failed; retaining incumbent models')
                 artifact = self.research.models.publish({'protocol': PROTOCOL, 'profile': profile.dump(),
                     'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows + context_rows + selection_rows),
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
-                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking, 'marketModels': market_models, 'trainingJobKey': job['key']},
+                    'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking,
+                    'freshResearch': fresh, 'marketModels': market_models, 'trainingJobKey': job['key']},
                     {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,
-                     'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}
+                     'indexHistory': index_history, 'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}
                                           for (day, cutoff), value in selection_cohorts.items()]}, claim=job)
                 if market_audit is not None:
                     meta.put(f'marketAblation:{profile.cutoff}', market_audit)

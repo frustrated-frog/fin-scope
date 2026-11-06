@@ -14,6 +14,8 @@ from finscope_market_data.overnight.context_research import attach_context_direc
 from finscope_market_data.overnight.up_selection import attach_up_selection
 from finscope_market_data.overnight.market_research import attach_market_direction
 from finscope_market_data.overnight.tail_ranking_research import attach_tail_ranking
+from finscope_market_data.overnight.fresh_research import attach_fresh_research
+from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,11 @@ class OvernightJointResearch:
         attach_context_direction(report, request, grouped, artifact, self.contexts, self.meta)
         attach_up_selection(report, grouped, request, artifact, self.contexts)
         attach_market_direction(report, request, grouped, artifact, self.contexts)
+        try:
+            attach_fresh_research(report, request, grouped, artifact, self.meta.get(INDEX_HISTORY_KEY) or {})
+        except Exception:
+            logger.exception('Fresh direction attachment failed; preserving main direction')
+            report['closeDirection']['freshModels'] = []
         try:
             attach_tail_ranking(report, grouped, request, artifact, self.contexts)
         except Exception:
@@ -113,6 +120,7 @@ class OvernightJointResearch:
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
                 'marketForward': self.meta.get('marketForward'),
+                'freshForward': self.meta.get('freshForward'),
                 'validationWorker': self.meta.get('validationWorker'),
                 'contextSnapshots': self.contexts.recent(),
                 'marketAblation': [value for cutoff in ('14:30', '14:45', '15:00')

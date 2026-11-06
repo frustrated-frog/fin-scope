@@ -12,16 +12,17 @@ from finscope_market_data.overnight.market_context import GROUPS
 from finscope_market_data.overnight.market_research import PROTOCOL
 
 
-def missing_reason(report, forecast, outcome, decision, target_at, now):
+def missing_reason(report, forecast, outcome, decision, target_at, now, *, protocol=PROTOCOL, require_context=True):
     if not report:
         return 'MISSING_PREDICTION'
-    if forecast.get('protocol') != PROTOCOL or forecast.get('target') != TARGET:
+    if forecast.get('protocol') != protocol or forecast.get('target') != TARGET:
         return 'MISSING_MODEL'
     if forecast.get('status') != 'SHADOW':
         return forecast.get('status', 'MISSING_MODEL')
     if (forecast.get('referenceAt') != decision or not forecast.get('artifactId')
-            or not forecast.get('contextFingerprint') or forecast.get('trainedAt', '9999') >= decision
-            or forecast.get('contextReceivedAt', '9999') > decision):
+            or forecast.get('trainedAt', '9999') >= decision
+            or (require_context and (not forecast.get('contextFingerprint')
+                                     or forecast.get('contextReceivedAt', '9999') > decision))):
         return 'INVALID_EVIDENCE'
     reference = forecast.get('referencePrice')
     if isinstance(reference, bool) or not isinstance(reference, (int, float)) or not math.isfinite(reference) or reference <= 0:
@@ -37,7 +38,8 @@ def missing_reason(report, forecast, outcome, decision, target_at, now):
     return None
 
 
-def summarize_market_forward(store, meta, now):
+def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROUPS,
+                             forecast_field='marketGroups', validate=missing_reason):
     through = now.isoformat()
     cohorts = scheduled_cohorts(meta, through)
     originals = {}
@@ -47,6 +49,7 @@ def summarize_market_forward(store, meta, now):
             continue
         key = (report['signalDate'], report['cutoff'], report['instrumentCode'])
         originals.setdefault(key, report)
+    group_names = tuple(groups)
     groups = defaultdict(lambda: {'scheduled': 0, 'paired': 0, 'days': 0, 'missing': Counter(), 'rows': []})
     for (day, cutoff), cohort in sorted(cohorts.items()):
         target = next_session(datetime.fromisoformat(day).date())
@@ -55,17 +58,17 @@ def summarize_market_forward(store, meta, now):
             continue
         mode = 'AFTER_CLOSE_HOLDING' if cutoff == '15:00' else 'TAIL_ENTRY'
         decision = f'{day}T{cutoff}:00'
-        for name in GROUPS:
+        for name in group_names:
             group = groups[(mode, cutoff, name)]
             group['scheduled'] += len(cohort['candidates'])
             group['days'] += 1
             rows = []
             for code in sorted(cohort['candidates']):
                 report = originals.get((day, cutoff, code), {})
-                forecasts = (report.get('closeDirection') or {}).get('marketGroups') or []
+                forecasts = (report.get('closeDirection') or {}).get(forecast_field) or []
                 forecast = next((row for row in forecasts if row.get('group') == name), {})
                 outcome = (report.get('outcome') or {}).get('closeDirection') or {}
-                reason = missing_reason(report, forecast, outcome, decision, target_at, through)
+                reason = validate(report, forecast, outcome, decision, target_at, through)
                 if reason:
                     group['missing'][reason] += 1
                     continue
@@ -76,7 +79,7 @@ def summarize_market_forward(store, meta, now):
             # Incomplete candidate days cannot improve either top-K or direction scores.
             if len(rows) == len(cohort['candidates']):
                 group['rows'].extend(rows)
-    return {'protocol': PROTOCOL, 'target': TARGET, 'computedAt': through,
+    return {'protocol': protocol, 'target': TARGET, 'computedAt': through,
             'groups': [summarize(key, value) for key, value in sorted(groups.items())]}
 
 

@@ -1,0 +1,97 @@
+"""Paired freshness/index challengers; never replace an incumbent from backtests."""
+import hashlib
+import json
+
+import numpy as np
+
+from finscope_market_data.forecast.direction_evaluation import evaluate_direction
+from finscope_market_data.overnight.direction_dataset import FEATURES, TARGET, direction_features
+from finscope_market_data.overnight.direction_learning import direction_prediction
+from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARCH_DAYS, TEST_DAYS, fit_fresh_direction
+from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
+
+GROUPS = ('FRESH', 'CALIBRATED', 'INDEX')
+
+
+def train_fresh_research(rows, history, through, cutoff):
+    result = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
+    fitted = fit_fresh_direction(rows, through, cutoff)
+    if fitted is None:
+        return result
+    fitted['features'] = list(FEATURES)
+    result['models']['FRESH'] = fitted
+    result['status'] = 'SHADOW'
+    base, enhanced = paired_index_rows(rows, history)
+    result['indexAudit'] = {'rowCount': len(base), 'dayCount': len({r['signalDate'] for r in base}),
+        'featureCount': len(INDEX_FEATURES), 'scope': 'PREVIOUS_COMPLETED_INDEX_DAYS',
+        'historyFingerprint': history_fingerprint(history),
+        'nonConstantFeatures': int(np.sum(np.ptp([r['features'][-len(INDEX_FEATURES):] for r in enhanced], axis=0) > 0)) if enhanced else 0}
+    if result['indexAudit']['dayCount'] < MIN_RESEARCH_DAYS or result['indexAudit']['nonConstantFeatures'] == 0:
+        result['indexAudit']['status'] = 'INSUFFICIENT_HISTORY'
+        return result
+    matched = fit_fresh_direction(base, through, cutoff, include_checks=True)
+    indexed = fit_fresh_direction(enhanced, through, cutoff, selector_rows=base, include_checks=True)
+    if matched is None or indexed is None:
+        result['indexAudit']['status'] = 'INSUFFICIENT_HISTORY'
+        return result
+    # The two arms share exact stocks, dates, labels and legacy recipe choices.
+    left, right = matched.pop('checks'), indexed.pop('checks')
+    test_days = set(sorted({r['signalDate'] for r in right})[-TEST_DAYS:])
+    left = [r for r in left if r['signalDate'] in test_days]
+    right = [r for r in right if r['signalDate'] in test_days]
+    if [(r['signalDate'], r['instrumentCode']) for r in left] != [(r['signalDate'], r['instrumentCode']) for r in right]:
+        raise ValueError('指数实验样本未配对')
+    comparison = evaluate_direction([r['raw'] for r in right], [r['actualReturn'] > 0 for r in right],
+        [r['signalDate'] for r in right], {'MATCHED_BASELINE': [r['raw'] for r in left]})
+    indexed['features'], matched['features'] = list(FEATURES + INDEX_FEATURES), list(FEATURES)
+    indexed['audit']['historical']['comparisons'].update(comparison['comparisons'])
+    result['models'].update(INDEX=indexed, INDEX_BASELINE=matched)
+    result['indexAudit']['status'] = 'SHADOW'
+    return result
+
+
+def attach_fresh_research(report, request, grouped, artifact, history):
+    parent, decision = report['closeDirection'], report['dataThrough']
+    parent['freshModels'] = []
+    research = artifact.get('freshResearch') or {}
+    local = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
+    timely = artifact.get('createdAt', '9999') < decision and artifact.get('labelsThrough', '9999') < decision
+    models = research.get('models') or {}
+    index = index_features(history, request.signal_date)
+    received = max((r.get('receivedAt', '9999') for r in history.values()), default='9999')
+    for name in GROUPS:
+        value = {'group': name, 'protocol': PROTOCOL, 'target': TARGET, 'validated': False,
+                 'status': 'WAITING_MODEL', 'reason': '等待新训练方案；原判断继续保留'}
+        parent['freshModels'].append(value)
+        model = models.get('INDEX' if name == 'INDEX' else 'FRESH')
+        expected = FEATURES + INDEX_FEATURES if name == 'INDEX' else FEATURES
+        if (not timely or research.get('protocol') != PROTOCOL or not model
+                or model.get('features') != list(expected)):
+            continue
+        if local is None or (name == 'INDEX' and (index is None or received >= decision)):
+            value.update(status='MISSING_FEATURES', reason='判断前的完整输入不足，保留缺口')
+            continue
+        baseline = models.get('INDEX_BASELINE') if name == 'INDEX' else artifact.get('closeDirection')
+        if name == 'INDEX' and (not baseline or baseline.get('features') != list(FEATURES)):
+            continue
+        if name == 'FRESH' and not baseline:
+            continue
+        x = local + index if name == 'INDEX' else local
+        forecast = direction_prediction(model, x, {})
+        raw = forecast['upProbability']
+        matched = raw if name == 'CALIBRATED' else direction_prediction(baseline, local, {})['rawUpProbability']
+        if matched is None or parent.get('upProbability') is None:
+            continue
+        probability = forecast['calibratedUpProbability'] if name == 'CALIBRATED' else raw
+        audit = model['audit']
+        value.update(status='SHADOW', upProbability=probability, rawUpProbability=raw,
+            matchedBaselineProbability=matched, liveProbability=parent['upProbability'],
+            selectedModel=forecast['selectedModel'], calibrationStatus=forecast['calibrationStatus'],
+            artifactId=artifact['id'], trainedAt=artifact['createdAt'], referenceAt=decision,
+            referencePrice=grouped[request.signal_date][request.cutoff].close,
+            featureFingerprint=hashlib.sha256(json.dumps(x, allow_nan=False).encode()).hexdigest(),
+            trainingThrough=audit['trainingThrough'], legacyTrainingThrough=audit['legacyTrainingThrough'],
+            calibrationThrough=audit['calibrationThrough'],
+            indexHistoryReceivedAt=received if name == 'INDEX' else None,
+            indexHistoryFingerprint=history_fingerprint(history) if name == 'INDEX' else None,
+            reason='新训练方案独立留档，尚未证明优于当前预测')

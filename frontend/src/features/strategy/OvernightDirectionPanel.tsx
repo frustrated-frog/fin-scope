@@ -1,4 +1,5 @@
 import { OvernightMarketProgress } from './OvernightMarketProgress';
+import { OvernightFreshProgress } from './OvernightFreshProgress';
 import type { OvernightReport, OvernightMode } from './overnightTypes';
 import type { OvernightJointState } from './overnightJointTypes';
 import './OvernightDirectionPanel.css';
@@ -94,6 +95,7 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
       <small>方向命中 / 基准 {percent(group.metrics?.accuracy)} / {percent(group.metrics?.comparisons.HISTORICAL_PRIOR?.accuracy)} · 两类平均识别 {percent(group.metrics?.balancedAccuracy)} · 可核验 {percent(group.coverage)}</small>
     </div>)}
     {models.map(model => <p key={model.id}>{model.profile.cutoff} · {model.closeDirection?.data.symbolCount} 只股票参与涨跌学习。历史开发对照：方向命中 {percent(model.closeDirection?.audit.historical.accuracy)} / 基准 {percent(model.closeDirection?.audit.historical.comparisons.HISTORICAL_PRIOR?.accuracy)}。仅供诊断。</p>)}
+    <OvernightFreshProgress state={state} mode={mode} />
     <p>环境增强方案：{snapshot ? `最近采集 ${snapshot.signalDate} ${snapshot.observedAt.slice(11, 16)} · ${snapshot.capturedSymbols} / ${snapshot.expectedSymbols} 只研究池股票。` : '等待交易时段自动采集环境数据。'}</p>
     <p>广泛市场数据：{snapshot?.market?.quality === 'SUFFICIENT'
       ? `已留存 ${snapshot.market.capturedSymbols} / ${snapshot.market.expectedSymbols} 只有效报价，正在积累独立对照。`

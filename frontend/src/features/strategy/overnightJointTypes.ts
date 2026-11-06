@@ -26,10 +26,16 @@ export interface OvernightJointState {
     data: { symbolCount: number; dayCount: number; rows: number };
     targets: Array<{ target: string; trainingDays: number; calibrationDays: number;
       historical: { dayCount: number; accuracy: number; brierScore: number } }>;
-    closeDirection?: { target?: string; data: { symbolCount: number }; audit: { historical: OvernightDirectionMetrics } } | null }>;
+    closeDirection?: { target?: string; data: { symbolCount: number }; audit: { historical: OvernightDirectionMetrics } } | null;
+    freshResearch?: { protocol: string; status: string;
+      indexAudit?: { status?: string; dayCount?: number; nonConstantFeatures?: number };
+      models: Record<string, { audit: { trainingThrough: string; legacyTrainingThrough: string } }> } | null }>;
   forward?: { requiredDays: number; computedAt: string; groups: OvernightJointGroup[] };
   closeDirectionForward?: OvernightDirectionForward;
   contextDirectionForward?: OvernightDirectionForward;
+  freshForward?: { protocol: string; groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
+    dayCount: number; pairedCount: number; scheduledCount: number;
+    metrics?: { accuracy: number; comparisons: Record<string, { accuracy: number }> } | null }> };
   errorAudit?: ErrorAudit;
   validationWorker?: { status: string; lastTickAt: string; lastCompletedAt?: string | null; intervalSeconds: number };
   marketAblation?: Array<{ cutoff: string; groups: Array<{ group: string; status: string; dayCount: number; requiredDays: number }> }>;

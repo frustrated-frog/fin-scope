@@ -26,6 +26,7 @@ class OvernightJointStore:
                 fitted_models.append(artifact[name])
         for pair in (artifact.get('marketModels') or {}).values():
             fitted_models.extend([pair['baseline'], pair['enhanced']])
+        fitted_models.extend(((artifact.get('freshResearch') or {}).get('models') or {}).values())
         for target in fitted_models:
             if any(target['audit'][key] > artifact['labelsThrough']
                    for key in ('trainingThrough', 'calibrationThrough', 'testThrough')):
@@ -70,7 +71,11 @@ class OvernightJointStore:
             if artifact:
                 directions = {name: {key: value for key, value in artifact[name].items() if key != 'model'}
                               if artifact.get(name) else None for name in ('closeDirection', 'contextDirection', 'upSelection', 'tailRanking')}
-                result.append({key: value for key, value in artifact.items() if key not in ('targets', 'context', 'marketModels', *directions)} | {
+                fresh = artifact.get('freshResearch') or {}
+                fresh_summary = {key: value for key, value in fresh.items() if key != 'models'}
+                fresh_summary['models'] = {name: {key: value for key, value in fitted.items() if key != 'model'}
+                                          for name, fitted in (fresh.get('models') or {}).items()}
+                result.append({key: value for key, value in artifact.items() if key not in ('targets', 'context', 'marketModels', 'freshResearch', *directions)} | {
                     'targets': [{'target': target, **value['audit']} for target, value in artifact['targets'].items()],
-                    **directions})
+                    'freshResearch': fresh_summary, **directions})
         return result
