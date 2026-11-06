@@ -24,6 +24,7 @@ from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PR
 from finscope_market_data.overnight.tail_ranking import PROTOCOL as RANKING_PROTOCOL, fit_tail_ranking
 from finscope_market_data.overnight.fresh_research import PROTOCOL as FRESH_PROTOCOL, train_fresh_research
 from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY, history_revision
+from finscope_market_data.overnight.selection_evaluation import PROTOCOL as SELECTION_PROTOCOL
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class OvernightJointWorker:
         for profile in profiles(context):
             index_history = meta.get(INDEX_HISTORY_KEY) or {}
             revision = history_revision(index_history)
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{revision}|{profile.key}'
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{SELECTION_PROTOCOL}|{revision}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue

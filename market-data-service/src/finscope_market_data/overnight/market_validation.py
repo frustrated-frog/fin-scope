@@ -39,7 +39,8 @@ def missing_reason(report, forecast, outcome, decision, target_at, now, *, proto
 
 
 def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROUPS,
-                             forecast_field='marketGroups', validate=missing_reason):
+                             forecast_field='marketGroups', validate=missing_reason, row_fields=(), summarizer=None,
+                             cohort_validate=None):
     through = now.isoformat()
     cohorts = scheduled_cohorts(meta, through)
     originals = {}
@@ -74,13 +75,18 @@ def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROU
                     continue
                 rows.append({'signalDate': day, 'instrumentCode': code, 'actualUp': outcome['actualUp'],
                              'probability': forecast['upProbability'], 'baseline': forecast['matchedBaselineProbability'],
-                             'live': forecast['liveProbability']})
+                             'live': forecast['liveProbability'], **{key: forecast[key] for key in row_fields}})
+            if cohort_validate and len(rows) == len(cohort['candidates']):
+                reason = cohort_validate(rows)
+                if reason:
+                    group['missing'][reason] += len(rows)
+                    continue
             group['paired'] += len(rows)
             # Incomplete candidate days cannot improve either top-K or direction scores.
             if len(rows) == len(cohort['candidates']):
                 group['rows'].extend(rows)
     return {'protocol': protocol, 'target': TARGET, 'computedAt': through,
-            'groups': [summarize(key, value) for key, value in sorted(groups.items())]}
+            'groups': [(summarizer or summarize)(key, value) for key, value in sorted(groups.items())]}
 
 
 def summarize(key, group):

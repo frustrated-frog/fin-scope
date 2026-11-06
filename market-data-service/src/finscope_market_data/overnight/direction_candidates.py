@@ -10,6 +10,7 @@ from finscope_market_data.overnight.multiscale_features import FEATURES as HISTO
 
 BASE_RECIPE = 'BASE'
 MULTISCALE_RECIPE = 'MULTISCALE_RECENCY_V1'
+INDEX_ONLY_RECIPE = 'INDEX_ONLY_NINE_FEATURES_V1'
 RECENCY_HALF_LIFE = 40
 CANDIDATES = ('PRIOR', 'SESSION_LOGISTIC', 'SHAPE_LOGISTIC', 'SHAPE_TREE', 'SHAPE_ENSEMBLE')
 HISTORY_CANDIDATES = ('MULTISCALE_ENSEMBLE', 'RECENT_ENSEMBLE')
@@ -35,12 +36,13 @@ def fit_tree(x, y, weights):
 
 
 def fit_candidates(rows, recipe=BASE_RECIPE):
-    if recipe not in (BASE_RECIPE, MULTISCALE_RECIPE):
+    if recipe not in (BASE_RECIPE, MULTISCALE_RECIPE, INDEX_ONLY_RECIPE):
         raise ValueError('未知方向学习方案')
     rows = [row for row in rows if row.get('trainingEligible', True)]
     raw = np.array([r['features'] for r in rows])
     width = raw.shape[1] - len(HISTORY_FEATURES) if recipe == MULTISCALE_RECIPE else raw.shape[1]
-    if width < 14 or not np.all(np.isfinite(raw)):
+    valid_width = width == 9 if recipe == INDEX_ONLY_RECIPE else width >= 14
+    if not valid_width or not np.all(np.isfinite(raw)):
         raise ValueError('方向模型特征宽度或数值无效')
     weights = training_weights(rows)
     low, high = np.quantile(raw, [.01, .99], axis=0)

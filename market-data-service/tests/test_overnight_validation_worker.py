@@ -13,7 +13,7 @@ from finscope_market_data.overnight.store import OvernightStore
 from finscope_market_data.overnight.universe import POOL_KEY
 from finscope_market_data.overnight.validation_worker import OvernightValidationWorker, needs_refresh
 
-KEYS = ('errorAudit', 'marketForward', 'freshForward', 'jointForward', 'closeDirectionForward', 'contextDirectionForward')
+KEYS = ('errorAudit', 'marketForward', 'freshForward', 'selectionForward', 'jointForward', 'closeDirectionForward', 'contextDirectionForward')
 
 
 def environment(tmp_path):

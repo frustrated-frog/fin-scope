@@ -121,6 +121,7 @@ class OvernightJointResearch:
                 'errorAudit': self.meta.get('errorAudit'),
                 'marketForward': self.meta.get('marketForward'),
                 'freshForward': self.meta.get('freshForward'),
+                'selectionForward': self.meta.get('selectionForward'),
                 'validationWorker': self.meta.get('validationWorker'),
                 'contextSnapshots': self.contexts.recent(),
                 'marketAblation': [value for cutoff in ('14:30', '14:45', '15:00')
