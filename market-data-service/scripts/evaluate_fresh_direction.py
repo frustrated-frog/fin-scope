@@ -10,11 +10,13 @@ import sys
 import lightgbm
 import numpy
 import sklearn
+from threadpoolctl import threadpool_limits
 
 from finscope_market_data.overnight.direction_dataset import FEATURES, TARGET
 from finscope_market_data.overnight.fresh_research import PROTOCOL, train_fresh_research
 
 
+@threadpool_limits.wrap(limits=1)
 def evaluate(path, history):
     raw = path.read_bytes()
     frozen = json.loads(gzip.decompress(raw))
