@@ -11,6 +11,7 @@ import { useWatchlistDashboardData } from './useWatchlistDashboardData';
 import { changeClass, formatPct, formatPrice, formatTurnover } from './watchlistFormatters';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
 import { WatchlistFundHoldingsDrawer } from './WatchlistFundHoldingsDrawer';
+import { WatchlistStockChanges } from './WatchlistStockChanges';
 
 type AttributionInstrument = {
   code: string;
@@ -488,6 +489,14 @@ export function WatchlistView({
       )}
 
       <DataQualityNotice quality={dashboard.marketDataQuality} />
+
+      <WatchlistStockChanges items={items} ready={dashboard.investments.phase === 'ready'} onOpen={(item, report) => {
+        if (report) {
+          openAttribution(item);
+        } else {
+          openInstrumentDetail(item);
+        }
+      }} />
 
       {loadError && (
         <p className="watchlist-load-error" role="alert">

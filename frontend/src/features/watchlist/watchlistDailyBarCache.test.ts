@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
-import { clearWatchlistDailyBarCache, loadWatchlistDailyBars } from './watchlistDailyBarCache';
+import { clearWatchlistDailyBarCache, loadWatchlistMarketHistory } from './watchlistDailyBarCache';
 
 vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 
 const bars = [{ code: '600519', tradeDate: '2026-08-06', close: 100 }];
+const history = { stock: { code: '600519', market: 'SH', bars, warnings: [] }, benchmarkCode: '000300.SH', benchmarkName: '沪深300', warnings: [] };
 
 describe('watchlistDailyBarCache', () => {
   beforeEach(() => {
@@ -14,41 +15,47 @@ describe('watchlistDailyBarCache', () => {
   });
 
   test('reuses one in-flight and resolved request for the same stock in a session', async () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(history as never);
     const now = new Date(2026, 7, 6, 10, 0);
 
-    const first = loadWatchlistDailyBars('600519', { now });
-    const second = loadWatchlistDailyBars('600519', { now });
+    const first = loadWatchlistMarketHistory('600519', { now });
+    const second = loadWatchlistMarketHistory('600519', { now });
 
-    await expect(first).resolves.toEqual(bars);
-    await expect(second).resolves.toEqual(bars);
+    await expect(first).resolves.toEqual(history);
+    await expect(second).resolves.toEqual(history);
     expect(api).toHaveBeenCalledTimes(1);
-    expect(api).toHaveBeenCalledWith('/api/watchlist/600519/daily-bars?limit=120');
+    expect(api).toHaveBeenCalledWith('/api/watchlist/stocks/600519/market-history');
   });
 
-  test('expires at the next local market refresh boundary', async () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+  test('expires after five minutes so recovered sources and new daily snapshots can appear', async () => {
+    vi.mocked(api).mockResolvedValue(history as never);
 
-    await loadWatchlistDailyBars('600519', { now: new Date(2026, 7, 6, 10, 0) });
-    await loadWatchlistDailyBars('600519', { now: new Date(2026, 7, 6, 15, 16) });
+    await loadWatchlistMarketHistory('600519', { now: new Date(2026, 7, 6, 10, 0) });
+    await loadWatchlistMarketHistory('600519', { now: new Date(2026, 7, 6, 10, 6) });
 
     expect(api).toHaveBeenCalledTimes(2);
   });
 
   test('removes failed requests so a retry can recover', async () => {
-    vi.mocked(api).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(bars as never);
+    vi.mocked(api).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(history as never);
 
-    await expect(loadWatchlistDailyBars('600519')).rejects.toThrow('offline');
-    await expect(loadWatchlistDailyBars('600519')).resolves.toEqual(bars);
+    await expect(loadWatchlistMarketHistory('600519')).rejects.toThrow('offline');
+    await expect(loadWatchlistMarketHistory('600519')).resolves.toEqual(history);
     expect(api).toHaveBeenCalledTimes(2);
   });
 
   test('force refresh bypasses session cache and refreshes the persistent snapshot', async () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(history as never);
 
-    await loadWatchlistDailyBars('600519');
-    await loadWatchlistDailyBars('600519', { force: true });
+    await loadWatchlistMarketHistory('600519');
+    await loadWatchlistMarketHistory('600519', { force: true });
 
-    expect(api).toHaveBeenNthCalledWith(2, '/api/watchlist/600519/daily-bars?limit=120&refresh=true');
+    expect(api).toHaveBeenNthCalledWith(2, '/api/watchlist/stocks/600519/market-history?refresh=true');
+  });
+
+  test('does not cache malformed responses as a successful empty history', async () => {
+    vi.mocked(api).mockResolvedValueOnce([] as never).mockResolvedValueOnce(history as never);
+    await expect(loadWatchlistMarketHistory('600519')).rejects.toThrow('响应不完整');
+    await expect(loadWatchlistMarketHistory('600519')).resolves.toEqual(history);
   });
 });

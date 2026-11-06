@@ -1,8 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { DailyBarPoint, KlineChart } from './KlineChart';
+import { KlineChart } from './KlineChart';
 import { StockSupplyChainPanel } from './StockSupplyChainPanel';
-import { loadWatchlistDailyBars } from './watchlistDailyBarCache';
+import { loadWatchlistMarketHistory, StockMarketHistory } from './watchlistDailyBarCache';
+import { compareStockBenchmark, summarizeStockHistory } from './stockMarketAnalysis';
+import { StockMarketInsights } from './StockMarketInsights';
+import { StockFundamentalsPanel } from './StockFundamentalsPanel';
 import { acquireWatchlistOverlayScrollLock } from './watchlistOverlayScrollLock';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
@@ -12,10 +15,11 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
   returnLabel?: string;
   onOpenIndustryChain?: (code: string) => void;
 }) {
-  const [bars, setBars] = useState<DailyBarPoint[]>();
+  const [history, setHistory] = useState<StockMarketHistory>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'chart' | 'supply-chain'>('chart');
+  const [activeTab, setActiveTab] = useState<'chart' | 'supply-chain' | 'fundamentals'>('chart');
+  const requestVersion = useRef(0);
   const backdrop = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -27,7 +31,9 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
     const overlay = backdrop.current;
     const workspace = overlay?.closest<HTMLElement>('.workspace');
     const topbar = workspace?.querySelector<HTMLElement>('.topbar');
-    if (!overlay || !workspace || !topbar) return;
+    if (!overlay || !workspace || !topbar) {
+      return;
+    }
 
     const updateBounds = () => {
       const compact = window.innerWidth <= 980;
@@ -49,49 +55,85 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
   }, []);
 
   useEffect(() => {
-    let stopped = false;
+    const version = ++requestVersion.current;
     closeButton.current?.focus();
+    setHistory(undefined);
+    setActiveTab('chart');
     setLoading(true);
     setError('');
-    void loadWatchlistDailyBars(item.code)
-      .then((values) => { if (!stopped) { setBars(values); setLoading(false); } })
-      .catch((loadError) => { if (!stopped) { setError(loadError instanceof Error ? loadError.message : '日线加载失败'); setLoading(false); } });
-    return () => { stopped = true; };
+    void loadWatchlistMarketHistory(item.code)
+      .then((value) => {
+        if (requestVersion.current === version) {
+          setHistory(value);
+          setLoading(false);
+        }
+      })
+      .catch((loadError) => {
+        if (requestVersion.current === version) {
+          setError(loadError instanceof Error ? loadError.message : '日线加载失败');
+          setLoading(false);
+        }
+      });
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [item.code]);
 
   useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) { if (event.key === 'Escape') onClose(); }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  const bars = history?.stock.bars;
+  const summary = useMemo(() => summarizeStockHistory(
+    bars?.every((bar) => bar.adjustment === 'QFQ') ? bars : []
+  ), [bars]);
+  const comparison = useMemo(() => compareStockBenchmark(summary.bars,
+    history?.benchmark?.bars.every((bar) => bar.adjustment === 'QFQ') ? history.benchmark.bars : []
+  ), [summary, history]);
   const latest = bars && bars.length > 0 ? bars[bars.length - 1] : undefined;
   const previous = bars && bars.length > 1 ? bars[bars.length - 2] : undefined;
-  const changePct = latest?.changePct
+  const changePct = summary.bars.length === 0 ? undefined : latest?.changePct
     ?? (latest && previous && previous.close ? ((latest.close! - previous.close) / previous.close) * 100 : undefined);
   const name = item.name || item.code;
-  const periodHigh = bars?.reduce<number | undefined>((highest, bar) => bar.high == null ? highest : Math.max(highest ?? bar.high, bar.high), undefined);
-  const periodLow = bars?.reduce<number | undefined>((lowest, bar) => bar.low == null ? lowest : Math.min(lowest ?? bar.low, bar.low), undefined);
-  const return20 = bars && bars.length >= 21 && latest?.close != null && bars[bars.length - 21].close
-    ? ((latest.close - bars[bars.length - 21].close!) / bars[bars.length - 21].close!) * 100
-    : undefined;
+  const periodHigh = summary.bars.slice(-120).reduce<number | undefined>((highest, bar) => Math.max(highest ?? bar.high, bar.high), undefined);
+  const periodLow = summary.bars.slice(-120).reduce<number | undefined>((lowest, bar) => Math.min(lowest ?? bar.low, bar.low), undefined);
+  const return20 = summary.performance.find((period) => period.sessions === 20)?.returnPct;
 
   function refresh() {
+    const version = ++requestVersion.current;
     setLoading(true);
     setError('');
-    void loadWatchlistDailyBars(item.code, { force: true })
-      .then((values) => { setBars(values); setLoading(false); })
-      .catch((loadError) => { setError(loadError instanceof Error ? loadError.message : '日线加载失败'); setLoading(false); });
+    void loadWatchlistMarketHistory(item.code, { force: true })
+      .then((value) => {
+        if (requestVersion.current === version) {
+          setHistory(value);
+          setLoading(false);
+        }
+      })
+      .catch((loadError) => {
+        if (requestVersion.current === version) {
+          setError(loadError instanceof Error ? loadError.message : '日线加载失败');
+          setLoading(false);
+        }
+      });
   }
+
+  const tabTitle = activeTab === 'chart' ? '行情图表' : activeTab === 'supply-chain' ? '产业链结论' : '财务与估值';
 
   return (
     <div ref={backdrop} className="watchlist-kline-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="watchlist-kline-modal" role="dialog" aria-modal="true" aria-labelledby="watchlist-kline-title">
         <header className="watchlist-kline-header">
           <div className="watchlist-kline-identity">
-            <span>{activeTab === 'chart' ? 'MARKET VIEW · DAILY' : 'SUPPLY CHAIN · OVERVIEW'}</span>
-            <h2 id="watchlist-kline-title">{name} <small>{activeTab === 'chart' ? '行情图表' : '产业链结论'}</small></h2>
-            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '最近 120 个交易日' : '上下游关系与核心结论'}</p>
+            <span>{activeTab === 'chart' ? 'MARKET VIEW · DAILY' : activeTab === 'supply-chain' ? 'SUPPLY CHAIN · OVERVIEW' : 'FINANCIALS · VALUATION'}</span>
+            <h2 id="watchlist-kline-title">{name} <small>{tabTitle}</small></h2>
+            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '完整日线 · 自动量价观察' : activeTab === 'supply-chain' ? '上下游关系与核心结论' : '季度趋势与真实估值档案'}</p>
           </div>
           <div className="watchlist-kline-head-actions">
             {returnLabel && (
@@ -116,10 +158,11 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
         <nav className="watchlist-stock-tabs" role="tablist" aria-label="股票详情">
           <button type="button" role="tab" aria-selected={activeTab === 'chart'} onClick={() => setActiveTab('chart')}>行情走势</button>
           <button type="button" role="tab" aria-selected={activeTab === 'supply-chain'} onClick={() => setActiveTab('supply-chain')}>产业链</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'fundamentals'} onClick={() => setActiveTab('fundamentals')}>财务与估值</button>
         </nav>
 
         <div className={`watchlist-kline-content${activeTab === 'supply-chain' ? ' is-supply-chain' : ''}`}>
-          {activeTab === 'supply-chain' ? (
+          {activeTab === 'fundamentals' ? <StockFundamentalsPanel code={item.code} /> : activeTab === 'supply-chain' ? (
             <StockSupplyChainPanel code={item.code} name={name} onOpenIndustryChain={onOpenIndustryChain} />
           ) : loading ? (
             <div className="watchlist-kline-pending" aria-live="polite"><span aria-hidden="true" /><strong>正在加载日线…</strong></div>
@@ -128,12 +171,13 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
           ) : (
             <section className="watchlist-kline-chart-stage" aria-label="日线图">
               <div className="watchlist-kline-chart-label">
-                <span>日 K · 价格走势</span>
-                <span className="watchlist-kline-ma-legend"><i>MA5</i><i>MA20</i><i>MA60</i></span>
+                <span>日 K · 最近 {Math.min(bars?.length ?? 0, 120)} 个完整交易日</span>
+                {summary.bars.length > 0 ? <span className="watchlist-kline-ma-legend"><i>MA5</i><i>MA20</i><i>MA60</i></span> : <span>复权口径待核验 · 仅展示原始蜡烛图</span>}
               </div>
-              <KlineChart bars={bars ?? []} />
+              <KlineChart bars={(bars ?? []).slice(-120)} events={summary.events} levels={summary.levels} showMovingAverages={summary.bars.length > 0} />
             </section>
           )}
+          {activeTab === 'chart' && !loading && !error && history && <StockMarketInsights summary={summary} comparison={comparison} history={history} />}
           {activeTab === 'chart' && !loading && bars && bars.length > 0 && latest && (
             <dl className="watchlist-kline-meta" aria-label="最新行情与区间指标">
               <div><dt>开盘</dt><dd>{fmt(latest.open)}</dd></div>
@@ -161,8 +205,12 @@ function formatVolume(value?: number) {
 }
 
 function formatAmount(value?: number) {
-  if (value == null) return '--';
-  if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(2)} 亿`;
+  if (value == null) {
+    return '--';
+  }
+  if (value >= 100_000_000) {
+    return `${(value / 100_000_000).toFixed(2)} 亿`;
+  }
   return `${(value / 10_000).toFixed(0)} 万`;
 }
 

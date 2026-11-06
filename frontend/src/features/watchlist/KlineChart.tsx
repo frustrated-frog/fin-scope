@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { StockMarketEvent, StockPriceLevel } from './stockMarketAnalysis';
 
 /** 后端 daily-bars 返回的单根日 K 记录。 */
 export type DailyBarPoint = {
@@ -14,6 +15,8 @@ export type DailyBarPoint = {
   amplitude?: number;
   changePct?: number;
   turnoverRate?: number;
+  adjustment?: string;
+  isComplete?: boolean;
 };
 
 const VIEW_W = 1_024;
@@ -30,13 +33,32 @@ const DATA_GUTTER = 8;
  * 手写 SVG 日 K 图。以宽坐标系与自适应柱宽绘制，避免密集日线互相覆盖而显得模糊。
  * A 股配色沿用红涨绿跌，价格与成交量使用独立绘图区。
  */
-export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
+export function KlineChart({ bars, events = [], levels = [], showMovingAverages = true }: {
+  bars: DailyBarPoint[];
+  events?: StockMarketEvent[];
+  levels?: StockPriceLevel[];
+  showMovingAverages?: boolean;
+}) {
   const geometry = useMemo(() => layout(bars), [bars]);
   if (!geometry) {
     return <p className="muted watchlist-kline-empty">暂无日线数据</p>;
   }
 
   const { candles, priceMin, priceMax, ticks, dateTicks, movingAverages } = geometry;
+  const eventsByDate = new Map<string, StockMarketEvent[]>();
+  for (const event of events) {
+    const existing = eventsByDate.get(event.date) ?? [];
+    existing.push(event);
+    eventsByDate.set(event.date, existing);
+  }
+  const referenceLevels = new Map<number, string[]>();
+  for (const level of levels) {
+    for (const [value, label] of [[level.high, `${level.sessions} 日高点`], [level.low, `${level.sessions} 日低点`]] as const) {
+      if (value != null && value >= priceMin && value <= priceMax) {
+        referenceLevels.set(value, [...(referenceLevels.get(value) ?? []), label]);
+      }
+    }
+  }
 
   return (
     <svg
@@ -51,7 +73,7 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
       <rect className="watchlist-kline-plot-bg" x={PLOT_LEFT} y={PRICE_TOP} width={PLOT_RIGHT - PLOT_LEFT} height={PRICE_BOTTOM - PRICE_TOP} rx="12" />
       <rect className="watchlist-kline-volume-bg" x={PLOT_LEFT} y={VOLUME_TOP} width={PLOT_RIGHT - PLOT_LEFT} height={VOLUME_BOTTOM - VOLUME_TOP} rx="8" />
       <text className="watchlist-kline-axis-title" x={PLOT_RIGHT} y="14" textAnchor="end">价格（元）</text>
-      <text className="watchlist-kline-axis-title" x={PLOT_LEFT} y={VOLUME_TOP - 8}>成交量（手）</text>
+      <text className="watchlist-kline-axis-title" x={PLOT_LEFT} y={VOLUME_TOP - 8}>成交量</text>
 
       {ticks.map((tick) => {
         const y = priceY(tick.value, priceMin, priceMax);
@@ -67,9 +89,14 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
         <text key={tick.index} className="watchlist-kline-date" x={tick.x} y="489" textAnchor={tick.anchor}>{tick.label}</text>
       ))}
 
-      {movingAverages.map((average) => (
+      {showMovingAverages && movingAverages.map((average) => (
         <path key={average.window} className={`watchlist-kline-ma watchlist-kline-ma-${average.window}`} d={average.path} />
       ))}
+
+      {[...referenceLevels].map(([value, labels]) => <g key={value} className="stock-kline-reference">
+        <line x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={priceY(value, priceMin, priceMax)} y2={priceY(value, priceMin, priceMax)} />
+        <title>{`此前 ${labels.join(' / ')} ${value.toFixed(2)}，不含最新交易日`}</title>
+      </g>)}
 
       {candles.map((c) => (
         <rect
@@ -82,6 +109,15 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
         />
       ))}
 
+      {candles.filter((candle) => eventsByDate.has(candle.date)).map((candle) => {
+        const dailyEvents = eventsByDate.get(candle.date)!;
+        const description = dailyEvents.map((event) => `${event.label}，收盘 ${event.price.toFixed(2)}，参考 ${event.referenceValue.toFixed(2)}${event.ratio == null ? '' : `，${event.ratio.toFixed(2)} 倍均量`}`).join('；');
+        return <g key={`event-${candle.date}`} className="stock-kline-event" tabIndex={0} role="img" aria-label={`${candle.date} ${description}`}>
+          <title>{`${candle.date}：${description}`}</title>
+          <circle cx={candle.x} cy={VOLUME_TOP + 8} r="4" />
+        </g>;
+      })}
+
       {candles.map((c) => (
         <g key={c.index} className={`watchlist-kline-candle ${c.up ? 'watchlist-up' : 'watchlist-down'}`}>
           <line x1={c.x} x2={c.x} y1={c.wickTop} y2={c.wickBottom} />
@@ -93,9 +129,13 @@ export function KlineChart({ bars }: { bars: DailyBarPoint[] }) {
 }
 
 function layout(bars: DailyBarPoint[]) {
-  if (!bars || bars.length === 0) return null;
+  if (!bars || bars.length === 0) {
+    return null;
+  }
   const values = bars.filter((bar) => bar.high != null && bar.low != null && bar.open != null && bar.close != null);
-  if (values.length === 0) return null;
+  if (values.length === 0) {
+    return null;
+  }
 
   const rawMax = Math.max(...values.map((bar) => bar.high as number));
   const rawMin = Math.min(...values.map((bar) => bar.low as number));
@@ -163,7 +203,9 @@ function movingAveragePath(
   const points: string[] = [];
   bars.forEach((bar, index) => {
     rolling += bar.close as number;
-    if (index >= window) rolling -= bars[index - window].close as number;
+    if (index >= window) {
+      rolling -= bars[index - window].close as number;
+    }
     if (index >= window - 1) {
       const command = points.length === 0 ? 'M' : 'L';
       points.push(`${command}${candleX(index).toFixed(2)},${priceY(rolling / window, priceMin, priceMax).toFixed(2)}`);

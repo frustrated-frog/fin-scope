@@ -43,3 +43,9 @@ test('keeps new invalid quotes when no successful snapshot exists', () => {
   expect(result.items).toEqual(next);
   expect(result.degradedCount).toBe(0);
 });
+
+test('a quote outage preserves price independently of fresh attribution report metadata', () => {
+  const prior = [{ code: '600519', price: 100, quoteValid: true, attributionReportId: 1, attributionReportDate: '2026-11-04', attributionSummary: '旧报告' }];
+  const next = [{ code: '600519', quoteValid: false, attributionReportId: 2, attributionReportDate: '2026-11-05', attributionSummary: '新报告' }];
+  expect(preserveValidQuotes(next, prior, (item) => item.code).items[0]).toMatchObject({ price: 100, attributionReportId: 2, attributionReportDate: '2026-11-05', attributionSummary: '新报告' });
+});

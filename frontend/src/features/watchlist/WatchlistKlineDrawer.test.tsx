@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -6,6 +6,10 @@ import { api } from '../../shared/api/client';
 import { KlineChart } from './KlineChart';
 import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
 import { clearWatchlistDailyBarCache } from './watchlistDailyBarCache';
+
+function marketHistory(values: typeof bars) {
+  return { stock: { code: '600519', market: 'SH', bars: values.map(bar => ({ ...bar, adjustment: 'QFQ', isComplete: true })), warnings: [] as string[] }, benchmarkCode: '000300.SH', benchmarkName: '沪深300', warnings: [] as string[] };
+}
 
 vi.mock('../../shared/api/client', () => ({
   api: vi.fn()
@@ -58,7 +62,7 @@ describe('KlineChart', () => {
     render(<KlineChart bars={bars} />);
 
     expect(screen.getByText('价格（元）')).toBeInTheDocument();
-    expect(screen.getByText('成交量（手）')).toBeInTheDocument();
+    expect(screen.getByText('成交量')).toBeInTheDocument();
   });
 
   test('draws cached MA5 MA20 and MA60 trend layers', () => {
@@ -86,21 +90,21 @@ describe('WatchlistKlineDrawer', () => {
   });
 
   test('loads daily bars on open and shows latest summary', async () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(bars) as never);
 
     render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
 
     expect(await screen.findByText('贵州茅台')).toBeInTheDocument();
-    expect(api).toHaveBeenCalledWith('/api/watchlist/600519/daily-bars?limit=120');
+    expect(api).toHaveBeenCalledWith('/api/watchlist/stocks/600519/market-history');
     expect(await screen.findByText('MARKET VIEW · DAILY')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
-    expect(screen.getByText('2026-07-31')).toBeInTheDocument();
+    expect(screen.getAllByText('2026-07-31')[0]).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '行情走势' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('loads only the supply-chain conclusions after opening the supply-chain tab', async () => {
     vi.mocked(api)
-      .mockResolvedValueOnce(bars as never)
+      .mockResolvedValueOnce(marketHistory(bars) as never)
       .mockResolvedValueOnce({
         code: '600519', name: '贵州茅台',
         snapshot: {
@@ -111,7 +115,7 @@ describe('WatchlistKlineDrawer', () => {
       } as never);
 
     render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
-    await screen.findByText('2026-07-31');
+    await screen.findAllByText('2026-07-31').then(values => values[0]);
     expect(api).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole('tab', { name: '产业链' }));
@@ -131,7 +135,7 @@ describe('WatchlistKlineDrawer', () => {
       open: 100 + index, high: 103 + index, low: 98 + index, close: 101 + index,
       volume: 50_000 + index, amount: 680_000_000, turnoverRate: 1.26
     }));
-    vi.mocked(api).mockResolvedValue(history as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(history) as never);
 
     render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
 
@@ -156,8 +160,27 @@ describe('WatchlistKlineDrawer', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  test('unverified adjustment keeps raw candles but suppresses every calculated chart layer and return', async () => {
+    const values = Array.from({ length: 65 }, (_, index) => ({
+      code: '600519', market: 'SH', tradeDate: new Date(Date.UTC(2026, 0, index + 1)).toISOString().slice(0, 10),
+      open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 100
+    }));
+    const response = marketHistory(values);
+    response.stock.bars = response.stock.bars.map((bar) => ({ ...bar, adjustment: 'NONE' }));
+    response.stock.warnings = ['未获得一致前复权行情'];
+    vi.mocked(api).mockResolvedValue(response as never);
+    const { container } = render(<WatchlistKlineDrawer item={{ code: '600519' }} onClose={vi.fn()} />);
+    expect(await screen.findByText('复权口径待核验 · 仅展示原始蜡烛图')).toBeInTheDocument();
+    expect(container.querySelectorAll('.watchlist-kline-candle')).toHaveLength(65);
+    expect(container.querySelector('.watchlist-kline-ma')).not.toBeInTheDocument();
+    expect(container.querySelector('.stock-kline-reference')).not.toBeInTheDocument();
+    const meta = screen.getByLabelText('最新行情与区间指标');
+    expect(within(meta).getByText('20 日涨跌').nextElementSibling).toHaveTextContent('--');
+    expect(within(meta).getByText('区间高 / 低').nextElementSibling).toHaveTextContent('-- / --');
+  });
+
   test('locks background scrolling only while the kline dialog is open', () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(bars) as never);
 
     const { unmount } = render(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
 
@@ -167,13 +190,13 @@ describe('WatchlistKlineDrawer', () => {
   });
 
   test('does not restart loading or focus the header when the parent supplies a new close callback', async () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(bars) as never);
     const focus = vi.spyOn(HTMLButtonElement.prototype, 'focus').mockImplementation(() => undefined);
     const { rerender } = render(
       <WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />
     );
 
-    expect(await screen.findByText('2026-07-31')).toBeInTheDocument();
+    expect(await screen.findAllByText('2026-07-31').then(values => values[0])).toBeInTheDocument();
     expect(focus).toHaveBeenCalledTimes(1);
 
     rerender(<WatchlistKlineDrawer item={{ code: '600519', name: '贵州茅台' }} onClose={vi.fn()} />);
@@ -185,7 +208,7 @@ describe('WatchlistKlineDrawer', () => {
   });
 
   test('positions the desktop overlay inside the workspace below the topbar', () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(bars) as never);
     const rect = (values: Partial<DOMRect>): DOMRect => ({
       x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0,
       toJSON: () => ({}), ...values
@@ -210,7 +233,7 @@ describe('WatchlistKlineDrawer', () => {
   });
 
   test('keeps a narrow overlay below the topbar while removing the sidebar offset', () => {
-    vi.mocked(api).mockResolvedValue(bars as never);
+    vi.mocked(api).mockResolvedValue(marketHistory(bars) as never);
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 });
     const rect = (values: Partial<DOMRect>): DOMRect => ({

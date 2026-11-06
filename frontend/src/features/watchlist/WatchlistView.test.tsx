@@ -28,6 +28,7 @@ const industryOverview = {
 
 beforeEach(() => {
   clearWatchlistDailyBarCache();
+  localStorage.removeItem('watchlist.stockLastVisit.v1');
   vi.mocked(api).mockReset();
 });
 
@@ -73,9 +74,9 @@ test('opens the stock chart in a modal while keeping the watchlist visible', asy
   vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
     path === '/api/watchlist' ? [{
       id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2
-    }] : path === '/api/watchlist/600519/daily-bars?limit=120' ? [{
-      code: '600519', tradeDate: '2026-08-05', open: 1500, high: 1520, low: 1490, close: 1510, volume: 50000
-    }] : []
+    }] : path === '/api/watchlist/stocks/600519/market-history' ? { stock: { code: '600519', market: 'SH', bars: [{
+      code: '600519', tradeDate: '2026-08-05', open: 1500, high: 1520, low: 1490, close: 1510, volume: 50000, adjustment: 'QFQ'
+    }], warnings: [] }, warnings: [], benchmarkCode: '000300.SH', benchmarkName: '沪深300' } : []
   ) as never);
 
   render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
@@ -382,9 +383,9 @@ test('opens the daily kline drawer when clicking a stock card', async () => {
   vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
     path === '/api/watchlist' ? [{
       id: 1, code: '600519', type: 'STOCK', name: '贵州茅台', quoteValid: true, price: 1500, changePct: 1.2
-    }] : path === '/api/market-indices' ? [] : path === '/api/watchlist/600519/daily-bars?limit=120' ? [{
-      tradeDate: '2026-07-31', open: 1510, high: 1530, low: 1505, close: 1528, volume: 60000
-    }] : []
+    }] : path === '/api/market-indices' ? [] : path === '/api/watchlist/stocks/600519/market-history' ? { stock: { code: '600519', market: 'SH', bars: [{
+      tradeDate: '2026-07-31', open: 1510, high: 1530, low: 1505, close: 1528, volume: 60000, adjustment: 'QFQ'
+    }], warnings: [] }, warnings: [], benchmarkCode: '000300.SH', benchmarkName: '沪深300' } : []
   ) as never);
 
   render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);
@@ -393,8 +394,8 @@ test('opens the daily kline drawer when clicking a stock card', async () => {
   await user.click(screen.getByText('贵州茅台'));
 
   expect(await screen.findByRole('dialog', { name: '贵州茅台 行情图表' })).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/watchlist/600519/daily-bars?limit=120');
-  expect(await screen.findByText('2026-07-31')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith('/api/watchlist/stocks/600519/market-history');
+  expect((await screen.findAllByText('2026-07-31'))[0]).toBeInTheDocument();
 });
 
 test('opens disclosed holdings instead of a kline when clicking a fund card', async () => {
@@ -420,7 +421,7 @@ test('opens disclosed holdings instead of a kline when clicking a fund card', as
 
   expect(await screen.findByRole('dialog', { name: '半导体基金 持仓透视' })).toBeInTheDocument();
   expect(api).toHaveBeenCalledWith('/api/watchlist/021894/fund-holdings?refresh=true');
-  expect(api).not.toHaveBeenCalledWith('/api/watchlist/021894/daily-bars?limit=120');
+  expect(api).not.toHaveBeenCalledWith('/api/watchlist/stocks/021894/market-history');
 });
 
 test('drills from a fund holding into the stock workspace and returns without reloading the fund', async () => {
@@ -435,9 +436,9 @@ test('drills from a fund holding into the stock workspace and returns without re
         rank: 1, stockCode: '688012', stockName: '中微公司', weightPct: 8,
         latestPrice: 468.5, changePct: 2, estimatedContributionPct: 0.16, quoteValid: true
       }]
-    } : path === '/api/watchlist/688012/daily-bars?limit=120' ? [{
-      code: '688012', tradeDate: '2026-08-08', open: 460, high: 470, low: 458, close: 468.5, volume: 10000
-    }] : []
+    } : path === '/api/watchlist/stocks/688012/market-history' ? { stock: { code: '688012', market: 'SH', bars: [{
+      code: '688012', tradeDate: '2026-08-08', open: 460, high: 470, low: 458, close: 468.5, volume: 10000, adjustment: 'QFQ'
+    }], warnings: [] }, warnings: [], benchmarkCode: '000300.SH', benchmarkName: '沪深300' } : []
   ) as never);
 
   render(<WatchlistView addToast={vi.fn()} setMessage={vi.fn()} />);

@@ -14,7 +14,24 @@ const overview = {
   laggards: []
 };
 
-beforeEach(() => vi.mocked(api).mockReset());
+beforeEach(() => {
+  vi.mocked(api).mockReset();
+});
+
+test('new attribution report metadata survives an investment quote outage', async () => {
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(path === '/api/watchlist' ? [{
+    id: 1, code: '600519', type: 'STOCK', price: 100, quoteValid: true, attributionReportId: 1
+  }] : path.startsWith('/api/sector-market/overview') ? overview : []) as never);
+  const { result } = renderHook(() => useWatchlistDashboardData());
+  await waitFor(() => expect(result.current.investments.phase).toBe('ready'));
+  vi.mocked(api).mockImplementation((path: string) => Promise.resolve(path.startsWith('/api/watchlist') ? [{
+    id: 1, code: '600519', type: 'STOCK', quoteValid: false, qualityStatus: 'UNAVAILABLE', attributionReportId: 2, attributionReportDate: '2026-11-06'
+  }] : path.startsWith('/api/sector-market/overview') ? overview : []) as never);
+  await act(async () => {
+    await result.current.loadInvestments(true);
+  });
+  expect(result.current.investments.data[0]).toMatchObject({ price: 100, attributionReportId: 2, attributionReportDate: '2026-11-06' });
+});
 
 test('keeps investments and indices ready when sector overview fails', async () => {
   vi.mocked(api).mockImplementation((path?: string) => {

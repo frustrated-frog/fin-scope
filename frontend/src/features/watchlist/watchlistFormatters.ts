@@ -1,6 +1,13 @@
 import type { MarketDataQuality } from '../../shared/types';
 
-type QuoteLike = MarketDataQuality & { quoteValid: boolean; quoteNote?: string };
+type QuoteLike = MarketDataQuality & {
+  quoteValid: boolean;
+  quoteNote?: string;
+  attributionReportId?: number;
+  attributionReportDate?: string;
+  attributionSummary?: string;
+  attributionChangePct?: number;
+};
 
 export function preserveValidQuotes<T extends QuoteLike>(
   next: T[],
@@ -15,6 +22,12 @@ export function preserveValidQuotes<T extends QuoteLike>(
       degradedCount += 1;
       return {
         ...prior,
+        ...(item.attributionReportId != null ? {
+          attributionReportId: item.attributionReportId,
+          attributionReportDate: item.attributionReportDate,
+          attributionSummary: item.attributionSummary,
+          attributionChangePct: item.attributionChangePct
+        } : {}),
         quoteNote: item.quoteNote ?? prior.quoteNote,
         qualityStatus: item.qualityStatus,
         sourceCode: item.sourceCode,
