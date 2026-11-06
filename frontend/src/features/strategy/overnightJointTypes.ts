@@ -1,6 +1,7 @@
 import type { OvernightMode } from './overnightTypes';
 import type { OvernightDirectionForward, OvernightDirectionMetrics } from './overnightDirectionTypes';
 import type { ErrorAudit } from './overnightErrorTypes';
+import type { SameDaySelection, SelectionForwardGroup } from './overnightSelectionTypes';
 
 export interface OvernightJointPrediction {
   status: string; adopted: boolean; qualified: boolean; artifactId: string;
@@ -28,11 +29,13 @@ export interface OvernightJointState {
       historical: { dayCount: number; accuracy: number; brierScore: number } }>;
     closeDirection?: { target?: string; data: { symbolCount: number }; audit: { historical: OvernightDirectionMetrics } } | null;
     freshResearch?: { protocol: string; status: string;
+      stockSelection?: { protocol?: string; status: string; historical?: SameDaySelection };
       indexAudit?: { status?: string; dayCount?: number; nonConstantFeatures?: number };
       models: Record<string, { audit: { trainingThrough: string; legacyTrainingThrough: string } }> } | null }>;
   forward?: { requiredDays: number; computedAt: string; groups: OvernightJointGroup[] };
   closeDirectionForward?: OvernightDirectionForward;
   contextDirectionForward?: OvernightDirectionForward;
+  selectionForward?: { protocol: string; groups: SelectionForwardGroup[] };
   freshForward?: { protocol: string; groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
     dayCount: number; pairedCount: number; scheduledCount: number;
     metrics?: { accuracy: number; comparisons: Record<string, { accuracy: number }> } | null }> };
@@ -44,6 +47,7 @@ export interface OvernightJointState {
     metrics?: { accuracy: number; comparisons: Record<string, { accuracy: number }> } | null }> };
   contextSnapshots?: Array<{ signalDate: string; cutoff: string; observedAt: string;
     receivedAt: string; capturedSymbols: number; expectedSymbols: number;
+    relativeStrength?: { protocol: string; expectedIndices: number; capturedIndices: number; pairedSymbols: number };
     market?: { quality: string; capturedSymbols?: number; expectedSymbols?: number; reason?: string } }>;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;
 }
