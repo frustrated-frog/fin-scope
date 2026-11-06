@@ -113,6 +113,31 @@ class PythonOvernightClientTest {
     }
 
     @Test
+    void preservesSelectionDenominatorsAndAlignedInputCoverage() throws Exception {
+        var http = mock(FinanceHttpClient.class);
+        String payload = """
+                {"enabled":true,"jobs":[],"joint":{
+                  "selectionForward":{"protocol":"overnight-same-day-selection-v1","groups":[{
+                    "scheduledCount":9,"pairedCount":5,"sameDaySelection":{
+                      "dayCount":0,"matchedCandidates":{"precision":{"INDEX":null}}}}]},
+                  "contextSnapshots":[{"relativeStrength":{
+                    "capturedIndices":2,"expectedIndices":3,"pairedSymbols":0}}]}}
+                """;
+        when(http.get(anyString(), any(), anyMap())).thenReturn(
+                new FinanceHttpResponse(200, payload, Instant.now(), "test"));
+        var client = new PythonOvernightClient();
+        ReflectionTestUtils.setField(client, "http", http);
+        ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:8000");
+        var state = new ObjectMapper().valueToTree(client.automationState());
+        var result = state.path("joint").path("selectionForward").path("groups").get(0);
+        assertEquals(9, result.path("scheduledCount").asInt());
+        assertEquals(5, result.path("pairedCount").asInt());
+        assertTrue(result.path("sameDaySelection").path("matchedCandidates").path("precision").path("INDEX").isNull());
+        assertEquals(2, state.path("joint").path("contextSnapshots").get(0)
+                .path("relativeStrength").path("capturedIndices").asInt());
+    }
+
+    @Test
     void acceptsCalibratedVersionAndPreservesItsEvidenceButRejectsUnknownVersions() {
         var input = new OvernightResearchInput();
         input.setMode(OvernightMode.TAIL_ENTRY);
