@@ -21,7 +21,7 @@ def summarize_direction(store, now, meta=None, *, challenger=False):
             prediction = prediction.get('incumbentPrediction') or prediction
         if (report.get('evidenceKind') != 'FORWARD' or (report.get('jointResearch') or {}).get('cohort') != 'AUTOMATIC'
                 or prediction.get('protocol') != protocol or prediction.get('target') != TARGET
-                or not report.get('targetDate') or report['targetDate'] >= str(now.date())):
+                or not report.get('targetDate') or f"{report['targetDate']}T15:00:00" >= now.isoformat()):
             continue
         key = f"{report['mode']}|{report['cutoff']}"
         identity = (key, report['signalDate'], report['instrumentCode'])

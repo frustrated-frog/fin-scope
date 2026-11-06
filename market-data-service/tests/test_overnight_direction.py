@@ -185,6 +185,49 @@ def test_direction_has_its_own_forward_checkpoint_and_excludes_replays(tmp_path)
     assert summarize_direction(fake_store, datetime(2026, 4, 2), meta)['groups'][0]['checkpointDays'] == result['checkpointDays']
 
 
+@pytest.mark.parametrize('challenger', [False, True])
+@pytest.mark.parametrize('now, matured', [
+    ('2026-11-06T14:59:59', False),
+    ('2026-11-06T15:00:00', False),
+    ('2026-11-06T15:00:01', True),
+    ('2026-11-07T00:00:00', True),
+])
+def test_forward_direction_counts_settled_results_after_target_close(now, matured, challenger):
+    from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
+    from finscope_market_data.overnight.direction_selection import PROTOCOL as CONTEXT_PROTOCOL
+    from finscope_market_data.overnight.direction_validation import summarize_direction
+    prediction = {'protocol': PROTOCOL, 'target': TARGET, 'artifactId': 'frozen-model',
+                  'upProbability': .7, 'baselineProbability': .5}
+    report = {'id': 'frozen', 'generatedAt': '2026-11-05T14:31:00', 'signalDate': '2026-11-05',
+              'targetDate': '2026-11-06', 'instrumentCode': '605058.SH', 'mode': 'TAIL_ENTRY',
+              'cutoff': '14:30', 'evidenceKind': 'FORWARD', 'jointResearch': {'cohort': 'AUTOMATIC'},
+              'closeDirection': {**prediction, 'challenger': {
+                  **prediction, 'protocol': CONTEXT_PROTOCOL, 'incumbentProbability': .6}},
+              'outcome': {'closeDirection': {'status': 'SETTLED', 'actualUp': True}}}
+    future = {**deepcopy(report), 'id': 'future', 'signalDate': '2026-11-06', 'targetDate': '2026-11-09'}
+    reports = [report, future]
+    store = SimpleNamespace(iter_history=lambda: iter(reports))
+    result = summarize_direction(store, datetime.fromisoformat(now), challenger=challenger)
+    if not matured:
+        assert result['groups'] == []
+        return
+    group = result['groups'][0]
+    assert group['recordCount'] == group['pairedCount'] == group['dayCount'] == 1
+    assert group['metrics']['accuracy'] == 1
+    assert group['status'] == 'ACCUMULATING'
+    assert not group['eligible']
+
+    # A date cannot enter the checkpoint until every frozen prediction has settled.
+    pending = {**deepcopy(report), 'id': 'pending', 'instrumentCode': '600030.SH',
+               'outcome': {'closeDirection': {'status': 'PENDING'}}}
+    reports.append(pending)
+    incomplete = summarize_direction(store, datetime.fromisoformat(now), challenger=challenger)['groups'][0]
+    assert incomplete['recordCount'] == 2
+    assert incomplete['pairedCount'] == 1
+    assert incomplete['dayCount'] == 0
+    assert 'metrics' not in incomplete
+
+
 def test_calibration_requires_both_direction_and_probability_advantage(direction_fit, direction_rows):
     x = direction_rows[0]['features']
     raw = direction_prediction(direction_fit, x)
