@@ -24,8 +24,10 @@ test('automatically presents all performance observations comparisons levels and
   expect(screen.getByText('3.00 倍')).toBeInTheDocument();
   expect(screen.getByRole('img', { name: '个股与沪深300累计涨跌幅对比' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '近期价格位置' })).toBeInTheDocument();
-  expect(screen.getByText('缓存来源')).toBeInTheDocument();
-  expect(screen.getByText(/质量 旧快照/)).toBeInTheDocument();
+  expect(screen.queryByText('缓存来源')).not.toBeInTheDocument();
+  expect(screen.queryByText(/来源 TENCENT_DAILY/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/质量 旧快照/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/均线穿越与历史价量变化为已发生的事实/)).not.toBeInTheDocument();
   expect(screen.getAllByText('收盘突破此前 20 日最高价').length).toBeGreaterThan(0);
 });
 
@@ -40,7 +42,7 @@ test('chart marks existing factual events and automatic price references without
 
 test('missing histories are explicit and never render fabricated percentages or event claims', () => {
   const { container } = render(<StockMarketInsights summary={summarizeStockHistory([])} comparison={compareStockBenchmark([], [])} history={{ stock: { code: '600519', market: 'SH', bars: [], warnings: ['无前复权历史'] }, benchmarkName: '沪深300', benchmarkCode: '000300.SH', warnings: [] }} />);
-  expect(screen.getByText('无前复权历史')).toBeInTheDocument();
+  expect(screen.queryByText('无前复权历史')).not.toBeInTheDocument();
   expect(screen.queryByRole('img')).not.toBeInTheDocument();
   expect(screen.getByText('历史不足，暂不能判断完整窗口事件')).toBeInTheDocument();
   expect(container.textContent).not.toContain('NaN');

@@ -8,11 +8,6 @@ export function StockMarketInsights({ summary, comparison, history }: {
   history: StockMarketHistory;
 }) {
   const latest = summary.bars[summary.bars.length - 1];
-  const warnings = [...new Set([
-    ...(history.warnings ?? []), ...(history.stock.warnings ?? []),
-    ...(history.benchmark?.warnings ?? []), ...summary.warnings, ...comparison.warnings
-  ])];
-  const verifiedAdjustment = history.stock.bars.every((bar) => bar.adjustment === 'QFQ');
 
   return <div className="stock-insights">
     <section className="stock-insight-section" aria-labelledby="stock-performance-title">
@@ -84,14 +79,7 @@ export function StockMarketInsights({ summary, comparison, history }: {
           <li key={`${event.date}-${event.code}`}><time>{event.date}</time><strong>{event.label}</strong>
             <span>{event.ratio == null ? `收盘 ${price(event.price)} · 参考 ${price(event.referenceValue)}` : `当日成交量为此前均量的 ${event.ratio.toFixed(2)} 倍`}</span>
           </li>)}</ul>}
-      <p className="stock-insight-note">均线穿越与历史价量变化为已发生的事实，不代表后续走势结论。</p>
     </section>
-
-    <footer className="stock-insight-provenance">
-      <span>来源 {history.stock.sourceCode || '未提供'} · 数据截至 {history.stock.asOf || latest?.tradeDate || '未提供'}</span>
-      <span>质量 {qualityLabel(history.stock.qualityStatus)} · {verifiedAdjustment ? '前复权' : '复权口径待核验'} · {summary.bars.length} 根有效完整日线</span>
-      {warnings.length > 0 && <ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-    </footer>
   </div>;
 }
 
@@ -138,8 +126,4 @@ function price(value?: number) {
 
 function directionClass(value?: number) {
   return value == null || value === 0 ? '' : value > 0 ? 'watchlist-up' : 'watchlist-down';
-}
-
-function qualityLabel(value?: string) {
-  return ({ FRESH_PRIMARY: '主源数据', FRESH_FALLBACK: '备用源数据', PARTIAL_FRESH: '部分可用', STALE_FALLBACK: '旧快照', UNAVAILABLE: '不可用' } as Record<string, string>)[value ?? ''] ?? '未提供';
 }
