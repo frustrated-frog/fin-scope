@@ -10,6 +10,7 @@ import com.finscope.service.instrument.FundHoldingDetailService;
 import com.finscope.web.request.AddWatchlistItemRequest;
 import com.finscope.web.request.UpdateWatchlistGroupRequest;
 import com.finscope.web.response.WatchlistItemResponse;
+import com.finscope.web.response.WatchlistMemberResponse;
 import com.finscope.web.response.FundHoldingDetailResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -48,17 +49,11 @@ public class WatchlistController {
         return ApiResponses.success(views.stream().map(WatchlistItemResponse::of).collect(Collectors.toList()));
     }
 
-    @GetMapping("/focuses")
-    public ApiResponse<List<com.finscope.web.response.WatchlistFocusResponse>> focuses() {
-        return ApiResponses.success(watchlistService.listFocuses().stream()
-                .map(com.finscope.web.response.WatchlistFocusResponse::of).collect(Collectors.toList()));
-    }
-
-    @PatchMapping("/{id}/focus")
-    public ResponseEntity<Void> updateFocus(@PathVariable Long id,
-            @javax.validation.Valid @RequestBody com.finscope.web.request.UpdateWatchlistFocusRequest request) {
-        watchlistService.updateFocus(id, request.getReason(), request.getNextWatch(), request.getDirection());
-        return ResponseEntity.noContent().build();
+    /** 只读取自选成员和行业归属，不触发行情刷新。 */
+    @GetMapping("/members")
+    public ApiResponse<List<WatchlistMemberResponse>> members() {
+        return ApiResponses.success(watchlistService.listMembers().stream()
+                .map(WatchlistMemberResponse::of).collect(Collectors.toList()));
     }
 
     /**

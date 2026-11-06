@@ -12,8 +12,6 @@ public class PersonalMarketChangeResponse {
     private String title;
     private String summary;
     private String occurredAt;
-    private String reason;
-    private String nextWatch;
     private String eventKey;
     private Long sampleId;
     private Long reportId;
@@ -27,8 +25,6 @@ public class PersonalMarketChangeResponse {
         response.setTitle(value.getTitle());
         response.setSummary(value.getSummary());
         response.setOccurredAt(value.getOccurredAt());
-        response.setReason(value.getReason());
-        response.setNextWatch(value.getNextWatch());
         response.setEventKey(value.getEventKey());
         response.setSampleId(value.getSampleId());
         response.setReportId(value.getReportId());

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { MarketPulseWorkspace, StockDiscoveryMarketContext } from './marketPulseTypes';
 import type { DailyResearch } from './marketResearchTypes';
-import type { WatchFocus } from '../watchlist/watchFocusTypes';
+import type { WatchlistMember } from '../../shared/types';
 import { PanoramaTrend } from './PanoramaTrend';
 import { PanoramaMap } from './PanoramaMap';
 import { PanoramaMatrix } from './PanoramaMatrix';
@@ -27,7 +27,7 @@ export function MarketPanorama({ workspace, dates, refreshing, onLoad, onRefresh
   const [benchmark, setBenchmark] = useState('');
   const [research, setResearch] = useState<DailyResearch>();
   const [stockState, setStockState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [watched, setWatched] = useState<WatchFocus[]>([]);
+  const [watched, setWatched] = useState<WatchlistMember[]>([]);
   useEffect(() => {
     const abort = new AbortController();
     const date = workspace.businessDate ?? '';
@@ -51,7 +51,7 @@ export function MarketPanorama({ workspace, dates, refreshing, onLoad, onRefresh
   }, [workspace.businessDate, workspace.generatedAt, attempt]);
   useEffect(() => {
     const abort = new AbortController();
-    void api<WatchFocus[]>('/api/watchlist/focuses', { signal: abort.signal }).then(result => {
+    void api<WatchlistMember[]>('/api/watchlist/members', { signal: abort.signal }).then(result => {
       if (!abort.signal.aborted && Array.isArray(result)) {
         setWatched(result);
       }

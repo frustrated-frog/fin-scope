@@ -13,7 +13,7 @@ beforeEach(() => {
     if (input.includes('/panorama?')) {
       return response(frames);
     }
-    if (input.includes('/focuses')) {
+    if (input.includes('/members')) {
       return response([{ code: '600000', type: 'STOCK' }]);
     }
     return response({ businessDate: input.split('/').pop(), stocks: [{ instrumentCode: '600000.SH', instrumentName: '样本公司', return1d: 1, sectorCodes: ['S0'], groupCodes: [] }] });

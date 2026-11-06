@@ -11,8 +11,6 @@ public class PersonalMarketChange {
     private String title;
     private String summary;
     private String occurredAt;
-    private String reason;
-    private String nextWatch;
     private String eventKey;
     private Long sampleId;
     private Long reportId;

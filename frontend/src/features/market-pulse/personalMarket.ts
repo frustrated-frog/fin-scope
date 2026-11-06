@@ -1,4 +1,4 @@
-import type { WatchFocus } from '../watchlist/watchFocusTypes';
+import type { WatchlistMember } from '../../shared/types';
 import type { SectorRotation } from './marketPulseTypes';
 import type { StockDiscoveryReport } from '../strategy/quantTypes';
 
@@ -10,8 +10,6 @@ export type PersonalChange = {
   title: string;
   summary?: string;
   occurredAt: string;
-  reason?: string;
-  nextWatch?: string;
   eventKey?: string;
   sampleId?: number;
   reportId?: number;
@@ -22,7 +20,7 @@ export function stockCode(code: string) {
 }
 export function sectorFollows(
   sector: SectorRotation,
-  focuses: WatchFocus[],
+  focuses: WatchlistMember[],
   report?: StockDiscoveryReport,
 ) {
   const members = new Set(
@@ -34,13 +32,12 @@ export function sectorFollows(
     (item) =>
       item.type === 'STOCK' &&
       (item.sectorCode === sector.sectorCode ||
-        item.direction?.trim() === sector.sectorName ||
         members.has(stockCode(item.code))),
   );
 }
 export function industryChanges(
   sectors: SectorRotation[],
-  focuses: WatchFocus[],
+  focuses: WatchlistMember[],
   date: string,
   report?: StockDiscoveryReport,
 ): PersonalChange[] {
@@ -70,7 +67,7 @@ export function industryChanges(
 }
 export function opportunitySectors(
   sectors: SectorRotation[],
-  focuses: WatchFocus[],
+  focuses: WatchlistMember[],
   report?: StockDiscoveryReport,
 ) {
   const sorted = sectors
@@ -91,7 +88,7 @@ export function opportunitySectors(
 export function relativeChanges(
   research: import('./marketResearchTypes').DailyResearch | undefined,
   sectors: SectorRotation[],
-  focuses: WatchFocus[],
+  focuses: WatchlistMember[],
   date: string,
   report?: StockDiscoveryReport,
 ): PersonalChange[] {
@@ -121,15 +118,13 @@ export function relativeChanges(
       }
       return [
         {
-          id: `relative:${focus.watchlistId}`,
+          id: `relative:${focus.id}`,
           category: 'COMPANY' as const,
           code: focus.code,
           name: focus.name,
           title: `当日表现${excess > 0 ? '强于' : '弱于'}${sector.sectorName} ${Math.abs(excess).toFixed(2)} 个百分点`,
           summary: `个股 ${stock.return1d > 0 ? '+' : ''}${stock.return1d.toFixed(2)}%，行业 ${sector.return1d > 0 ? '+' : ''}${sector.return1d.toFixed(2)}%。`,
           occurredAt: date,
-          reason: focus.reason,
-          nextWatch: focus.nextWatch,
         },
       ];
     });

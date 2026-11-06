@@ -31,7 +31,7 @@ class PersonalMarketRepositoryTest {
         ReflectionTestUtils.setField(migrator, "transactionManager", new DataSourceTransactionManager(source));
         migrator.afterPropertiesSet();
         jdbc.update("INSERT INTO instrument(code,type,name,market,created_at,updated_at) VALUES('600519','STOCK','测试公司','SH','2026-09-01','2026-09-01')");
-        jdbc.update("INSERT INTO watchlist_item(instrument_id,created_at,focus_reason) SELECT id,'2026-09-01','订单' FROM instrument WHERE code='600519'");
+        jdbc.update("INSERT INTO watchlist_item(instrument_id,created_at) SELECT id,'2026-09-01' FROM instrument WHERE code='600519'");
         for (String code : new String[]{"600519", "600000"}) {
             for (String date : new String[]{"2026-09-01", "2026-09-29", "2026-10-05"}) {
                 jdbc.update("INSERT INTO attribution_report(instrument_code,instrument_type,report_date,status,summary,created_at,updated_at) VALUES(?,'STOCK',?,'COMPLETED','归因摘要',?,?)", code,date,date,date);
@@ -47,7 +47,6 @@ class PersonalMarketRepositoryTest {
         var values = repo.findChanges(LocalDate.parse("2026-09-30"));
         assertEquals(3, values.size());
         assertTrue(values.stream().allMatch(value -> value.getCode().equals("600519")));
-        assertTrue(values.stream().allMatch(value -> value.getReason().equals("订单")));
         assertTrue(values.stream().anyMatch(value -> value.getReportId()!=null));
         assertTrue(values.stream().anyMatch(value -> "event:one".equals(value.getEventKey())));
         jdbc.update("UPDATE investment_reaction_sample SET excluded=1");

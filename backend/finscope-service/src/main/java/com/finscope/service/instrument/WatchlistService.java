@@ -268,26 +268,8 @@ public class WatchlistService {
         log.info("自选分组更新 id={} group={}", id, normalized);
     }
 
-    public List<WatchlistItem> listFocuses() {
+    public List<WatchlistItem> listMembers() {
         return watchlistRepository.findByTypes(java.util.Arrays.asList("STOCK", "FUND"));
-    }
-
-    public void updateFocus(Long id, String reason, String nextWatch, String direction) {
-        requireInvestmentItem(id);
-        reason = normalizeFocus(reason, 500);
-        nextWatch = normalizeFocus(nextWatch, 500);
-        direction = normalizeFocus(direction, 80);
-        if (watchlistRepository.updateFocus(id, reason, nextWatch, direction) != 1) {
-            throw new BusinessException(BizErrorCode.WATCHLIST_ITEM_NOT_FOUND);
-        }
-    }
-
-    private String normalizeFocus(String text, int limit) {
-        String value = text == null ? "" : text.trim();
-        if (value.length() > limit) {
-            throw new BusinessException(com.finscope.common.exception.ErrorCode.REQUEST_PARAMETER_INVALID);
-        }
-        return value.isEmpty() ? null : value;
     }
 
     private WatchlistItem requireInvestmentItem(Long id) {

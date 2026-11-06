@@ -969,10 +969,15 @@ export type MarketDataQuality = {
   refreshId?: string;
 };
 
+export type WatchlistMember = {
+  id: number;
+  code: string;
+  type: 'STOCK' | 'FUND';
+  name?: string;
+  sectorCode?: string;
+};
+
 export type WatchlistItem = MarketDataQuality & {
-  reason?: string;
-  nextWatch?: string;
-  direction?: string;
   id: number;
   code: string;
   type: 'STOCK' | 'FUND' | 'SECTOR';

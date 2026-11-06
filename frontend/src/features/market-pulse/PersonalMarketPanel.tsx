@@ -1,4 +1,4 @@
-import type { WatchFocus } from '../watchlist/watchFocusTypes';
+import type { WatchlistMember } from '../../shared/types';
 import { useEffect, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryLatest } from '../strategy/quantTypes';
@@ -42,7 +42,7 @@ export function PersonalMarketPanel({
   onOpenStockDiscovery,
   addToast,
 }: Props) {
-  const [focuses, setFocuses] = useState<WatchFocus[]>([]);
+  const [focuses, setFocuses] = useState<WatchlistMember[]>([]);
   const [changes, setChanges] = useState<PersonalChange[]>([]);
   const [research, setResearch] = useState<DailyResearch>();
   const [latest, setLatest] = useState<StockDiscoveryLatest>();
@@ -61,7 +61,7 @@ export function PersonalMarketPanel({
     setFocuses([]);
     setErrors([]);
     void Promise.allSettled([
-      api<WatchFocus[]>('/api/watchlist/focuses', { signal: abort.signal }),
+      api<WatchlistMember[]>('/api/watchlist/members', { signal: abort.signal }),
       api<PersonalChange[]>(
         `/api/market-pulse/personal?businessDate=${businessDate}`,
         { signal: abort.signal },
@@ -142,7 +142,7 @@ export function PersonalMarketPanel({
       });
       setAdded((values) => [...values, stockCode(code)]);
       setAttempt((value) => value + 1);
-      addToast('已加入自选，可填写关注理由', 'success');
+      addToast('已加入自选', 'success');
     } catch (error) {
       addToast(
         error instanceof Error ? error.message : '加入自选失败',
@@ -211,9 +211,9 @@ export function PersonalMarketPanel({
             <strong>这个分类暂无新变化</strong>
             <p>
               已关注 {focuses.length}{' '}
-              个标的。可以先看看右侧机会，或补充你接下来想观察的事情。
+              个标的。可以先看看右侧机会，或调整自选列表。
             </p>
-            <button onClick={() => onOpenWatchlist?.()}>完善关注理由</button>
+            <button onClick={() => onOpenWatchlist?.()}>管理自选</button>
           </div>
         )}
         {!loading && (
@@ -229,13 +229,6 @@ export function PersonalMarketPanel({
                 </div>
                 <h4>{item.title}</h4>
                 {item.summary && <p>{item.summary}</p>}
-                {(item.reason || item.nextWatch) && (
-                  <details>
-                    <summary>我的关注点</summary>
-                    {item.reason && <p>关注理由：{item.reason}</p>}
-                    {item.nextWatch && <p>接下来观察：{item.nextWatch}</p>}
-                  </details>
-                )}
                 <div className="mp-personal-actions">
                   {item.category === 'INDUSTRY' ? (
                     <button onClick={() => openSector(item.sectorName!)}>

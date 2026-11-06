@@ -36,7 +36,7 @@ test('selects an opportunity and can return to the full yesterday group', () => 
   expect(screen.getByText('查看成员（6）')).toBeInTheDocument();
 });
 
-test('loads watchlist only on demand and recomputes the group for stock focuses', async () => {
+test('loads watchlist only on demand and recomputes the group for stock members', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response([{ code: 'SH:600000', type: 'STOCK' }, { code: '600001', type: 'FUND' }])));
   render(<CohortResearchPanel research={research} />);
   expect(fetch).not.toHaveBeenCalled();

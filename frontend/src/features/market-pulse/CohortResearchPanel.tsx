@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import type { WatchFocus } from '../watchlist/watchFocusTypes';
+import type { WatchlistMember } from '../../shared/types';
 import { finite, pct, ratio } from './marketResearch';
 import { stockCode } from './personalMarket';
 import { ResearchStockActions } from './ResearchStockActions';
@@ -30,7 +30,7 @@ export function CohortResearchPanel({ research, onOpenStock }: Props) {
     const abort = new AbortController();
     setWatched(undefined);
     setWatchError('');
-    api<WatchFocus[]>('/api/watchlist/focuses', { signal: abort.signal }).then(values => {
+    api<WatchlistMember[]>('/api/watchlist/members', { signal: abort.signal }).then(values => {
       if (!Array.isArray(values)) {
         throw new Error('自选列表暂不可用');
       }

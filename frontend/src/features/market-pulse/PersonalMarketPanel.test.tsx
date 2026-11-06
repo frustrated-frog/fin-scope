@@ -7,12 +7,11 @@ const sectors = [
   { sectorCode: 'b', sectorName: '半导体', return1d: 3, rotationScore: 90 },
 ];
 const focus = {
-  watchlistId: 1,
+  id: 1,
   code: '600001',
   type: 'STOCK' as const,
   name: '测试公司',
-  direction: '电网设备',
-  reason: '订单增长',
+  sectorCode: 'a',
 };
 const event = {
   id: 'event:1',
@@ -22,7 +21,6 @@ const event = {
   title: '海外新订单',
   occurredAt: '2026-09-30',
   sampleId: 7,
-  reason: '订单增长',
 };
 function response(data: unknown) {
   return {
@@ -44,7 +42,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url) =>
       response(
-        String(url).includes('/focuses')
+        String(url).includes('/members')
           ? [focus]
           : String(url).includes('/personal?')
             ? [event]
@@ -118,7 +116,7 @@ test('does not turn a data error into an empty watchlist', async () => {
 test('adds a same-date discovery candidate and removes the add action', async () => {
   vi.mocked(fetch).mockImplementation(async (url) =>
     response(
-      String(url).includes('/focuses')
+      String(url).includes('/members')
         ? [focus]
         : String(url).includes('/personal?')
           ? []
@@ -164,10 +162,10 @@ test('adds a same-date discovery candidate and removes the add action', async ()
     expect(screen.queryByText('加入自选')).not.toBeInTheDocument(),
   );
 });
-test('sector links use explicit directions and retain unrelated opportunities', () => {
+test('sector links use registered industry codes and retain unrelated opportunities', () => {
   expect(industryChanges(sectors, [focus], '2026-09-30')).toHaveLength(1);
   expect(
-    industryChanges(sectors, [{ ...focus, direction: '设备' }], '2026-09-30'),
+    industryChanges(sectors, [{ ...focus, sectorCode: 'unknown' }], '2026-09-30'),
   ).toHaveLength(0);
   expect(opportunitySectors(sectors, [focus]).map((s) => s.sectorName)).toEqual(
     ['电网设备', '半导体'],
