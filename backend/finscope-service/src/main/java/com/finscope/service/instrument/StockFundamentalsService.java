@@ -56,27 +56,53 @@ public class StockFundamentalsService {
     private final Map<String, AttemptEntry> attempts = new LinkedHashMap<String, AttemptEntry>(16, 0.75f, true);
 
     public StockFundamentals load(String code, boolean refresh) {
+        return load(code, refresh, true);
+    }
+
+    /** 批量研究只补齐财报，不触发与本次计算无关的估值和同行查询。 */
+    public StockFundamentals loadQuartersForResearch(String code) {
+        return loadQuartersForResearch(code, false);
+    }
+
+    public StockFundamentals loadQuartersForResearch(String code, boolean refresh) {
+        return load(code, refresh, false);
+    }
+
+    private StockFundamentals load(String code, boolean refresh, boolean includeValuation) {
         Instrument instrument = requireStock(code);
         LocalDate today = LocalDate.now(clock.withZone(CHINA));
         List<LocalDate> periods = recentQuarters(today);
         String key = instrument.getId() + "|" + today;
         AttemptLease lease = acquire(key);
         if (lease == null) {
-            StockFundamentals local = localSnapshot(instrument, periods);
+            StockFundamentals local = localSnapshot(instrument, periods, includeValuation);
             local.getWarnings().add("股票财务刷新繁忙，本次保留本地数据");
-            peers.populate(local);
+            if (includeValuation) {
+                peers.populate(local);
+            }
             return local;
         }
         AttemptEntry entry = lease.entry;
         try {
             synchronized (entry) {
+                if (!includeValuation) {
+                    if (!refresh && entry.quarterSnapshot != null && clock.instant().isBefore(entry.quarterExpiresAt)) {
+                        return entry.quarterSnapshot;
+                    }
+                    StockFundamentals snapshot = refreshSnapshot(instrument, periods, today, refresh, entry, false);
+                    entry.quarterSnapshot = snapshot;
+                    entry.quarterExpiresAt = clock.instant().plus(ATTEMPT_TTL);
+                    entry.snapshot = null;
+                    return snapshot;
+                }
                 boolean completedWhileWaiting = entry.generation != lease.generation;
                 if (entry.snapshot != null && (completedWhileWaiting
                         || (!refresh && clock.instant().isBefore(entry.expiresAt)))) {
                     return entry.snapshot;
                 }
-                StockFundamentals snapshot = refreshSnapshot(instrument, periods, today, refresh, entry);
+                StockFundamentals snapshot = refreshSnapshot(instrument, periods, today, refresh, entry, true);
                 entry.snapshot = snapshot;
+                entry.quarterSnapshot = null;
                 entry.expiresAt = clock.instant().plus(ATTEMPT_TTL);
                 entry.generation++;
                 return snapshot;
@@ -87,11 +113,14 @@ public class StockFundamentalsService {
     }
 
     private StockFundamentals refreshSnapshot(Instrument instrument, List<LocalDate> periods,
-                                               LocalDate today, boolean refresh, AttemptEntry entry) {
-        StockFundamentals result = localSnapshot(instrument, periods);
+                                               LocalDate today, boolean refresh, AttemptEntry entry,
+                                               boolean includeValuation) {
+        StockFundamentals result = localSnapshot(instrument, periods, includeValuation);
         Set<LocalDate> failedPeriods = new HashSet<LocalDate>();
         try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(REFRESH_TIMEOUT)) {
-            refreshValuation(instrument, today, refresh, entry, result);
+            if (includeValuation) {
+                refreshValuation(instrument, today, refresh, entry, result);
+            }
             List<LocalDate> required = requiredPeriods(periods);
             for (int index = required.size() - 1; index >= 0; index--) {
                 LocalDate period = required.get(index);
@@ -114,7 +143,9 @@ public class StockFundamentalsService {
             }
         }
         readRefreshedQuarters(result, periods, failedPeriods);
-        peers.populate(result);
+        if (includeValuation) {
+            peers.populate(result);
+        }
         result.setRefreshedAt(clock.instant());
         return result;
     }
@@ -232,11 +263,13 @@ public class StockFundamentalsService {
         }
     }
 
-    private StockFundamentals localSnapshot(Instrument instrument, List<LocalDate> periods) {
+    private StockFundamentals localSnapshot(Instrument instrument, List<LocalDate> periods, boolean includeValuation) {
         StockFundamentals result = new StockFundamentals();
         result.setInstrument(instrument);
         result.setQuarters(quarters.assemble(instrument.getId(), periods));
-        result.setValuation(readLocalValuation(instrument, result, null));
+        if (includeValuation) {
+            result.setValuation(readLocalValuation(instrument, result, null));
+        }
         result.setRefreshedAt(clock.instant());
         return result;
     }
@@ -339,6 +372,8 @@ public class StockFundamentalsService {
         private int users;
         private volatile long generation;
         private StockFundamentals snapshot;
+        private StockFundamentals quarterSnapshot;
+        private Instant quarterExpiresAt;
         private Instant expiresAt;
         private boolean valuationAttempted;
         private String valuationWarning;

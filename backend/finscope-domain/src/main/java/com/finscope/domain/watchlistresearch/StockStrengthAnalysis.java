@@ -17,7 +17,7 @@ public class StockStrengthAnalysis {
     private int trainingSamples;
     private int evaluationSamples;
     private Double beta;
-    private Double rSquared;
+    private Double fitQuality;
     private Double actualReturnPct;
     private Double baselineReturnPct;
     private Double excessReturnPp;

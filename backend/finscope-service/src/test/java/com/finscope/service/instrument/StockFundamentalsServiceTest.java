@@ -84,6 +84,16 @@ class StockFundamentalsServiceTest {
     }
 
     @Test
+    void researchQuarterRefreshReusesFinancialFallbackWithoutValuationOrPeerCalls() {
+        service.loadQuartersForResearch("600519");
+        service.loadQuartersForResearch("600519");
+
+        verify(quarters, times(2)).assemble(eq(17L), anyList());
+        verifyNoInteractions(valuations);
+        verifyNoInteractions(financialRefresh);
+    }
+
+    @Test
     void readsExistingRawQuartersAndActualValuationWithoutRefetchingToday() {
         StockFundamentals result = service.load(" 600519 ", false);
 

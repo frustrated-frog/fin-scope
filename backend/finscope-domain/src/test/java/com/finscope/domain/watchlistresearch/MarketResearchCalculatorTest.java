@@ -21,7 +21,7 @@ class MarketResearchCalculatorTest {
         StockStrengthAnalysis result = MarketResearchCalculator.strength(stock("1"), stock, benchmark);
 
         assertEquals(1.7, result.getBeta(), 1e-10);
-        assertEquals(1.0, result.getRSquared(), 1e-10);
+        assertEquals(1.0, result.getFitQuality(), 1e-10);
         assertEquals(120, result.getTrainingSamples());
         assertEquals(20, result.getPositiveResidualDays());
         assertTrue(result.getExcessReturnPp() > 7.0);
@@ -87,6 +87,23 @@ class MarketResearchCalculatorTest {
     }
 
     @Test
+    void staleFallbackRetainsDatedMetricsButCannotGenerateFreshSignalsOrLinks() {
+        DailyBarHistory benchmark = prices(160, MarketResearchCalculatorTest::market);
+        benchmark.setQualityStatus("STALE_FALLBACK");
+        DailyBarHistory own = prices(160, index -> market(index) + (index > 140 ? .01 : 0));
+        StockStrengthAnalysis result = MarketResearchCalculator.strength(stock("a"), own, benchmark);
+        assertNotNull(result.getExcessReturnPp());
+        assertFalse(result.getGaps().isEmpty());
+        WatchlistResearchSnapshot snapshot = new WatchlistResearchSnapshot();
+        snapshot.getStrengths().add(result);
+        assertTrue(WatchlistResearchRules.findings(snapshot).isEmpty());
+        assertTrue(MarketResearchCalculator.relationships(List.of(stock("a"), stock("b")),
+                Map.of("a", own, "b", own), benchmark).isEmpty());
+        benchmark.setQualityStatus("UNVERIFIED");
+        assertNull(MarketResearchCalculator.strength(stock("a"), own, benchmark).getBeta());
+    }
+
+    @Test
     void doesNotReportUndefinedResidualCorrelationsOrStaleRelationships() {
         DailyBarHistory exact = prices(160, index -> market(index) * 2);
         assertTrue(MarketResearchCalculator.relationships(List.of(stock("a"), stock("b")),
@@ -110,6 +127,7 @@ class MarketResearchCalculatorTest {
 
     private static DailyBarHistory prices(int count, IntToDoubleFunction returns) {
         DailyBarHistory result = new DailyBarHistory();
+        result.setQualityStatus("FRESH_PRIMARY");
         double price = 100;
         for (int index = 0; index <= count; index++) {
             if (index > 0) {

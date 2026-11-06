@@ -27,7 +27,9 @@ public final class GrowthQualityCalculator {
         result.setName(stock.getName());
         List<StockFinancialQuarter> quarters = new ArrayList<StockFinancialQuarter>();
         for (StockFinancialQuarter quarter : input) {
-            if (quarter.getPeriodEnd() != null && !quarter.getPeriodEnd().isAfter(observedDate)) {
+            if (quarter.getPeriodEnd() != null && !quarter.getPeriodEnd().isAfter(observedDate)
+                    && (quarter.getPublishedAt() == null
+                    || !quarter.getPublishedAt().toLocalDate().isAfter(observedDate))) {
                 quarters.add(quarter);
             }
         }
@@ -44,7 +46,7 @@ public final class GrowthQualityCalculator {
         StockFinancialQuarter last = current.get(3);
         result.setCurrency(last.getCurrency());
         result.setSourceCode(last.getSourceCode());
-        result.setPeriodFrom(current.get(0).getPeriodEnd());
+        result.setPeriodFrom(YearMonth.from(current.get(0).getPeriodEnd()).minusMonths(2).atDay(1));
         result.setPeriodThrough(last.getPeriodEnd());
         result.setRevenueTtm(sum(current, StockFinancialQuarter::getRevenue));
         result.setProfitTtm(sum(current, StockFinancialQuarter::getNetProfitParent));

@@ -14,7 +14,7 @@ public final class WatchlistResearchRules {
     public static List<ResearchFinding> findings(WatchlistResearchSnapshot snapshot) {
         List<ResearchFinding> findings = new ArrayList<ResearchFinding>();
         for (StockStrengthAnalysis stock : snapshot.getStrengths()) {
-            if (stock.getExcessReturnPp() == null) {
+            if (stock.getExcessReturnPp() == null || !stock.getGaps().isEmpty()) {
                 continue;
             }
             boolean strong = stock.getExcessReturnPp() >= 5 && stock.getPositiveResidualDays() >= 13;
@@ -27,7 +27,7 @@ public final class WatchlistResearchRules {
                                         stock.getActualReturnPct(), stock.getBaselineReturnPct(), stock.getExcessReturnPp()),
                                 format("20日中有%d日高于基线；beta %.2f，训练样本%d日，拟合度 %.0f%%",
                                         stock.getPositiveResidualDays(), stock.getBeta(), stock.getTrainingSamples(),
-                                        stock.getRSquared() * 100),
+                                        stock.getFitQuality() * 100),
                                 stock.getEvaluatedFrom() + " → " + stock.getEvaluatedThrough())));
             }
         }

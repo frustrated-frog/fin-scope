@@ -30,6 +30,8 @@ public final class MarketResearchCalculator {
         result.setCode(stock.getCode());
         result.setName(stock.getName());
         result.setSourceCode(history == null ? null : history.getSourceCode());
+        addQualityGap(result, history, "股票");
+        addQualityGap(result, benchmark, "沪深300");
         Map<Interval, Double> own = returns(history);
         Map<Interval, Double> market = returns(benchmark);
         List<Interval> calendar = new ArrayList<Interval>(market.keySet());
@@ -82,7 +84,7 @@ public final class MarketResearchCalculator {
         result.setEvaluatedThrough(evaluation.get(evaluation.size() - 1).end);
         result.setEvaluationSamples(evaluation.size());
         result.setBeta(fit.beta);
-        result.setRSquared(fit.rSquared);
+        result.setFitQuality(fit.rSquared);
         result.setActualReturnPct((actual - 1.0) * 100.0);
         result.setBaselineReturnPct((baseline - 1.0) * 100.0);
         result.setExcessReturnPp((actual - baseline) * 100.0);
@@ -93,11 +95,15 @@ public final class MarketResearchCalculator {
     public static List<StockRelationship> relationships(List<WatchlistItem> stocks,
                                                          Map<String, DailyBarHistory> histories,
                                                          DailyBarHistory benchmark) {
+        if (!isFresh(benchmark)) {
+            return Collections.emptyList();
+        }
         Map<Interval, Double> market = returns(benchmark);
         List<Interval> calendar = tail(new ArrayList<Interval>(market.keySet()), RELATIONSHIP_DAYS);
         Map<String, Map<Interval, Double>> series = new LinkedHashMap<String, Map<Interval, Double>>();
         for (WatchlistItem stock : stocks) {
-            series.put(stock.getCode(), returns(histories.get(stock.getCode())));
+            DailyBarHistory history = histories.get(stock.getCode());
+            series.put(stock.getCode(), isFresh(history) ? returns(history) : Collections.emptyMap());
         }
         List<StockRelationship> result = new ArrayList<StockRelationship>();
         for (int left = 0; left < stocks.size(); left++) {
@@ -171,8 +177,8 @@ public final class MarketResearchCalculator {
     private static Map<Interval, Double> returns(DailyBarHistory history) {
         Map<Interval, Double> result = new TreeMap<Interval, Double>();
         if (history == null || history.getBars() == null || history.getBars().size() < 2
-                || "UNAVAILABLE".equals(history.getQualityStatus())
-                || "CONFLICT".equals(history.getQualityStatus())) {
+                || (!isFresh(history) && !"STALE_FALLBACK".equals(history.getQualityStatus())
+                && !"PARTIAL_FRESH".equals(history.getQualityStatus()))) {
             return result;
         }
         LocalDate previousDate = null;
@@ -195,6 +201,19 @@ public final class MarketResearchCalculator {
             previousClose = close;
         }
         return result;
+    }
+
+    private static boolean isFresh(DailyBarHistory history) {
+        return history != null && ("FRESH_PRIMARY".equals(history.getQualityStatus())
+                || "FRESH_FALLBACK".equals(history.getQualityStatus()));
+    }
+
+    private static void addQualityGap(StockStrengthAnalysis result, DailyBarHistory history, String label) {
+        if (history != null && !isFresh(history)) {
+            String through = history.getBars() == null || history.getBars().isEmpty() ? "未知日期"
+                    : String.valueOf(history.getBars().get(history.getBars().size() - 1).getTradeDate());
+            result.getGaps().add(label + "日线使用已有或不完整快照（截至" + through + "），待更新确认");
+        }
     }
 
     private static Fit fit(double[] x, double[] y) {

@@ -253,6 +253,19 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "watchlistResearchExecutor")
+    public Executor watchlistResearchExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("watchlist-research-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(false);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "quantExperimentExecutor")
     public Executor quantExperimentExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
