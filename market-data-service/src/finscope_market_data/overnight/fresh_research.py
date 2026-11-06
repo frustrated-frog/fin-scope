@@ -11,6 +11,7 @@ from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARC
 from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
 
 GROUPS = ('FRESH', 'CALIBRATED', 'INDEX')
+INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
 
 
 def train_fresh_research(rows, history, through, cutoff):
@@ -29,12 +30,15 @@ def train_fresh_research(rows, history, through, cutoff):
     if result['indexAudit']['dayCount'] < MIN_RESEARCH_DAYS or result['indexAudit']['nonConstantFeatures'] == 0:
         result['indexAudit']['status'] = 'INSUFFICIENT_HISTORY'
         return result
-    matched = fit_fresh_direction(base, through, cutoff, include_checks=True)
-    indexed = fit_fresh_direction(enhanced, through, cutoff, selector_rows=base, include_checks=True)
+    # PRIOR and SESSION_LOGISTIC ignore appended inputs. Use a predeclared
+    # full-feature recipe on BOTH arms so the index comparison measures input.
+    matched = fit_fresh_direction(base, through, cutoff, fixed_candidate=INDEX_CANDIDATE, include_checks=True)
+    indexed = fit_fresh_direction(enhanced, through, cutoff, selector_rows=base,
+                                  fixed_candidate=INDEX_CANDIDATE, include_checks=True)
     if matched is None or indexed is None:
         result['indexAudit']['status'] = 'INSUFFICIENT_HISTORY'
         return result
-    # The two arms share exact stocks, dates, labels and legacy recipe choices.
+    # The two arms share exact stocks, dates, labels and a fixed recipe.
     left, right = matched.pop('checks'), indexed.pop('checks')
     test_days = set(sorted({r['signalDate'] for r in right})[-TEST_DAYS:])
     left = [r for r in left if r['signalDate'] in test_days]

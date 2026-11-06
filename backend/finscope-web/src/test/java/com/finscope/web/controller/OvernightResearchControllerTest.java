@@ -90,6 +90,31 @@ class OvernightResearchControllerTest {
     }
 
     @Test
+    void preservesIndependentFreshnessForecastsAndTheirTrainingEvidence() throws Exception {
+        ArrayNode reports = fixture();
+        ObjectNode direction = ((ObjectNode) reports.get(1)).putObject("closeDirection");
+        direction.put("upProbability", 0.61);
+        ObjectNode fresh = direction.putArray("freshModels").addObject();
+        fresh.put("protocol", "overnight-fresh-direction-v1");
+        fresh.put("group", "FRESH");
+        fresh.put("status", "SHADOW");
+        fresh.put("upProbability", 0.49);
+        fresh.put("trainingThrough", "2026-11-05T15:00:00");
+        fresh.put("legacyTrainingThrough", "2026-09-29T15:00:00");
+        fresh.put("validated", false);
+        when(http.get(anyString(), any(), anyMap(), anyInt(), anyInt()))
+                .thenReturn(response(reports.toString()));
+
+        mvc.perform(get("/api/quant/overnight/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].closeDirection.upProbability").value(0.61))
+                .andExpect(jsonPath("$.data[1].closeDirection.freshModels[0].upProbability").value(0.49))
+                .andExpect(jsonPath("$.data[1].closeDirection.freshModels[0].trainingThrough").value("2026-11-05T15:00:00"))
+                .andExpect(jsonPath("$.data[1].closeDirection.freshModels[0].legacyTrainingThrough").value("2026-09-29T15:00:00"))
+                .andExpect(jsonPath("$.data[1].closeDirection.freshModels[0].validated").value(false));
+    }
+
+    @Test
     void generatesThePythonReportWithoutLosingItsDecisionPriceOrProvenance() throws Exception {
         var report = fixture().get(1);
         when(http.postJson(anyString(), any(), anyString(), anyMap(), anyInt()))

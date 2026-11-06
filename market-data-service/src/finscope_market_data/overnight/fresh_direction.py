@@ -6,7 +6,7 @@ import json
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
-from finscope_market_data.overnight.direction_candidates import BASE_RECIPE, candidate_probabilities, fit_candidates
+from finscope_market_data.overnight.direction_candidates import BASE_RECIPE, CANDIDATES, candidate_probabilities, fit_candidates
 from finscope_market_data.overnight.direction_dataset import TARGET
 from finscope_market_data.overnight.direction_learning import (
     apply_calibration, covered_matured_rows, fit_direction_before, TEST_DAYS, SELECTION_DAYS,
@@ -62,7 +62,9 @@ def metrics(checks, key):
 
 
 def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_policy='BRIER', include_checks=False,
-                        selector_rows=None):
+                        selector_rows=None, fixed_candidate=None):
+    if fixed_candidate is not None and fixed_candidate not in CANDIDATES:
+        raise ValueError('未知固定对照算法')
     selector_rows = rows if selector_rows is None else selector_rows
     selectors = {(r['signalDate'], r['instrumentCode']): r for r in selector_rows}
     identities = {(r['signalDate'], r['instrumentCode']) for r in rows}
@@ -86,7 +88,7 @@ def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_
         if legacy is None:
             return None
         # Hold recipe selection fixed to the legacy arm to isolate freshness.
-        model, audit = fresh_refit(rows, decision, legacy['model']['selected'], recipe=recipe)
+        model, audit = fresh_refit(rows, decision, fixed_candidate or legacy['model']['selected'], recipe=recipe)
         calibration, calibration_audit = rolling_calibration(checks, decision)
         test = [r for r in matured if r['signalDate'] == day]
         x = [r['features'] for r in test]
@@ -100,14 +102,14 @@ def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_
         folds.append({'signalDate': day, 'predictionAt': decision, **audit, **calibration_audit,
                       'legacyTrainingThrough': legacy['audit']['selectionThrough'], 'selected': model['selected']})
     legacy = fit_direction_before(selector_rows, through, recipe=recipe, selection_policy=selection_policy)
-    model, audit = fresh_refit(rows, through, legacy['model']['selected'], recipe=recipe)
+    model, audit = fresh_refit(rows, through, fixed_candidate or legacy['model']['selected'], recipe=recipe)
     model['calibration'], calibration_audit = rolling_calibration(checks, through)
     # Calibration remains a separately measured candidate, not an automatic
     # upgrade justified by repeatedly inspected development history.
     model['calibrationGate'] = {'directionSource': 'RAW', 'probabilitySource': 'RAW'}
     selected = [r for r in checks if r['signalDate'] in set(days[-TEST_DAYS:])]
     result = {'protocol': PROTOCOL, 'target': TARGET, 'model': model,
-        'audit': {**audit, **calibration_audit, 'selected': model['selected'],
+        'audit': {**audit, **calibration_audit, 'selected': model['selected'], 'fixedCandidate': fixed_candidate,
             'legacyTrainingThrough': legacy['audit']['selectionThrough'],
             'testStart': min(r['signalDate'] for r in selected), 'testThrough': max(r['exitAt'] for r in selected),
             'historical': metrics(selected, 'raw'), 'calibratedHistorical': metrics(selected, 'calibrated'),

@@ -62,7 +62,7 @@ def test_real_paired_models_share_selection_and_labels(research):
     left, right = [research['models'][name] for name in ('INDEX_BASELINE', 'INDEX')]
     assert len(right['features']) == len(left['features']) + 9
     for a, b in zip(left['audit']['folds'], right['audit']['folds']):
-        assert a['selected'] == b['selected']
+        assert a['selected'] == b['selected'] == 'SHAPE_ENSEMBLE'
         assert a['trainingThrough'] == b['trainingThrough'] < b['predictionAt']
         assert a['trainingRows'] == b['trainingRows']
     assert 'MATCHED_BASELINE' in right['audit']['historical']['comparisons']
