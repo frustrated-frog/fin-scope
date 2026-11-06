@@ -21,6 +21,9 @@ test('shows actual training freshness without claiming an improvement or inventi
   expect(screen.queryByRole('region', { name: '新训练方案对照' })).not.toBeInTheDocument();
   rerender(<OvernightFreshProgress state={{ ...state, models: [] }} mode="TAIL_ENTRY" />);
   expect(screen.queryByRole('region', { name: '新训练方案对照' })).not.toBeInTheDocument();
+  rerender(<OvernightFreshProgress state={{ ...state, models: [], freshForward: {
+    protocol: 'overnight-fresh-direction-v1', groups: [] } }} mode="TAIL_ENTRY" />);
+  expect(screen.getByText(/新训练方案尚未就绪/)).toBeVisible();
 });
 
 test('displays paired real evidence and rejects incompatible versions', () => {
