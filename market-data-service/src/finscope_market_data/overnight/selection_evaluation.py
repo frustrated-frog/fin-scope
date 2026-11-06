@@ -39,6 +39,9 @@ def paired_selection(rows, *, top_k=3, threshold=.5):
         scores = {arm: np.array([r['scores'][arm] for r in values]) for arm in ARMS}
         if np.ptp(scores['INDEX_ONLY']) > 1e-12:
             raise ValueError('仅指数模型在同一天不能区分股票')
+        # Accepted numerical jitter must not turn a timing-only arm into an
+        # accidental stock selector at an exact-equality tie boundary.
+        scores['INDEX_ONLY'] = np.full(len(values), scores['INDEX_ONLY'].mean())
         forced = min(top_k, len(values))
         count = min(top_k, int(np.sum(scores['INDEX'] >= threshold)))
         daily.append({'signalDate': day, 'poolSize': len(values), 'poolUpRate': float(labels.mean()),

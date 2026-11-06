@@ -36,6 +36,13 @@ def test_order_and_equal_score_codes_cannot_change_selection():
     assert all(row['forced']['INDEX'] == pytest.approx(.6) for row in result['days'])
 
 
+def test_index_only_numerical_jitter_does_not_invent_stock_ranking():
+    values = rows()
+    for index, row in enumerate(values):
+        row['scores']['INDEX_ONLY'] += index * 1e-14
+    assert paired_selection(values)['forcedTopK']['precision']['INDEX_ONLY'] == pytest.approx(.6)
+
+
 @pytest.mark.parametrize('change', ['duplicate', 'missing', 'nan', 'label', 'index_identity'])
 def test_rejects_nonpaired_or_invalid_inputs(change):
     values = deepcopy(rows())
