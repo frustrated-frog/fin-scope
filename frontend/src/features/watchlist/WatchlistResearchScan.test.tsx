@@ -108,10 +108,10 @@ test('manual scan uses POST and membership changes restart with GET without leak
   const { rerender } = render(<WatchlistResearchScan items={[stock]} ready onOpen={vi.fn()} />);
   await screen.findByText('现金流与利润不同步');
   await userEvent.click(screen.getByRole('button', { name: '重新扫描' }));
-  await waitFor(() => expect(vi.mocked(api).mock.calls.at(-1)?.[1]?.method).toBe('POST'));
+  await waitFor(() => expect(vi.mocked(api).mock.calls[vi.mocked(api).mock.calls.length - 1]?.[1]?.method).toBe('POST'));
   vi.mocked(api).mockResolvedValue({ history: [] });
   rerender(<WatchlistResearchScan items={[{ ...stock, code: '603986' }]} ready onOpen={vi.fn()} />);
-  await waitFor(() => expect(vi.mocked(api).mock.calls.at(-1)?.[1]?.method).toBe('GET'));
+  await waitFor(() => expect(vi.mocked(api).mock.calls[vi.mocked(api).mock.calls.length - 1]?.[1]?.method).toBe('GET'));
   expect(screen.queryByText('现金流与利润不同步')).not.toBeInTheDocument();
 });
 
