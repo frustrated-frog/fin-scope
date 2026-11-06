@@ -67,12 +67,25 @@ export function InvestmentObservationView({
   return (
     <section className="reaction-workspace reaction-browser" aria-label="市场反应观察室">
       <header className="reaction-browser-header">
-        <div>
-          <h3>投资观察</h3>
-          <p>跟踪一件事，读懂它之后的市场反应。</p>
+        <div className="reaction-browser-heading">
+          <span className="reaction-browser-mark" aria-hidden="true">
+            <svg viewBox="0 0 28 28" fill="none">
+              <path d="M7 5.5h10l4 4v13H7z" />
+              <path d="M17 5.5v4h4M10 17l3-3 3 2 5-5M10 10h3" />
+            </svg>
+          </span>
+          <div>
+            <h3>投资观察</h3>
+            <p>跟踪一件事，读懂它之后的市场反应。</p>
+          </div>
         </div>
         <div className="reaction-browser-tools">
+          <div className="reaction-browser-status">
+            <span><i aria-hidden="true" />{discovery?.running ? '正在自动识别与更新' : '自动观察'}</span>
+            <small>{discovery?.lastCompletedAt ? `最近同步 ${dateTime(discovery.lastCompletedAt)}` : '正在读取同步状态'}</small>
+          </div>
           <button
+            className="reaction-browser-sync"
             disabled={busy || discovery?.running}
             onClick={() =>
               void act(async () => {
@@ -85,10 +98,11 @@ export function InvestmentObservationView({
               })
             }
           >
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M16 7a6.5 6.5 0 0 0-11-2L3 7m0 0V3m0 4h4M4 13a6.5 6.5 0 0 0 11 2l2-2m0 0v4m0-4h-4" /></svg>
             {discovery?.running ? '同步中…' : '立即同步'}
           </button>
           <details>
-            <summary>更多</summary>
+            <summary>更多<svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" /></svg></summary>
             <div>
               <button onClick={() => void loadManual()}>手动补充</button>
               <button onClick={() => setExtra('legacy')}>历史资料</button>
@@ -105,31 +119,27 @@ export function InvestmentObservationView({
           </details>
         </div>
       </header>
-      <div className="reaction-browser-status">
-        <span>{discovery?.running ? '正在自动识别与更新' : '自动观察'}</span>
-        <small>
-          {discovery?.lastCompletedAt ? `最近同步 ${dateTime(discovery.lastCompletedAt)}` : '正在读取同步状态'} ·
-          日频行情在收盘后更新
-        </small>
+      <div className="reaction-browser-navigation">
+        <nav className="reaction-browser-tabs" aria-label="投资观察视图">
+          {views.map((item) => (
+            <button
+              key={item.value}
+              aria-pressed={!extra && view === item.value}
+              onClick={() => {
+                setView(item.value);
+                setExtra(undefined);
+                setReason('');
+                resetList();
+              }}
+            >
+              <span className="reaction-browser-tab-label">{item.label}</span>
+              <span className="reaction-browser-count">{data?.counts[item.value]?.toLocaleString('zh-CN') ?? '—'}</span>
+            </button>
+          ))}
+          {view === 'EXCLUDED' && <button aria-pressed>已排除样本</button>}
+        </nav>
+        <span className="reaction-browser-market-note"><i aria-hidden="true" />日频行情在收盘后更新</span>
       </div>
-      <nav className="reaction-browser-tabs" aria-label="投资观察视图">
-        {views.map((item) => (
-          <button
-            key={item.value}
-            aria-pressed={!extra && view === item.value}
-            onClick={() => {
-              setView(item.value);
-              setExtra(undefined);
-              setReason('');
-              resetList();
-            }}
-          >
-            {item.label}
-            <span>{data?.counts[item.value] ?? '—'}</span>
-          </button>
-        ))}
-        {view === 'EXCLUDED' && <button aria-pressed>已排除样本</button>}
-      </nav>
       {view === 'PENDING' && !extra && (
         <p className="reaction-note">
           自动采集 {data?.automaticEvents ?? 0} 件事件，其中 {data?.linkedEvents ?? 0} 件至少关联一只股票。
@@ -184,6 +194,7 @@ export function InvestmentObservationView({
           >
             <label className="reaction-browser-search">
               <span className="sr-only">搜索事件或股票</span>
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
               <input
                 aria-label="搜索事件或股票"
                 placeholder="搜索事件、公司或代码"
@@ -212,22 +223,26 @@ export function InvestmentObservationView({
             </label>
             <button
               type="button"
+              className="reaction-browser-filter-toggle"
               aria-pressed={followed}
               onClick={() => {
                 setFollowed((value) => !value);
                 resetList();
               }}
             >
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="m10 2 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8z" /></svg>
               仅关注
             </button>
             <button
               type="button"
+              className="reaction-browser-filter-toggle"
               aria-pressed={changed}
               onClick={() => {
                 setChanged((value) => !value);
                 resetList();
               }}
             >
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M3 11h3l2-6 4 11 2-5h3" /></svg>
               有新变化
             </button>
             {view === 'PENDING' && (
@@ -292,6 +307,10 @@ export function InvestmentObservationView({
                         ? '观察已结束'
                         : '持续跟踪';
                 const names = data.stockNames[sample.sourceIdentity || ''] || sample.instrumentName;
+                const relative = profile?.currentRelativePp;
+                const direction = relative == null || !Number.isFinite(relative) || relative === 0 ? 'neutral' : relative > 0 ? 'up' : 'down';
+                const observedSessions = profile?.observedSessions || 0;
+                const status = sample.excluded ? 'excluded' : sample.state === 'DRAFT' || sample.refreshError ? 'pending' : profile?.windowEnded ? 'ended' : 'tracking';
                 return (
                   <button
                     className="reaction-browser-row"
@@ -300,36 +319,44 @@ export function InvestmentObservationView({
                   >
                     <div className="reaction-browser-subject">
                       <span className="reaction-browser-meta">
-                        {subtypeLabels[sample.eventSubtype || ''] || '事件观察'} · {dateTime(sample.publishedAt)}
-                        {sample.followed ? ' · 已关注' : ''}
+                        <span className="reaction-browser-event-type" data-tone={sample.eventSubtype?.startsWith('EARNINGS') ? 'earnings' : sample.eventSubtype === 'OPERATING_UPDATE' ? 'operating' : 'contract'}>
+                          {subtypeLabels[sample.eventSubtype || ''] || '事件观察'}
+                        </span>
+                        <time dateTime={sample.publishedAt}>{dateTime(sample.publishedAt)}</time>
+                        {sample.followed && <span className="reaction-browser-followed">已关注</span>}
                       </span>
-                      <strong>{sample.title}</strong>
-                      <span>
-                        {names || '暂无明确关联公司'}
+                      <strong title={sample.title}>{sample.title}</strong>
+                      <span className="reaction-browser-company">
+                        <svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="M2.5 13.5h11M4 13V3.5h8V13M6.5 6h3M6.5 8.5h3M7 13v-2h2v2" /></svg>
+                        <span>{names || '暂无明确关联公司'}</span>
                         {(data.stockCounts[sample.sourceIdentity || ''] || 0) > 1
-                          ? ` · ${data.stockCounts[sample.sourceIdentity!]} 只股票`
+                          ? <span className="reaction-browser-stock-code">{data.stockCounts[sample.sourceIdentity!]} 只股票</span>
                           : sample.instrumentCode
-                            ? ` · ${sample.instrumentCode}`
-                            : ''}
+                            ? <span className="reaction-browser-stock-code">{sample.instrumentCode}</span>
+                            : null}
                       </span>
                     </div>
-                    <div className="reaction-browser-value">
-                      <strong>{signed(profile?.currentRelativePp, ' pp')}</strong>
+                    <div className="reaction-browser-value" data-direction={direction}>
+                      <span className="reaction-browser-value-line">
+                        {direction !== 'neutral' && <svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d={direction === 'up' ? 'M3 11 12 3m-6 0h6v6' : 'M3 5l9 8m-6 0h6V7'} /></svg>}
+                        <strong>{signed(relative)}{relative != null && Number.isFinite(relative) && <span className="reaction-browser-unit"> pp</span>}</strong>
+                      </span>
                       <small>
                         {profile
                           ? `相对基准 · 已观察 ${profile.observedSessions} 日`
                           : sample.discoveryIssue || '等待可用行情'}
                       </small>
                     </div>
-                    <div className="reaction-browser-progress">
-                      <span>{state}</span>
-                      <div aria-label={`已观察 ${profile?.observedSessions || 0} 个交易日`}>
+                    <div className="reaction-browser-progress" data-status={status}>
+                      <span className="reaction-browser-progress-heading"><span className="reaction-browser-state"><i aria-hidden="true" />{state}</span><span className="reaction-browser-session">T+{Math.min(observedSessions, 5)}<small> / 5</small></span></span>
+                      <div className="reaction-browser-track" aria-label={`已观察 ${observedSessions} 个交易日`}>
                         {[1, 2, 3, 4, 5].map((day) => (
-                          <i key={day} data-ready={(profile?.observedSessions || 0) >= day} />
+                          <i key={day} title={`T+${day}`} data-ready={observedSessions >= day} data-current={status === 'tracking' && observedSessions === day} />
                         ))}
                       </div>
                       <small>{sample.lastAttemptAt ? `更新 ${dateTime(sample.lastAttemptAt)}` : '系统自动跟踪'}</small>
                     </div>
+                    <svg className="reaction-browser-row-arrow" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m6 3 5 5-5 5" /></svg>
                   </button>
                 );
               })
