@@ -3,6 +3,7 @@ package com.finscope.rpc.quote;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.instrument.DailyBarPoint;
+import com.finscope.domain.instrument.DailyBarHistory;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -14,11 +15,17 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 从本地 Python market-data-service 读取日 K 线，供自选页标的展示。
@@ -31,21 +38,11 @@ import java.util.Locale;
 public class PythonDailyBarClient {
     private static final String CLIENT_CODE = "PYTHON_DAILY_BARS";
 
-    private final String baseUrl;
-    private final FinanceHttpClient http;
-    private final ObjectMapper json = new ObjectMapper();
-
+    @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}")
+    private String baseUrl;
     @Autowired
-    public PythonDailyBarClient(
-            FinanceHttpClient http,
-            @Value("${finscope.python-market-data.base-url:http://127.0.0.1:8000}") String baseUrl) {
-        this(trimTrailingSlash(baseUrl), http);
-    }
-
-    PythonDailyBarClient(String baseUrl, FinanceHttpClient http) {
-        this.baseUrl = baseUrl;
-        this.http = http;
-    }
+    private FinanceHttpClient http;
+    private final ObjectMapper json = new ObjectMapper();
 
     /**
      * 获取标的最近 {@code limit} 根日 K 线。
@@ -72,9 +69,69 @@ public class PythonDailyBarClient {
         return fetchBars("000300", "SH", limit, false);
     }
 
+    /** 展示分析只读取同一快照的完整日线，保留来源与复权信息。 */
+    public DailyBarHistory fetchHistory(String code, String market, int limit, boolean refresh) {
+        String normalizedCode = normalizeCode(code);
+        if (normalizedCode == null || !("SH".equals(market) || "SZ".equals(market) || "BJ".equals(market))) {
+            throw new ProviderContractException("INVALID_SYMBOL", "股票市场或证券代码无效", false);
+        }
+        int normalizedLimit = Math.max(1, Math.min(limit, 500));
+        URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/stocks/" + market + "/" + normalizedCode
+                + "/daily-bars?limit=" + normalizedLimit + "&include_current=false"
+                + (refresh ? "&refresh=true" : ""));
+        try {
+            FinanceHttpResponse response = http.get(CLIENT_CODE, uri, Collections.<String, String>emptyMap());
+            JsonNode root = json.readTree(response.getBody());
+            DailyBarHistory history = new DailyBarHistory();
+            history.setCode(normalizedCode);
+            history.setMarket(market);
+            history.setSourceCode(text(root, "source_code"));
+            history.setQualityStatus(text(root, "quality_status"));
+            history.setAsOf(text(root, "as_of"));
+            history.setRetrievedAt(text(root, "retrieved_at"));
+            for (JsonNode warning : root.path("warnings")) {
+                if (warning.isTextual()) {
+                    history.getWarnings().add(warning.asText());
+                }
+            }
+            List<DailyBarPoint> parsed = parse(response, normalizedCode, market);
+            Set<LocalDate> dates = new HashSet<LocalDate>();
+            ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Shanghai"));
+            for (DailyBarPoint bar : parsed) {
+                boolean currentIncomplete = !bar.getTradeDate().isBefore(now.toLocalDate())
+                        && now.toLocalTime().isBefore(LocalTime.of(15, 15));
+                if (Boolean.FALSE.equals(bar.getIsComplete()) || currentIncomplete
+                        || bar.getTradeDate().isAfter(now.toLocalDate())) {
+                    continue;
+                }
+                if (!dates.add(bar.getTradeDate()) || !validPrices(bar)) {
+                    throw new ProviderContractException("SCHEMA_DRIFT", "日线存在重复日期或无效价格", false);
+                }
+                history.getBars().add(bar);
+            }
+            history.getBars().sort(Comparator.comparing(DailyBarPoint::getTradeDate));
+            if (history.getBars().isEmpty()) {
+                throw new ProviderContractException("EMPTY_COMPLETE_HISTORY", "暂无完整交易日日线", true);
+            }
+            return history;
+        } catch (ProviderContractException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new ProviderContractException("PYTHON_SERVICE_ERROR", "股票历史数据读取失败", true, error);
+        }
+    }
+
+    private static boolean validPrices(DailyBarPoint bar) {
+        return bar.getOpen().signum() > 0 && bar.getHigh().signum() > 0
+                && bar.getLow().signum() > 0 && bar.getClose().signum() > 0
+                && bar.getHigh().compareTo(bar.getOpen().max(bar.getClose())) >= 0
+                && bar.getLow().compareTo(bar.getOpen().min(bar.getClose())) <= 0
+                && (bar.getVolume() == null || bar.getVolume().signum() >= 0);
+    }
+
     private List<DailyBarPoint> fetchBars(String normalizedCode, String market, int limit, boolean refresh) {
         int normalizedLimit = Math.max(1, Math.min(limit, 250));
-        URI uri = URI.create(baseUrl + "/v1/stocks/" + market + "/" + normalizedCode
+        URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/stocks/" + market + "/" + normalizedCode
                 + "/daily-bars?limit=" + normalizedLimit + (refresh ? "&refresh=true" : ""));
         try {
             FinanceHttpResponse response = http.get(CLIENT_CODE, uri, Collections.<String, String>emptyMap());
@@ -116,6 +173,9 @@ public class PythonDailyBarClient {
         bar.setAmplitude(decimalOrNull(row, "amplitude"));
         bar.setChangePct(decimalOrNull(row, "change_pct"));
         bar.setTurnoverRate(decimalOrNull(row, "turnover_rate"));
+        bar.setAdjustment(text(row, "adjustment"));
+        bar.setIsComplete(row.has("is_complete") && row.get("is_complete").isBoolean()
+                ? row.get("is_complete").asBoolean() : null);
         return bar;
     }
 
@@ -148,13 +208,17 @@ public class PythonDailyBarClient {
     }
 
     private static String text(JsonNode node, String field) {
-        if (node == null || !node.isObject()) return null;
+        if (node == null || !node.isObject()) {
+            return null;
+        }
         JsonNode value = node.get(field);
         return value != null && value.isValueNode() && !value.isNull() ? value.asText() : null;
     }
 
     private static String normalizeCode(String code) {
-        if (code == null) return null;
+        if (code == null) {
+            return null;
+        }
         String normalized = code.trim().toLowerCase(Locale.ROOT);
         if (normalized.startsWith("sh") || normalized.startsWith("sz") || normalized.startsWith("bj")) {
             normalized = normalized.substring(2);
@@ -163,16 +227,24 @@ public class PythonDailyBarClient {
     }
 
     private static String market(String code) {
-        if (code == null) return "SZ";
-        if (code.startsWith("6") || code.startsWith("5") || code.startsWith("9")) return "SH";
-        if (code.startsWith("4") || code.startsWith("8")) return "BJ";
+        if (code == null) {
+            return "SZ";
+        }
+        if (code.startsWith("6") || code.startsWith("5") || code.startsWith("9")) {
+            return "SH";
+        }
+        if (code.startsWith("4") || code.startsWith("8")) {
+            return "BJ";
+        }
         return "SZ";
     }
 
     private static String trimTrailingSlash(String value) {
         String normalized = value == null || value.trim().isEmpty()
                 ? "http://127.0.0.1:8000" : value.trim();
-        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
         return normalized;
     }
 

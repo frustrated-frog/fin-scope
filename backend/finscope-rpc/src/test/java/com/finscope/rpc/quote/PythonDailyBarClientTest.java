@@ -1,10 +1,12 @@
 package com.finscope.rpc.quote;
 
 import com.finscope.domain.instrument.DailyBarPoint;
+import com.finscope.domain.instrument.DailyBarHistory;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.time.Instant;
@@ -25,7 +27,7 @@ class PythonDailyBarClientTest {
                     + "\"trade_date\":\"2026-09-18\",\"open\":100,\"high\":104,\"low\":99,\"close\":103,\"volume\":100}]}",
                     Instant.now(), "hash");
         };
-        List<DailyBarPoint> bars = new PythonDailyBarClient("http://localhost:8000", http).fetchMarketBenchmark(250);
+        List<DailyBarPoint> bars = client("http://localhost:8000", http).fetchMarketBenchmark(250);
         assertEquals("SH", bars.get(0).getMarket());
         assertEquals("000300", bars.get(0).getCode());
     }
@@ -48,7 +50,7 @@ class PythonDailyBarClientTest {
                     + "]}";
             return new FinanceHttpResponse(200, body, Instant.parse("2026-08-03T07:00:00Z"), "hash");
         };
-        PythonDailyBarClient client = new PythonDailyBarClient(
+        PythonDailyBarClient client = client(
                 "http://python-market-data:8000", http);
 
         List<DailyBarPoint> bars = client.fetchDailyBars("600519", 120);
@@ -80,7 +82,7 @@ class PythonDailyBarClientTest {
                     + "\"volume\":1}]}";
             return new FinanceHttpResponse(200, body, Instant.now(), "hash");
         };
-        PythonDailyBarClient client = new PythonDailyBarClient("http://localhost:8000", http);
+        PythonDailyBarClient client = client("http://localhost:8000", http);
 
         assertEquals("SZ", client.fetchDailyBars("000001", 30).get(0).getMarket());
         assertEquals("BJ", client.fetchDailyBars("830799", 30).get(0).getMarket());
@@ -96,7 +98,7 @@ class PythonDailyBarClientTest {
                             + "\"open\":1,\"high\":1,\"low\":1,\"close\":1,\"volume\":1}]}",
                     Instant.now(), "hash");
         };
-        PythonDailyBarClient client = new PythonDailyBarClient("http://localhost:8000", http);
+        PythonDailyBarClient client = client("http://localhost:8000", http);
 
         client.fetchDailyBars("600519", 120, true);
 
@@ -107,11 +109,69 @@ class PythonDailyBarClientTest {
     void unavailableUpstreamThrowsRetryableContractError() throws Exception {
         FinanceHttpClient http = (providerCode, uri, headers) -> new FinanceHttpResponse(200,
                 "{\"quality_status\":\"UNAVAILABLE\",\"data\":null}", Instant.now(), "hash");
-        PythonDailyBarClient client = new PythonDailyBarClient("http://localhost:8000", http);
+        PythonDailyBarClient client = client("http://localhost:8000", http);
 
         ProviderContractException error = assertThrows(ProviderContractException.class,
                 () -> client.fetchDailyBars("600519", 60));
         assertEquals("UPSTREAM_UNAVAILABLE", error.getErrorType());
         assertTrue(error.isRetryable());
+    }
+
+    @Test
+    void historyPreservesProvenanceExcludesIncompleteAndUsesLongerWindow() {
+        FinanceHttpClient http = (provider, uri, headers) -> {
+            assertEquals("limit=500&include_current=false&refresh=true", uri.getQuery());
+            return response("{\"source_code\":\"TENCENT_DAILY\",\"quality_status\":\"STALE_FALLBACK\","
+                    + "\"as_of\":\"2026-01-05T15:15:00+08:00\",\"retrieved_at\":\"2026-01-06T08:00:00+08:00\","
+                    + "\"warnings\":[\"旧快照\"],\"data\":["
+                    + row("2026-01-05", true) + "," + row("2026-01-06", false) + "]}");
+        };
+        DailyBarHistory history = client("http://localhost:8000", http).fetchHistory("600519", "SH", 999, true);
+        assertEquals(1, history.getBars().size());
+        assertEquals("QFQ", history.getBars().get(0).getAdjustment());
+        assertEquals(Boolean.TRUE, history.getBars().get(0).getIsComplete());
+        assertEquals("TENCENT_DAILY", history.getSourceCode());
+        assertEquals("STALE_FALLBACK", history.getQualityStatus());
+        assertEquals("2026-01-05T15:15:00+08:00", history.getAsOf());
+        assertEquals("旧快照", history.getWarnings().get(0));
+    }
+
+    @Test
+    void historyRejectsDuplicateAndIncoherentPricesRatherThanCalculatingAcrossThem() {
+        FinanceHttpClient duplicate = (provider, uri, headers) -> response("{\"data\":["
+                + row("2026-01-05", true) + "," + row("2026-01-05", true) + "]}");
+        assertThrows(ProviderContractException.class,
+                () -> client("http://localhost:8000", duplicate).fetchHistory("600519", "SH", 500, false));
+        FinanceHttpClient invalid = (provider, uri, headers) -> response("{\"data\":["
+                + row("2026-01-05", true).replace("\"close\":100", "\"close\":200") + "]}");
+        assertThrows(ProviderContractException.class,
+                () -> client("http://localhost:8000", invalid).fetchHistory("600519", "SH", 500, false));
+    }
+
+    @Test
+    void historyRejectsInvalidSymbolsBeforeRequest() {
+        FinanceHttpClient http = (provider, uri, headers) -> {
+            throw new AssertionError("invalid symbol must not reach network");
+        };
+        assertThrows(ProviderContractException.class,
+                () -> client("http://localhost:8000", http).fetchHistory("../600519", "SH", 500, false));
+        assertThrows(ProviderContractException.class,
+                () -> client("http://localhost:8000", http).fetchHistory("600519", "US", 500, false));
+    }
+
+    private static String row(String date, boolean complete) {
+        return "{\"trade_date\":\"" + date + "\",\"open\":100,\"high\":101,\"low\":99,"
+                + "\"close\":100,\"volume\":100,\"adjustment\":\"QFQ\",\"is_complete\":" + complete + "}";
+    }
+
+    private static FinanceHttpResponse response(String body) {
+        return new FinanceHttpResponse(200, body, Instant.now(), "hash");
+    }
+
+    private static PythonDailyBarClient client(String baseUrl, FinanceHttpClient http) {
+        PythonDailyBarClient client = new PythonDailyBarClient();
+        ReflectionTestUtils.setField(client, "baseUrl", baseUrl);
+        ReflectionTestUtils.setField(client, "http", http);
+        return client;
     }
 }
