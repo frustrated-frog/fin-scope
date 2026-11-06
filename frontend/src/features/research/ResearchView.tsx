@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import './ResearchReadability.css';
 import { createPortal } from 'react-dom';
 import { ResearchReport, ResearchRun, ResearchRunDetail, ResearchThesis, ResearchThesisDetail } from '../../shared/types';
 import { api } from '../../shared/api/client';
@@ -251,10 +252,10 @@ export function ResearchView({
         </div>
         <div className="research-thesis-list" aria-label="研究命题列表">
           <div className="research-thesis-list-heading">
-            <span>最近命题</span>
+            <span>研究命题 · {theses.length} 项</span>
             <small>选择后查看判断并继续研究</small>
           </div>
-          {theses.length ? theses.slice(0, 5).map((thesis) => {
+          {theses.length ? theses.map((thesis) => {
             const findingCount = thesisDetail?.thesis.id === thesis.id ? thesisDetail.findings.length : 0;
             const stage = presentThesisStage(thesis, findingCount);
             return (

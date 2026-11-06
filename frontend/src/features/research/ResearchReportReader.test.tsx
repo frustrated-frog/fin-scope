@@ -130,3 +130,19 @@ test('keeps the desktop report body on the page centerline', () => {
     /@container\s+report-reader\s*\(max-width:\s*1120px\)[\s\S]*\.research-report-toc-container\s+\.research-report-toc\s*>\s*strong\s*{[^}]*display:\s*none;[\s\S]*\.research-report-toc-container\s+\.research-report-toc\s+ol\s*{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/
   );
 });
+
+test('renders the conclusion as Markdown with evidence links and lists', () => {
+  const report: ResearchReport = {
+    id: 30, researchRunId: 30, reportType: 'THESIS', status: 'COMPLETED', title: '研究报告',
+    conclusion: '**阶段性结论**\n\n- 营收增长 [E1](#evidence-e1)\n- 尚待验证 [](/)',
+    conclusionDirection: 'MIXED', confidence: 'MEDIUM', executiveSummary: '摘要',
+    contentMarkdown: '## 核心结论\n\n**营收增长**', markdownPath: '/tmp/report.md',
+    generationMode: 'MODEL', evidenceCount: 1, sourceCount: 1, characterCount: 100
+  };
+  render(<ResearchReportReader report={report} onBack={() => undefined} />);
+  const conclusion = screen.getByLabelText('报告结论');
+  expect(conclusion.querySelector('strong')).toHaveTextContent('阶段性结论');
+  expect(conclusion.querySelectorAll('li')).toHaveLength(2);
+  expect(conclusion.querySelector('a')).toHaveAttribute('href', '#evidence-e1');
+  expect(conclusion).not.toHaveTextContent('[](/)');
+});

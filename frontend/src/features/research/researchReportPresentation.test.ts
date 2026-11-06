@@ -21,3 +21,10 @@ test('extracts thesis-first report sections', () => {
     { title: '资料来源', id: 'section-资料来源' }
   ]);
 });
+
+test('removes only recognizable navigation fragments and empty links while retaining evidence', async () => {
+  const { prepareReportMarkdown } = await import('./researchReportPresentation');
+  const source = '## 执行摘要\n\n**事实**：移动版 网页版) [](/) * 首页 * 新闻 您当前的位置：证券时报 > 公司 > 正文 公司营收增长 20%。 [E1](#evidence-e1)';
+  expect(prepareReportMarkdown(source)).toBe('## 执行摘要\n\n**事实**：公司营收增长 20%。 [E1](#evidence-e1)');
+  expect(prepareReportMarkdown('移动版产品营收增长 20%。')).toBe('移动版产品营收增长 20%。');
+});

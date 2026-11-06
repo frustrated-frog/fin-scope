@@ -1,0 +1,79 @@
+/* Bound queue growth independently of the thesis editor. */
+.research-apple-workbench .research-thesis-layout {
+  align-items: start;
+}
+
+.research-apple-workbench .research-thesis-panel {
+  align-content: start;
+  align-self: start;
+}
+
+.research-apple-workbench .research-thesis-list {
+  min-width: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding-right: .4rem;
+}
+
+.research-apple-workbench .research-thesis-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.research-apple-workbench .research-thesis-card strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  line-height: 1.55;
+}
+
+.research-report-reader .research-report-hero > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.research-report-reader .research-report-conclusion {
+  max-height: 16rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  line-height: 1.85;
+  font-weight: 400;
+}
+
+.research-report-reader .research-report-conclusion > :first-child {
+  margin-top: 0;
+}
+
+.research-report-reader .research-report-conclusion > :last-child {
+  margin-bottom: 0;
+}
+
+.research-report-reader .research-report-document {
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.research-report-reader .research-report-document p,
+.research-report-reader .research-report-document li {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.research-report-reader .research-report-document pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.research-report-reader .research-report-document table,
+.research-report-reader .research-report-conclusion table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}

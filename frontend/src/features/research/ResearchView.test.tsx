@@ -455,3 +455,14 @@ function stubThesisDetail(detail: ResearchThesisDetail) {
     headers: { 'Content-Type': 'application/json' }
   })));
 }
+
+test('keeps older theses reachable when the queue grows beyond five items', () => {
+  const theses = Array.from({ length: 13 }, (_, index) => ({
+    ...thesis(), id: index + 1, question: `待验证研究问题 ${index + 1}`
+  }));
+  renderView(legacyDetail(), { theses });
+
+  const queue = screen.getByLabelText('研究命题列表');
+  expect(within(queue).getAllByRole('button')).toHaveLength(13);
+  expect(within(queue).getByText('待验证研究问题 13')).toBeInTheDocument();
+});

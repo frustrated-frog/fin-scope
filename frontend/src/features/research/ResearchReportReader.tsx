@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import './ResearchReadability.css';
 
 import { ResearchReport } from '../../shared/types';
 import {
   evidenceHeadingId,
   extractReportSections,
-  sanitizeLegacyEvidenceAnchors,
+  prepareReportMarkdown,
   slugReportHeading
 } from './researchReportPresentation';
 
@@ -14,7 +15,7 @@ const CONFIDENCE_LABELS = { HIGH: '高', MEDIUM: '中', LOW: '低' } as const;
 
 export function ResearchReportReader({ report, onBack }: { report: ResearchReport; onBack: () => void }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const displayMarkdown = sanitizeLegacyEvidenceAnchors(report.contentMarkdown);
+  const displayMarkdown = prepareReportMarkdown(report.contentMarkdown);
   const sections = extractReportSections(displayMarkdown);
 
   useEffect(() => {
@@ -31,7 +32,9 @@ export function ResearchReportReader({ report, onBack }: { report: ResearchRepor
         <div>
           <p className="eyebrow">Research report</p>
           <h1 ref={titleRef} tabIndex={-1}>{report.title}</h1>
-          <p className="research-report-conclusion">{report.conclusion}</p>
+          <div className="research-report-conclusion" aria-label="报告结论">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{prepareReportMarkdown(report.conclusion)}</ReactMarkdown>
+          </div>
         </div>
         <div className="research-report-metrics" aria-label="报告质量信息">
           <span><small>置信度</small><strong>{CONFIDENCE_LABELS[report.confidence]}</strong></span>
