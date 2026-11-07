@@ -13,6 +13,7 @@ import { WatchlistKlineDrawer } from './WatchlistKlineDrawer';
 import { WatchlistFundHoldingsDrawer } from './WatchlistFundHoldingsDrawer';
 import { WatchlistStockChanges } from './WatchlistStockChanges';
 import { WatchlistResearchScan } from './WatchlistResearchScan';
+import { WatchlistMatters } from './WatchlistMatters';
 
 type AttributionInstrument = {
   code: string;
@@ -498,6 +499,8 @@ export function WatchlistView({
           openInstrumentDetail(item);
         }
       }} />
+
+      <WatchlistMatters items={items} />
 
       <WatchlistResearchScan items={items} ready={dashboard.investments.phase === 'ready'} onOpen={openInstrumentDetail} />
 
