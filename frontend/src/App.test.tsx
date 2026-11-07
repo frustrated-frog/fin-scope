@@ -71,7 +71,7 @@ const responses: Record<string, unknown> = {
     productionStatus: { running: false, status: 'SUCCESS', sourceCount: 3, signalCount: 5, eventCount: 1 }
   },
   '/api/news/categories': [],
-  '/api/research-radar/events/10': {
+  '/api/research-radar/events/10?section=OVERVIEW': {
     event: dashboardRadarEvent,
     signals: [],
     evidence: [],
