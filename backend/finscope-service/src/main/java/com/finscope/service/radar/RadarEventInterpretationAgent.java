@@ -1,6 +1,7 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -21,7 +23,7 @@ import java.util.Set;
 
 @Service
 public class RadarEventInterpretationAgent {
-    static final int TIMEOUT_MS = 20_000;
+    static final int TIMEOUT_MS = 90_000;
     static final int MAX_OUTPUT_TOKENS = 900;
     private static final int MAX_ITEMS = 8;
     private static final int MAX_LIST_ITEM_LENGTH = 180;
@@ -55,9 +57,18 @@ public class RadarEventInterpretationAgent {
         } catch (InterpretationException error) {
             trace(event, "FALLBACK", error.getClass().getSimpleName(), error.getCode(), started, null);
             throw error;
-        } catch (Exception error) {
+        } catch (SocketTimeoutException error) {
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_TIMEOUT", started, null);
+            throw new InterpretationException("LLM_TIMEOUT", "等待模型回复超时，请重试 AI 解读", error);
+        } catch (JsonProcessingException | IllegalArgumentException error) {
             trace(event, "FALLBACK", error.getClass().getSimpleName(), "INVALID_OUTPUT", started, null);
             throw new InterpretationException("INVALID_OUTPUT", "模型解读输出不可用", error);
+        } catch (Exception error) {
+            if (error instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_REQUEST_FAILED", started, null);
+            throw new InterpretationException("LLM_REQUEST_FAILED", "模型请求未完成，请重试 AI 解读", error);
         }
     }
 
@@ -137,9 +148,11 @@ public class RadarEventInterpretationAgent {
                 + "不得给出买卖、仓位或目标价建议，不得输出Markdown或思维链。";
     }
 
-    private RadarEventInterpretation.Result parseResult(String raw) throws Exception {
+    private RadarEventInterpretation.Result parseResult(String raw) throws JsonProcessingException {
         JsonNode root = json.readTree(extractJson(raw));
-        if (root == null || !root.isObject()) throw new IllegalArgumentException("解读输出必须是JSON对象");
+        if (root == null || !root.isObject()) {
+            throw new IllegalArgumentException("解读输出必须是JSON对象");
+        }
         ObjectNode object = (ObjectNode) root;
         normalizeTextArray(object, "impactChain");
         normalizeTextArray(object, "uncertainties");

@@ -9,6 +9,7 @@ import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -23,7 +24,7 @@ class RadarEventInterpretationAgentTest {
     @Test
     void returnsValidatedEvidenceBoundInterpretation() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900))).thenReturn(validJson());
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900))).thenReturn(validJson());
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -39,7 +40,7 @@ class RadarEventInterpretationAgentTest {
                 .replace("[\"产品发布→量产验证→供应链订单\"]", "\"产品发布→量产验证→供应链订单\"")
                 .replace("[\"价格尚未披露\"]", "\"价格尚未披露\"")
                 .replace("[\"观察公司正式公告\"]", "\"观察公司正式公告\"");
-        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900))).thenReturn(response);
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900))).thenReturn(response);
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -52,7 +53,7 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsReferencesOutsideTheInputEvidenceSet() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900)))
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
                 .thenReturn(validJson().replace("evidence:31", "evidence:999"));
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
@@ -66,7 +67,7 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsInvestmentAdvice() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900)))
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
                 .thenReturn(validJson().replace("可能影响供应链订单预期。", "建议买入相关股票。"));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
@@ -77,12 +78,27 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsUnknownJsonFields() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(20_000), eq(900)))
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
                 .thenReturn(validJson().replaceFirst("\\{", "{\"recommendation\":\"关注\","));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
                 () -> agent(llm).interpret(event(), Collections.singletonList(signal()),
                         Collections.singletonList(evidence())));
+    }
+
+    @Test
+    void reportsTheModelTimeoutSeparatelyFromInvalidOutput() throws Exception {
+        LlmChatClient llm = configuredLlm();
+        when(llm.complete(anyString(), anyString(), eq(90_000), eq(900)))
+                .thenThrow(new SocketTimeoutException("Read timed out"));
+
+        RadarEventInterpretationAgent.InterpretationException error = assertThrows(
+                RadarEventInterpretationAgent.InterpretationException.class,
+                () -> agent(llm).interpret(event(), Collections.singletonList(signal()),
+                        Collections.singletonList(evidence())));
+
+        assertEquals("LLM_TIMEOUT", error.getCode());
+        assertEquals("等待模型回复超时，请重试 AI 解读", error.getMessage());
     }
 
     @Test
