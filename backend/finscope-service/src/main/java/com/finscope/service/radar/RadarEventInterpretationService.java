@@ -3,6 +3,7 @@ package com.finscope.service.radar;
 import com.finscope.service.news.NewsWorkbenchCapabilities;
 
 import com.finscope.common.exception.BusinessException;
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
@@ -71,6 +72,7 @@ public class RadarEventInterpretationService {
         if (!inFlight.add(key)) {
             return interpretations.findByEventFingerprint(eventId, fingerprint).orElseGet(() -> {
                 RadarEventInterpretation pending = new RadarEventInterpretation();
+                pending.setId(interpretations.idForEventFingerprint(eventId, fingerprint));
                 pending.setEventId(eventId);
                 pending.setStatus("QUEUED");
                 return pending;
@@ -116,6 +118,33 @@ public class RadarEventInterpretationService {
         value.setStartedAt(null); value.setCompletedAt(null);
     }
 
+    public RadarEventInterpretation status(Long eventId, Long interpretationId) {
+        RadarEventInterpretation value = findInterpretation(eventId, interpretationId);
+        if (isInterrupted(value)) {
+            // The job may have saved its result between the read and the in-flight check.
+            value = findInterpretation(eventId, interpretationId);
+            markInterrupted(value);
+        }
+        return value;
+    }
+
+    private RadarEventInterpretation findInterpretation(Long eventId, Long interpretationId) {
+        return interpretations.findById(eventId, interpretationId)
+                .orElseThrow(() -> new ResourceNotFoundException("解读记录不存在或已过期"));
+    }
+
+    private boolean isInterrupted(RadarEventInterpretation value) {
+        return ("QUEUED".equals(value.getStatus()) || "RUNNING".equals(value.getStatus()))
+                && !inFlight.contains(value.getEventId() + ":" + value.getEventFingerprint());
+    }
+
+    private void markInterrupted(RadarEventInterpretation value) {
+        if (isInterrupted(value)) {
+            value.setStatus("FAILED");
+            value.setFailureMessage("上次解读未完成，可以重新生成");
+        }
+    }
+
     public Optional<RadarEventInterpretation> current(RadarEvent event, List<RadarSignal> signals,
                                                        List<RadarEvidence> evidenceItems) {
         if (event == null || event.getId() == null) return Optional.empty();
@@ -125,12 +154,7 @@ public class RadarEventInterpretationService {
         String fingerprint = fingerprint(event, signals, evidenceItems);
         Optional<RadarEventInterpretation> matching = interpretations.findByEventFingerprint(event.getId(), fingerprint);
         if (matching.isPresent()) {
-            RadarEventInterpretation value = matching.get();
-            if (("QUEUED".equals(value.getStatus()) || "RUNNING".equals(value.getStatus()))
-                    && !inFlight.contains(event.getId() + ":" + fingerprint)) {
-                value.setStatus("FAILED");
-                value.setFailureMessage("上次解读未完成，可以重新生成");
-            }
+            markInterrupted(matching.get());
             return matching;
         }
         Optional<RadarEventInterpretation> latest = interpretations.findLatestByEventId(event.getId());

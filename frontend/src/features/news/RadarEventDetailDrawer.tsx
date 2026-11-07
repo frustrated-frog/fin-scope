@@ -1,46 +1,68 @@
 import { RadarRankHistory } from "./RadarRankHistory";
 import { useEffect, useRef, useState } from 'react';
 
-import { api } from '../../shared/api/client';
+import { ApiError, api } from '../../shared/api/client';
 import { RadarTimeline } from './RadarTimeline';
 import { RadarTrustPanel } from './RadarTrustPanel';
 import type { RadarEvent, RadarEventDetail, RadarInterpretation, RadarWorkspaceState } from './researchRadarTypes';
 
 const POLL_INTERVAL_MS = 1_500;
+const MAX_POLL_RETRIES = 4;
 type Tab = 'interpretation' | 'timeline' | 'evidence' | 'tracking';
 
 export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { event: RadarEvent; onClose: () => void; onEventChange?: (event: RadarEvent) => void }) {
   const [detail, setDetail] = useState<RadarEventDetail>(); const [tab,setTab]=useState<Tab>('interpretation');
   const [error, setError] = useState(''); const [requesting, setRequesting] = useState(false);
+  const [pollFailures, setPollFailures] = useState(0);
   const stopped = useRef(false); const timer = useRef<number>();
+  const polling = useRef(false);
+  const eventPath = `/api/research-radar/events/${event.id}`;
 
   useEffect(() => {
-    stopped.current = false; setDetail(undefined); setError(''); setTab('interpretation'); void load(true);
+    let active = true;
+    stopped.current = false; setDetail(undefined); setError(''); setPollFailures(0); setTab('interpretation');
+    void load(() => active);
     function onKeyDown(keyEvent: KeyboardEvent) { if (keyEvent.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKeyDown);
-    return () => { stopped.current = true; if (timer.current) window.clearTimeout(timer.current); document.removeEventListener('keydown', onKeyDown); };
+    return () => {
+      active = false;
+      stopped.current = true;
+      window.clearTimeout(timer.current);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [event.id]);
 
-  async function load(initial: boolean) {
+  async function load(isActive = () => !stopped.current) {
     try {
-      const next = await api<RadarEventDetail>(`/api/research-radar/events/${event.id}`);
-      if (stopped.current) {
+      const next = await api<RadarEventDetail>(eventPath);
+      if (!isActive()) {
         return;
       }
       setDetail(next);
       setError('');
-      if (initial && next.interpretation?.status === 'UNAVAILABLE') {
+      if (next.interpretation?.status === 'UNAVAILABLE') {
         setTab('evidence');
       }
       onEventChange?.({ ...event, read: true, followed: next.workspaceState?.followed ?? event.followed,
         disposition: next.workspaceState?.disposition ?? event.disposition });
-      if (isPending(next.interpretation)) {
-        schedulePoll();
+      if (next.interpretation && isPending(next.interpretation)) {
+        schedulePoll(next.interpretation, 0);
       }
     } catch (loadError) {
-      if (!stopped.current) {
+      if (isActive()) {
         setError(loadError instanceof Error ? loadError.message : '事件详情加载失败');
       }
+    }
+  }
+
+  async function refreshInterpretationContext() {
+    try {
+      const next = await api<RadarEventDetail>(eventPath);
+      if (!stopped.current) {
+        setDetail((current) => current && { ...current, timeline: next.timeline, trust: next.trust, agentTrace: next.agentTrace });
+      }
+    } catch {
+      // The saved interpretation is already visible. Reopening the drawer refreshes its context.
     }
   }
 
@@ -52,13 +74,15 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     setRequesting(true);
     setError('');
     try {
-      const queued = await api<RadarInterpretation>(`/api/research-radar/events/${event.id}/interpretation?automatic=false`, { method: 'POST' });
+      const queued = await api<RadarInterpretation>(`${eventPath}/interpretation?automatic=false`, { method: 'POST' });
       if (stopped.current) {
         return;
       }
       setDetail((current) => current ? { ...current, interpretation: queued } : current);
       if (isPending(queued)) {
-        schedulePoll();
+        schedulePoll(queued, 0);
+      } else if (queued.status === 'SUCCESS') {
+        void refreshInterpretationContext();
       }
     } catch (requestError) {
       if (!stopped.current) {
@@ -70,7 +94,56 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
       }
     }
   }
-  function schedulePoll() { if (stopped.current) return; if (timer.current) window.clearTimeout(timer.current); timer.current = window.setTimeout(() => void load(false), POLL_INTERVAL_MS); }
+  function schedulePoll(pending: RadarInterpretation, failures: number) {
+    window.clearTimeout(timer.current);
+    const delay = POLL_INTERVAL_MS * Math.min(2 ** failures, 6);
+    timer.current = window.setTimeout(() => void pollInterpretation(pending, failures), delay);
+  }
+
+  async function pollInterpretation(pending: RadarInterpretation, failures: number) {
+    if (stopped.current || polling.current) {
+      return;
+    }
+    window.clearTimeout(timer.current);
+    polling.current = true;
+    try {
+      const next = pending.id == null
+        ? (await api<RadarEventDetail>(eventPath)).interpretation
+        : await api<RadarInterpretation>(`${eventPath}/interpretation/${pending.id}`);
+      if (stopped.current) {
+        return;
+      }
+      if (!next) {
+        throw new ApiError(404, '解读记录不存在或已过期');
+      }
+      setPollFailures(0);
+      setDetail((current) => current && { ...current, interpretation: next });
+      if (isPending(next)) {
+        schedulePoll(next, 0);
+      } else {
+        void refreshInterpretationContext();
+      }
+    } catch (readError) {
+      if (stopped.current) {
+        return;
+      }
+      const attempts = failures + 1;
+      if (attempts <= MAX_POLL_RETRIES) {
+        setPollFailures(attempts);
+        schedulePoll(pending, attempts);
+      } else if (readError instanceof ApiError && readError.status === 404) {
+        setPollFailures(0);
+        setDetail((current) => current && { ...current, interpretation: {
+          ...pending, status: 'FAILED', failureMessage: '解读记录已过期，可重新生成。',
+        } });
+      } else {
+        setPollFailures(attempts);
+      }
+    } finally {
+      polling.current = false;
+    }
+  }
+
   async function updateState(patch:{followed?:boolean;disposition?:'ACTIVE'|'LATER'|'IGNORED'}){
     const state=await api<RadarWorkspaceState>(`/api/research-radar/events/${event.id}/state`,{method:'PATCH',body:JSON.stringify(patch)});
     setDetail((current)=>current?{...current,workspaceState:state}:current);onEventChange?.({...event,read:state.read,followed:state.followed,disposition:state.disposition});
@@ -81,22 +154,25 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     <aside className="radar-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="radar-detail-title">
       <header><div><span>EVENT RESEARCH DOSSIER</span><h2 id="radar-detail-title">{event.title}</h2><div className="radar-drawer-state">
         <button type="button" disabled={!detail || requesting || interpretation?.status === 'UNAVAILABLE'} onClick={() => void requestInterpretation()}>
-          {requesting || isPending(interpretation) ? '解读生成中…' : result && !interpretation?.stale ? '查看 AI 解读' : '生成 AI 解读'}
+          {pollFailures ? '解读状态待读取' : requesting || isPending(interpretation) ? '解读生成中…' : result && !interpretation?.stale ? '查看 AI 解读' : '生成 AI 解读'}
         </button>
         <button type="button" aria-pressed={Boolean(detail?.workspaceState?.followed??event.followed)} onClick={()=>void updateState({followed:!(detail?.workspaceState?.followed??event.followed)})}>{detail?.workspaceState?.followed??event.followed?'取消临时关注':'临时关注'}</button><button type="button" onClick={()=>void updateState({disposition:'LATER'})}>稍后看</button><button type="button" onClick={()=>void updateState({disposition:'IGNORED'})}>忽略</button></div></div><button type="button" className="radar-drawer-close" aria-label="关闭事件解读" onClick={onClose}>×</button></header>
       <nav className="radar-dossier-tabs" aria-label="事件详情栏目">{([['interpretation','解读'],['timeline','事件脉络'],['evidence','证据'],['tracking','跟踪']] as [Tab,string][]).map(([code,label])=><button type="button" key={code} className={tab===code?'active':''} aria-pressed={tab===code} onClick={()=>setTab(code)}>{label}</button>)}</nav>
       <div className="radar-detail-scroll">
         <section className="radar-detail-overview"><div><strong>{event.priorityScore}</strong><span>研究优先级</span></div><p>{event.summary}</p><small>{event.sourceCount} 个独立来源共同报道</small></section>
 
-        {error && !detail ? <div role="alert"><p>{error}</p><button type="button" onClick={() => void load(true)}>重试加载</button></div> : null}
+        {error && !detail ? <div role="alert"><p>{error}</p><button type="button" className="ghost-button" onClick={() => void load()}>重试加载</button></div> : null}
         {tab==='interpretation'?<section className="radar-detail-section" aria-labelledby="interpretation-heading">
-          <div className="radar-detail-section-heading"><h3 id="interpretation-heading">事件解读</h3><StatusBadge interpretation={interpretation}/></div>
-          {detail && error ? <div role="alert"><p>{error}</p>{isPending(interpretation) ?
-            <button type="button" onClick={() => void load(false)}>重试读取</button> : null}</div> : null}
+          <div className="radar-detail-section-heading"><h3 id="interpretation-heading">事件解读</h3>{pollFailures ? <span>待读取</span> : <StatusBadge interpretation={interpretation}/>}</div>
+          {detail && error ? <div role="alert"><p>{error}</p></div> : null}
+          {pollFailures && interpretation ? <div role="status">
+            <p>{pollFailures <= MAX_POLL_RETRIES ? '暂时读不到解读进度，正在自动重试。' : '解读进度暂不可读，请重试读取。'}</p>
+            <button type="button" className="ghost-button" onClick={() => void pollInterpretation(interpretation, 0)}>重试读取</button>
+          </div> : null}
           {interpretation?.stale && result ? <p>这是此前证据版本的解读，可点击上方按钮更新。</p> : null}
           {!detail?(error ? null : <DrawerSkeleton/>):result?<div className="radar-interpretation-grid"><InterpretationBlock label="已确认事实" value={result.factSummary}/><InterpretationBlock label="本次新变化" value={result.newDevelopment}/><InterpretationBlock label="为什么重要" value={result.whyItMatters} accent/><InterpretationList label="影响链条" values={result.impactChain} ordered/><InterpretationList label="仍存疑点" values={result.uncertainties}/><InterpretationList label="下一步观察" values={result.nextObservations}/></div>
           :interpretation?.status === 'UNAVAILABLE' ? <p>模型解读未启用，可继续查看证据与来源、事件脉络。</p>
-            :isPending(interpretation) || requesting ? <p role="status">正在整理事件事实与证据…</p>
+            :isPending(interpretation) || requesting ? (pollFailures ? null : <p role="status">正在整理事件事实与证据…</p>)
               :<p>{interpretation?.failureMessage || '点击上方「生成 AI 解读」开始。'}</p>}
         </section>:null}
 

@@ -101,6 +101,12 @@ public class ResearchRadarController {
         return ApiResponses.success(service.detail(id));
     }
 
+    @GetMapping("/events/{id}/interpretation/{interpretationId}")
+    public ApiResponse<ResearchRadarView.InterpretationView> interpretationStatus(@PathVariable Long id,
+            @PathVariable Long interpretationId) {
+        return ApiResponses.success(service.interpretationStatus(id, interpretationId));
+    }
+
     /**
      * 请求生成雷达事件解读。
      *

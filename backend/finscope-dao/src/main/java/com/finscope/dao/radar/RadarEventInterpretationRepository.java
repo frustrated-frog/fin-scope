@@ -32,7 +32,7 @@ public class RadarEventInterpretationRepository {
                 }
             }
             RadarEventInterpretation value = new RadarEventInterpretation();
-            value.setId(store.stableId("interpretation", eventId + ":" + fingerprint));
+            value.setId(idForEventFingerprint(eventId, fingerprint));
             value.setEventId(eventId);
             value.setEventFingerprint(fingerprint);
             value.setStatus("QUEUED");
@@ -40,6 +40,10 @@ public class RadarEventInterpretationRepository {
             values.add(value);
             return value;
         });
+    }
+
+    public Long idForEventFingerprint(Long eventId, String fingerprint) {
+        return store.stableId("interpretation", eventId + ":" + fingerprint);
     }
 
     public void update(RadarEventInterpretation value) {
@@ -66,6 +70,11 @@ public class RadarEventInterpretationRepository {
     public Optional<RadarEventInterpretation> findByEventFingerprint(Long eventId, String fingerprint) {
         return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
                 .filter(value -> fingerprint.equals(value.getEventFingerprint())).findFirst();
+    }
+
+    public Optional<RadarEventInterpretation> findById(Long eventId, Long interpretationId) {
+        return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
+                .filter(value -> interpretationId.equals(value.getId())).findFirst();
     }
 
     public Optional<RadarEventInterpretation> findLatestByEventId(Long eventId) {

@@ -300,6 +300,13 @@ public class ResearchRadarService {
         return detail;
     }
 
+    public ResearchRadarView.InterpretationView interpretationStatus(Long id, Long interpretationId) {
+        if (interpretations == null) {
+            throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_UNAVAILABLE);
+        }
+        return new ResearchRadarView.InterpretationView(interpretations.status(id, interpretationId));
+    }
+
     public ResearchRadarView.InterpretationView requestInterpretation(Long id, boolean automatic) {
         if (interpretations == null) {
             throw new BusinessException(BizErrorCode.RADAR_INTERPRETATION_UNAVAILABLE);

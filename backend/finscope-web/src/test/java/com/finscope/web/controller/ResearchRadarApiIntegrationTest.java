@@ -135,4 +135,20 @@ class ResearchRadarApiIntegrationTest {
 
         verify(service).requestInterpretation(10L, false);
     }
+
+    @Test
+    void readsAnExactInterpretationWithoutLoadingTheEventDetail() throws Exception {
+        long eventId = 2995944177939409580L;
+        long interpretationId = 2995944177939409581L;
+        when(service.interpretationStatus(eventId, interpretationId))
+                .thenReturn(ResearchRadarView.InterpretationView.queued(eventId));
+
+        mvc.perform(get("/api/research-radar/events/{id}/interpretation/{interpretationId}", eventId, interpretationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.eventId").value(Long.toString(eventId)))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"));
+
+        verify(service, never()).detail(eventId);
+        verify(service, never()).requestInterpretation(eq(eventId), anyBoolean());
+    }
 }

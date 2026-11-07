@@ -5,7 +5,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { api } from '../../shared/api/client';
 import { NewsView } from './NewsView';
 
-vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
+vi.mock('../../shared/api/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../shared/api/client')>(),
+  api: vi.fn(),
+}));
 
 const event = {
   id: 10,
@@ -393,19 +396,31 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
   expect(screen.queryByRole('button', { name: /发现 .* 条新资讯/ })).not.toBeInTheDocument();
 });
 
-test('requires an explicit click to generate a missing interpretation', async () => {
+test('generates on click and recovers from a temporary interpretation status read failure', async () => {
   vi.useFakeTimers();
+  const interpretationId = '2995944177939409581';
+  const detailPath = '/api/research-radar/events/10';
+  const statusPath = `${detailPath}/interpretation/${interpretationId}`;
   let detailCalls = 0;
+  let statusCalls = 0;
   vi.mocked(api).mockImplementation((path, options) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
     if (path === '/api/news/window/filters') return Promise.resolve([]);
     if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     if (path === '/api/research-radar/events/10/interpretation?automatic=false' && options?.method === 'POST') {
-      return Promise.resolve({ eventId: 10, status: 'QUEUED', stale: false });
+      return Promise.resolve({ id: interpretationId, eventId: 10, status: 'QUEUED', stale: false });
     }
-    if (path === '/api/research-radar/events/10') {
+    if (path === statusPath) {
+      statusCalls += 1;
+      return statusCalls === 1
+        ? Promise.reject(new Error('系统繁忙，请稍后重试'))
+        : Promise.resolve({ ...detail.interpretation, id: interpretationId });
+    }
+    if (path === detailPath) {
       detailCalls += 1;
-      return Promise.resolve(detailCalls === 1 ? { ...detail, interpretation: undefined, automaticInterpretationEnabled: true } : detail);
+      return detailCalls === 1
+        ? Promise.resolve({ ...detail, interpretation: undefined, automaticInterpretationEnabled: true })
+        : Promise.reject(new Error('系统繁忙，请稍后重试'));
     }
     return Promise.resolve(snapshot);
   });
@@ -421,7 +436,16 @@ test('requires an explicit click to generate a missing interpretation', async ()
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
   expect(api).toHaveBeenCalledWith('/api/research-radar/events/10/interpretation?automatic=false', { method: 'POST' });
   await act(async () => { vi.advanceTimersByTime(1_500); await Promise.resolve(); await Promise.resolve(); });
+  expect(api).toHaveBeenCalledWith(statusPath);
+  expect(detailCalls).toBe(1);
+  expect(screen.getByText('暂时读不到解读进度，正在自动重试。')).toBeInTheDocument();
+  expect(screen.queryByText('正在整理事件事实与证据…')).not.toBeInTheDocument();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+  expect(statusCalls).toBe(2);
   expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
+  expect(screen.getByText('解读完成')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '重试读取' })).not.toBeInTheDocument();
+  expect(vi.mocked(api).mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
 });
 
 test('does not request or poll interpretation when the model is disabled', async () => {

@@ -1,5 +1,6 @@
 package com.finscope.service.radar;
 
+import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -105,6 +107,33 @@ class RadarEventInterpretationServiceTest {
 
         assertEquals(queued.getId(), duplicate.getId());
         assertEquals(1, executor.tasks.size());
+    }
+
+    @Test
+    void readsTheCompletedInterpretationWhenItFinishesDuringTheStatusRead() {
+        RadarEventInterpretation running = queued();
+        running.setStatus("RUNNING");
+        RadarEventInterpretation completed = queued();
+        completed.setStatus("SUCCESS");
+        completed.setResult(successResult());
+        when(interpretations.findById(10L, 5L))
+                .thenReturn(Optional.of(running), Optional.of(completed));
+
+        RadarEventInterpretation status = service.status(10L, 5L);
+
+        assertEquals("SUCCESS", status.getStatus());
+        assertEquals("事实摘要", status.getResult().getFactSummary());
+        verify(radar, never()).findEvent(any());
+        verify(agent, never()).interpret(any(), any(), any());
+        assertTrue(executor.tasks.isEmpty());
+    }
+
+    @Test
+    void reportsAnExpiredInterpretationWithoutStartingAnotherJob() {
+        when(interpretations.findById(10L, 5L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.status(10L, 5L));
+        assertTrue(executor.tasks.isEmpty());
     }
 
     @Test
