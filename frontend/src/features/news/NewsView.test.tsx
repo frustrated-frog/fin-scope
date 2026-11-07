@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
-import { api } from '../../shared/api/client';
+import { ApiError, api } from '../../shared/api/client';
 import { NewsView } from './NewsView';
 
 vi.mock('../../shared/api/client', async (importOriginal) => ({
@@ -251,6 +251,28 @@ test('shows saved interpretation without waiting for read state and hides its in
   expect(within(drawer).getByText('产品发布→量产验证')).toBeInTheDocument();
   expect(drawer).not.toHaveTextContent(/\[(signal|evidence):/);
   expect(api).toHaveBeenCalledWith(`${detailPath}/state`, { method: 'PATCH', body: '{"read":true}' });
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
+});
+
+test('retries a temporary evidence read failure without reloading the interpretation', async () => {
+  const defaultApi = vi.mocked(api).getMockImplementation()!;
+  let evidenceReads = 0;
+  vi.mocked(api).mockImplementation((path, options) => {
+    if (path === evidencePath) {
+      evidenceReads += 1;
+      if (evidenceReads === 1) {
+        return Promise.reject(new ApiError(500, '系统繁忙，请稍后重试'));
+      }
+    }
+    return defaultApi(path, options);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
+  await screen.findByRole('dialog', { name: event.title });
+
+  await userEvent.click(screen.getByRole('button', { name: '证据' }));
+
+  expect(await screen.findByRole('heading', { name: '证据与来源' })).toBeInTheDocument();
+  expect(evidenceReads).toBe(2);
   expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
 });
 

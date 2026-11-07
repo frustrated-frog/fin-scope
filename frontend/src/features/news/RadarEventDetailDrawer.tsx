@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../../shared/api/client';
 import { RadarTimeline } from './RadarTimeline';
 import { RadarTrustPanel } from './RadarTrustPanel';
-import { loadRadarEventOverview } from './radarEventDetailApi';
+import { loadRadarEventOverview, loadRadarEventSection, type RadarContextSection } from './radarEventDetailApi';
 import type { RadarEvent, RadarEventDetail, RadarInterpretation, RadarWorkspaceState } from './researchRadarTypes';
 
 const POLL_INTERVAL_MS = 1_500;
 const MAX_POLL_RETRIES = 4;
-type Tab = 'interpretation' | 'timeline' | 'evidence' | 'tracking';
-type ContextTab = Exclude<Tab, 'interpretation'>;
+type Tab = 'interpretation' | RadarContextSection;
 type ContextSection = { data: RadarEventDetail } | { error: string };
 
 export function RadarEventDetailDrawer({ event, overview, onClose, onEventChange }: {
@@ -23,7 +22,7 @@ export function RadarEventDetailDrawer({ event, overview, onClose, onEventChange
   const [tab, setTab] = useState<Tab>('interpretation');
   const [error, setError] = useState(''); const [requesting, setRequesting] = useState(false);
   const [pollFailures, setPollFailures] = useState(0);
-  const [sections, setSections] = useState<Partial<Record<ContextTab, ContextSection>>>({});
+  const [sections, setSections] = useState<Partial<Record<RadarContextSection, ContextSection>>>({});
   const [contextRevision, setContextRevision] = useState(0);
   const stopped = useRef(false); const timer = useRef<number>();
   const polling = useRef(false);
@@ -68,7 +67,7 @@ export function RadarEventDetailDrawer({ event, overview, onClose, onEventChange
       return;
     }
     let active = true;
-    void api<RadarEventDetail>(`${eventPath}?section=${tab.toUpperCase()}`).then((data) => {
+    void loadRadarEventSection(event.id, tab).then((data) => {
       if (active) {
         setSections((current) => ({ ...current, [tab]: { data } }));
       }
@@ -79,7 +78,7 @@ export function RadarEventDetailDrawer({ event, overview, onClose, onEventChange
       }
     });
     return () => { active = false; };
-  }, [tab, section, eventPath, contextRevision]);
+  }, [tab, section, event.id, contextRevision]);
 
   async function load(isActive = () => !stopped.current) {
     try {
