@@ -1,6 +1,7 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.news.*;
+import com.finscope.service.news.NewsReportInterpretationService;
 import com.finscope.service.news.NewsWindowService;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class NewsWindowControllerTest {
     @Autowired private MockMvc mvc;
     @MockBean private NewsWindowService news;
+    @MockBean private NewsReportInterpretationService interpretations;
+
+    @Test
+    void readsAndSubmitsOnlyTheSelectedReportVersion() throws Exception {
+        NewsReportInterpretationView view = new NewsReportInterpretationView();
+        view.setContentVersion(2);
+        view.setAvailable(true);
+        when(interpretations.get("CLS:251", 2)).thenReturn(view);
+        when(interpretations.request("CLS:251", 2)).thenReturn(view);
+        mvc.perform(get("/api/news/window/interpretation").param("id", "CLS:251").param("version", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.available").value(true));
+        verify(interpretations, never()).request(anyString(), anyInt());
+        mvc.perform(post("/api/news/window/interpretation").param("id", "CLS:251").param("version", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.contentVersion").value(2));
+        verify(interpretations).request("CLS:251", 2);
+    }
 
     @Test
     void bindsTheFullQueryAndSerializesContentVersionAndReadState() throws Exception {

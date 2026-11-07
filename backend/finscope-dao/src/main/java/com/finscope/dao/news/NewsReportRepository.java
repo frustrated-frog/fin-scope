@@ -104,7 +104,16 @@ public class NewsReportRepository {
     }
 
     public List<NewsReportVersion> versions(String id) {
-        return jdbc.query("SELECT * FROM news_report_version WHERE report_id=? ORDER BY version DESC LIMIT 100", (rs, index) -> {
+        return jdbc.query("SELECT * FROM news_report_version WHERE report_id=? ORDER BY version DESC LIMIT 100", versionRow(), id);
+    }
+
+    public Optional<NewsReportVersion> findVersion(String id, int version) {
+        return jdbc.query("SELECT * FROM news_report_version WHERE report_id=? AND version=?", versionRow(), id, version)
+                .stream().findFirst();
+    }
+
+    private RowMapper<NewsReportVersion> versionRow() {
+        return (rs, index) -> {
             NewsReportVersion value = new NewsReportVersion();
             value.setReportId(rs.getString("report_id"));
             value.setVersion(rs.getInt("version"));
@@ -112,7 +121,7 @@ public class NewsReportRepository {
             value.setContent(rs.getString("content"));
             value.setDetectedAt(LocalDateTime.parse(rs.getString("detected_at")));
             return value;
-        }, id);
+        };
     }
 
     public boolean markRead(String id, int version) {
@@ -167,6 +176,7 @@ public class NewsReportRepository {
                 + "AND NOT EXISTS(SELECT 1 FROM major_event m WHERE m.origin_type='NEWS_ITEM' AND m.origin_key=news_report.id)", time(before));
         jdbc.update("DELETE FROM news_report_version WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
         jdbc.update("DELETE FROM news_report_read WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
+        jdbc.update("DELETE FROM news_report_interpretation WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
     }
 
     private String where(NewsWindowQuery query, LocalDateTime since, LocalDateTime until, List<Object> args) {

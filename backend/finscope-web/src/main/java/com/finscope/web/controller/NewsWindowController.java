@@ -3,6 +3,7 @@ package com.finscope.web.controller;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.news.*;
 import com.finscope.service.news.NewsWindowService;
+import com.finscope.service.news.NewsReportInterpretationService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
@@ -13,6 +14,8 @@ import java.util.List;
 public class NewsWindowController {
     @Resource
     private NewsWindowService news;
+    @Resource
+    private NewsReportInterpretationService interpretations;
 
     @GetMapping
     public ApiResponse<NewsWindowPage> query(@ModelAttribute NewsWindowQuery query) {
@@ -22,6 +25,16 @@ public class NewsWindowController {
     @GetMapping("/detail")
     public ApiResponse<NewsReportDetail> detail(@RequestParam String id) {
         return ApiResponses.success(news.detail(id));
+    }
+
+    @GetMapping("/interpretation")
+    public ApiResponse<NewsReportInterpretationView> interpretation(@RequestParam String id, @RequestParam int version) {
+        return ApiResponses.success(interpretations.get(id, version));
+    }
+
+    @PostMapping("/interpretation")
+    public ApiResponse<NewsReportInterpretationView> requestInterpretation(@RequestParam String id, @RequestParam int version) {
+        return ApiResponses.success(interpretations.request(id, version));
     }
 
     @PostMapping("/read")

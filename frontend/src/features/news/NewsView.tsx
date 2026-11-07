@@ -309,7 +309,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                         !loadError ? <EmptyState label="当前筛选下没有事件"/> : null}
                 </section>
             </div>
-            {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)}
+            {selectedEvent ? <RadarEventDetailDrawer key={selectedEvent.id} event={selectedEvent} onClose={() => setSelectedEvent(undefined)}
                                                      onEventChange={replaceEvent}/> : null}
         </section>
     );

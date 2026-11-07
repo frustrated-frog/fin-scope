@@ -355,6 +355,18 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "newsInterpretationExecutor")
+    public Executor newsInterpretationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("news-interpretation-");
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(4);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "globalExpectationExecutor")
     public Executor globalExpectationExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

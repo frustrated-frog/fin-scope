@@ -67,26 +67,38 @@ public class RadarEventInterpretationService {
         List<RadarSignal> signals = radar.findSignalsByEventId(eventId);
         List<RadarEvidence> evidenceItems = evidence.findByEventId(eventId);
         String fingerprint = fingerprint(event, signals, evidenceItems);
-        Optional<RadarEventInterpretation> existing = interpretations.findByEventFingerprint(eventId, fingerprint);
         String key = eventId + ":" + fingerprint;
-        if (existing.isPresent() && !retryable(existing.get())) return existing.get();
-        if (existing.isPresent() && !inFlight.add(key)) return existing.get();
-        RadarEventInterpretation queued;
-        if (existing.isPresent()) {
-            queued = existing.get();
-            resetForRetry(queued);
-            interpretations.update(queued);
-        } else {
-            queued = interpretations.saveQueued(eventId, fingerprint);
+        if (!inFlight.add(key)) {
+            return interpretations.findByEventFingerprint(eventId, fingerprint).orElseGet(() -> {
+                RadarEventInterpretation pending = new RadarEventInterpretation();
+                pending.setEventId(eventId);
+                pending.setStatus("QUEUED");
+                return pending;
+            });
         }
-        if (!existing.isPresent() && !inFlight.add(key)) return queued;
+        boolean submitted = false;
         try {
-            executor.execute(() -> complete(queued, event, signals, evidenceItems, key));
-        } catch (RuntimeException error) {
-            inFlight.remove(key);
-            fail(queued, "EXECUTOR_REJECTED", "解读任务繁忙，请稍后重试");
+            Optional<RadarEventInterpretation> existing = interpretations.findByEventFingerprint(eventId, fingerprint);
+            RadarEventInterpretation queued = existing.orElseGet(() -> interpretations.saveQueued(eventId, fingerprint));
+            if ("SUCCESS".equals(queued.getStatus())) {
+                return queued;
+            }
+            if (existing.isPresent()) {
+                resetForRetry(queued);
+                interpretations.update(queued);
+            }
+            try {
+                executor.execute(() -> complete(queued, event, signals, evidenceItems, key));
+                submitted = true;
+            } catch (java.util.concurrent.RejectedExecutionException error) {
+                fail(queued, "EXECUTOR_REJECTED", "解读任务繁忙，请稍后重试");
+            }
+            return queued;
+        } finally {
+            if (!submitted) {
+                inFlight.remove(key);
+            }
         }
-        return queued;
     }
 
     private RadarEventInterpretation unavailable(Long eventId) {
@@ -96,10 +108,6 @@ public class RadarEventInterpretationService {
         value.setFailureCode("MODEL_DISABLED");
         value.setFailureMessage("模型解读未启用，可继续阅读报道与事件脉络");
         return value;
-    }
-
-    private boolean retryable(RadarEventInterpretation value) {
-        return "FAILED".equals(value.getStatus()) || "UNAVAILABLE".equals(value.getStatus());
     }
 
     private void resetForRetry(RadarEventInterpretation value) {
@@ -116,7 +124,15 @@ public class RadarEventInterpretationService {
         }
         String fingerprint = fingerprint(event, signals, evidenceItems);
         Optional<RadarEventInterpretation> matching = interpretations.findByEventFingerprint(event.getId(), fingerprint);
-        if (matching.isPresent()) return matching;
+        if (matching.isPresent()) {
+            RadarEventInterpretation value = matching.get();
+            if (("QUEUED".equals(value.getStatus()) || "RUNNING".equals(value.getStatus()))
+                    && !inFlight.contains(event.getId() + ":" + fingerprint)) {
+                value.setStatus("FAILED");
+                value.setFailureMessage("上次解读未完成，可以重新生成");
+            }
+            return matching;
+        }
         Optional<RadarEventInterpretation> latest = interpretations.findLatestByEventId(event.getId());
         if (latest.isPresent()) latest.get().setStale(true);
         return latest;

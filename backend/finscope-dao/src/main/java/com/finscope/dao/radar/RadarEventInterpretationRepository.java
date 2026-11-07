@@ -16,6 +16,9 @@ import java.util.Optional;
 
 @Repository
 public class RadarEventInterpretationRepository {
+    private static final Comparator<RadarEventInterpretation> BY_CREATED = Comparator.comparing(
+            RadarEventInterpretation::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(RadarEventInterpretation::getId);
     @Resource
     private RedisRadarCacheStore store;
 
@@ -67,12 +70,12 @@ public class RadarEventInterpretationRepository {
 
     public Optional<RadarEventInterpretation> findLatestByEventId(Long eventId) {
         return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
-                .max(Comparator.comparing(RadarEventInterpretation::getId));
+                .max(BY_CREATED);
     }
 
     public List<RadarEventInterpretation> findHistory(Long eventId, int limit) {
         return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
-                .sorted(Comparator.comparing(RadarEventInterpretation::getId).reversed())
+                .sorted(BY_CREATED.reversed())
                 .limit(Math.max(1, Math.min(limit, 100))).collect(java.util.stream.Collectors.toList());
     }
 
@@ -84,7 +87,7 @@ public class RadarEventInterpretationRepository {
         RadarCacheState state = store.read();
         for (Long eventId : eventIds) {
             state.getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
-                    .max(Comparator.comparing(RadarEventInterpretation::getId))
+                    .max(BY_CREATED)
                     .ifPresent(value -> result.put(eventId, value));
         }
         return result;

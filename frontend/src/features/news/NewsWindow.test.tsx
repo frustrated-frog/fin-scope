@@ -134,6 +134,39 @@ test('failed detail retrieval does not mark the report read', async () => {
   expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith('/api/news/window/read'))).toBe(false);
 });
 
+test('only generates a selected news version after the reader clicks and reuses its result', async () => {
+  const original = vi.mocked(api).getMockImplementation()!;
+  const path = '/api/news/window/interpretation?id=CLS%3A1&version=2';
+  const post = vi.fn();
+  const result = {
+    facts: ['公司披露中标设备采购项目'], whyItMatters: '中标后的正式合同和履约进度仍需核对。',
+    unknowns: ['签署时间'], nextChecks: ['正式合同公告'],
+  };
+  vi.mocked(api).mockImplementation((url, options) => {
+    if (url === path) {
+      if (options?.method === 'POST') {
+        post();
+      }
+      return Promise.resolve({ contentVersion: 2, available: true, current: post.mock.calls.length
+        ? { contentVersion: 2, status: 'SUCCESS', result } : null });
+    }
+    return original(url, options);
+  });
+  setup();
+  fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
+  const generate = await screen.findByRole('button', { name: '生成 AI 解读' });
+  await waitFor(() => expect(generate).toBeEnabled());
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(generate);
+  expect(await screen.findByText(result.whyItMatters)).toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: '关闭新闻详情' }));
+  fireEvent.click(screen.getByRole('button', { name: /阅读资讯：开普检测中标/ }));
+  fireEvent.click(await screen.findByRole('button', { name: '查看 AI 解读' }));
+  expect(await screen.findByText(result.whyItMatters)).toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(1);
+});
+
 test('allows manual classification of an unclassified report and keeps content after a failure', async () => {
   const original = vi.mocked(api).getMockImplementation()!;
   vi.mocked(api).mockImplementation((path) =>

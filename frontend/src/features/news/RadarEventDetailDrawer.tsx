@@ -21,18 +21,22 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     return () => { stopped.current = true; if (timer.current) window.clearTimeout(timer.current); document.removeEventListener('keydown', onKeyDown); };
   }, [event.id]);
 
-  async function load(requestIfMissing: boolean) {
+  async function load(initial: boolean) {
     try {
       const next = await api<RadarEventDetail>(`/api/research-radar/events/${event.id}`); if (stopped.current) return;
-      setDetail(next); setError(''); if (requestIfMissing && next.interpretation?.status === 'UNAVAILABLE') { setTab('evidence'); } onEventChange?.({...event,read:true,followed:next.workspaceState?.followed??event.followed,disposition:next.workspaceState?.disposition??event.disposition});
-      if (requestIfMissing && next.automaticInterpretationEnabled === true && shouldRequest(next.interpretation)) { await requestInterpretation(true); return; }
+      setDetail(next); setError(''); if (initial && next.interpretation?.status === 'UNAVAILABLE') { setTab('evidence'); } onEventChange?.({...event,read:true,followed:next.workspaceState?.followed??event.followed,disposition:next.workspaceState?.disposition??event.disposition});
       if (isPending(next.interpretation)) schedulePoll();
     } catch (loadError) { if (!stopped.current) setError(loadError instanceof Error ? loadError.message : '事件详情加载失败'); }
   }
 
-  async function requestInterpretation(automatic = false) {
-    if (requesting) return; setRequesting(true);
-    try { const queued = await api<RadarInterpretation>(`/api/research-radar/events/${event.id}/interpretation?automatic=${automatic}`, { method: 'POST' }); if (stopped.current) return; setDetail((current) => current ? { ...current, interpretation: queued } : current); if (isPending(queued)) { schedulePoll(); } }
+  async function requestInterpretation() {
+    setTab('interpretation');
+    if (!detail || requesting || isPending(detail.interpretation) || !shouldRequest(detail.interpretation)) {
+      return;
+    }
+    setRequesting(true);
+    setError('');
+    try { const queued = await api<RadarInterpretation>(`/api/research-radar/events/${event.id}/interpretation?automatic=false`, { method: 'POST' }); if (stopped.current) return; setDetail((current) => current ? { ...current, interpretation: queued } : current); if (isPending(queued)) { schedulePoll(); } }
     catch (requestError) { if (!stopped.current) setError(requestError instanceof Error ? requestError.message : '事件解读生成失败'); }
     finally { if (!stopped.current) setRequesting(false); }
   }
@@ -45,7 +49,11 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
   const interpretation = detail?.interpretation; const result = interpretation?.result;
   return <div className="radar-drawer-backdrop" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
     <aside className="radar-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="radar-detail-title">
-      <header><div><span>EVENT RESEARCH DOSSIER</span><h2 id="radar-detail-title">{event.title}</h2><div className="radar-drawer-state"><button type="button" aria-pressed={Boolean(detail?.workspaceState?.followed??event.followed)} onClick={()=>void updateState({followed:!(detail?.workspaceState?.followed??event.followed)})}>{detail?.workspaceState?.followed??event.followed?'取消临时关注':'临时关注'}</button><button type="button" onClick={()=>void updateState({disposition:'LATER'})}>稍后看</button><button type="button" onClick={()=>void updateState({disposition:'IGNORED'})}>忽略</button></div></div><button type="button" className="radar-drawer-close" aria-label="关闭事件解读" onClick={onClose}>×</button></header>
+      <header><div><span>EVENT RESEARCH DOSSIER</span><h2 id="radar-detail-title">{event.title}</h2><div className="radar-drawer-state">
+        <button type="button" disabled={!detail || requesting || interpretation?.status === 'UNAVAILABLE'} onClick={() => void requestInterpretation()}>
+          {requesting || isPending(interpretation) ? '解读生成中…' : result && !interpretation?.stale ? '查看 AI 解读' : '生成 AI 解读'}
+        </button>
+        <button type="button" aria-pressed={Boolean(detail?.workspaceState?.followed??event.followed)} onClick={()=>void updateState({followed:!(detail?.workspaceState?.followed??event.followed)})}>{detail?.workspaceState?.followed??event.followed?'取消临时关注':'临时关注'}</button><button type="button" onClick={()=>void updateState({disposition:'LATER'})}>稍后看</button><button type="button" onClick={()=>void updateState({disposition:'IGNORED'})}>忽略</button></div></div><button type="button" className="radar-drawer-close" aria-label="关闭事件解读" onClick={onClose}>×</button></header>
       <nav className="radar-dossier-tabs" aria-label="事件详情栏目">{([['interpretation','解读'],['timeline','事件脉络'],['evidence','证据'],['tracking','跟踪']] as [Tab,string][]).map(([code,label])=><button type="button" key={code} className={tab===code?'active':''} aria-pressed={tab===code} onClick={()=>setTab(code)}>{label}</button>)}</nav>
       <div className="radar-detail-scroll">
         <section className="radar-detail-overview"><div><strong>{event.priorityScore}</strong><span>研究优先级</span></div><p>{event.summary}</p><small>{event.sourceCount} 个独立来源共同报道</small></section>
@@ -53,8 +61,13 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
         {error && !detail ? <div role="alert"><p>{error}</p><button type="button" onClick={() => void load(true)}>重试加载</button></div> : null}
         {tab==='interpretation'?<section className="radar-detail-section" aria-labelledby="interpretation-heading">
           <div className="radar-detail-section-heading"><h3 id="interpretation-heading">事件解读</h3><StatusBadge interpretation={interpretation}/></div>
+          {detail && error ? <div role="alert"><p>{error}</p>{isPending(interpretation) ?
+            <button type="button" onClick={() => void load(false)}>重试读取</button> : null}</div> : null}
+          {interpretation?.stale && result ? <p>这是此前证据版本的解读，可点击上方按钮更新。</p> : null}
           {!detail?(error ? null : <DrawerSkeleton/>):result?<div className="radar-interpretation-grid"><InterpretationBlock label="已确认事实" value={result.factSummary}/><InterpretationBlock label="本次新变化" value={result.newDevelopment}/><InterpretationBlock label="为什么重要" value={result.whyItMatters} accent/><InterpretationList label="影响链条" values={result.impactChain} ordered/><InterpretationList label="仍存疑点" values={result.uncertainties}/><InterpretationList label="下一步观察" values={result.nextObservations}/></div>
-          :!isPending(interpretation) && shouldRequest(interpretation) ? <div><p>尚无当前事件的 AI 解读，点击后才会调用模型。</p><button type="button" onClick={()=>void requestInterpretation()} disabled={requesting}>生成 AI 解读</button></div>:interpretation?.status === 'UNAVAILABLE' ? <p>模型解读未启用，可继续查看证据与来源、事件脉络。</p>:<div className="radar-interpretation-pending" aria-live="polite"><span aria-hidden="true"/><div><strong>{error?'暂时无法生成解读':'解读生成中…'}</strong><p>{error||'Agent 正在后台整理事实与影响链，不会阻塞雷达页面。'}</p></div>{error?<button type="button" className="ghost-button" onClick={()=>void requestInterpretation()} disabled={requesting}>重新生成</button>:null}</div>}
+          :interpretation?.status === 'UNAVAILABLE' ? <p>模型解读未启用，可继续查看证据与来源、事件脉络。</p>
+            :isPending(interpretation) || requesting ? <p role="status">正在整理事件事实与证据…</p>
+              :<p>{interpretation?.failureMessage || '点击上方「生成 AI 解读」开始。'}</p>}
         </section>:null}
 
         {tab==='timeline'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>事件脉络</h3><span>{detail?.timeline?.length??0} 个节点</span></div><RadarTimeline items={detail?.timeline}/></section>:null}
@@ -75,8 +88,8 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
 
 function Evidence({title,source,meta,url,summary}:{title:string;source:string;meta:string;url?:string;summary?:string}){return <article className="radar-drawer-evidence"><div><span>{source}</span><small>{meta}</small></div>{url?<a href={url} target="_blank" rel="noreferrer">{title}</a>:<strong>{title}</strong>}{summary?<p>{summary}</p>:null}</article>;}
 function shouldRequest(value?: RadarInterpretation) { return value?.status !== 'UNAVAILABLE' && (!value || value.stale || value.status === 'FAILED'); }
-function isPending(value?: RadarInterpretation) { return value?.status === 'QUEUED' || value?.status === 'RUNNING'; }
-function StatusBadge({ interpretation }: { interpretation?: RadarInterpretation }) { if (!interpretation) return <span>未生成</span>; if (interpretation?.status === 'SUCCESS'&&!interpretation.stale)return <span className="is-success">解读完成</span>;if (interpretation?.status === 'UNAVAILABLE') { return <span>未启用</span>; } if(interpretation?.status==='FAILED')return <span className="is-error">生成失败</span>;return <span>生成中</span>; }
+function isPending(value?: RadarInterpretation) { return !value?.stale && (value?.status === 'QUEUED' || value?.status === 'RUNNING'); }
+function StatusBadge({ interpretation }: { interpretation?: RadarInterpretation }) { if (!interpretation) return <span>未生成</span>; if (interpretation.stale) return <span>证据已更新</span>; if (interpretation.status === 'SUCCESS')return <span className="is-success">解读完成</span>;if (interpretation?.status === 'UNAVAILABLE') { return <span>未启用</span>; } if(interpretation?.status==='FAILED')return <span className="is-error">生成失败</span>;return <span>生成中</span>; }
 function InterpretationBlock({label,value,accent=false}:{label:string;value:string;accent?:boolean}){return <article className={accent?'is-accent':''}><span>{label}</span><p>{value}</p></article>;}
 function InterpretationList({label,values,ordered=false}:{label:string;values:string[];ordered?:boolean}){const List=ordered?'ol':'ul';return <article><span>{label}</span><List>{values.map((value)=><li key={value}>{value}</li>)}</List></article>;}
 function DrawerSkeleton(){return <div className="radar-drawer-skeleton" aria-label="正在加载事件详情"><span/><span/><span/></div>;}

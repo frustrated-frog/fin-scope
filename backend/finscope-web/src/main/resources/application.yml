@@ -54,6 +54,9 @@ finscope:
     enabled: true
     cache:
       research-material-ttl-seconds: 240
+  news-workbench:
+    model-enabled: true
+    automatic-model-enabled: false
   news:
     refresh-initial-delay-ms: 1000
     refresh-interval-ms: 30000

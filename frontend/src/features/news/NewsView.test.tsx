@@ -405,7 +405,7 @@ test('requires an explicit click to generate a missing interpretation', async ()
     }
     if (path === '/api/research-radar/events/10') {
       detailCalls += 1;
-      return Promise.resolve(detailCalls === 1 ? { ...detail, interpretation: undefined } : detail);
+      return Promise.resolve(detailCalls === 1 ? { ...detail, interpretation: undefined, automaticInterpretationEnabled: true } : detail);
     }
     return Promise.resolve(snapshot);
   });

@@ -31,6 +31,11 @@ public class NewsWindowSchemaMigrator implements InitializingBean {
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_report_version (report_id TEXT NOT NULL,version INTEGER NOT NULL,"
                     + "title TEXT NOT NULL,content TEXT NOT NULL,detected_at TEXT NOT NULL,PRIMARY KEY(report_id,version))");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_report_read (report_id TEXT PRIMARY KEY,read_version INTEGER NOT NULL)");
+            jdbc.execute("CREATE TABLE IF NOT EXISTS news_report_interpretation (report_id TEXT NOT NULL,"
+                    + "content_version INTEGER NOT NULL,status TEXT NOT NULL,claim_token TEXT NOT NULL,"
+                    + "queued_at_ms INTEGER NOT NULL,result_json TEXT,failure_message TEXT,"
+                    + "PRIMARY KEY(report_id,content_version),"
+                    + "FOREIGN KEY(report_id) REFERENCES news_report(id) ON DELETE CASCADE)");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_saved_filter (id TEXT PRIMARY KEY,name TEXT NOT NULL,query_json TEXT NOT NULL)");
         });
     }
