@@ -22,5 +22,6 @@ public class StockStrengthAnalysis {
     private Double baselineReturnPct;
     private Double excessReturnPp;
     private int positiveResidualDays;
+    private List<StockStrengthPoint> returnPath = List.of();
     private List<String> gaps = new ArrayList<String>();
 }

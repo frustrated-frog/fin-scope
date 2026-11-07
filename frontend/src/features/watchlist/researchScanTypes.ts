@@ -1,5 +1,11 @@
 export type ResearchScanStatus = 'RUNNING' | 'READY' | 'PARTIAL' | 'FAILED';
 
+export type StrengthReturnPoint = {
+  date: string;
+  actualReturnPct: number;
+  baselineReturnPct: number;
+};
+
 export type StockStrength = {
   code: string;
   name: string;
@@ -15,6 +21,7 @@ export type StockStrength = {
   baselineReturnPct?: number | null;
   excessReturnPp?: number | null;
   positiveResidualDays: number;
+  returnPath?: StrengthReturnPoint[];
   gaps: string[];
 };
 
@@ -99,4 +106,11 @@ export function isResearchScanView(value: ResearchScanView | null | undefined): 
 
 export function isCompletedResearchRun(value: ResearchScanRun | null | undefined): value is ResearchScanRun {
   return Boolean(value && (value.status === 'READY' || value.status === 'PARTIAL'));
+}
+
+export function formatResearchNumber(value: number | null | undefined, suffix = '', signed = false) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${signed && value > 0 ? '+' : ''}${value.toFixed(2)}${suffix}`;
 }

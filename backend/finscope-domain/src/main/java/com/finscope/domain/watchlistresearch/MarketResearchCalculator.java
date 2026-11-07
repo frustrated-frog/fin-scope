@@ -66,14 +66,23 @@ public final class MarketResearchCalculator {
         double actual = 1.0;
         double baseline = 1.0;
         int positive = 0;
+        List<StockStrengthPoint> returnPath = new ArrayList<>(evaluation.size() + 1);
+        returnPath.add(new StockStrengthPoint(evaluation.get(0).start, 0.0, 0.0));
         for (Interval interval : evaluation) {
             double predicted = fit.alpha + fit.beta * market.get(interval);
-            if (predicted <= -1.0) {
+            if (!Double.isFinite(predicted) || predicted <= -1.0) {
                 result.getGaps().add("模型基线超出日收益有效范围，暂不输出比较");
                 return result;
             }
             actual *= 1.0 + own.get(interval);
             baseline *= 1.0 + predicted;
+            double actualReturnPct = (actual - 1.0) * 100.0;
+            double baselineReturnPct = (baseline - 1.0) * 100.0;
+            if (!Double.isFinite(actualReturnPct) || !Double.isFinite(baselineReturnPct)) {
+                result.getGaps().add("累计收益超出可计算范围，暂不输出比较");
+                return result;
+            }
+            returnPath.add(new StockStrengthPoint(interval.end, actualReturnPct, baselineReturnPct));
             if (own.get(interval) > predicted + 1e-10) {
                 positive++;
             }
@@ -89,6 +98,7 @@ public final class MarketResearchCalculator {
         result.setBaselineReturnPct((baseline - 1.0) * 100.0);
         result.setExcessReturnPp((actual - baseline) * 100.0);
         result.setPositiveResidualDays(positive);
+        result.setReturnPath(returnPath);
         return result;
     }
 

@@ -27,6 +27,13 @@ class MarketResearchCalculatorTest {
         assertTrue(result.getExcessReturnPp() > 7.0);
         assertEquals(result.getTrainingThrough(), result.getEvaluatedFrom());
         assertTrue(result.getGaps().isEmpty());
+        List<StockStrengthPoint> path = result.getReturnPath();
+        assertEquals(21, path.size());
+        assertEquals(new StockStrengthPoint(result.getEvaluatedFrom(), 0, 0), path.getFirst());
+        assertEquals(result.getEvaluatedThrough(), path.getLast().date());
+        assertEquals(result.getActualReturnPct(), path.getLast().actualReturnPct(), 1e-10);
+        assertEquals(result.getBaselineReturnPct(), path.getLast().baselineReturnPct(), 1e-10);
+        assertEquals(100.0 * (0.0005 + 1.7 * market(141) + 0.004), path.get(1).actualReturnPct(), 1e-10);
         WatchlistResearchSnapshot snapshot = new WatchlistResearchSnapshot();
         snapshot.getStrengths().add(result);
         assertEquals(1, WatchlistResearchRules.findings(snapshot).size());
@@ -39,6 +46,7 @@ class MarketResearchCalculatorTest {
         StockStrengthAnalysis result = MarketResearchCalculator.strength(stock("1"), stock,
                 prices(100, MarketResearchCalculatorTest::market));
         assertNull(result.getExcessReturnPp());
+        assertTrue(result.getReturnPath().isEmpty());
         assertFalse(result.getGaps().isEmpty());
     }
 

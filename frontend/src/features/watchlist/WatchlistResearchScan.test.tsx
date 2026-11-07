@@ -47,7 +47,7 @@ test('automatically scans stocks and opens the existing stock detail with numeri
   expect(await screen.findByText('现金流与利润不同步')).toBeInTheDocument();
   expect(screen.getByText('利润增长20%，现金转化0.25倍')).toBeInTheDocument();
   expect(vi.mocked(api).mock.calls[0][1]?.method).toBe('GET');
-  await userEvent.click(screen.getByRole('button', { name: /澳弘电子/ }));
+  await userEvent.click(within(screen.getByRole('region', { name: '其他观察' })).getByRole('button', { name: /澳弘电子/ }));
   expect(open).toHaveBeenCalledWith(stock);
   await userEvent.click(screen.getByRole('tab', { name: '强弱分解' }));
   expect(screen.getByText('+7.00 pp')).toBeInTheDocument();
@@ -56,6 +56,36 @@ test('automatically scans stocks and opens the existing stock detail with numeri
   const row = screen.getByRole('row', { name: /澳弘电子/ });
   expect(within(row).getByText('—')).toBeInTheDocument();
   expect(within(row).getByText('0.25 倍')).toBeInTheDocument();
+});
+
+test('selects a bubble and shows only the daily curves stored with that scan', async () => {
+  const user = userEvent.setup();
+  const open = vi.fn();
+  const peer = { ...stock, id: 2, code: '000823', name: '超声电子' };
+  const current = run();
+  const first = current.snapshot!.strengths[0];
+  current.snapshot!.strengths.push({
+    ...first, code: peer.code, name: peer.name, actualReturnPct: -8, baselineReturnPct: 2, excessReturnPp: -10,
+    returnPath: [
+      { date: '2026-10-01', actualReturnPct: 0, baselineReturnPct: 0 },
+      { date: '2026-11-06', actualReturnPct: -8, baselineReturnPct: 2 },
+    ],
+  });
+  vi.mocked(api).mockResolvedValue({ ...view(), latest: current });
+  render(<WatchlistResearchScan items={[stock, peer]} ready onOpen={open} />);
+
+  const detail = await screen.findByRole('region', { name: '所选股票强弱详情' });
+  expect(within(detail).getByRole('img', { name: '实际累计收益与统计基线对比' })).toBeInTheDocument();
+  await user.click(within(detail).getByRole('button', { name: /超声电子/ }));
+  expect(open).toHaveBeenCalledWith(peer);
+
+  const bubble = screen.getByRole('button', { name: /^选择 澳弘电子/ });
+  bubble.focus();
+  await user.keyboard('{Enter}');
+  expect(bubble).toHaveAttribute('aria-pressed', 'true');
+  expect(within(detail).getByText('+7.00')).toBeInTheDocument();
+  expect(within(detail).getByText(/此扫描未保存逐日曲线/)).toBeInTheDocument();
+  expect(within(detail).queryByRole('img')).not.toBeInTheDocument();
 });
 
 test('fund-only and not-ready watchlists do not request a research scan', async () => {

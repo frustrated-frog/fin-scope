@@ -3,18 +3,12 @@ import { api } from '../../shared/api/client';
 import type { WatchlistItem } from '../../shared/types';
 import { RESEARCH_SCAN_PATH, useWatchlistResearchScan } from './useWatchlistResearchScan';
 import type { ResearchScanRun, ResearchSnapshot } from './researchScanTypes';
-import { isCompletedResearchRun } from './researchScanTypes';
+import { formatResearchNumber as number, isCompletedResearchRun } from './researchScanTypes';
+import { WatchlistResearchObservations } from './WatchlistResearchObservations';
 import './watchlistResearchScan.css';
 
 const tabs = ['研究观察', '强弱分解', '隐藏联动', '增长质量'] as const;
 type Tab = typeof tabs[number];
-
-function number(value: number | null | undefined, suffix = '', signed = false) {
-  if (value == null || !Number.isFinite(value)) {
-    return '—';
-  }
-  return `${signed && value > 0 ? '+' : ''}${value.toFixed(2)}${suffix}`;
-}
 
 function validSnapshot(snapshot?: ResearchSnapshot | null): snapshot is ResearchSnapshot {
   return Boolean(snapshot && Array.isArray(snapshot.findings) && Array.isArray(snapshot.strengths)
@@ -78,12 +72,17 @@ export function WatchlistResearchScan({ items, ready, onOpen }: {
     ...snapshot.strengths.flatMap((stock) => stock.gaps.map((gap) => `${stock.name}：${gap}`)),
     ...snapshot.growthQuality.flatMap((stock) => stock.gaps.map((gap) => `${stock.name}：${gap}`))
   ])] : [];
+  const findStock = (code: string) => items.find((item) => item.type === 'STOCK' && item.code === code);
+  const stockName = (code: string, fallback?: string) => findStock(code)?.name || fallback || code;
   const stockLink = (code: string, name?: string) => {
-    const current = items.find((item) => item.type === 'STOCK' && item.code === code);
+    const current = findStock(code);
+    const label = current?.name || name || code;
     return current ? <button className="research-stock-link" type="button" onClick={() => onOpen(current)}>
-      {name || code}<small>{code}</small>
-    </button> : <span>{name || code}<small> {code} · 已移出自选</small></span>;
+      {label}<small>{code}</small>
+    </button> : <span>{label}<small> {code} · 已移出自选</small></span>;
   };
+  const tabCounts = snapshot ? [snapshot.findings.length, snapshot.strengths.length,
+    snapshot.relationships.length, snapshot.growthQuality.length] : [];
 
   return <section className="watchlist-research-scan" aria-label="自选研究扫描">
     <header className="research-scan-head">
@@ -116,20 +115,14 @@ export function WatchlistResearchScan({ items, ready, onOpen }: {
     </p>}
     {snapshot && <>
       <div className="research-scan-tabs" role="tablist" aria-label="扫描分析类别">
-        {tabs.map((label) => <button key={label} type="button" role="tab" aria-selected={tab === label}
+        {tabs.map((label, index) => <button key={label} type="button" role="tab" aria-selected={tab === label}
           id={`research-tab-${label}`} aria-controls="research-scan-content" onClick={() => setTab(label)}>
-          {label}{label === '研究观察' && <span>{snapshot.findings.length}</span>}
+          {label}<span aria-hidden="true">{tabCounts[index]}</span>
         </button>)}
       </div>
       <div className="research-scan-content" id="research-scan-content" role="tabpanel" aria-labelledby={`research-tab-${tab}`} tabIndex={0}>
-        {tab === '研究观察' && (snapshot.findings.length ? <ol className="research-finding-list">
-          {snapshot.findings.slice(0, 12).map((finding) => <li key={finding.key}>
-            <header><strong>{finding.title}</strong>{finding.newlyObserved && <span className="research-new">新增观察</span>}</header>
-            <div className="research-finding-links">{finding.codes.map((code) => <span key={code}>{stockLink(code, items.find((item) => item.type === 'STOCK' && item.code === code)?.name)}</span>)}</div>
-            <ul>{finding.evidence.map((evidence, index) => <li key={index}>{evidence}</li>)}</ul>
-          </li>)}
-          {snapshot.findings.length > 12 && <li className="research-scan-empty">另有 {snapshot.findings.length - 12} 项观察，可在各分类查看。</li>}
-        </ol> : <p className="research-scan-empty">本次没有触发研究观察。可以在各分类查看已计算的强弱、关系与增长指标。</p>)}
+        {tab === '研究观察' && <WatchlistResearchObservations key={run?.id} snapshot={snapshot}
+          stockLink={stockLink} stockName={stockName} />}
         {tab === '强弱分解' && (snapshot.strengths.length ? <table>
           <caption>最近20个完整交易区间 · 以此前60—120日拟合沪深300统计基线</caption>
           <thead><tr><th>股票</th><th>实际涨跌</th><th>统计基线</th><th>偏离</th><th>Beta / 拟合度</th><th>高于基线</th><th>评价区间</th></tr></thead>

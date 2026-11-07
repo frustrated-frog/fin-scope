@@ -75,6 +75,7 @@ class WatchlistResearchScanControllerTest {
         strength.setCode("605058");
         strength.setFitQuality(.82);
         strength.setExcessReturnPp(4.2);
+        strength.setReturnPath(List.of(new StockStrengthPoint(LocalDate.of(2026, 11, 6), 5.2, 1.0)));
         snapshot.getStrengths().add(strength);
         ResearchFinding finding = new ResearchFinding();
         finding.setKey("signal");
@@ -91,6 +92,10 @@ class WatchlistResearchScanControllerTest {
         assertFalse(data.has("membershipKey"));
         assertEquals(.82, data.path("snapshot").path("strengths").get(0).path("fitQuality").asDouble());
         assertTrue(data.path("snapshot").path("strengths").get(0).path("beta").isNull());
+        JsonNode point = data.path("snapshot").path("strengths").get(0).path("returnPath").get(0);
+        assertEquals("2026-11-06", point.path("date").asText());
+        assertEquals(5.2, point.path("actualReturnPct").asDouble());
+        assertEquals(1.0, point.path("baselineReturnPct").asDouble());
         assertTrue(data.path("snapshot").path("findings").get(0).path("newlyObserved").asBoolean());
         assertFalse(data.path("snapshot").path("findings").get(0).has("magnitude"));
     }

@@ -80,7 +80,9 @@ class WatchlistResearchScanServiceTest {
         assertEquals(2, ready.getLatest().getSnapshot().getMarketCovered());
         assertEquals(2, ready.getLatest().getSnapshot().getFinancialCovered());
         assertEquals(1, ready.getHistory().size());
-        assertNotNull(service.history(ready.getLatest().getId()).getSnapshot());
+        WatchlistResearchSnapshot archived = service.history(ready.getLatest().getId()).getSnapshot();
+        assertNotNull(archived);
+        assertEquals(21, archived.getStrengths().getFirst().getReturnPath().size());
         verify(inputs, times(1)).market("000300", "SH", false);
     }
 

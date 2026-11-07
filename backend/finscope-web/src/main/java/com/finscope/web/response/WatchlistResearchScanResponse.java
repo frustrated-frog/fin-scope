@@ -113,6 +113,7 @@ public class WatchlistResearchScanResponse {
         private Double baselineReturnPct;
         private Double excessReturnPp;
         private int positiveResidualDays;
+        private List<StrengthPointResponse> returnPath;
         private List<String> gaps;
 
         public static StrengthResponse of(StockStrengthAnalysis source) {
@@ -135,8 +136,15 @@ public class WatchlistResearchScanResponse {
             result.setBaselineReturnPct(source.getBaselineReturnPct());
             result.setExcessReturnPp(source.getExcessReturnPp());
             result.setPositiveResidualDays(source.getPositiveResidualDays());
+            result.setReturnPath(source.getReturnPath().stream().map(StrengthPointResponse::of).toList());
             result.setGaps(source.getGaps());
             return result;
+        }
+    }
+
+    public record StrengthPointResponse(LocalDate date, double actualReturnPct, double baselineReturnPct) {
+        private static StrengthPointResponse of(StockStrengthPoint source) {
+            return new StrengthPointResponse(source.date(), source.actualReturnPct(), source.baselineReturnPct());
         }
     }
 
