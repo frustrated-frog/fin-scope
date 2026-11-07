@@ -224,6 +224,35 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    void enforcesTheDeadlineWhileTheProviderKeepsSendingResponseChunks() throws Exception {
+        AtomicInteger chunksSent = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            readAll(exchange.getRequestBody());
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream output = exchange.getResponseBody()) {
+                for (int index = 0; index < 40; index++) {
+                    output.write(' ');
+                    output.flush();
+                    chunksSent.incrementAndGet();
+                    Thread.sleep(40L);
+                }
+                output.write("{\"choices\":[{\"message\":{\"content\":\"late\"}}]}".getBytes(StandardCharsets.UTF_8));
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            } catch (IOException ignored) {
+                // 截止后客户端关闭连接。
+            }
+        });
+        server.start();
+        OpenAiCompatibleLlmClient client = new OpenAiCompatibleLlmClient(true,
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1", "test-key", "test-model", 3000, 0.2);
+
+        assertThrows(SocketTimeoutException.class, () -> client.complete("system", "user", 500));
+        assertTrue(chunksSent.get() > 0 && chunksSent.get() < 40);
+    }
+
+    @Test
     void excludesProviderErrorBodiesFromExceptionsAndKeepsOnlyRequestId() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {

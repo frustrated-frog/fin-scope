@@ -5,14 +5,14 @@ import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.net.URL;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +21,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private final boolean enabled;
@@ -31,6 +35,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
     private final double temperature;
     private final boolean jsonMode;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
     private static final int RETRY_OUTPUT_TOKEN_BUDGET = 4_096;
     private static final int MAX_TRANSIENT_ATTEMPTS = 2;
     private static final String USER_AGENT =
@@ -132,45 +137,46 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
 
     private JsonNode requestCompletion(String systemPrompt, String userPrompt,
                                        int maxOutputTokens, long deadlineNanos) throws Exception {
-        int connectTimeoutMs = remainingTimeoutMs(deadlineNanos);
-        if (connectTimeoutMs <= 0) {
+        byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt, maxOutputTokens));
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint()))
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .header("User-Agent", USER_AGENT)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
+                .build();
+        if (remainingTimeoutMs(deadlineNanos) <= 0) {
             throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
         }
-        byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt, maxOutputTokens));
-        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint()).openConnection();
+        // ofString 完成时才收齐正文。等待整个响应使用同一截止时间，持续到达的分块也不能延长预算。
+        CompletableFuture<HttpResponse<String>> pending = httpClient.sendAsync(request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        HttpResponse<String> response;
         try {
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(connectTimeoutMs);
-            connection.setReadTimeout(connectTimeoutMs);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-            connection.setRequestProperty("User-Agent", USER_AGENT);
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(requestBody);
+            response = pending.get(remainingTimeoutMs(deadlineNanos), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException error) {
+            pending.cancel(true);
+            SocketTimeoutException timeout = new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
+            timeout.initCause(error);
+            throw timeout;
+        } catch (InterruptedException error) {
+            pending.cancel(true);
+            Thread.currentThread().interrupt();
+            throw error;
+        } catch (ExecutionException error) {
+            if (error.getCause() instanceof Exception cause) {
+                throw cause;
             }
-            int readTimeoutMs = remainingTimeoutMs(deadlineNanos);
-            if (readTimeoutMs <= 0) {
-                throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
-            }
-            connection.setReadTimeout(readTimeoutMs);
-            int status = connection.getResponseCode();
-            String responseBody;
-            InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            try (InputStream input = responseStream) {
-                responseBody = new String(readAll(input), StandardCharsets.UTF_8);
-            }
-            if (status >= 400) {
-                String requestId = firstHeader(connection, "x-request-id", "request-id", "trace-id");
-                throw new ProviderHttpException(status, retryAfterMillis(connection.getHeaderField("Retry-After")),
-                        "OpenAI compatible LLM request failed, HTTP " + status
-                                + (isBlank(requestId) ? "" : ", requestId=" + limit(requestId, 160)));
-            }
-            return objectMapper.readTree(responseBody);
-        } finally {
-            connection.disconnect();
+            throw error;
         }
+        int status = response.statusCode();
+        if (status >= 400) {
+            String requestId = firstHeader(response.headers(), "x-request-id", "request-id", "trace-id");
+            throw new ProviderHttpException(status, retryAfterMillis(response.headers().firstValue("Retry-After").orElse(null)),
+                    "OpenAI compatible LLM request failed, HTTP " + status
+                            + (isBlank(requestId) ? "" : ", requestId=" + limit(requestId, 160)));
+        }
+        return objectMapper.readTree(response.body());
     }
 
     private boolean isTransient(Exception error) {
@@ -212,10 +218,12 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         }
     }
 
-    private String firstHeader(HttpURLConnection connection, String... names) {
+    private String firstHeader(HttpHeaders headers, String... names) {
         for (String name : names) {
-            String value = connection.getHeaderField(name);
-            if (!isBlank(value)) return value.trim();
+            String value = headers.firstValue(name).orElse("");
+            if (!isBlank(value)) {
+                return value.trim();
+            }
         }
         return "";
     }
@@ -324,19 +332,6 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
             value = value.substring(0, value.length() - 1);
         }
         return value + "/chat/completions";
-    }
-
-    private byte[] readAll(InputStream inputStream) throws Exception {
-        if (inputStream == null) {
-            return new byte[0];
-        }
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[4096];
-        int read;
-        while ((read = inputStream.read(chunk)) != -1) {
-            buffer.write(chunk, 0, read);
-        }
-        return buffer.toByteArray();
     }
 
     private String trim(String value) {
