@@ -322,6 +322,46 @@ test('describes a busy radar refresh without blaming realtime sources', async ()
   expect(screen.queryByText('实时来源暂不可用，当前展示最近一次雷达结果')).not.toBeInTheDocument();
 });
 
+test('shows a failed radar read with a retry instead of an empty event list', async () => {
+  const original = vi.mocked(api).getMockImplementation()!;
+  let fail = true;
+  vi.mocked(api).mockImplementation((path, options) => {
+    if (fail && path.startsWith('/api/research-radar?')) {
+      return Promise.reject(new Error('系统繁忙，请稍后重试'));
+    }
+    return original(path, options);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} />);
+  await openRadar();
+  expect(await screen.findByRole('alert')).toHaveTextContent('研究雷达读取失败');
+  expect(screen.queryByText('当前筛选下没有事件')).not.toBeInTheDocument();
+
+  fail = false;
+  await userEvent.click(screen.getByRole('button', { name: '重试读取' }));
+  expect(await screen.findByText(event.title)).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('renders events when the production status or followed count is unavailable', async () => {
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation((path, options) => {
+    if (path === '/api/research-radar/followed?limit=20') {
+      return Promise.reject(new Error('关注列表暂不可用'));
+    }
+    if (path.startsWith('/api/research-radar?')) {
+      return Promise.resolve({ ...snapshot, productionStatus: {
+        running: false, status: 'UNAVAILABLE', warning: '雷达更新状态暂不可用'
+      } });
+    }
+    return original(path, options);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} />);
+  await openRadar();
+  expect(await screen.findByText(event.title)).toBeInTheDocument();
+  expect(screen.getByText('雷达更新状态暂不可用，仍可浏览已读取的事件')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
 test('SSE applies newly ranked radar events without waiting for the fallback reconciliation', async () => {
   class FakeEventSource {
     static latest: FakeEventSource | undefined;

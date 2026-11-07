@@ -136,7 +136,7 @@ export type ResearchRadarSnapshot = {
   refreshedAt: string;
   productionStatus?: {
     running: boolean;
-    status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'EMPTY';
+    status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'EMPTY' | 'UNAVAILABLE';
     completedAt?: string;
     sourceCount: number;
     signalCount: number;

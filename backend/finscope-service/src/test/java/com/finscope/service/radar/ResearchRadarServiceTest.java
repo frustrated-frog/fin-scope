@@ -61,6 +61,20 @@ class ResearchRadarServiceTest {
     }
 
     @Test
+    void preservesStoredEventsWhenBatchStatusReadTimesOut() {
+        RadarHotspotRefreshService refresh = mock(RadarHotspotRefreshService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "backgroundRefresh", refresh);
+        when(repository.findWorkspaceEvents("ALL", false)).thenReturn(Collections.singletonList(rankedEvent(10L)));
+        when(refresh.latestRun()).thenThrow(new IllegalStateException("Redis 雷达临时缓存读取失败"));
+
+        ResearchRadarView view = service.loadStored("ALL", false, 20, "ALL");
+
+        assertEquals(10L, view.getEvents().get(0).getId());
+        assertEquals("UNAVAILABLE", view.getProductionStatus().getStatus());
+        assertEquals("雷达更新状态暂不可用", view.getProductionStatus().getWarning());
+    }
+
+    @Test
     void filtersBeforeLimitingAndCountsTheEntireWindow() {
         RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "workspace", workspace);

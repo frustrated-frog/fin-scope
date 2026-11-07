@@ -17,6 +17,7 @@ import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
 import com.finscope.service.news.NewsFeedSnapshot;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.finscope.common.exception.BizErrorCode;
 
 @Service
+@Slf4j
 public class ResearchRadarService {
     private final RadarHotspotScoreService directHotspotScores = new RadarHotspotScoreService();
     private final RadarDashboardCategoryService directDashboardCategories = new RadarDashboardCategoryService();
@@ -228,7 +230,14 @@ public class ResearchRadarService {
         LocalDateTime refreshedAt = null;
         ResearchRadarView.ProductionStatus status = ResearchRadarView.ProductionStatus.of(false, "EMPTY", refreshedAt, 0, 0, 0, null);
         if (backgroundRefresh != null) {
-            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun = backgroundRefresh.latestRun();
+            java.util.Optional<com.finscope.domain.radar.RadarRefreshRun> latestRun;
+            try {
+                latestRun = backgroundRefresh.latestRun();
+            } catch (IllegalStateException error) {
+                log.warn("雷达批次状态读取失败，保留已读取的事件", error);
+                return ResearchRadarView.ProductionStatus.of(backgroundRefresh.isRunning(), "UNAVAILABLE",
+                        null, 0, 0, 0, "雷达更新状态暂不可用");
+            }
             if (latestRun.isPresent()) {
                 com.finscope.domain.radar.RadarRefreshRun run = latestRun.get();
                 if (run.getCompletedAt() != null) {

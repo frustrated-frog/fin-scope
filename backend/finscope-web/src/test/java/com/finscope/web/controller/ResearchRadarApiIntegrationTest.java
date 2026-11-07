@@ -99,6 +99,7 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.events[0].followed").value(true));
 
         verify(service).loadStored("ALL", false, 20, "ALL");
+        verify(service, never()).productionStatus();
     }
 
     @Test

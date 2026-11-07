@@ -71,6 +71,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     const [query, setQuery] = useState('');
     const [stateFilter, setStateFilter] = useState<RadarStateFilter>('ALL');
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const mounted = useRef(true);
     const snapshotRef = useRef<ResearchRadarSnapshot>();
     const selectedCategoryRef = useRef('ALL');
@@ -89,19 +90,24 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                 : `/api/research-radar?category=${encodeURIComponent(category)}&watchlistOnly=${watchlistOnly}&limit=20&state=${requestedState}${refresh ? '' : '&refresh=false'}`;
             const [rawNext, rawFollowed] = requestedState === 'FOLLOWED'
                 ? [await api<ResearchRadarSnapshot>(followedPath), undefined]
-                : await Promise.all([api<ResearchRadarSnapshot>(path), api<ResearchRadarSnapshot>(followedPath)]);
+                : await Promise.all([api<ResearchRadarSnapshot>(path), api<ResearchRadarSnapshot>(followedPath).catch(() => undefined)]);
             const next = normalizeRadarSnapshot(rawNext);
-            const followed = rawFollowed ? normalizeRadarSnapshot(rawFollowed) : next;
             if (!mounted.current || requestId !== requestSequence.current || selection !== selectedCategoryRef.current) return;
-            setFollowedCount(followed.events.length);
+            if (rawFollowed || requestedState === 'FOLLOWED') {
+                setFollowedCount(rawFollowed ? normalizeRadarSnapshot(rawFollowed).events.length : next.events.length);
+            }
             if (requestedState === 'ALL') setBaseSnapshot(next);
             snapshotRef.current = next;
             setSnapshot(next);
+            setLoadError('');
             setMessage((next.warnings ?? []).length ? '雷达已更新，当前使用部分最近结果' : '研究雷达已同步');
             if (manual) addToast('研究雷达已更新', 'success');
         } catch (error) {
-            if (!mounted.current) return;
-            const message = error instanceof Error ? error.message : '研究雷达刷新失败';
+            if (!mounted.current || requestId !== requestSequence.current) {
+                return;
+            }
+            const message = error instanceof Error ? error.message : '请稍后重试';
+            setLoadError(message);
             setMessage(message);
             if (manual) addToast(message, 'error');
         } finally {
@@ -115,6 +121,8 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         setSelectedCategory(code);
         setQuery('');
         setSelectedEvent(undefined);
+        setSnapshot(undefined);
+        setLoadError('');
         setLoading(true);
         void load(false, code, false);
     }
@@ -123,6 +131,8 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         stateFilterRef.current = value;
         setStateFilter(value);
         setSelectedEvent(undefined);
+        setSnapshot(undefined);
+        setLoadError('');
         setLoading(true);
         void load(false, selectedCategoryRef.current, false);
     }
@@ -229,6 +239,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     const productionStatus = snapshot?.productionStatus ?? contextSnapshot?.productionStatus;
     const radarRefreshing = productionStatus?.running || contextSnapshot?.warnings?.some((warning) => warning.includes('后台生产') || warning.includes('雷达正在刷新')) || false;
     const productionFailed = productionStatus?.status === 'FAILED';
+    const productionStatusUnavailable = productionStatus?.status === 'UNAVAILABLE';
     const productionStatusWarning = productionStatus?.warning;
     const degradedTitle = [contextSnapshot?.warnings?.join('\n'), productionStatusWarning].filter(Boolean).join('\n');
 
@@ -275,8 +286,13 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
 
             {(contextSnapshot?.warnings?.length || productionFailed || productionStatusWarning) ?
                 <div className="news-degraded" role="status" title={degradedTitle}><span
-                    aria-hidden="true">!</span>{productionFailed ? '雷达最近一次生产失败，当前展示此前快照' : radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : productionStatusWarning ? '部分来源本次未更新，已展示最近结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}
+                    aria-hidden="true">!</span>{productionStatusUnavailable ? '雷达更新状态暂不可用，仍可浏览已读取的事件' : productionFailed ? '雷达最近一次生产失败，当前展示此前快照' : radarRefreshing ? '雷达正在后台生产，当前展示最近一次热点快照' : productionStatusWarning ? '部分来源本次未更新，已展示最近结果' : '实时来源暂不可用，当前展示最近一次雷达结果'}
                 </div> : null}
+
+            {loadError && <div className="news-window-error" role="alert">
+                <span>研究雷达读取失败。{snapshot ? '当前保留上次读取的结果。' : ''}{loadError}</span>
+                <button type="button" disabled={loading} onClick={() => void load(true, selectedCategoryRef.current, false)}>重试读取</button>
+            </div>}
 
             <div className="news-board radar-board radar-board-single" data-testid="research-radar-board">
                 <section className="news-flash-panel radar-focus-panel" aria-labelledby="radar-focus-heading">
@@ -290,7 +306,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                                                                                                 onResearch={onResearch}
                                                                                                 onOpen={openEvent}
                                                                                                 onStateChange={(target, patch) => void updateState(target, patch)}/>)}</div> :
-                        <EmptyState label="当前筛选下没有事件"/>}
+                        !loadError ? <EmptyState label="当前筛选下没有事件"/> : null}
                 </section>
             </div>
             {selectedEvent ? <RadarEventDetailDrawer event={selectedEvent} onClose={() => setSelectedEvent(undefined)}

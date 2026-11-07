@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 
 import javax.annotation.Resource;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/research-radar")
@@ -48,7 +49,7 @@ public class ResearchRadarController {
      * @param watchlistOnly 是否仅返回自选标的相关事件，默认 false。
      * @param limit 返回条数上限，默认 20。
      * @param state 事件状态过滤条件，默认 ALL。
-     * @param refresh 是否请求后台生产一批新的雷达快照，默认 true；请求本身只读取最近已完成快照。
+     * @param refresh 是否请求后台生产一批新的雷达快照，默认 false；请求本身只读取最近已完成快照。
      * @return 研究雷达视图，包含事件流、统计信息和生产批次状态。
      */
     @GetMapping
@@ -65,12 +66,16 @@ public class ResearchRadarController {
         int normalizedLimit = Math.max(1, Math.min(limit, 50));
         String variant = "category=" + normalizedCategory + "&watchlist=" + watchlistOnly
                 + "&limit=" + normalizedLimit + "&state=" + normalizedState + "&queryVersion=2";
-        JsonNode data = snapshots.read("radar", variant).orElseGet(() -> mapper.valueToTree(
-                service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState)));
-        if (data.isObject()) {
-            ((com.fasterxml.jackson.databind.node.ObjectNode) data).set("productionStatus", mapper.valueToTree(service.productionStatus()));
+        Optional<JsonNode> cached = snapshots.read("radar", variant);
+        if (cached.isPresent()) {
+            JsonNode data = cached.get();
+            if (data.isObject()) {
+                ((com.fasterxml.jackson.databind.node.ObjectNode) data).set("productionStatus", mapper.valueToTree(service.productionStatus()));
+            }
+            return ApiResponses.success(data);
         }
-        return ApiResponses.success(data);
+        return ApiResponses.success(mapper.valueToTree(
+                service.loadStored(normalizedCategory, watchlistOnly, normalizedLimit, normalizedState)));
     }
 
     /** 手动请求一轮雷达生产；不会把页面请求变成同步抓源。 */
