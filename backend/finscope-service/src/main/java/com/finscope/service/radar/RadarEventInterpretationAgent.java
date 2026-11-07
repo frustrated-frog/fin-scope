@@ -144,7 +144,8 @@ public class RadarEventInterpretationAgent {
                 + "输出单个纯JSON对象，只允许factSummary、newDevelopment、whyItMatters、impactChain、uncertainties、"
                 + "nextObservations、evidenceRefs字段。factSummary、newDevelopment、whyItMatters必须是字符串；"
                 + "impactChain、uncertainties、nextObservations、evidenceRefs必须是字符串数组，即使只有一项也必须使用数组。"
-                + "清楚区分事实、影响推演与未知项；每个判断引用输入ref；"
+                + "清楚区分事实、影响推演与未知项，每个判断以输入证据为依据。"
+                + "将使用的输入ref集中写入evidenceRefs，其他字段只写自然语言，不写ref编号或方括号标记。"
                 + "不得给出买卖、仓位或目标价建议，不得输出Markdown或思维链。";
     }
 

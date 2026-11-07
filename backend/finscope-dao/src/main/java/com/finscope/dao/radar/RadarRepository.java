@@ -2,6 +2,8 @@ package com.finscope.dao.radar;
 
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
+import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.radar.RadarSignalStatus;
@@ -135,6 +137,27 @@ public class RadarRepository {
         return Optional.ofNullable(store.read().getEvents().get(id));
     }
 
+    public Optional<RadarEventDetailSnapshot> findDetailSnapshot(Long eventId) {
+        RadarCacheState state = store.read();
+        RadarEvent event = state.getEvents().get(eventId);
+        if (event == null) {
+            return Optional.empty();
+        }
+        List<RadarEventInterpretation> interpretations = state.getInterpretations()
+                .getOrDefault(eventId, Collections.emptyList());
+        return Optional.of(RadarEventDetailSnapshot.builder()
+                .event(event)
+                .signals(signalsForEvent(state, eventId))
+                .signalLinks(state.getEventSignals().getOrDefault(eventId, Collections.emptyList()))
+                .evidence(RadarEvidenceRepository.evidenceForEvent(state, eventId))
+                .interpretations(interpretations)
+                .latestInterpretation(RadarEventInterpretationRepository.latest(interpretations).orElse(null))
+                .workspaceState(state.getUserStates().get(eventId))
+                .researchLinks(RadarEventWorkspaceRepository.researchLinksForEvent(state, eventId))
+                .agentRuns(state.getAgentRunsBySubject().getOrDefault("RADAR_EVENT:" + eventId, Collections.emptyList()))
+                .build());
+    }
+
     public Optional<RadarEvent> findEventByKey(String eventKey) {
         RadarCacheState state = store.read();
         Long id = state.getEventIdsByKey().get(eventKey);
@@ -159,7 +182,10 @@ public class RadarRepository {
     }
 
     public List<RadarSignal> findSignalsByEventId(Long eventId) {
-        RadarCacheState state = store.read();
+        return signalsForEvent(store.read(), eventId);
+    }
+
+    private List<RadarSignal> signalsForEvent(RadarCacheState state, Long eventId) {
         List<RadarSignal> values = new ArrayList<RadarSignal>();
         for (RadarEventSignal link : state.getEventSignals().getOrDefault(eventId, Collections.emptyList())) {
             RadarSignal signal = state.getSignals().get(link.getSignalId());

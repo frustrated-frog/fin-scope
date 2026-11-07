@@ -1,6 +1,7 @@
 package com.finscope.dao.radar;
 
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEventSnapshot;
@@ -89,6 +90,30 @@ class RadarCacheRepositoriesTest {
         assertEquals(storedEvent.getId(), repository.findEventByKey("rate-cut").orElseThrow().getId());
         assertEquals(1, repository.findSignalsByEventId(storedEvent.getId()).size());
         assertEquals(storedEvent.getId(), repository.findEventSignals(storedEvent.getId()).get(0).getEventId());
+    }
+
+    @Test
+    void readsSignalsEvidenceInterpretationAndWorkspaceFromOneSnapshot() {
+        RadarRepository repository = inject(new RadarRepository());
+        LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
+        Long eventId = repository.saveEvent(event("rate-cut", now)).getId();
+        RadarSignal signal = repository.capture(RadarSignal.builder().itemId("CLS:1").publishedAt(now).build(), now);
+        RadarEventSignal link = new RadarEventSignal();
+        link.setSignalId(signal.getId());
+        repository.replaceEventSignals(eventId, Collections.singletonList(link));
+        RadarEvidence item = new RadarEvidence();
+        item.setTitle("公告");
+        inject(new RadarEvidenceRepository()).replaceForEvent(eventId, Collections.singletonList(item));
+        RadarEventInterpretation interpretation = inject(new RadarEventInterpretationRepository()).saveQueued(eventId, "version");
+        inject(new RadarEventWorkspaceRepository()).updateState(eventId, true, null, null, "viewed");
+
+        RadarEventDetailSnapshot snapshot = repository.findDetailSnapshot(eventId).orElseThrow();
+
+        assertEquals(1, store.reads);
+        assertEquals(signal.getId(), snapshot.getSignals().get(0).getId());
+        assertEquals("公告", snapshot.getEvidence().get(0).getTitle());
+        assertEquals(interpretation.getId(), snapshot.getLatestInterpretation().getId());
+        assertTrue(snapshot.getWorkspaceState().isRead());
     }
 
     @Test

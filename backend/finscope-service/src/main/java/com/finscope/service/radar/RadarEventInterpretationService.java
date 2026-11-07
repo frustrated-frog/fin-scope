@@ -8,6 +8,7 @@ import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
@@ -145,21 +146,29 @@ public class RadarEventInterpretationService {
         }
     }
 
-    public Optional<RadarEventInterpretation> current(RadarEvent event, List<RadarSignal> signals,
-                                                       List<RadarEvidence> evidenceItems) {
-        if (event == null || event.getId() == null) return Optional.empty();
+    public Optional<RadarEventInterpretation> current(RadarEventDetailSnapshot snapshot) {
+        RadarEvent event = snapshot.getEvent();
         if (!capabilities.isModelEnabled()) {
             return Optional.of(unavailable(event.getId()));
         }
-        String fingerprint = fingerprint(event, signals, evidenceItems);
-        Optional<RadarEventInterpretation> matching = interpretations.findByEventFingerprint(event.getId(), fingerprint);
+        String fingerprint = fingerprint(event, snapshot.getSignals(), snapshot.getEvidence());
+        Optional<RadarEventInterpretation> matching = snapshot.getInterpretations().stream()
+                .filter(value -> fingerprint.equals(value.getEventFingerprint())).findFirst();
         if (matching.isPresent()) {
-            markInterrupted(matching.get());
+            RadarEventInterpretation value = matching.get();
+            if (isInterrupted(value)) {
+                return interpretations.findById(event.getId(), value.getId()).map(latest -> {
+                    markInterrupted(latest);
+                    return latest;
+                });
+            }
             return matching;
         }
-        Optional<RadarEventInterpretation> latest = interpretations.findLatestByEventId(event.getId());
-        if (latest.isPresent()) latest.get().setStale(true);
-        return latest;
+        RadarEventInterpretation latest = snapshot.getLatestInterpretation();
+        if (latest != null) {
+            latest.setStale(true);
+        }
+        return Optional.ofNullable(latest);
     }
 
     public Map<Long, RadarEventInterpretation> latestByEventIds(List<Long> eventIds) {

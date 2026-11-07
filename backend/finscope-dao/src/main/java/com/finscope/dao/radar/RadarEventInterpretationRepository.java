@@ -78,8 +78,11 @@ public class RadarEventInterpretationRepository {
     }
 
     public Optional<RadarEventInterpretation> findLatestByEventId(Long eventId) {
-        return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
-                .max(BY_CREATED);
+        return latest(store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()));
+    }
+
+    static Optional<RadarEventInterpretation> latest(List<RadarEventInterpretation> values) {
+        return values.stream().max(BY_CREATED);
     }
 
     public List<RadarEventInterpretation> findHistory(Long eventId, int limit) {
@@ -95,8 +98,7 @@ public class RadarEventInterpretationRepository {
         }
         RadarCacheState state = store.read();
         for (Long eventId : eventIds) {
-            state.getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
-                    .max(BY_CREATED)
+            latest(state.getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()))
                     .ifPresent(value -> result.put(eventId, value));
         }
         return result;

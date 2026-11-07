@@ -45,10 +45,12 @@ public class RadarEventWorkspaceService {
         return workspace.findFollowedEventIds(limit);
     }
 
-    public void reconcileRead(RadarEvent event, RadarEventWorkspace.Summary summary) {
-        if (event == null || summary == null) return;
-        summary.setRead(summary.getLastViewedFingerprint() != null
-                && summary.getLastViewedFingerprint().equals(fingerprint(event)));
+    public void reconcileRead(RadarEvent event, RadarEventWorkspace.State state) {
+        if (event == null || state == null) {
+            return;
+        }
+        state.setRead(state.getLastViewedFingerprint() != null
+                && state.getLastViewedFingerprint().equals(fingerprint(event)));
     }
 
     public void createChangeNotifications(List<RadarEvent> events,Map<Long,RadarEventWorkspace.Summary> summaries){

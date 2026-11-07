@@ -34,7 +34,11 @@ public class RadarEvidenceRepository {
     }
 
     public List<RadarEvidence> findByEventId(Long eventId) {
-        List<RadarEvidence> values = new ArrayList<RadarEvidence>(store.read().getEvidence()
+        return evidenceForEvent(store.read(), eventId);
+    }
+
+    static List<RadarEvidence> evidenceForEvent(RadarCacheState state, Long eventId) {
+        List<RadarEvidence> values = new ArrayList<RadarEvidence>(state.getEvidence()
                 .getOrDefault(eventId, java.util.Collections.emptyList()));
         values.sort(Comparator.comparing((RadarEvidence value) -> value.getPublishedAt() == null
                         ? value.getCreatedAt() : value.getPublishedAt(), Comparator.nullsLast(Comparator.reverseOrder()))

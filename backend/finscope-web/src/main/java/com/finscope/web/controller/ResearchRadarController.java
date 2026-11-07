@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.enums.radar.RadarEventDetailSection;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.service.radar.ResearchRadarService;
 import com.finscope.service.radar.ResearchRadarView;
@@ -94,11 +95,13 @@ public class ResearchRadarController {
      * 查询雷达事件详情。
      *
      * @param id 雷达事件 ID。
+     * @param section 要返回的详情栏目。
      * @return 雷达事件详情。
      */
     @GetMapping("/events/{id}")
-    public ApiResponse<ResearchRadarView.EventDetail> detail(@PathVariable Long id){
-        return ApiResponses.success(service.detail(id));
+    public ApiResponse<ResearchRadarView.EventDetail> detail(@PathVariable Long id,
+            @RequestParam(defaultValue = "FULL") RadarEventDetailSection section) {
+        return ApiResponses.success(service.detail(id, section));
     }
 
     @GetMapping("/events/{id}/interpretation/{interpretationId}")

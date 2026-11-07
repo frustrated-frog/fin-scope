@@ -3,10 +3,11 @@ package com.finscope.service.radar;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.WatchlistRepository;
-import com.finscope.dao.agent.AgentRunRepository;
-import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
+import com.finscope.common.enums.radar.RadarEventDetailSection;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
+import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.domain.radar.RadarEvidence;
@@ -142,7 +143,7 @@ class ResearchRadarServiceTest {
         RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
         service = new ResearchRadarService(news, repository,
                 new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
-                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                new RadarPriorityService(), watchlist, null, null, workspace, null, null, null,
                 Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
         when(news.load("ALL", 100)).thenThrow(new IllegalStateException("upstream unavailable"));
         RadarEvent saved = new RadarEvent(); saved.setId(9L); saved.setCanonicalTitle("已有事件");
@@ -165,7 +166,7 @@ class ResearchRadarServiceTest {
         RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
         service = new ResearchRadarService(news, repository,
                 new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
-                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                new RadarPriorityService(), watchlist, null, null, workspace, null, null, null,
                 Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
         RadarEvent first = new RadarEvent(); first.setId(10L); first.setCanonicalTitle("第一条关注事件");
         RadarEvent second = new RadarEvent(); second.setId(20L); second.setCanonicalTitle("第二条关注事件");
@@ -191,7 +192,7 @@ class ResearchRadarServiceTest {
         RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
         service = new ResearchRadarService(news, repository,
                 new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
-                new RadarPriorityService(), watchlist, null, null, null, null, workspace,
+                new RadarPriorityService(), watchlist, null, null, workspace, null, null, null,
                 Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
         java.util.List<RadarEvent> ranked = new java.util.ArrayList<RadarEvent>();
         RadarEvent first = rankedEvent(1L);
@@ -236,11 +237,9 @@ class ResearchRadarServiceTest {
     @Test
     void schedulesHighPriorityEnhancementAndReturnsEvidenceWithSanitizedTrace() {
         RadarEventEnhancementScheduler scheduler = mock(RadarEventEnhancementScheduler.class);
-        RadarEvidenceRepository evidence = mock(RadarEvidenceRepository.class);
-        AgentRunRepository runs = mock(AgentRunRepository.class);
         service = new ResearchRadarService(news, repository,
                 new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
-                new RadarPriorityService(), watchlist, scheduler, evidence, runs,
+                new RadarPriorityService(), watchlist, scheduler, null, null, null, null, null,
                 Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
         NewsFeedItem first = item("CLS:1", "CLS", "财联社", "宁德时代发布新一代电池", NOW.minusMinutes(30));
         NewsFeedItem second = item("THS:2", "THS", "同花顺", "宁德时代新电池正式发布", NOW.minusMinutes(20));
@@ -256,18 +255,52 @@ class ResearchRadarServiceTest {
         assertEquals(1,view.getEvents().size());
 
         RadarEvent stored=new RadarEvent();stored.setId(10L);stored.setCanonicalTitle("宁德时代发布新一代电池");stored.setEvidenceStatus("SUCCESS");
-        when(repository.findEvent(10L)).thenReturn(java.util.Optional.of(stored));
-        when(repository.findSignalsByEventId(10L)).thenReturn(Collections.emptyList());
-        when(repository.findEventSignals(10L)).thenReturn(Collections.emptyList());
-        RadarEvidence external=new RadarEvidence();external.setTitle("公司公告");external.setSourceName("深交所");
-        when(evidence.findByEventId(10L)).thenReturn(Collections.singletonList(external));
-        AgentRun trace=new AgentRun();trace.setNodeName("radar-evidence-plan");trace.setStatus("SUCCESS");trace.setInput("完整提示词不应返回");trace.setOutput("actions=2");
-        when(repository.findAgentRunsBySubject("RADAR_EVENT",10L)).thenReturn(Collections.singletonList(trace));
+        RadarEvidence external = new RadarEvidence();
+        external.setTitle("公司公告");
+        external.setSourceName("深交所");
+        AgentRun trace = new AgentRun();
+        trace.setNodeName("radar-evidence-plan");
+        trace.setStatus("SUCCESS");
+        trace.setInput("完整提示词不应返回");
+        trace.setOutput("actions=2");
+        when(repository.findDetailSnapshot(10L)).thenReturn(java.util.Optional.of(RadarEventDetailSnapshot.builder()
+                .event(stored).evidence(Collections.singletonList(external)).agentRuns(Collections.singletonList(trace)).build()));
 
-        ResearchRadarView.EventDetail detail=service.detail(10L);
+        ResearchRadarView.EventDetail detail = service.detail(10L, RadarEventDetailSection.EVIDENCE);
         assertEquals(1,detail.getEvidence().size());
         assertEquals("radar-evidence-plan",detail.getAgentTrace().get(0).getNodeName());
         assertEquals("actions=2",detail.getAgentTrace().get(0).getSummary());
+    }
+
+    @Test
+    void returnsSavedInterpretationWithoutLoadingOtherSectionsOrWritingReadState() {
+        RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
+        RadarEventTimelineService timeline = mock(RadarEventTimelineService.class);
+        RadarEventInterpretationService interpretations = mock(RadarEventInterpretationService.class);
+        RadarEvidenceTrustService trust = mock(RadarEvidenceTrustService.class);
+        service = new ResearchRadarService(news, repository,
+                new RadarClusteringService(new RadarTextAnalyzer(new FingerprintService())),
+                new RadarPriorityService(), watchlist, null, interpretations, workspace, timeline, trust, null,
+                Clock.fixed(Instant.parse("2026-07-31T08:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        RadarEvent event = rankedEvent(10L);
+        RadarEventDetailSnapshot snapshot = RadarEventDetailSnapshot.builder()
+                .event(event).evidence(Collections.singletonList(new RadarEvidence())).build();
+        RadarEventInterpretation interpretation = new RadarEventInterpretation();
+        interpretation.setId(32L);
+        interpretation.setEventId(10L);
+        interpretation.setStatus("SUCCESS");
+        when(repository.findDetailSnapshot(10L)).thenReturn(java.util.Optional.of(snapshot));
+        when(interpretations.current(snapshot)).thenReturn(java.util.Optional.of(interpretation));
+
+        ResearchRadarView.EventDetail overview = service.detail(10L, RadarEventDetailSection.OVERVIEW);
+
+        assertEquals(32L, overview.getInterpretation().getId());
+        assertTrue(overview.getEvidence().isEmpty());
+        assertTrue(overview.getTimeline().isEmpty());
+        verify(repository, times(1)).findDetailSnapshot(10L);
+        verify(workspace, never()).open(any());
+        verify(timeline, never()).timeline(any(), any(), any(), any());
+        verify(trust, never()).assess(any(), any(), any());
     }
 
     private NewsFeedItem item(String id, String provider, String source, String title, LocalDateTime time) {

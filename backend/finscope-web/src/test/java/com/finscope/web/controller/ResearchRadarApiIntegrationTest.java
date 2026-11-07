@@ -1,5 +1,6 @@
 package com.finscope.web.controller;
 
+import com.finscope.common.enums.radar.RadarEventDetailSection;
 import com.finscope.service.radar.ResearchRadarService;
 import com.finscope.service.radar.ResearchRadarView;
 import com.finscope.service.radar.RadarEventWorkspaceService;
@@ -148,7 +149,20 @@ class ResearchRadarApiIntegrationTest {
                 .andExpect(jsonPath("$.data.eventId").value(Long.toString(eventId)))
                 .andExpect(jsonPath("$.data.status").value("QUEUED"));
 
-        verify(service, never()).detail(eventId);
+        verify(service, never()).detail(eq(eventId), any());
         verify(service, never()).requestInterpretation(eq(eventId), anyBoolean());
+    }
+
+    @Test
+    void requestsOnlyTheOverviewForTheFirstDrawerRead() throws Exception {
+        RadarEvent event = new RadarEvent();
+        event.setId(2995944177939409580L);
+        when(service.detail(event.getId(), RadarEventDetailSection.OVERVIEW)).thenReturn(
+                new ResearchRadarView.EventDetail(event, Collections.emptyList(), Collections.emptyList()));
+
+        mvc.perform(get("/api/research-radar/events/{id}", event.getId()).param("section", "OVERVIEW"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.event.id").value(event.getId().toString()))
+                .andExpect(jsonPath("$.data.signals").isEmpty());
     }
 }

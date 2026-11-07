@@ -4,6 +4,7 @@ import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventWorkspace;
+import com.finscope.domain.radar.RadarTimelineEntryDraft;
 import org.springframework.stereotype.Repository;
 
 import javax.annotation.Resource;
@@ -121,32 +122,44 @@ public class RadarEventWorkspaceRepository {
 
     public void appendTimeline(Long eventId, String eventFingerprint, String eventType, String title,
                                String summary, String referenceType, Long referenceId, LocalDateTime occurredAt) {
+        appendTimeline(eventId, Collections.singletonList(
+                new RadarTimelineEntryDraft(eventFingerprint, eventType, title, summary, referenceType, referenceId, occurredAt)));
+    }
+
+    public List<RadarEventWorkspace.TimelineEntry> appendTimeline(Long eventId, List<RadarTimelineEntryDraft> entries) {
         requireEventId(eventId);
-        store.update(state -> {
+        return store.update(state -> {
             List<RadarEventWorkspace.TimelineEntry> values = state.getTimelines()
                     .computeIfAbsent(eventId, ignored -> new ArrayList<RadarEventWorkspace.TimelineEntry>());
             Set<String> fingerprints = state.getTimelineFingerprints()
                     .computeIfAbsent(eventId, ignored -> new LinkedHashSet<String>());
-            String key = eventFingerprint + ':' + eventType + ':' + referenceType + ':' + referenceId;
-            if (fingerprints.add(key)) {
+            for (RadarTimelineEntryDraft entry : entries) {
+                String key = entry.getFingerprint() + ':' + entry.getEventType() + ':'
+                        + entry.getReferenceType() + ':' + entry.getReferenceId();
+                if (!fingerprints.add(key)) {
+                    continue;
+                }
                 RadarEventWorkspace.TimelineEntry value = new RadarEventWorkspace.TimelineEntry();
                 value.setId(state.nextSequence());
                 value.setEventId(eventId);
-                value.setEventType(eventType);
-                value.setTitle(title);
-                value.setSummary(summary);
-                value.setReferenceType(referenceType);
-                value.setReferenceId(referenceId);
-                value.setOccurredAt(occurredAt == null ? LocalDateTime.now() : occurredAt);
+                value.setEventType(entry.getEventType());
+                value.setTitle(entry.getTitle());
+                value.setSummary(entry.getSummary());
+                value.setReferenceType(entry.getReferenceType());
+                value.setReferenceId(entry.getReferenceId());
+                value.setOccurredAt(entry.getOccurredAt() == null ? LocalDateTime.now() : entry.getOccurredAt());
                 values.add(value);
             }
-            return null;
+            return sortedTimeline(values);
         });
     }
 
     public List<RadarEventWorkspace.TimelineEntry> findTimeline(Long eventId) {
-        List<RadarEventWorkspace.TimelineEntry> values = new ArrayList<RadarEventWorkspace.TimelineEntry>(
-                store.read().getTimelines().getOrDefault(eventId, Collections.emptyList()));
+        return sortedTimeline(store.read().getTimelines().getOrDefault(eventId, Collections.emptyList()));
+    }
+
+    private List<RadarEventWorkspace.TimelineEntry> sortedTimeline(List<RadarEventWorkspace.TimelineEntry> entries) {
+        List<RadarEventWorkspace.TimelineEntry> values = new ArrayList<>(entries);
         values.sort(Comparator.comparing(RadarEventWorkspace.TimelineEntry::getOccurredAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return values;
@@ -174,8 +187,12 @@ public class RadarEventWorkspaceRepository {
     }
 
     public List<RadarEventWorkspace.ResearchLink> findResearchLinks(Long eventId) {
+        return researchLinksForEvent(store.read(), eventId);
+    }
+
+    static List<RadarEventWorkspace.ResearchLink> researchLinksForEvent(RadarCacheState state, Long eventId) {
         List<RadarEventWorkspace.ResearchLink> values = new ArrayList<RadarEventWorkspace.ResearchLink>(
-                store.read().getResearchLinks().getOrDefault(eventId, Collections.emptyList()));
+                state.getResearchLinks().getOrDefault(eventId, Collections.emptyList()));
         values.sort(Comparator.comparing(RadarEventWorkspace.ResearchLink::getCreatedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return values;

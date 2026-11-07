@@ -5,6 +5,7 @@ import {useViewRevision} from '../../shared/api/useViewRevision';
 import {LiveNewsPanel} from './LiveNewsPanel';
 import {RadarEventCard} from './RadarEventCard';
 import {RadarEventDetailDrawer} from './RadarEventDetailDrawer';
+import {loadRadarEventOverview} from './radarEventDetailApi';
 import {matchesRadarState, RadarStateFilters} from './RadarStateFilters';
 import {RadarNotificationPanel} from './RadarNotificationPanel';
 import type {
@@ -67,7 +68,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     const [followedCount, setFollowedCount] = useState(0);
     const [categories, setCategories] = useState<NewsCategory[]>([ALL_CATEGORY, RELATED_CATEGORY]);
     const [selectedCategory, setSelectedCategory] = useState('ALL');
-    const [selectedEvent, setSelectedEvent] = useState<RadarEvent>();
+    const [selection, setSelection] = useState<{ event: RadarEvent; overview?: RadarEventDetail }>();
     const [query, setQuery] = useState('');
     const [stateFilter, setStateFilter] = useState<RadarStateFilter>('ALL');
     const [loading, setLoading] = useState(true);
@@ -120,7 +121,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
         selectedCategoryRef.current = code;
         setSelectedCategory(code);
         setQuery('');
-        setSelectedEvent(undefined);
+        setSelection(undefined);
         setSnapshot(undefined);
         setLoadError('');
         setLoading(true);
@@ -130,7 +131,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     function switchState(value: RadarStateFilter) {
         stateFilterRef.current = value;
         setStateFilter(value);
-        setSelectedEvent(undefined);
+        setSelection(undefined);
         setSnapshot(undefined);
         setLoadError('');
         setLoading(true);
@@ -152,13 +153,13 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
             snapshotRef.current = updated;
             return updated;
         });
-        setSelectedEvent((current) => current?.id === next.id ? next : current);
+        setSelection((current) => current?.event.id === next.id ? {...current, event: next} : current);
     }
 
-    function openEvent(item: RadarEvent) {
+    function openEvent(item: RadarEvent, overview?: RadarEventDetail) {
         const next = {...item, read: true};
         replaceEvent(next);
-        setSelectedEvent(next);
+        setSelection({event: next, overview});
     }
 
     async function updateState(item: RadarEvent, patch: {
@@ -181,11 +182,11 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     }
 
     async function openNotificationEvent(eventId: string | number) {
-        const detail = await api<RadarEventDetail>(`/api/research-radar/events/${eventId}`);
+        const detail = await loadRadarEventOverview(eventId);
         if (!mounted.current) {
             return false;
         }
-        openEvent(detail.event);
+        openEvent(detail.event, detail);
         return true;
     }
 
@@ -207,13 +208,13 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
     useEffect(() => {
         if (!initialEventId) return;
         let active = true;
-        void api<RadarEventDetail>(`/api/research-radar/events/${initialEventId}`)
+        void loadRadarEventOverview(initialEventId)
             .then((detail) => {
-                if (active) setSelectedEvent(detail.event);
+                if (active) openEvent(detail.event, detail);
             })
             .catch(() => {
                 const item = snapshotRef.current?.events.find((event) => event.id === initialEventId);
-                if (active && item) setSelectedEvent(item);
+                if (active && item) openEvent(item);
             })
             .finally(() => {
                 if (active) onInitialEventOpened?.();
@@ -309,7 +310,7 @@ function ResearchRadarPanel({setMessage, addToast, onResearch, initialEventId, o
                         !loadError ? <EmptyState label="当前筛选下没有事件"/> : null}
                 </section>
             </div>
-            {selectedEvent ? <RadarEventDetailDrawer key={selectedEvent.id} event={selectedEvent} onClose={() => setSelectedEvent(undefined)}
+            {selection ? <RadarEventDetailDrawer key={selection.event.id} event={selection.event} overview={selection.overview} onClose={() => setSelection(undefined)}
                                                      onEventChange={replaceEvent}/> : null}
         </section>
     );

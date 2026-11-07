@@ -1,14 +1,14 @@
 package com.finscope.service.radar;
 
+import com.finscope.common.enums.radar.RadarEventDetailSection;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.WatchlistRepository;
-import com.finscope.dao.agent.AgentRunRepository;
-import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarSignalStatus;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEventSignal;
 import com.finscope.domain.radar.RadarEvidence;
@@ -41,8 +41,6 @@ public class ResearchRadarService {
     private final WatchlistRepository watchlist;
     private final Clock clock;
     private final RadarEventEnhancementScheduler enhancementScheduler;
-    private final RadarEvidenceRepository evidenceRepository;
-    private final AgentRunRepository agentRuns;
     private final RadarEventInterpretationService interpretations;
     private final RadarEventWorkspaceService workspace;
     private final RadarEventTimelineService timeline;
@@ -55,67 +53,31 @@ public class ResearchRadarService {
     public ResearchRadarService(NewsFeedService news, RadarRepository repository,
                                 RadarClusteringService clustering, RadarPriorityService priority,
                                 WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                                RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
                                 RadarEventInterpretationService interpretations,
                                 RadarEventWorkspaceService workspace, RadarEventTimelineService timeline,
                                 RadarEvidenceTrustService trust, RadarHotspotRefreshService backgroundRefresh) {
-        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository,
-                agentRuns, interpretations, workspace, timeline, trust, backgroundRefresh, Clock.systemDefaultZone());
+        this(news, repository, clustering, priority, watchlist, enhancementScheduler,
+                interpretations, workspace, timeline, trust, backgroundRefresh, Clock.systemDefaultZone());
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, null, null, null, null, null, null, null, clock);
-    }
-
-    ResearchRadarService(NewsFeedService news, RadarRepository repository,
-                         RadarClusteringService clustering, RadarPriorityService priority,
-                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository, agentRuns, null, null, null, null, clock);
-    }
-
-    ResearchRadarService(NewsFeedService news, RadarRepository repository,
-                         RadarClusteringService clustering, RadarPriorityService priority,
-                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
-                         RadarEventInterpretationService interpretations, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository, agentRuns, interpretations, null, null, null, clock);
-    }
-
-    ResearchRadarService(NewsFeedService news, RadarRepository repository,
-                         RadarClusteringService clustering, RadarPriorityService priority,
-                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
-                         RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository, agentRuns, interpretations, workspace, null, null, clock);
-    }
-
-    ResearchRadarService(NewsFeedService news, RadarRepository repository,
-                         RadarClusteringService clustering, RadarPriorityService priority,
-                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                         RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
-                         RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
-                         RadarEventTimelineService timeline, RadarEvidenceTrustService trust, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, enhancementScheduler, evidenceRepository, agentRuns,
-                interpretations, workspace, timeline, trust, null, clock);
+        this(news, repository, clustering, priority, watchlist, null, null, null, null, null, null, clock);
     }
 
     ResearchRadarService(NewsFeedService news, RadarRepository repository,
                          RadarClusteringService clustering, RadarPriorityService priority,
                          WatchlistRepository watchlist, RadarHotspotRefreshService backgroundRefresh, Clock clock) {
-        this(news, repository, clustering, priority, watchlist, null, null, null,
-                null, null, null, null, backgroundRefresh, clock);
+        this(news, repository, clustering, priority, watchlist, null, null, null, null, null, backgroundRefresh, clock);
     }
 
-    private ResearchRadarService(NewsFeedService news, RadarRepository repository,
-                                 RadarClusteringService clustering, RadarPriorityService priority,
-                                 WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
-                                 RadarEvidenceRepository evidenceRepository, AgentRunRepository agentRuns,
-                                 RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
-                                 RadarEventTimelineService timeline, RadarEvidenceTrustService trust,
-                                 RadarHotspotRefreshService backgroundRefresh, Clock clock) {
+    ResearchRadarService(NewsFeedService news, RadarRepository repository,
+                         RadarClusteringService clustering, RadarPriorityService priority,
+                         WatchlistRepository watchlist, RadarEventEnhancementScheduler enhancementScheduler,
+                         RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace,
+                         RadarEventTimelineService timeline, RadarEvidenceTrustService trust,
+                         RadarHotspotRefreshService backgroundRefresh, Clock clock) {
         this.news = news;
         this.repository = repository;
         this.clustering = clustering;
@@ -123,8 +85,6 @@ public class ResearchRadarService {
         this.watchlist = watchlist;
         this.clock = clock;
         this.enhancementScheduler = enhancementScheduler;
-        this.evidenceRepository = evidenceRepository;
-        this.agentRuns = agentRuns;
         this.interpretations = interpretations;
         this.workspace = workspace;
         this.timeline = timeline;
@@ -272,30 +232,48 @@ public class ResearchRadarService {
         return new ResearchRadarView(cards(followed, index), Collections.<NewsFeedItem>emptyList(), Collections.<String>emptyList(), LocalDateTime.now(clock));
     }
 
-    public ResearchRadarView.EventDetail detail(Long id) {
-        RadarEvent event = repository.findEvent(id).orElseThrow(() -> new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
-        List<RadarSignal> signals = repository.findSignalsByEventId(id);
-        List<RadarEvidence> evidence = evidenceRepository == null ? Collections.emptyList() : evidenceRepository.findByEventId(id);
-        RadarEventInterpretation interpretation = interpretations == null ? null : interpretations.current(event, signals, evidence).orElse(null);
-        RadarEventWorkspaceService.OpenedEvent opened = null;
-        List<RadarEventWorkspace.TimelineEntry> timelineEntries = Collections.emptyList();
-        RadarEventWorkspace.Trust trustView = new RadarEventWorkspace.Trust();
-        try {
-            if (workspace != null) opened = workspace.open(event);
-        } catch (RuntimeException ignored) {
+    public ResearchRadarView.EventDetail detail(Long id, RadarEventDetailSection section) {
+        RadarEventDetailSnapshot snapshot = repository.findDetailSnapshot(id)
+                .orElseThrow(() -> new BusinessException(BizErrorCode.RADAR_EVENT_NOT_FOUND));
+        RadarEvent event = snapshot.getEvent();
+        boolean full = section == RadarEventDetailSection.FULL;
+        boolean showEvidence = full || section == RadarEventDetailSection.EVIDENCE;
+        RadarEventInterpretation interpretation = section == RadarEventDetailSection.TRACKING || interpretations == null
+                ? null : interpretations.current(snapshot).orElse(null);
+        RadarEventWorkspace.State state = snapshot.getWorkspaceState();
+        if (workspace != null) {
+            workspace.reconcileRead(event, state);
+            if (full) {
+                try {
+                    state = workspace.open(event).getState();
+                } catch (RuntimeException error) {
+                    log.debug("雷达事件已读状态更新失败，eventId={}", id, error);
+                }
+            }
         }
-        try {
-            if (timeline != null) timelineEntries = timeline.timeline(event, signals, evidence, interpretation);
-        } catch (RuntimeException ignored) {
+
+        List<RadarEventWorkspace.TimelineEntry> entries = Collections.emptyList();
+        if (timeline != null && (full || section == RadarEventDetailSection.TIMELINE)) {
+            try {
+                entries = timeline.timeline(event, snapshot.getSignals(), snapshot.getEvidence(), interpretation);
+            } catch (RuntimeException error) {
+                if (!full) {
+                    throw error;
+                }
+                log.debug("雷达事件脉络加载失败，eventId={}", id, error);
+            }
         }
-        try {
-            if (trust != null) trustView = trust.assess(signals, evidence, interpretation);
-        } catch (RuntimeException ignored) {
-        }
-        ResearchRadarView.EventDetail detail = new ResearchRadarView.EventDetail(event, signals, repository.findEventSignals(id), evidence,
-                repository.findAgentRunsBySubject("RADAR_EVENT", id), interpretation,
-                opened == null ? null : opened.getState(), opened == null ? Collections.<RadarEventWorkspace.Observation>emptyList() : opened.getObservations(),
-                timelineEntries, trustView, opened == null ? Collections.<RadarEventWorkspace.ResearchLink>emptyList() : opened.getResearchLinks());
+
+        RadarEventWorkspace.Trust trustView = showEvidence && trust != null
+                ? trust.assess(snapshot.getSignals(), snapshot.getEvidence(), interpretation) : null;
+        ResearchRadarView.EventDetail detail = new ResearchRadarView.EventDetail(event,
+                showEvidence ? snapshot.getSignals() : Collections.emptyList(),
+                showEvidence ? snapshot.getSignalLinks() : Collections.emptyList(),
+                showEvidence ? snapshot.getEvidence() : Collections.emptyList(),
+                showEvidence ? snapshot.getAgentRuns() : Collections.emptyList(),
+                full || section == RadarEventDetailSection.OVERVIEW ? interpretation : null,
+                state, Collections.emptyList(), entries, trustView,
+                full || section == RadarEventDetailSection.TRACKING ? snapshot.getResearchLinks() : Collections.emptyList());
         detail.setAutomaticInterpretationEnabled(interpretations != null && interpretations.isAutomaticModelEnabled());
         return detail;
     }

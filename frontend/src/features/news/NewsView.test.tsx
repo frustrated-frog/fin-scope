@@ -91,6 +91,12 @@ const detail = {
     }
   }
 };
+const detailPath = '/api/research-radar/events/10';
+const overviewPath = `${detailPath}?section=OVERVIEW`;
+const evidencePath = `${detailPath}?section=EVIDENCE`;
+const timelinePath = `${detailPath}?section=TIMELINE`;
+const trackingPath = `${detailPath}?section=TRACKING`;
+const overview = { event, signals: [], interpretation: detail.interpretation, workspaceState: detail.workspaceState };
 
 const categories = [
   { code: 'COMPANY', name: '公司动态', enabled: true, displayOrder: 10 },
@@ -118,7 +124,8 @@ beforeEach(() => {
     if (path === '/api/news/window/filters') return Promise.resolve([]);
     if (path.startsWith('/api/news/window?')) return Promise.resolve({ ...newsSnapshot, total: 2, size: 50, page: 0, asOfSequence: 2, sources: ['财联社', '同花顺'] });
     if (path === '/api/research-radar/followed?limit=20') return Promise.resolve({ ...snapshot, events: [] });
-    if (path === '/api/research-radar/events/10') return Promise.resolve(detail);
+    if (path === overviewPath) return Promise.resolve(overview);
+    if ([evidencePath, timelinePath, trackingPath].includes(path)) return Promise.resolve(detail);
     if (path === '/api/research-radar/events/10/state') return Promise.resolve({ eventId: 10, read: true, followed: true, disposition: 'ACTIVE' });
     if (path === '/api/research-radar/notifications?limit=30') return Promise.resolve({ items: [], unreadCount: 0, todayCount: 0 });
     return Promise.resolve(snapshot);
@@ -195,7 +202,7 @@ test('keeps the twenty-item radar context stable while showing the independent f
   expect(api).toHaveBeenCalledWith('/api/research-radar/followed?limit=20');
 });
 
-test('loads original signals only when the user opens the interpretation drawer', async () => {
+test('loads the interpretation first and requests other sections only when selected', async () => {
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} onResearch={vi.fn()} />);
   await openRadar();
   await screen.findByRole('heading', { name: event.title });
@@ -204,9 +211,47 @@ test('loads original signals only when the user opens the interpretation drawer'
 
   expect(await screen.findByRole('dialog', { name: event.title })).toBeInTheDocument();
   expect(screen.getByText('3 个独立来源共同报道')).toBeInTheDocument();
+  expect(await screen.findByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith(overviewPath);
+  expect(api).not.toHaveBeenCalledWith(detailPath);
+  expect(api).not.toHaveBeenCalledWith(evidencePath);
+  expect(api).not.toHaveBeenCalledWith(timelinePath);
+  expect(api).not.toHaveBeenCalledWith(trackingPath);
+  await userEvent.click(screen.getByRole('button', { name: '证据' }));
+  expect(await screen.findByText('同花顺')).toBeInTheDocument();
+  expect(api).toHaveBeenCalledWith(evidencePath);
+  await userEvent.click(screen.getByRole('button', { name: '事件脉络' }));
+  expect(await screen.findByText('同花顺补充量产信息')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '跟踪' }));
+  expect(await screen.findByText('量产仍需跟踪')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '证据' }));
   expect(screen.getByText('同花顺')).toBeInTheDocument();
-  expect(api).toHaveBeenCalledWith('/api/research-radar/events/10');
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === evidencePath)).toHaveLength(1);
+});
+
+test('shows saved interpretation without waiting for read state and hides its internal references', async () => {
+  const result = {
+    ...detail.interpretation.result,
+    factSummary: '公司发布新产品[signal:279641337455935553]。',
+    impactChain: ['产品发布→量产验证 [evidence:31]'],
+  };
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === '/api/news/categories') return Promise.resolve(categories);
+    if (path === overviewPath) return Promise.resolve({
+      ...overview, workspaceState: { ...overview.workspaceState, read: false },
+      interpretation: { ...detail.interpretation, result },
+    });
+    if (path === `${detailPath}/state`) return new Promise(() => undefined);
+    return Promise.resolve(snapshot);
+  });
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
+
+  const drawer = await screen.findByRole('dialog', { name: event.title });
+  expect(within(drawer).getByText('公司发布新产品。')).toBeInTheDocument();
+  expect(within(drawer).getByText('产品发布→量产验证')).toBeInTheDocument();
+  expect(drawer).not.toHaveTextContent(/\[(signal|evidence):/);
+  expect(api).toHaveBeenCalledWith(`${detailPath}/state`, { method: 'PATCH', body: '{"read":true}' });
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
 });
 
 test('records a radar event with an in-app toast instead of a native alert', async () => {
@@ -399,7 +444,6 @@ test('SSE applies newly ranked radar events without waiting for the fallback rec
 test('generates on click and recovers from a temporary interpretation status read failure', async () => {
   vi.useFakeTimers();
   const interpretationId = '2995944177939409581';
-  const detailPath = '/api/research-radar/events/10';
   const statusPath = `${detailPath}/interpretation/${interpretationId}`;
   let detailCalls = 0;
   let statusCalls = 0;
@@ -416,11 +460,9 @@ test('generates on click and recovers from a temporary interpretation status rea
         ? Promise.reject(new Error('系统繁忙，请稍后重试'))
         : Promise.resolve({ ...detail.interpretation, id: interpretationId });
     }
-    if (path === detailPath) {
+    if (path === overviewPath) {
       detailCalls += 1;
-      return detailCalls === 1
-        ? Promise.resolve({ ...detail, interpretation: undefined, automaticInterpretationEnabled: true })
-        : Promise.reject(new Error('系统繁忙，请稍后重试'));
+      return Promise.resolve({ ...overview, interpretation: undefined, automaticInterpretationEnabled: true });
     }
     return Promise.resolve(snapshot);
   });
@@ -445,15 +487,17 @@ test('generates on click and recovers from a temporary interpretation status rea
   expect(screen.getByText('量产节奏可能影响相关产业链订单预期。')).toBeInTheDocument();
   expect(screen.getByText('解读完成')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '重试读取' })).not.toBeInTheDocument();
+  expect(detailCalls).toBe(1);
   expect(vi.mocked(api).mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
 });
 
 test('does not request or poll interpretation when the model is disabled', async () => {
   vi.mocked(api).mockImplementation((path) => {
     if (path === '/api/news/categories') return Promise.resolve(categories);
-    if (path === '/api/research-radar/events/10') return Promise.resolve({ ...detail,
+    if (path === overviewPath) return Promise.resolve({ ...overview,
       interpretation: { eventId: 10, status: 'UNAVAILABLE', stale: false, failureCode: 'MODEL_DISABLED' }
     });
+    if (path === evidencePath) return Promise.resolve(detail);
     return Promise.resolve(snapshot);
   });
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);

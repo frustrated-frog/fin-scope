@@ -5,6 +5,7 @@ import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
 import com.finscope.domain.radar.RadarEvent;
+import com.finscope.domain.radar.RadarEventDetailSnapshot;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
@@ -182,11 +183,11 @@ class RadarEventInterpretationServiceTest {
     @Test
     void marksAnOlderInterpretationAsStaleForTheCurrentEventVersion() {
         RadarEventInterpretation old = queued(); old.setStatus("SUCCESS"); old.setEventFingerprint("old-fingerprint");
-        when(interpretations.findByEventFingerprint(eq(10L), any())).thenReturn(Optional.empty());
-        when(interpretations.findLatestByEventId(10L)).thenReturn(Optional.of(old));
+        RadarEventDetailSnapshot snapshot = RadarEventDetailSnapshot.builder().event(event)
+                .signals(Collections.singletonList(signal)).interpretations(Collections.singletonList(old))
+                .latestInterpretation(old).build();
 
-        RadarEventInterpretation current = service.current(event, Collections.singletonList(signal),
-                Collections.<RadarEvidence>emptyList()).get();
+        RadarEventInterpretation current = service.current(snapshot).get();
 
         assertTrue(current.isStale());
     }

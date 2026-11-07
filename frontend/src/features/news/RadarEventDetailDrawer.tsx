@@ -4,23 +4,37 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../../shared/api/client';
 import { RadarTimeline } from './RadarTimeline';
 import { RadarTrustPanel } from './RadarTrustPanel';
+import { loadRadarEventOverview } from './radarEventDetailApi';
 import type { RadarEvent, RadarEventDetail, RadarInterpretation, RadarWorkspaceState } from './researchRadarTypes';
 
 const POLL_INTERVAL_MS = 1_500;
 const MAX_POLL_RETRIES = 4;
 type Tab = 'interpretation' | 'timeline' | 'evidence' | 'tracking';
+type ContextTab = Exclude<Tab, 'interpretation'>;
+type ContextSection = { data: RadarEventDetail } | { error: string };
 
-export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { event: RadarEvent; onClose: () => void; onEventChange?: (event: RadarEvent) => void }) {
-  const [detail, setDetail] = useState<RadarEventDetail>(); const [tab,setTab]=useState<Tab>('interpretation');
+export function RadarEventDetailDrawer({ event, overview, onClose, onEventChange }: {
+  event: RadarEvent;
+  overview?: RadarEventDetail;
+  onClose: () => void;
+  onEventChange?: (event: RadarEvent) => void;
+}) {
+  const [detail, setDetail] = useState(overview);
+  const [tab, setTab] = useState<Tab>('interpretation');
   const [error, setError] = useState(''); const [requesting, setRequesting] = useState(false);
   const [pollFailures, setPollFailures] = useState(0);
+  const [sections, setSections] = useState<Partial<Record<ContextTab, ContextSection>>>({});
+  const [contextRevision, setContextRevision] = useState(0);
   const stopped = useRef(false); const timer = useRef<number>();
   const polling = useRef(false);
+  const readRequested = useRef(false);
   const eventPath = `/api/research-radar/events/${event.id}`;
+  const section = tab === 'interpretation' ? undefined : sections[tab];
+  const context = section && 'data' in section ? section.data : undefined;
 
   useEffect(() => {
     let active = true;
-    stopped.current = false; setDetail(undefined); setError(''); setPollFailures(0); setTab('interpretation');
+    stopped.current = false;
     void load(() => active);
     function onKeyDown(keyEvent: KeyboardEvent) { if (keyEvent.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKeyDown);
@@ -32,16 +46,51 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     };
   }, [event.id]);
 
+  useEffect(() => {
+    if (!detail || detail.workspaceState?.read || readRequested.current) {
+      return;
+    }
+    readRequested.current = true;
+    void api<RadarWorkspaceState>(`${eventPath}/state`, { method: 'PATCH', body: JSON.stringify({ read: true }) })
+      .then((state) => {
+        if (!stopped.current) {
+          setDetail((current) => current && {
+            ...current,
+            workspaceState: { ...(current.workspaceState ?? state), read: state.read, readAt: state.readAt },
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, [detail, eventPath]);
+
+  useEffect(() => {
+    if (tab === 'interpretation' || section) {
+      return;
+    }
+    let active = true;
+    void api<RadarEventDetail>(`${eventPath}?section=${tab.toUpperCase()}`).then((data) => {
+      if (active) {
+        setSections((current) => ({ ...current, [tab]: { data } }));
+      }
+    }).catch((failure: unknown) => {
+      if (active) {
+        const message = failure instanceof Error ? failure.message : '事件资料加载失败';
+        setSections((current) => ({ ...current, [tab]: { error: message } }));
+      }
+    });
+    return () => { active = false; };
+  }, [tab, section, eventPath, contextRevision]);
+
   async function load(isActive = () => !stopped.current) {
     try {
-      const next = await api<RadarEventDetail>(eventPath);
+      const next = overview ?? await loadRadarEventOverview(event.id);
       if (!isActive()) {
         return;
       }
       setDetail(next);
       setError('');
       if (next.interpretation?.status === 'UNAVAILABLE') {
-        setTab('evidence');
+        setTab((current) => current === 'interpretation' ? 'evidence' : current);
       }
       onEventChange?.({ ...event, read: true, followed: next.workspaceState?.followed ?? event.followed,
         disposition: next.workspaceState?.disposition ?? event.disposition });
@@ -55,15 +104,9 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     }
   }
 
-  async function refreshInterpretationContext() {
-    try {
-      const next = await api<RadarEventDetail>(eventPath);
-      if (!stopped.current) {
-        setDetail((current) => current && { ...current, timeline: next.timeline, trust: next.trust, agentTrace: next.agentTrace });
-      }
-    } catch {
-      // The saved interpretation is already visible. Reopening the drawer refreshes its context.
-    }
+  function invalidateInterpretationContext() {
+    setSections((current) => ({ tracking: current.tracking }));
+    setContextRevision((current) => current + 1);
   }
 
   async function requestInterpretation() {
@@ -82,7 +125,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
       if (isPending(queued)) {
         schedulePoll(queued, 0);
       } else if (queued.status === 'SUCCESS') {
-        void refreshInterpretationContext();
+        invalidateInterpretationContext();
       }
     } catch (requestError) {
       if (!stopped.current) {
@@ -108,7 +151,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
     polling.current = true;
     try {
       const next = pending.id == null
-        ? (await api<RadarEventDetail>(eventPath)).interpretation
+        ? (await loadRadarEventOverview(event.id)).interpretation
         : await api<RadarInterpretation>(`${eventPath}/interpretation/${pending.id}`);
       if (stopped.current) {
         return;
@@ -121,7 +164,7 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
       if (isPending(next)) {
         schedulePoll(next, 0);
       } else {
-        void refreshInterpretationContext();
+        invalidateInterpretationContext();
       }
     } catch (readError) {
       if (stopped.current) {
@@ -176,17 +219,47 @@ export function RadarEventDetailDrawer({ event, onClose, onEventChange }: { even
               :<p>{interpretation?.failureMessage || '点击上方「生成 AI 解读」开始。'}</p>}
         </section>:null}
 
-        {tab==='timeline'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>事件脉络</h3><span>{detail?.timeline?.length??0} 个节点</span></div><RadarTimeline items={detail?.timeline}/></section>:null}
+        {tab !== 'interpretation' && !section ? <DrawerSkeleton label="正在加载事件资料"/> : null}
+        {tab !== 'interpretation' && section && 'error' in section ? <div role="alert">
+          <p>{section.error}</p>
+          <button type="button" className="ghost-button"
+            onClick={() => setSections((current) => ({ ...current, [tab]: undefined }))}>重试加载</button>
+        </div> : null}
 
-        {tab==='evidence'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>证据与来源</h3><span>{(detail?.signals.length??0)+(detail?.evidence?.length??0)} 条</span></div><RadarTrustPanel trust={detail?.trust}/>
-          {detail?.evidence?.map((item,index)=><Evidence key={item.id??`${item.toolCode}-${index}`} title={item.title} source={item.sourceName||evidenceTypeLabel(item.evidenceType)} meta={evidenceTypeLabel(item.evidenceType)} url={item.url} summary={item.summary}/>)}
-          {detail?.signals.map((signal)=><Evidence key={signal.id} title={signal.title} source={signal.sourceName} meta={formatDateTime(signal.publishedAt)} url={signal.url} summary={signal.content || signal.matchReason}/>)}
-          {detail?.agentTrace?.length?<details className="radar-agent-trace radar-drawer-trace"><summary>Agent 运行状态</summary><ol>{detail.agentTrace.map((trace,index)=><li key={`${trace.nodeName}-${index}`}><div><strong>{agentNodeLabel(trace.nodeName)}</strong><span>{trace.status} · {trace.durationMs}ms</span></div>{trace.summary?<p>{trace.summary}</p>:null}{trace.fallbackUsed?<small>已降级：{trace.fallbackReason||trace.errorType||'使用确定性结果'}</small>:null}</li>)}</ol></details>:null}
-        </section>:null}
+        {tab === 'timeline' && context ? <section className="radar-detail-section">
+          <div className="radar-detail-section-heading"><h3>事件脉络</h3><span>{context.timeline?.length ?? 0} 个节点</span></div>
+          <RadarTimeline items={context.timeline}/>
+        </section> : null}
 
-        {tab==='tracking'?<section className="radar-detail-section"><div className="radar-detail-section-heading"><h3>临时跟踪</h3><span>随事件缓存过期</span></div><p className="radar-empty-copy">需要长期保存和记录后续变化时，请先将事件记入大事记。</p>
-          <RadarRankHistory eventId={event.id} /><div className="radar-research-links"><h3>关联研究结论</h3>{detail?.researchLinks?.length?<ul>{detail.researchLinks.map((link)=><li key={link.id}><div><strong>研究运行 #{link.researchRunId}</strong><span>{link.status}</span></div>{link.questionSnapshot?<p>{link.questionSnapshot}</p>:null}{link.summary?<small>{link.summary}</small>:null}</li>)}</ul>:<p className="radar-empty-copy">从事件卡片启动研究后，结论会回到这里。</p>}</div>
-        </section>:null}
+        {tab === 'evidence' && context ? <section className="radar-detail-section">
+          <div className="radar-detail-section-heading"><h3>证据与来源</h3><span>{context.signals.length + (context.evidence?.length ?? 0)} 条</span></div>
+          <RadarTrustPanel trust={context.trust}/>
+          {context.evidence?.map((item, index) => <Evidence key={item.id ?? `${item.toolCode}-${index}`}
+            title={item.title} source={item.sourceName || evidenceTypeLabel(item.evidenceType)} meta={evidenceTypeLabel(item.evidenceType)}
+            url={item.url} summary={item.summary}/>)}
+          {context.signals.map((signal) => <Evidence key={signal.id} title={signal.title} source={signal.sourceName}
+            meta={formatDateTime(signal.publishedAt)} url={signal.url} summary={signal.content || signal.matchReason}/>)}
+          {context.agentTrace?.length ? <details className="radar-agent-trace radar-drawer-trace"><summary>Agent 运行状态</summary>
+            <ol>{context.agentTrace.map((trace, index) => <li key={`${trace.nodeName}-${index}`}>
+              <div><strong>{agentNodeLabel(trace.nodeName)}</strong><span>{trace.status} · {trace.durationMs}ms</span></div>
+              {trace.summary ? <p>{trace.summary}</p> : null}
+              {trace.fallbackUsed ? <small>已降级：{trace.fallbackReason || trace.errorType || '使用确定性结果'}</small> : null}
+            </li>)}</ol>
+          </details> : null}
+        </section> : null}
+
+        {tab === 'tracking' && context ? <section className="radar-detail-section">
+          <div className="radar-detail-section-heading"><h3>临时跟踪</h3><span>随事件缓存过期</span></div>
+          <p className="radar-empty-copy">需要长期保存和记录后续变化时，请先将事件记入大事记。</p>
+          <RadarRankHistory eventId={event.id}/>
+          <div className="radar-research-links"><h3>关联研究结论</h3>
+            {context.researchLinks?.length ? <ul>{context.researchLinks.map((link) => <li key={link.id}>
+              <div><strong>研究运行 #{link.researchRunId}</strong><span>{link.status}</span></div>
+              {link.questionSnapshot ? <p>{link.questionSnapshot}</p> : null}
+              {link.summary ? <small>{link.summary}</small> : null}
+            </li>)}</ul> : <p className="radar-empty-copy">从事件卡片启动研究后，结论会回到这里。</p>}
+          </div>
+        </section> : null}
       </div>
     </aside>
   </div>;
@@ -209,9 +282,22 @@ function StatusBadge({ interpretation }: { interpretation?: RadarInterpretation 
     default: return <span>生成中</span>;
   }
 }
-function InterpretationBlock({label,value,accent=false}:{label:string;value:string;accent?:boolean}){return <article className={accent?'is-accent':''}><span>{label}</span><p>{value}</p></article>;}
-function InterpretationList({label,values,ordered=false}:{label:string;values:string[];ordered?:boolean}){const List=ordered?'ol':'ul';return <article><span>{label}</span><List>{values.map((value)=><li key={value}>{value}</li>)}</List></article>;}
-function DrawerSkeleton(){return <div className="radar-drawer-skeleton" aria-label="正在加载事件详情"><span/><span/><span/></div>;}
+function interpretationText(value: string) {
+  return value.replace(/[ \t]*\[(?:signal|evidence):\d+(?:[ \t]*[,，、][ \t]*(?:signal|evidence):\d+)*\]/gi, '').trim();
+}
+function InterpretationBlock({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return <article className={accent ? 'is-accent' : ''}><span>{label}</span><p>{interpretationText(value)}</p></article>;
+}
+function InterpretationList({ label, values, ordered = false }: { label: string; values: string[]; ordered?: boolean }) {
+  const List = ordered ? 'ol' : 'ul';
+  return <article><span>{label}</span><List>{values.map((value) => {
+    const content = interpretationText(value);
+    return content ? <li key={value}>{content}</li> : null;
+  })}</List></article>;
+}
+function DrawerSkeleton({ label = '正在加载事件详情' }: { label?: string }) {
+  return <div className="radar-drawer-skeleton" aria-label={label}><span/><span/><span/></div>;
+}
 function evidenceTypeLabel(value?:string){if(value==='ANNOUNCEMENT')return '公司公告';if(value==='INTERACTION')return '互动问答';if(value==='BROKER_REPORT')return '机构研报';if(value==='NEWS_FLASH'||value==='PUBLIC_NEWS')return '公开资讯';return '补充资料';}
 function agentNodeLabel(value:string){if(value==='radar-evidence-plan')return '证据规划';if(value==='radar-evidence-synthesis')return '证据综合';if(value.startsWith('radar-tool-'))return '多源检索';if(value==='radar-event-interpretation')return '事件解读';return value;}
 function formatDateTime(value?:string){const date=value?new Date(value):undefined;return date&&!Number.isNaN(date.getTime())?new Intl.DateTimeFormat('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(date):'--';}
