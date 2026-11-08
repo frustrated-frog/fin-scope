@@ -67,11 +67,6 @@ export function WatchlistResearchScan({ items, ready, onOpen }: {
   const run = selected ? (historical?.id === selected ? historical : undefined) : view?.latest;
   const snapshot = validSnapshot(run?.snapshot) ? run.snapshot : undefined;
   const active = view?.active;
-  const gaps = snapshot ? [...new Set([
-    ...snapshot.gaps,
-    ...snapshot.strengths.flatMap((stock) => stock.gaps.map((gap) => `${stock.name}：${gap}`)),
-    ...snapshot.growthQuality.flatMap((stock) => stock.gaps.map((gap) => `${stock.name}：${gap}`))
-  ])] : [];
   const findStock = (code: string) => items.find((item) => item.type === 'STOCK' && item.code === code);
   const stockName = (code: string, fallback?: string) => findStock(code)?.name || fallback || code;
   const stockLink = (code: string, name?: string) => {
@@ -156,9 +151,6 @@ export function WatchlistResearchScan({ items, ready, onOpen }: {
           </tr>)}</tbody>
         </table> : <p className="research-scan-empty">财报正在补齐，取得连续季度数据后会自动计算。</p>)}
       </div>
-      {gaps.length > 0 && <details className="research-scan-gaps"><summary>{gaps.length} 项数据缺口</summary>
-        <ul>{gaps.slice(0, 80).map((gap, index) => <li key={index}>{gap}</li>)}</ul>
-      </details>}
     </>}
   </section>;
 }

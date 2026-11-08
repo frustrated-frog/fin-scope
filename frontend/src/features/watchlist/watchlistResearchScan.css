@@ -37,9 +37,6 @@
 .research-row-gap { display: block; margin-top: 4px; }
 .research-pair { display: flex; align-items: center; gap: 10px; }
 .research-pair > span { color: var(--muted); }
-.research-scan-gaps { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.8; }
-.research-scan-gaps summary { cursor: pointer; }
-.research-scan-gaps ul { max-height: 170px; overflow: auto; padding-left: 18px; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .watchlist-research-scan { padding: 14px; }
   .research-scan-head { align-items: flex-start; gap: 12px; }
