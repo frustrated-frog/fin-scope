@@ -94,6 +94,25 @@ class StockFundamentalsServiceTest {
     }
 
     @Test
+    void researchRefreshesMixedSourceWindowIncludingOldestQuarterPrerequisite() {
+        LocalDate q1 = LocalDate.of(2026, 3, 31);
+        LocalDate halfYear = LocalDate.of(2026, 6, 30);
+        StockFinancialQuarter first = quarter(q1, 71L, "SOURCE_A", "100");
+        StockFinancialQuarter second = quarter(halfYear, 81L, "SOURCE_B", null);
+        StockFinancialQuarter alignedFirst = quarter(q1, 71L, "SOURCE_B", "100");
+        StockFinancialQuarter alignedSecond = quarter(halfYear, 81L, "SOURCE_B", "120");
+        when(quarters.assemble(eq(17L), anyList()))
+                .thenReturn(List.of(first, second), List.of(alignedFirst, alignedSecond));
+
+        StockFundamentals result = service.loadQuartersForResearch("600519");
+
+        verify(financialRefresh, times(9)).refresh(eq(17L), any(), any());
+        verify(financialRefresh).refresh(17L, LocalDate.of(2024, 9, 30), FinancialReportType.Q3);
+        assertEquals(List.of(alignedFirst, alignedSecond), result.getQuarters());
+        verifyNoInteractions(valuations);
+    }
+
+    @Test
     void readsExistingRawQuartersAndActualValuationWithoutRefetchingToday() {
         StockFundamentals result = service.load(" 600519 ", false);
 

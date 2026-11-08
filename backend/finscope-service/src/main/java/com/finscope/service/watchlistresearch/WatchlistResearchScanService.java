@@ -134,6 +134,8 @@ public class WatchlistResearchScanService {
             repository.finish(run);
             log.info("自选研究扫描完成 runId={} status={} stocks={} marketCovered={} financialCovered={}",
                     run.getId(), run.getStatus(), allStocks.size(), result.getMarketCovered(), result.getFinancialCovered());
+        } catch (LinkageError error) {
+            fail(run, "后端运行版本不一致，重启后可重新扫描", error);
         } catch (RuntimeException error) {
             fail(run, "扫描未完成，已保留此前结果，可重新扫描", error);
         }
@@ -216,7 +218,7 @@ public class WatchlistResearchScanService {
         }
     }
 
-    private void fail(ResearchScanRun run, String message, RuntimeException error) {
+    private void fail(ResearchScanRun run, String message, Throwable error) {
         log.error("自选研究扫描失败 runId={}", run.getId(), error);
         run.setStatus(ResearchScanStatus.FAILED);
         run.setSnapshot(null);

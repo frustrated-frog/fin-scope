@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** 自动补齐股票详情的确定性输入；远程调用不放入数据库事务。 */
@@ -116,6 +117,9 @@ public class StockFundamentalsService {
                                                LocalDate today, boolean refresh, AttemptEntry entry,
                                                boolean includeValuation) {
         StockFundamentals result = localSnapshot(instrument, periods, includeValuation);
+        // 研究窗口使用同来源的累计报表，换源时也需要更新最早一季的前序报告。
+        boolean refreshResearchWindow = !includeValuation && (refresh || result.getQuarters().stream()
+                .map(StockFinancialQuarter::getSourceCode).filter(Objects::nonNull).distinct().limit(2).count() > 1);
         Set<LocalDate> failedPeriods = new HashSet<LocalDate>();
         try (ProviderCallDeadline.Scope ignored = ProviderCallDeadline.open(REFRESH_TIMEOUT)) {
             if (includeValuation) {
@@ -124,7 +128,7 @@ public class StockFundamentalsService {
             List<LocalDate> required = requiredPeriods(periods);
             for (int index = required.size() - 1; index >= 0; index--) {
                 LocalDate period = required.get(index);
-                boolean forcePeriod = refresh && periods.contains(period);
+                boolean forcePeriod = refreshResearchWindow || (refresh && periods.contains(period));
                 if (!forcePeriod && quarters.hasUsableReport(instrument.getId(), period)) {
                     continue;
                 }

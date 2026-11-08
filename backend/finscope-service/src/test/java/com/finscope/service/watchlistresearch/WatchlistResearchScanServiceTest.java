@@ -129,6 +129,7 @@ class WatchlistResearchScanServiceTest {
         service.view(false);
         jobs.remove(0).run();
         String previous = service.view(false).getLatest().getId();
+        advanceClock();
         when(inputs.market(anyString(), anyString(), eq(true))).thenThrow(new IllegalStateException("offline"));
         when(inputs.financials(anyString(), eq(true))).thenThrow(new IllegalStateException("offline"));
         service.view(true);
@@ -137,6 +138,24 @@ class WatchlistResearchScanServiceTest {
         assertEquals(previous, view.getLatest().getId());
         assertEquals(ResearchScanStatus.FAILED, view.getLastAttempt().getStatus());
         assertEquals(1, view.getHistory().size());
+    }
+
+    @Test
+    void binaryMismatchReleasesScanSlotAndPreservesPreviousResult() {
+        service.view(false);
+        jobs.remove(0).run();
+        String previous = service.view(false).getLatest().getId();
+        advanceClock();
+        when(inputs.market("000300", "SH", true)).thenThrow(new NoSuchMethodError("old classes"));
+
+        service.view(true);
+        jobs.remove(0).run();
+
+        ResearchScanView view = service.view(false);
+        assertNull(view.getActive());
+        assertEquals(previous, view.getLatest().getId());
+        assertEquals(ResearchScanStatus.FAILED, view.getLastAttempt().getStatus());
+        assertTrue(view.getLastAttempt().getMessage().contains("重启"));
     }
 
     @Test
@@ -163,6 +182,11 @@ class WatchlistResearchScanServiceTest {
         assertNull(service.view(false).getActive());
         assertEquals(ResearchScanStatus.FAILED, service.view(false).getLastAttempt().getStatus());
         assertTrue(jobs.isEmpty());
+    }
+
+    private void advanceClock() {
+        Clock clock = (Clock) ReflectionTestUtils.getField(service, "clock");
+        ReflectionTestUtils.setField(service, "clock", Clock.fixed(clock.instant().plusSeconds(1), clock.getZone()));
     }
 
     private WatchlistItem stock(String code) {
