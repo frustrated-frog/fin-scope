@@ -189,24 +189,48 @@ public class ReactionSampleRepository {
                 mapper, origin, key).stream().findFirst();
     }
 
-    public List<ReactionSample> findUnresolved(LocalDateTime before, int limit) {
-        return findUnresolved(before, limit, false);
+    public boolean hasResolvedOrigin(String origin, String key, String title, String summary) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM investment_reaction_source o "
+                        + "JOIN investment_reaction_sample s ON s.source_identity=o.event_key "
+                        + "JOIN investment_reaction_source_version v ON v.id=(SELECT id FROM investment_reaction_source_version "
+                        + "WHERE origin_type=o.origin_type AND origin_key=o.origin_key ORDER BY id DESC LIMIT 1) "
+                        + "WHERE o.origin_type=? AND o.origin_key=? AND (s.state<>'DRAFT' OR s.excluded=1) "
+                        + "AND v.title IS ? AND v.body IS ?)",
+                Boolean.class, origin, key, title, summary));
     }
 
-    public List<ReactionSample> findUnresolved(LocalDateTime before, int limit, boolean force) {
-        int bounded = Math.max(1, Math.min(30, limit));
-        int freshLimit = Math.max(1, bounded * 2 / 3);
-        List<ReactionSample> result = new java.util.ArrayList<>(jdbcTemplate.query(
-                "SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
-                        + "AND json_extract(snapshot_json,'$.automatic')=1 AND enrichment_attempt_at IS NULL ORDER BY id DESC LIMIT ?",
-                mapper, freshLimit));
-        // 预留容量给旧线索，临时服务故障较快重试；语义缺失等待更长时间或来源版本更新。
-        result.addAll(jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE state='DRAFT' AND excluded=0 "
-                        + "AND json_extract(snapshot_json,'$.automatic')=1 AND enrichment_attempt_at<? "
-                        + "AND (json_extract(snapshot_json,'$.resolutionStatus')='LOOKUP_UNAVAILABLE' "
-                        + "OR enrichment_attempt_at<?) ORDER BY enrichment_attempt_at,id LIMIT ?",
-                mapper, before.toString(), (force ? before : before.minusHours(5).minusMinutes(30)).toString(), bounded - result.size()));
-        return result;
+    @Transactional(rollbackFor = Exception.class)
+    public int captureResolvedSource(List<ReactionSample> resolved) {
+        ReactionSample first = resolved.get(0);
+        if (captureSource(first)) {
+            for (int index = 1; index < resolved.size(); index++) {
+                ReactionSample peer = resolved.get(index);
+                peer.setSourceIdentity(first.getSourceIdentity());
+                create(peer);
+            }
+            return resolved.size();
+        }
+        // 已经确认或排除的事件保持原状态。仅允许当前原文对应的旧自动草稿升级。
+        List<ReactionSample> existing = findByIdentity(first.getSourceIdentity());
+        if (existing.size() != 1) {
+            return 0;
+        }
+        ReactionSample draft = existing.get(0);
+        if (draft.getState() != ReactionSampleState.DRAFT || draft.isExcluded() || !draft.isAutomatic()
+                || !first.getTitle().equals(draft.getTitle())) {
+            return 0;
+        }
+        List<ReactionSample> eligible = resolved.stream()
+                .filter(sample -> draft.getInstrumentCode().isBlank() || draft.getInstrumentCode().equals(sample.getInstrumentCode()))
+                .toList();
+        for (ReactionSample sample : eligible) {
+            sample.setSourceIdentity(draft.getSourceIdentity());
+            sample.setRegisteredAt(draft.getRegisteredAt());
+            sample.setFirstCapturedAt(draft.getFirstCapturedAt());
+            sample.setFollowed(draft.isFollowed());
+        }
+        return promoteDraft(draft, eligible) ? eligible.size() : 0;
     }
 
     @Transactional(rollbackFor = Exception.class)

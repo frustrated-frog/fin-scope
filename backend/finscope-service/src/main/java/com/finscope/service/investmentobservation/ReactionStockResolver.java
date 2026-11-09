@@ -3,6 +3,7 @@ package com.finscope.service.investmentobservation;
 import com.finscope.common.enums.investmentobservation.ReactionResolutionStatus;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.instrument.Instrument;
+import com.finscope.domain.investmentobservation.ReactionEventDecision;
 import com.finscope.domain.investmentobservation.ReactionEventRules;
 import com.finscope.domain.investmentobservation.ReactionStockMatch;
 import com.finscope.domain.investmentobservation.ReactionStockResolution;
@@ -30,8 +31,12 @@ public class ReactionStockResolver {
         return resolve(title, null).getMatches();
     }
 
+    public ReactionStockResolution resolveDirect(ReactionEventDecision decision) {
+        Set<String> subjects = new LinkedHashSet<>(decision.getSubjects());
+        return resolveSubjects(subjects, subjects);
+    }
+
     public ReactionStockResolution resolve(String title, String body) {
-        ReactionStockResolution result = new ReactionStockResolution();
         var titleDecision = rules.evaluate(title);
         Set<String> titleSubjects = new LinkedHashSet<>(titleDecision.getSubjects());
         Set<String> subjects = new LinkedHashSet<>(titleSubjects);
@@ -49,6 +54,11 @@ public class ReactionStockResolver {
                 }
             }
         }
+        return resolveSubjects(titleSubjects, subjects);
+    }
+
+    private ReactionStockResolution resolveSubjects(Set<String> titleSubjects, Set<String> subjects) {
+        ReactionStockResolution result = new ReactionStockResolution();
         List<Instrument> local = instruments.findAll();
         boolean unavailable = false;
         boolean ambiguous = false;

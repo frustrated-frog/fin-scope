@@ -59,7 +59,7 @@ class ReactionDiscoveryServiceTest {
         ReflectionTestUtils.setField(service, "radar", radar);
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
         when(radar.findActiveSignals(any(), anyInt())).thenReturn(List.of());
-        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
+        when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
     }
 
     @Test
@@ -67,11 +67,12 @@ class ReactionDiscoveryServiceTest {
         ResearchMaterial news = news("示例公司签订重大合同");
         supplyNews(List.of(news));
         RadarSignal duplicate = new RadarSignal();
+        duplicate.setItemId("RADAR:1");
         duplicate.setTitle(news.getTitle());
         duplicate.setPublishedAt(news.getPublishedAt());
         duplicate.setFirstSeenAt(now.minusMinutes(1));
         when(radar.findActiveSignals(any(), anyInt())).thenReturn(List.of(duplicate));
-        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"), match("000001.SZ", "另一公司"))));
+        when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"), match("000001.SZ", "另一公司"))));
         assertEquals(2, service.discover().getResolved());
         List<ReactionSample> samples = repository.recent(Long.MAX_VALUE, 100);
         assertEquals(2, samples.size());
@@ -89,83 +90,61 @@ class ReactionDiscoveryServiceTest {
     }
 
     @Test
-    void unresolvedNewsSurvivesCacheExpiryAndRetriesWithoutUserInput() {
-        supplyNews(List.of(news("示例公司业绩增长")));
-        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of()));
-        service.discover();
-        ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
-        assertEquals(ReactionSampleState.DRAFT, draft.getState());
-        assertNotNull(draft.getDiscoveryIssue());
-        service.discover();
-        verify(resolver, times(1)).resolve(anyString(), nullable(String.class));
-        supplyNews(List.of());
-        when(resolver.resolve(anyString(), nullable(String.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
-        ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.plusHours(7).atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
+    void temporaryIdentityFailureRetriesRawNewsWithoutCreatingPendingRecords() {
+        supplyNews(List.of(news("示例公司：披露三季报")));
+        var unavailable = resolution(List.of());
+        unavailable.setStatus(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.LOOKUP_UNAVAILABLE);
+        when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class)))
+                .thenReturn(unavailable, resolution(List.of(match("600519.SH", "示例公司"))));
+        assertEquals(0, service.discover().getResolved());
+        assertTrue(repository.recent(Long.MAX_VALUE, 100).isEmpty());
         assertEquals(1, service.discover().getResolved());
         assertEquals(ReactionSampleState.OBSERVING, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
     }
 
     @Test
-    void missingTimeIsRetainedAndFutureOrUnrelatedNewsIsNotMadeIntoPriceSamples() {
-        ResearchMaterial missing = news("示例公司年度业绩");
+    void rejectsMissingTimeNonEventsAndUnverifiedSubjectsBeforeCreatingAnyRows() {
+        ResearchMaterial missing = news("示例公司：发布第三季度报告");
         missing.setPublishedAt(null);
-        ResearchMaterial future = news("未来公司合同");
+        ResearchMaterial future = news("未来公司：签订设备采购合同");
         future.setPublishedAt(now.plusDays(1));
-        supplyNews(List.of(missing, future, news("市场午间概览")));
-        service.discover();
-        assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
-        assertEquals(ReactionSampleState.DRAFT, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
-        assertEquals("600519.SH", repository.recent(Long.MAX_VALUE, 100).get(0).getInstrumentCode());
-        assertEquals(com.finscope.common.enums.investmentobservation.ReactionResolutionStatus.TIME_MISSING,
-                repository.recent(Long.MAX_VALUE, 100).get(0).getResolutionStatus());
+        ResearchMaterial aggregate = news("晚间公告汇总");
+        aggregate.setContent("示例公司签订设备采购合同。");
+        supplyNews(List.of(missing, future, aggregate, news("市场午间概览"), news("示例公司：订单饱满"),
+                news("券商公司：另一公司中标重大项目"), news("未知公司：签订重大合同")));
+        when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class)))
+                .thenReturn(resolution(List.of()));
+        assertEquals(0, service.discover().getCaptured());
+        assertTrue(repository.recent(Long.MAX_VALUE, 100).isEmpty());
+        verify(resolver).resolveDirect(argThat(decision -> decision.getSubjects().equals(List.of("未知公司"))));
     }
 
     @Test
-    void archivedDuringEnrichmentCannotBeResurrected() {
-        supplyNews(List.of(news("示例公司重大合同")));
-        when(resolver.resolve(anyString(), nullable(String.class))).thenAnswer(call -> {
-            ReactionSample draft = repository.recent(Long.MAX_VALUE, 100).get(0);
-            repository.changeState(draft.getId(), draft.getRevision(), ReactionSampleState.ARCHIVED);
-            return resolution(List.of(match("600519.SH", "示例公司")));
-        });
-        assertEquals(0, service.discover().getResolved());
-        assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
-        assertEquals(ReactionSampleState.ARCHIVED, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
-    }
-
-    @Test
-    void fillingPublicationTimeDoesNotChangeIdentityAfterPromotionOrArchival() {
+    void fillsLegacyDraftTimeWithoutChangingIdentity() {
         ResearchMaterial item = news("示例公司签订重大合同");
-        item.setPublishedAt(null);
+        ReactionSample draft = new ReactionSample();
+        draft.setInstrumentCode("");
+        draft.setSourceIdentity("LEGACY:1");
+        draft.setSourceOriginType("NEWS_ITEM");
+        draft.setSourceOriginKey(item.getProviderCode() + ":" + item.getExternalId());
+        draft.setTitle(item.getTitle());
+        draft.setSummary(item.getContent());
+        draft.setFirstCapturedAt(now.minusHours(2));
+        draft.setRegisteredAt(now.minusHours(1));
+        draft.setAutomatic(true);
+        draft.setState(ReactionSampleState.DRAFT);
+        assertTrue(repository.captureSource(draft));
+        long id = repository.recent(Long.MAX_VALUE, 100).get(0).getId();
+
         supplyNews(List.of(item));
-        service.discover();
-        String identity = repository.recent(Long.MAX_VALUE, 100).get(0).getSourceIdentity();
-        item.setPublishedAt(now.minusHours(1));
-        service.discover();
-        service.discover();
+        assertEquals(1, service.discover().getResolved());
+        assertEquals(0, service.discover().getResolved());
         var rows = repository.recent(Long.MAX_VALUE, 100);
         assertEquals(1, rows.size());
-        assertEquals(identity, rows.get(0).getSourceIdentity());
-        assertEquals(1, repository.sources(identity).size());
-        repository.changeState(rows.get(0).getId(), rows.get(0).getRevision(), ReactionSampleState.ARCHIVED);
-        service.discover();
-        assertEquals(1, repository.recent(Long.MAX_VALUE, 100).size());
-        assertEquals(ReactionSampleState.ARCHIVED, repository.recent(Long.MAX_VALUE, 100).get(0).getState());
-    }
-
-    @Test
-    void genericHeadlinesWithDifferentBodyEventsAreNotMerged() {
-        var first = news("最新公告");
-        first.setExternalId("generic-1");
-        first.setContent("示例公司签订设备采购合同。");
-        var second = news("最新公告");
-        second.setExternalId("generic-2");
-        second.setContent("另一公司签订材料采购合同。");
-        supplyNews(List.of(first, second));
-        service.discover();
-        var samples = repository.recent(Long.MAX_VALUE, 100);
-        assertEquals(2, samples.size());
-        assertNotEquals(samples.get(0).getSourceIdentity(), samples.get(1).getSourceIdentity());
+        assertEquals(id, rows.get(0).getId());
+        assertEquals("LEGACY:1", rows.get(0).getSourceIdentity());
+        assertEquals(item.getPublishedAt(), rows.get(0).getPublishedAt());
+        assertEquals(1, repository.sources("LEGACY:1").size());
     }
 
     private void verifyAutomaticPriceTracking(ReactionSample sample) {
