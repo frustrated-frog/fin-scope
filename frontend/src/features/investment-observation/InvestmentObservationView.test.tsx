@@ -102,12 +102,35 @@ test('server search, pagination, view totals and pending reasons do not depend o
       ),
     ).toBe(true),
   );
-  await userEvent.click(screen.getByRole('button', { name: /待补全\s*26/ }));
+  await userEvent.click(screen.getByText('更多'));
+  await userEvent.click(screen.getByRole('button', { name: '待补全记录' }));
   expect(await screen.findByLabelText('待补全原因')).toBeInTheDocument();
   await userEvent.selectOptions(screen.getByLabelText('待补全原因'), 'TIME_MISSING');
   await waitFor(() =>
     expect(fetch.mock.calls.some(([path]) => String(path).includes('resolutionStatus=TIME_MISSING'))).toBe(true),
   );
+});
+
+test('history filters case subtypes and related companies and shows merged records', async () => {
+  const { fetch } = setup((path) => path.includes('/events?') ? {
+    ...page([{ ...sample, eventSubtype: 'OPERATING_UPDATE', caseSubtype: 'CONTRACT_AMENDED' }]),
+    caseReportCounts: { 'EVENT:stable': 2 },
+  } : undefined);
+  await userEvent.click(await screen.findByRole('button', { name: /历史案例/ }));
+  await userEvent.selectOptions(screen.getByLabelText('事件子类'), 'CONTRACT_AMENDED');
+  await userEvent.click(screen.getByRole('button', { name: '仅搜公司' }));
+  await userEvent.type(screen.getByLabelText('搜索事件或股票'), '600519');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  await waitFor(() =>
+    expect(fetch.mock.calls.some(([path]) =>
+      String(path).includes('query=600519') && String(path).includes('companyOnly=true') &&
+      String(path).includes('eventSubtype=CONTRACT_AMENDED'),
+    )).toBe(true),
+  );
+  expect(await screen.findByText('合并 2 条记录')).toBeInTheDocument();
+  expect(screen.getByText('T+1', { selector: 'small' })).toBeInTheDocument();
+  expect(screen.getByText('T+3', { selector: 'small' })).toBeInTheDocument();
+  expect(screen.getByText('T+5', { selector: 'small' })).toBeInTheDocument();
 });
 
 test('an old event opens directly even when absent from the current page', async () => {

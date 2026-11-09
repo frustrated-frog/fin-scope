@@ -13,6 +13,7 @@ public class ReactionSampleResponse {
     private com.finscope.common.enums.investmentobservation.ReactionEventSubtype eventSubtype =
             com.finscope.common.enums.investmentobservation.ReactionEventSubtype.UNCLASSIFIED;
     private String ruleVersion;
+    private com.finscope.common.enums.investmentobservation.ReactionEventSubtype caseSubtype;
     private String ruleEvidence;
     private String fact;
     private java.util.List<com.finscope.domain.investmentobservation.ReactionStockMatch> resolutionCandidates = new java.util.ArrayList<>();
@@ -52,6 +53,7 @@ public class ReactionSampleResponse {
         result.setResolutionCandidates(sample.getResolutionCandidates());
         result.setResolutionStatus(sample.getResolutionStatus());
         result.setEventSubtype(sample.getEventSubtype());
+        result.setCaseSubtype(sample.getHistoricalCase() == null ? null : sample.getHistoricalCase().subtype());
         result.setRuleVersion(sample.getRuleVersion());
         result.setRuleEvidence(sample.getRuleEvidence());
         result.setFact(sample.getFact());

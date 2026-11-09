@@ -31,8 +31,8 @@ class ReactionWorkspaceServiceTest {
         missing.getCalculation().getWindows().get(0).setStatus(ReactionWindowStatus.MISSING_DATA);
         ReactionSample pending = sample(102);
         pending.getCalculation().getWindows().get(0).setStatus(ReactionWindowStatus.NOT_DUE);
-        when(repo.list(null, 0, 100)).thenReturn(first);
-        when(repo.list(null, 100, 100)).thenReturn(List.of(missing, pending));
+        when(repo.comparableCandidates(ReactionEventSubtype.CONTRACT_SIGNED, 0)).thenReturn(first);
+        when(repo.comparableCandidates(ReactionEventSubtype.CONTRACT_SIGNED, 100)).thenReturn(List.of(missing, pending));
         var result = service.compare(999, 5).getSameCompany();
         assertEquals(102, result.getSampleCount());
         assertEquals(102, result.getEventCount());
@@ -60,7 +60,7 @@ class ReactionWorkspaceServiceTest {
         other.setInstrumentCode("600519.SH");
         var wrongType = sample(3);
         wrongType.setEventSubtype(ReactionEventSubtype.CONTRACT_TERMINATED);
-        when(repo.list(null, 0, 100)).thenReturn(List.of(missing, other, wrongType));
+        when(repo.comparableCandidates(ReactionEventSubtype.CONTRACT_SIGNED, 0)).thenReturn(List.of(missing, other, wrongType));
         var result = service.compare(999, 5);
         assertTrue(result.getSameCompany().isRelaxed());
         assertEquals(1, result.getSameCompany().getSampleCount());
@@ -90,12 +90,38 @@ class ReactionWorkspaceServiceTest {
         invalid.setExcluded(true);
         candidates.add(invalid);
         candidates.get(0).setState(ReactionSampleState.ARCHIVED);
-        when(repo.list(null, 0, 100)).thenReturn(candidates);
+        when(repo.comparableCandidates(ReactionEventSubtype.CONTRACT_SIGNED, 0)).thenReturn(candidates);
         var result = service.compare(999, 5).getSameCompany();
         assertEquals(7, result.getBaseCandidateCount());
         assertEquals(4, result.getUnknownComparabilityCount());
         assertEquals(3, result.getSampleCount());
         assertEquals(3, result.getCompleteCount());
+    }
+
+    @Test
+    void comparisonCountsAnEarlierDisclosureOnceAndExcludesTheTargetsOtherReports() {
+        var repo = mock(ReactionSampleRepository.class);
+        var registration = mock(ReactionRegistrationService.class);
+        var service = new ReactionWorkspaceService();
+        ReflectionTestUtils.setField(service, "repository", repo);
+        ReflectionTestUtils.setField(service, "registration", registration);
+        var target = sample(999);
+        var previous = sample(1);
+        var duplicate = sample(2);
+        var currentDuplicate = sample(3);
+        var subtype = ReactionEventSubtype.CONTRACT_SIGNED;
+        var previousCase = new ReactionHistoricalCase(subtype, "previous");
+        var currentCase = new ReactionHistoricalCase(subtype, "current");
+        target.setHistoricalCase(currentCase);
+        currentDuplicate.setHistoricalCase(currentCase);
+        previous.setHistoricalCase(previousCase);
+        duplicate.setHistoricalCase(previousCase);
+        when(registration.require(999)).thenReturn(target);
+        when(repo.comparableCandidates(subtype, 0)).thenReturn(List.of(duplicate, previous, currentDuplicate));
+        var result = service.compare(999, 5).getSameCompany();
+        assertEquals(1, result.getCompleteCount());
+        assertEquals(1L, result.getCases().get(0).getSampleId());
+        assertEquals(0, result.getMedian().compareTo(BigDecimal.valueOf(-1)));
     }
 
     private ReactionSample sample(long id) {

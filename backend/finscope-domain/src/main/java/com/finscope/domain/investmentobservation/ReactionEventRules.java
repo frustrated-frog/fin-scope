@@ -7,14 +7,14 @@ import java.util.regex.Pattern;
 
 /** 规则只接受文本中的主体与动作；不推断受益关系或市场预期。 */
 public class ReactionEventRules {
-    private static final String PERIOD = "(?:[一二三四1234]季度|第[一二三四1234]季|[一二三四]季报|半年度|上半年|下半年|半年报|年度|年报|[0-9]{2,4}年|[1一][至-][369]月|[Qq][1-4])";
+    private static final String PERIOD = "(?:前三季度|[一二三四1234]季度|第[一二三四1234]季|[一二三四]季报|半年度|上半年|下半年|半年报|年度|年报|[0-9]{2,4}年|[1一][至-][369]月|[Qq][1-4])";
     private static final Pattern PREFIX = Pattern.compile("^([\\p{IsHan}\\p{Alnum}*·.&（）()、及与\\s-]{2,45})[：:]");
     private static final Pattern ACTION = Pattern.compile("^(.{2,45}?)(?=拟签|拟中标|预中标|签署|签订|签下|中标|终止|解除|取消|上修|下修|修正|发布|披露|预计|预告|获得|调增|调减|上调|下调|"
             + PERIOD + "|净利润|归母净利|业绩)");
     private static final Pattern ANNOUNCEMENT = Pattern.compile("公告编号[：:]?\\s*([0-9]{4})[-－]([0-9]{2,6})");
-    private static final Pattern DIRECT_FACT = Pattern.compile("^(?:[，,\\s]*(?:公司|本公司|全资子公司|控股子公司|子公司|联合体|目前|近日|今日|已|正式))*[，,\\s]*"
+    private static final Pattern DIRECT_FACT = Pattern.compile("^(?:[，,\\s]*(?:公司|本公司|全资子公司|控股子公司|全资孙公司|控股孙公司|子公司|孙公司|联合体|目前|近日|今日|已|正式))*[，,\\s]*"
             + "(?:签|中标|预中标|终止|解除|取消|变更|调整|调增|调减|上调|下调|拟|计划|尚未|未|没有|否认|并未|获得|获中标|发布|披露|预计|修正|上修|下修|"
-            + "与[^，,]{1,28}(?:签|拟签)|净利|归母净利|营收|营业收入|业绩|今年|去年|前三季度|" + PERIOD
+            + "与[^，,]{1,28}(?:签|拟签)|成为[^，,]{0,24}中标候选|净利|归母净利|营收|营业收入|业绩|今年|去年|前三季度|" + PERIOD
             + "|[^，,]{0,14}(?:合同|订单)[^，,]{0,16}(?:金额|总额|调增|调减|上调|下调|变更|调整|提高|增至|升至|终止|解除|取消|已签))");
 
     public ReactionEventDecision evaluateMaterial(String title, String body) {
@@ -126,7 +126,8 @@ public class ReactionEventRules {
         if (facts.matches(".*(?:修正|上修|下修).*(?:业绩预告|净利).*")) {
             return ReactionEventSubtype.EARNINGS_REVISION;
         }
-        if (facts.contains("业绩预告") || facts.matches(".*预计.*(?:净利|营收|营业收入).*") && facts.matches(".*" + PERIOD + ".*")) {
+        if (facts.contains("业绩预告") || facts.matches(".*(?:预计.*(?:净利|营收|营业收入)|(?:净利[润]?|营收|营业收入)[^，。；]{0,12}预计).*")
+                && facts.matches(".*" + PERIOD + ".*")) {
             return ReactionEventSubtype.EARNINGS_FORECAST;
         }
         if (facts.matches(".*(?:业绩快报|[一二三四]季报|年报|半年报|财报|年度报告|季度报告).*")

@@ -12,6 +12,7 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
   const [sessions, setSessions] = useState(5);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const subtype = sample.caseSubtype || sample.eventSubtype || 'UNCLASSIFIED';
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -50,13 +51,24 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
       <ul>{peers.map(peer => <li key={peer.id}><button onClick={() => onOpen(peer.id)}>{peer.instrumentName || peer.instrumentCode || '待补全'}{peer.excluded ? '（已排除）' : ''}</button> · {peer.relationNote || '标题直接提及的事件主体'}</li>)}</ul>
     </section>}
     <details><summary>来源与识别依据 · {sources.length} 条报道（最多展示 100 条）</summary>
-      <p>{sample.fact || sample.title}</p><p className="reaction-note">{sample.ruleEvidence && sample.eventSubtype ? sample.ruleEvidence.replace(sample.eventSubtype, subtypeLabels[sample.eventSubtype] || sample.eventSubtype) : '历史样本未记录规则依据。'} · 子类：{subtypeLabels[sample.eventSubtype || 'UNCLASSIFIED'] || '未分类'}</p>
-      <p className="reaction-note">公开时间采用来源报道的时间，不等同于公告最早发布时间。仅有明确事件标识或同日完全一致标题时自动合并报道。</p>
+      <p>{sample.fact || sample.title}</p><p className="reaction-note">案例分类：{subtypeLabels[subtype] || '未分类'}</p>
+      <p className="reaction-note">同一披露的多条报道可在这里核对。合并案例采用最早收录的报道时间。</p>
       {sources.map(source => <p key={`${source.originType}:${source.originKey}`}>{sourceHref(source.url) ? <a href={sourceHref(source.url)} target="_blank" rel="noreferrer">{source.title}</a> : source.title}<small> · 公开 {dateTime(source.publishedAt)} · 捕获 {dateTime(source.capturedAt)}</small></p>)}
     </details>
+    {!!history?.relatedStages?.length && (
+      <details>
+        <summary>同一事项的其他阶段 · {history.relatedStages.length} 件</summary>
+        <ul>{history.relatedStages.map(stage => (
+          <li key={stage.sampleId}>
+            <small>{subtypeLabels[stage.subtype]} · {dateTime(stage.publishedAt)} </small>
+            <button onClick={() => onOpen(stage.sampleId)}>{stage.title}</button>
+          </li>
+        ))}</ul>
+      </details>
+    )}
     <header className="reaction-history-heading"><h5>自动历史对照</h5><label>比较窗口<select value={sessions} onChange={event => setSessions(Number(event.target.value))}>{[1, 3, 5].map(value => <option key={value} value={value}>事件后 {value} 日</option>)}</select></label></header>
     <p className="reaction-note">检索数据库全部历史样本，分组使用事件子类、公开时段与事前表现；事后收益只用于描述。事前相对表现按 ≥ 2pp、≤ −2pp 和两者之间分组；公开时段区分盘前、盘中、盘后与休市日。最新四例按事件时间选取。</p>
-    {(!sample.eventSubtype || sample.eventSubtype === 'UNCLASSIFIED') && <p className="reaction-note">此样本尚无可靠事件子类，暂不纳入自动同类统计。</p>}
+    {['UNCLASSIFIED', 'OPERATING_UPDATE'].includes(subtype) && <p className="reaction-note">此样本尚无可靠事件子类，暂不纳入自动同类统计。</p>}
     {history?.sameCompany && <div className="reaction-history-groups"><HistoryGroup label="同一公司" group={history.sameCompany} onOpen={onOpen} /><HistoryGroup label="其他公司" group={history.otherCompanies} onOpen={onOpen} /></div>}
   </section>;
 }

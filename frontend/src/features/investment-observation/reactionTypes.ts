@@ -47,6 +47,7 @@ export interface ReactionSample {
   sourceIdentity?: string;
   automatic?: boolean;
   eventSubtype?: string;
+  caseSubtype?: string;
   ruleEvidence?: string;
   fact?: string;
   followed?: boolean;
@@ -174,12 +175,13 @@ export interface ReactionHistoryComparison {
   sessions: number;
   sameCompany: ReactionComparisonGroup;
   otherCompanies: ReactionComparisonGroup;
+  relatedStages?: Array<{ sampleId: number; title: string; subtype: string; publishedAt: string }>;
 }
 
 export const subtypeLabels: Record<string, string> = {
   EARNINGS_FORECAST: '业绩预告', EARNINGS_REVISION: '业绩修正', EARNINGS_REPORT: '业绩报告',
   CONTRACT_PROPOSED: '拟议合同', CONTRACT_DENIED: '合同否认／澄清',
-  CONTRACT_SIGNED: '合同签署', CONTRACT_AWARDED: '正式中标', CONTRACT_TERMINATED: '合同终止',
+  CONTRACT_SIGNED: '合同签署', CONTRACT_AWARDED: '正式中标', CONTRACT_AMENDED: '合同变更', CONTRACT_TERMINATED: '合同终止',
   OPERATING_UPDATE: '经营进展', UNCLASSIFIED: '未分类'
 };
 
@@ -193,6 +195,7 @@ export interface ReactionEventPage {
   pendingReasons: Record<string, number>;
   stockCounts: Record<string, number>;
   stockNames: Record<string, string>;
+  caseReportCounts?: Record<string, number>;
   total: number;
   anchor: number;
   revision: number;

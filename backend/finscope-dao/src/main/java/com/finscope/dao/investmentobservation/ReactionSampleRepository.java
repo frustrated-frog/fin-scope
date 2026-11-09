@@ -11,11 +11,14 @@ import com.finscope.common.enums.investmentobservation.ReactionChangeType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.investmentobservation.ReactionSampleState;
+import com.finscope.common.enums.investmentobservation.ReactionEventSubtype;
 import com.finscope.common.enums.investmentobservation.ReactionWindowStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.util.TimeUtil;
 import com.finscope.domain.investmentobservation.ReactionCalculation;
+import com.finscope.domain.investmentobservation.ReactionHistoricalCase;
+import com.finscope.domain.investmentobservation.ReactionRelatedStage;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -41,6 +44,10 @@ public class ReactionSampleRepository {
         sample.setSourceIdentity(rs.getString("source_identity"));
         sample.setInstrumentCode(rs.getString("instrument_code"));
         sample.setState(ReactionSampleState.valueOf(rs.getString("state")));
+        String subtype = rs.getString("case_subtype");
+        if (subtype != null) {
+            sample.setHistoricalCase(new ReactionHistoricalCase(ReactionEventSubtype.valueOf(subtype), rs.getString("case_key"), rs.getString("case_topic")));
+        }
         sample.setRevision(rs.getInt("revision"));
         sample.setLastAttemptAt(TimeUtil.localDateTime(rs, "last_attempt_at"));
         sample.setRefreshError(rs.getString("refresh_error"));
@@ -58,11 +65,13 @@ public class ReactionSampleRepository {
         if (sample.getSourceIdentity() == null) {
             sample.setSourceIdentity("MAJOR_EVENT:" + sample.getMajorEventId());
         }
+        ReactionHistoricalCase historicalCase = ReactionHistoricalCase.from(sample);
         int changed = jdbcTemplate.update("INSERT INTO investment_reaction_sample(major_event_id,source_identity,instrument_code,"
-                        + "state,snapshot_json,registered_at,followed) VALUES(?,?,?,?,?,?,?) "
+                        + "state,snapshot_json,registered_at,followed,case_subtype,case_key,case_topic) VALUES(?,?,?,?,?,?,?,?,?,?) "
                         + "ON CONFLICT(source_identity,instrument_code) DO NOTHING",
                 sample.getMajorEventId(), sample.getSourceIdentity(), sample.getInstrumentCode(), sample.getState().name(),
-                write(sample), TimeUtil.text(sample.getRegisteredAt()), sample.isFollowed() ? 1 : 0);
+                write(sample), TimeUtil.text(sample.getRegisteredAt()), sample.isFollowed() ? 1 : 0,
+                historicalCase.subtype().name(), historicalCase.key(), historicalCase.topicKey());
         if (changed != 0 && changed != 1) {
             throw new BusinessException(ErrorCode.DATA_INTEGRITY_ERROR);
         }
@@ -143,7 +152,13 @@ public class ReactionSampleRepository {
     }
 
     public List<ReactionSource> sources(String eventKey) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_source WHERE event_key=? ORDER BY captured_at LIMIT 100", (rs, n) -> {
+        return sources(eventKey, null);
+    }
+
+    public List<ReactionSource> sources(String eventKey, String caseKey) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_source WHERE event_key=? OR event_key IN "
+                + "(SELECT source_identity FROM investment_reaction_sample WHERE case_key=? AND excluded=0 AND state<>'DRAFT') "
+                + "ORDER BY published_at IS NULL,published_at,captured_at LIMIT 100", (rs, n) -> {
             var source = new ReactionSource();
             source.setOriginType(rs.getString("origin_type"));
             source.setOriginKey(rs.getString("origin_key"));
@@ -153,7 +168,7 @@ public class ReactionSampleRepository {
             source.setPublishedAt(TimeUtil.localDateTime(rs, "published_at"));
             source.setCapturedAt(TimeUtil.localDateTime(rs, "captured_at"));
             return source;
-        }, eventKey);
+        }, eventKey, caseKey);
     }
 
     public boolean followEvent(String eventKey, boolean followed) {
@@ -239,9 +254,11 @@ public class ReactionSampleRepository {
             return false;
         }
         ReactionSample first = samples.get(0);
+        ReactionHistoricalCase historicalCase = ReactionHistoricalCase.from(first);
         int updated = jdbcTemplate.update("UPDATE investment_reaction_sample SET instrument_code=?,state=?,snapshot_json=?,"
-                        + "enrichment_attempt_at=?,revision=revision+1 WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0",
-                first.getInstrumentCode(), first.getState().name(), write(first), TimeUtil.text(draft.getEnrichmentAttemptAt()), draft.getId(), draft.getRevision());
+                        + "enrichment_attempt_at=?,case_subtype=?,case_key=?,case_topic=?,revision=revision+1 WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0",
+                first.getInstrumentCode(), first.getState().name(), write(first), TimeUtil.text(draft.getEnrichmentAttemptAt()),
+                historicalCase.subtype().name(), historicalCase.key(), historicalCase.topicKey(), draft.getId(), draft.getRevision());
         if (updated != 1) {
             return false;
         }
@@ -252,8 +269,10 @@ public class ReactionSampleRepository {
     }
 
     public boolean saveDraft(ReactionSample sample) {
-        return jdbcTemplate.update("UPDATE investment_reaction_sample SET snapshot_json=?,enrichment_attempt_at=?,revision=revision+1 "
-                        + "WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0", write(sample), TimeUtil.text(sample.getEnrichmentAttemptAt()), sample.getId(), sample.getRevision()) == 1;
+        ReactionHistoricalCase historicalCase = ReactionHistoricalCase.from(sample);
+        return jdbcTemplate.update("UPDATE investment_reaction_sample SET snapshot_json=?,enrichment_attempt_at=?,case_subtype=?,case_key=?,case_topic=?,revision=revision+1 "
+                        + "WHERE id=? AND revision=? AND state='DRAFT' AND excluded=0", write(sample), TimeUtil.text(sample.getEnrichmentAttemptAt()),
+                historicalCase.subtype().name(), historicalCase.key(), historicalCase.topicKey(), sample.getId(), sample.getRevision()) == 1;
     }
 
     public List<ReactionSample> recent(long beforeId, int limit) {
@@ -271,13 +290,34 @@ public class ReactionSampleRepository {
                 mapper, state.name(), afterId, bounded);
     }
 
+    public List<ReactionSample> comparableCandidates(ReactionEventSubtype subtype, long afterId) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE case_subtype=? "
+                        + "AND id>? AND state<>'DRAFT' AND excluded=0 ORDER BY id LIMIT 100",
+                mapper, subtype.name(), afterId);
+    }
+
     public boolean confirm(ReactionSample sample, int revision) {
+        ReactionHistoricalCase historicalCase = ReactionHistoricalCase.from(sample);
         return jdbcTemplate.update("UPDATE investment_reaction_sample SET instrument_code=?,state=?,snapshot_json=?,"
-                        + "revision=revision+1 WHERE id=? AND revision=? AND state=? "
+                        + "case_subtype=?,case_key=?,case_topic=?,revision=revision+1 WHERE id=? AND revision=? AND state=? "
                         + "AND NOT EXISTS (SELECT 1 FROM investment_reaction_sample existing "
                         + "WHERE existing.source_identity=? AND existing.instrument_code=? AND existing.id<>?)",
-                sample.getInstrumentCode(), ReactionSampleState.OBSERVING.name(), write(sample), sample.getId(),
+                sample.getInstrumentCode(), ReactionSampleState.OBSERVING.name(), write(sample), historicalCase.subtype().name(), historicalCase.key(), historicalCase.topicKey(), sample.getId(),
                 revision, ReactionSampleState.DRAFT.name(), sample.getSourceIdentity(), sample.getInstrumentCode(), sample.getId()) == 1;
+    }
+
+    public List<ReactionRelatedStage> relatedStages(ReactionHistoricalCase current) {
+        if (current.topicKey() == null) {
+            return List.of();
+        }
+        return jdbcTemplate.query("WITH stage_sources AS (SELECT id,case_subtype,json_extract(snapshot_json,'$.title') AS title,"
+                        + "json_extract(snapshot_json,'$.publishedAt') AS published_at,ROW_NUMBER() OVER("
+                        + "PARTITION BY COALESCE(case_key,source_identity) ORDER BY json_extract(snapshot_json,'$.publishedAt'),id) AS rank "
+                        + "FROM investment_reaction_sample WHERE case_topic=? AND case_subtype<>? AND state<>'DRAFT' AND excluded=0) "
+                        + "SELECT * FROM stage_sources WHERE rank=1 ORDER BY published_at,id LIMIT 12",
+                (rs, index) -> new ReactionRelatedStage(rs.getLong("id"), rs.getString("title"),
+                        ReactionEventSubtype.valueOf(rs.getString("case_subtype")), TimeUtil.localDateTime(rs, "published_at")),
+                current.topicKey(), current.subtype().name());
     }
 
     public List<ReactionSample> findDue(LocalDateTime before, int limit) {
@@ -387,7 +427,13 @@ public class ReactionSampleRepository {
     }
 
     public List<ReactionSource> sourceVersions(String eventKey) {
-        return jdbcTemplate.query("SELECT * FROM investment_reaction_source_version WHERE event_key=? ORDER BY id DESC LIMIT 100", (rs, n) -> {
+        return sourceVersions(eventKey, null);
+    }
+
+    public List<ReactionSource> sourceVersions(String eventKey, String caseKey) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_source_version WHERE event_key=? OR event_key IN "
+                + "(SELECT source_identity FROM investment_reaction_sample WHERE case_key=? AND excluded=0 AND state<>'DRAFT') "
+                + "ORDER BY id DESC LIMIT 100", (rs, n) -> {
             ReactionSource source = new ReactionSource();
             source.setOriginType(rs.getString("origin_type"));
             source.setOriginKey(rs.getString("origin_key"));
@@ -398,7 +444,7 @@ public class ReactionSampleRepository {
             source.setCapturedAt(TimeUtil.localDateTime(rs, "captured_at"));
             source.setPublishedAt(TimeUtil.localDateTime(rs, "published_at"));
             return source;
-        }, eventKey);
+        }, eventKey, caseKey);
     }
 
     private String write(Object value) {

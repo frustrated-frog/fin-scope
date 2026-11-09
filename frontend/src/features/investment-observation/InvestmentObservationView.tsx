@@ -10,7 +10,6 @@ import './reactionWorkspace.css';
 const views: Array<{ value: WorkspaceView; label: string }> = [
   { value: 'TRACKING', label: '跟踪中' },
   { value: 'HISTORY', label: '历史案例' },
-  { value: 'PENDING', label: '待补全' },
 ];
 
 export function InvestmentObservationView({
@@ -32,6 +31,10 @@ export function InvestmentObservationView({
     setSearch,
     type,
     setType,
+    subtype,
+    setSubtype,
+    companyOnly,
+    setCompanyOnly,
     reason,
     setReason,
     followed,
@@ -94,7 +97,7 @@ export function InvestmentObservationView({
                     method: 'POST',
                   }),
                 );
-                addToast('已提交自动发现与补全，结果会在更新提示中出现', 'info');
+                addToast('正在核对近期业绩与合同事件', 'info');
               })
             }
           >
@@ -105,6 +108,16 @@ export function InvestmentObservationView({
             <summary>更多<svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" /></svg></summary>
             <div>
               <button onClick={() => void loadManual()}>手动补充</button>
+              <button
+                onClick={() => {
+                  setView('PENDING');
+                  setExtra(undefined);
+                  setReason('');
+                  resetList();
+                }}
+              >
+                待补全记录
+              </button>
               <button onClick={() => setExtra('legacy')}>历史资料</button>
               <button
                 onClick={() => {
@@ -136,15 +149,14 @@ export function InvestmentObservationView({
               <span className="reaction-browser-count">{data?.counts[item.value]?.toLocaleString('zh-CN') ?? '—'}</span>
             </button>
           ))}
+          {view === 'PENDING' && <button aria-pressed>待补全记录</button>}
           {view === 'EXCLUDED' && <button aria-pressed>已排除样本</button>}
         </nav>
         <span className="reaction-browser-market-note"><i aria-hidden="true" />日频行情在收盘后更新</span>
       </div>
       {view === 'PENDING' && !extra && (
         <p className="reaction-note">
-          自动采集 {data?.automaticEvents ?? 0} 件事件，其中 {data?.linkedEvents ?? 0} 件至少关联一只股票。
-          {data?.oldestPendingAt ? `最早待补全登记于 ${dateTime(data.oldestPendingAt)}。` : ''}
-          统计不含已排除的错误样本。
+          这里保留此前的待补全记录和手动草稿。新的自动观察只收录已确认公司、事件和公开时间的记录。
         </p>
       )}
       {extra ? (
@@ -197,13 +209,48 @@ export function InvestmentObservationView({
               <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
               <input
                 aria-label="搜索事件或股票"
-                placeholder="搜索事件、公司或代码"
+                placeholder={view === 'HISTORY' && companyOnly ? '搜索关联公司或股票代码' : '搜索事件、公司或代码'}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
               <button type="submit">搜索</button>
             </label>
-            <label>
+            {view === 'HISTORY' ? (
+              <>
+                <select
+                  aria-label="事件子类"
+                  value={subtype}
+                  onChange={(event) => {
+                    setSubtype(event.target.value);
+                    resetList();
+                  }}
+                >
+                  <option value="">全部事件子类</option>
+                  {Object.entries(eventLabels).map(([typeKey, label]) => (
+                    <optgroup key={typeKey} label={label}>
+                      {Object.entries(subtypeLabels).filter(([key]) => key.startsWith(typeKey)).map(([key, name]) => (
+                        <option key={key} value={key}>{name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  <optgroup label="其他旧案例">
+                    <option value="OPERATING_UPDATE">经营进展</option>
+                    <option value="UNCLASSIFIED">未分类</option>
+                  </optgroup>
+                </select>
+                <button
+                  type="button"
+                  className="reaction-browser-filter-toggle"
+                  aria-pressed={companyOnly}
+                  onClick={() => {
+                    setCompanyOnly((value) => !value);
+                    resetList();
+                  }}
+                >
+                  仅搜公司
+                </button>
+              </>
+            ) : <label>
               <span className="sr-only">事件类型</span>
               <select
                 aria-label="事件类型"
@@ -220,7 +267,7 @@ export function InvestmentObservationView({
                   </option>
                 ))}
               </select>
-            </label>
+            </label>}
             <button
               type="button"
               className="reaction-browser-filter-toggle"
@@ -278,7 +325,7 @@ export function InvestmentObservationView({
           <div className="reaction-browser-list" ref={listRef} aria-busy={loading}>
             <div className="reaction-browser-columns">
               <span>事件 / 关联股票</span>
-              <span>最新反应</span>
+              <span>{view === 'HISTORY' ? '相对基准 · pp' : '最新反应'}</span>
               <span>观察进度</span>
             </div>
             {loading ? (
@@ -290,7 +337,7 @@ export function InvestmentObservationView({
                 <h4>{view === 'TRACKING' ? '当前没有符合条件的跟踪事件' : '没有符合条件的事件'}</h4>
                 <p>
                   {view === 'TRACKING'
-                    ? '已关联股票的事件会自动进入这里；尚缺材料的线索可在“待补全”查看。'
+                    ? '核对通过的业绩与合同事件会自动进入这里。'
                     : '调整搜索和筛选条件，可检索完整事件库。'}
                 </p>
               </div>
@@ -307,6 +354,8 @@ export function InvestmentObservationView({
                         ? '观察已结束'
                         : '持续跟踪';
                 const names = data.stockNames[sample.sourceIdentity || ''] || sample.instrumentName;
+                const caseType = (view === 'HISTORY' ? sample.caseSubtype : undefined) || sample.eventSubtype || '';
+                const reportCount = data.caseReportCounts?.[sample.sourceIdentity || ''] || 1;
                 const relative = profile?.currentRelativePp;
                 const direction = relative == null || !Number.isFinite(relative) || relative === 0 ? 'neutral' : relative > 0 ? 'up' : 'down';
                 const observedSessions = profile?.observedSessions || 0;
@@ -319,10 +368,11 @@ export function InvestmentObservationView({
                   >
                     <div className="reaction-browser-subject">
                       <span className="reaction-browser-meta">
-                        <span className="reaction-browser-event-type" data-tone={sample.eventSubtype?.startsWith('EARNINGS') ? 'earnings' : sample.eventSubtype === 'OPERATING_UPDATE' ? 'operating' : 'contract'}>
-                          {subtypeLabels[sample.eventSubtype || ''] || '事件观察'}
+                        <span className="reaction-browser-event-type" data-tone={caseType.startsWith('EARNINGS') ? 'earnings' : caseType.startsWith('CONTRACT') ? 'contract' : 'operating'}>
+                          {subtypeLabels[caseType] || '事件观察'}
                         </span>
                         <time dateTime={sample.publishedAt}>{dateTime(sample.publishedAt)}</time>
+                        {reportCount > 1 && <span className="reaction-browser-reports">合并 {reportCount} 条记录</span>}
                         {sample.followed && <span className="reaction-browser-followed">已关注</span>}
                       </span>
                       <strong title={sample.title}>{sample.title}</strong>
@@ -336,7 +386,9 @@ export function InvestmentObservationView({
                             : null}
                       </span>
                     </div>
-                    <div className="reaction-browser-value" data-direction={direction}>
+                    {view === 'HISTORY' ? (
+                      <HistoricalReturns sample={sample} />
+                    ) : <div className="reaction-browser-value" data-direction={direction}>
                       <span className="reaction-browser-value-line">
                         {direction !== 'neutral' && <svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d={direction === 'up' ? 'M3 11 12 3m-6 0h6v6' : 'M3 5l9 8m-6 0h6V7'} /></svg>}
                         <strong>{signed(relative)}{relative != null && Number.isFinite(relative) && <span className="reaction-browser-unit"> pp</span>}</strong>
@@ -346,7 +398,7 @@ export function InvestmentObservationView({
                           ? `相对基准 · 已观察 ${profile.observedSessions} 日`
                           : sample.discoveryIssue || '等待可用行情'}
                       </small>
-                    </div>
+                    </div>}
                     <div className="reaction-browser-progress" data-status={status}>
                       <span className="reaction-browser-progress-heading"><span className="reaction-browser-state"><i aria-hidden="true" />{state}</span><span className="reaction-browser-session">T+{Math.min(observedSessions, 5)}<small> / 5</small></span></span>
                       <div className="reaction-browser-track" aria-label={`已观察 ${observedSessions} 个交易日`}>
@@ -403,5 +455,23 @@ export function InvestmentObservationView({
         />
       )}
     </section>
+  );
+}
+
+function HistoricalReturns({ sample }: { sample: ReactionSample }) {
+  return (
+    <div className="reaction-browser-history-returns" aria-label="事件后相对基准表现，单位为百分点">
+      {[1, 3, 5].map((day) => {
+        const window = sample.calculation?.windows.find((item) => item.sessions === day);
+        const value = window?.status === 'READY' ? window.relativeReturnPp : undefined;
+        const tone = value == null || value === 0 ? 'neutral' : value > 0 ? 'up' : 'down';
+        return (
+          <span key={day}>
+            <small>T+{day}</small>
+            <strong data-direction={tone}>{signed(value)}</strong>
+          </span>
+        );
+      })}
+    </div>
   );
 }

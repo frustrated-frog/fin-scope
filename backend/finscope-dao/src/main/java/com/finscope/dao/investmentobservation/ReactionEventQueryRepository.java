@@ -24,43 +24,62 @@ public class ReactionEventQueryRepository {
             query.setAnchor(jdbcTemplate.queryForObject("SELECT COALESCE(MAX(id),0) FROM investment_reaction_sample", Long.class));
         }
         List<Object> params = new ArrayList<>();
+        List<String> filters = new ArrayList<>();
         String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
-        params.add(query.getAnchor());
-        String where = " WHERE s.id<=?";
         if (query.getEventType() != null) {
-            where += " AND json_extract(s.snapshot_json,'$.eventType')=?";
+            filters.add("(CASE WHEN s.case_subtype GLOB 'EARNINGS_*' THEN 'EARNINGS' "
+                    + "WHEN s.case_subtype GLOB 'CONTRACT_*' THEN 'CONTRACT' ELSE json_extract(s.snapshot_json,'$.eventType') END)=?");
             params.add(query.getEventType().name());
         }
+        if (query.getEventSubtype() != null) {
+            filters.add("COALESCE(s.case_subtype,json_extract(s.snapshot_json,'$.eventSubtype'))=?");
+            params.add(query.getEventSubtype().name());
+        }
         if (!query.getQuery().isBlank()) {
-            where += " AND (instr(lower(COALESCE(json_extract(s.snapshot_json,'$.title'),'') || ' ' || COALESCE(json_extract(s.snapshot_json,'$.summary'),'') || ' ' || COALESCE(json_extract(s.snapshot_json,'$.instrumentName'),'')),lower(?))>0 OR instr(lower(s.instrument_code),lower(?))>0)";
+            String company = "COALESCE(json_extract(s.snapshot_json,'$.instrumentName'),'')";
+            String text = query.isCompanyOnly() ? company : "COALESCE(json_extract(s.snapshot_json,'$.title'),'') || ' ' "
+                    + "|| COALESCE(json_extract(s.snapshot_json,'$.summary'),'') || ' ' || " + company;
+            filters.add("(instr(lower(" + text + "),lower(?))>0 OR instr(lower(s.instrument_code),lower(?))>0)");
             params.add(query.getQuery());
             params.add(query.getQuery());
         }
         if (query.isFollowed()) {
-            where += " AND s.followed=1";
+            filters.add("s.followed=1");
         }
         if (query.isChangedToday()) {
-            where += " AND EXISTS(SELECT 1 FROM investment_reaction_change c WHERE c.event_key=s.source_identity AND c.detected_at>=?)";
+            filters.add("EXISTS(SELECT 1 FROM investment_reaction_change c WHERE c.event_key=s.source_identity AND c.detected_at>=?)");
             params.add(today);
         }
         if (query.getResolutionStatus() != null) {
-            where += " AND COALESCE(json_extract(s.snapshot_json,'$.resolutionStatus'),'PENDING')=?";
+            filters.add("COALESCE(json_extract(s.snapshot_json,'$.resolutionStatus'),'PENDING')=?");
             params.add(query.getResolutionStatus().name());
         }
-        String grouped = "WITH events AS (SELECT s.source_identity AS event_key,COALESCE(MIN(CASE WHEN s.excluded=0 AND s.state='OBSERVING' THEN s.id END),MIN(s.id)) AS representative,MIN(CASE WHEN s.excluded=1 THEN s.id END) AS invalid_representative,MAX(s.id) AS newest,"
+        String matches = filters.isEmpty() ? "1" : String.join(" AND ", filters);
+        params.add(query.getAnchor());
+        String grouped = "WITH source_events AS (SELECT s.source_identity AS event_key,"
+                + "COALESCE(MIN(CASE WHEN s.excluded=0 AND s.state='OBSERVING' THEN s.id END),MIN(s.id)) AS representative,"
+                + "MIN(CASE WHEN s.excluded=1 THEN s.id END) AS invalid_representative,MAX(s.id) AS newest,"
                 + "COUNT(DISTINCT CASE WHEN s.excluded=0 THEN NULLIF(s.instrument_code,'') END) AS stock_count,"
-                + "GROUP_CONCAT(DISTINCT CASE WHEN s.excluded=0 THEN json_extract(s.snapshot_json,'$.instrumentName') END) AS stock_names,SUM(s.excluded) AS invalid_count,"
+                + "GROUP_CONCAT(DISTINCT CASE WHEN s.excluded=0 THEN json_extract(s.snapshot_json,'$.instrumentName') END) AS stock_names,"
+                + "SUM(s.excluded) AS invalid_count,MIN(s.case_key) AS case_key,"
+                + "MIN(CASE WHEN s.excluded=0 THEN json_extract(s.snapshot_json,'$.publishedAt') END) AS published_at,"
+                + "MAX(CASE WHEN " + matches + " THEN 1 ELSE 0 END) AS matches,"
                 + "CASE WHEN MIN(s.excluded)=1 THEN 'EXCLUDED' "
                 + "WHEN MAX(CASE WHEN s.state='OBSERVING' AND s.excluded=0 AND COALESCE(json_extract(s.calculation_json,'$.profile.windowEnded'),0)=0 AND s.completed=0 THEN 1 ELSE 0 END)=1 THEN 'TRACKING' "
                 + "WHEN MAX(CASE WHEN s.state='DRAFT' AND s.excluded=0 THEN 1 ELSE 0 END)=1 THEN 'PENDING' ELSE 'HISTORY' END AS view "
-                + "FROM investment_reaction_sample s" + where + " GROUP BY s.source_identity) ";
+                + "FROM investment_reaction_sample s WHERE s.id<=? GROUP BY s.source_identity), "
+                + "case_events AS (SELECT *,CASE WHEN view='HISTORY' AND stock_count=1 AND invalid_count=0 AND case_key IS NOT NULL "
+                + "THEN 'CASE:' || case_key ELSE 'SOURCE:' || event_key END AS grouping_key FROM source_events), "
+                + "ranked AS (SELECT *,ROW_NUMBER() OVER(PARTITION BY grouping_key ORDER BY published_at IS NULL,published_at,representative) AS rank,"
+                + "COUNT(*) OVER(PARTITION BY grouping_key) AS report_count,MAX(matches) OVER(PARTITION BY grouping_key) AS case_matches,"
+                + "MAX(newest) OVER(PARTITION BY grouping_key) AS case_newest FROM case_events), "
+                + "events AS (SELECT * FROM ranked WHERE rank=1 AND case_matches=1) ";
         ReactionEventPage result = new ReactionEventPage();
         var counts = new LinkedHashMap<String, Long>();
-        jdbcTemplate.query(grouped + "SELECT view,COUNT(*) AS total FROM events GROUP BY view", rs -> {
+        jdbcTemplate.query(grouped + "SELECT view,COUNT(*) AS total FROM events WHERE view<>'EXCLUDED' GROUP BY view "
+                + "UNION ALL SELECT 'EXCLUDED',COUNT(*) FROM events WHERE invalid_count>0", rs -> {
             counts.put(rs.getString("view"), rs.getLong("total"));
         }, params.toArray());
-        Long excluded = jdbcTemplate.queryForObject(grouped + "SELECT COUNT(*) FROM events WHERE invalid_count>0", Long.class, params.toArray());
-        counts.put("EXCLUDED", excluded);
         result.setCounts(counts);
         result.setTotal(counts.getOrDefault(query.getView().name(), 0L));
         List<Object> pageParams = new ArrayList<>(params);
@@ -70,10 +89,11 @@ public class ReactionEventQueryRepository {
         }
         pageParams.add(query.getSize());
         pageParams.add((query.getPage() - 1L) * query.getSize());
-        var rows = jdbcTemplate.queryForList(grouped + "SELECT * FROM events WHERE " + (excludedView ? "invalid_count>0" : "view=?") + " ORDER BY newest DESC LIMIT ? OFFSET ?", pageParams.toArray());
+        var rows = jdbcTemplate.queryForList(grouped + "SELECT * FROM events WHERE " + (excludedView ? "invalid_count>0" : "view=?") + " ORDER BY case_newest DESC LIMIT ? OFFSET ?", pageParams.toArray());
         var items = new ArrayList<com.finscope.domain.investmentobservation.ReactionSample>();
         var stockCounts = new LinkedHashMap<String, Integer>();
         var stockNames = new LinkedHashMap<String, String>();
+        var caseReportCounts = new LinkedHashMap<String, Integer>();
         for (var row : rows) {
             String key = (String) row.get("event_key");
             long id = ((Number) row.get(excludedView ? "invalid_representative" : "representative")).longValue();
@@ -82,10 +102,12 @@ public class ReactionEventQueryRepository {
             items.add(representative);
             stockCounts.put(key, ((Number) row.get("stock_count")).intValue());
             stockNames.put(key, (String) row.get("stock_names"));
+            caseReportCounts.put(key, ((Number) row.get("report_count")).intValue());
         }
         result.setItems(items);
         result.setStockCounts(stockCounts);
         result.setStockNames(stockNames);
+        result.setCaseReportCounts(caseReportCounts);
         result.setAnchor(query.getAnchor() == Long.MAX_VALUE ? jdbcTemplate.queryForObject("SELECT COALESCE(MAX(id),0) FROM investment_reaction_sample", Long.class) : query.getAnchor());
         result.setRevision(jdbcTemplate.queryForObject("SELECT COALESCE(SUM(id+revision+followed+excluded),0) FROM investment_reaction_sample", Long.class));
         var reasons = new LinkedHashMap<String, Long>();

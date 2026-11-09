@@ -1,6 +1,7 @@
 package com.finscope.domain.investmentobservation;
 
 import lombok.Data;
+import lombok.Getter;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import com.finscope.common.enums.investmentobservation.ReactionEventType;
@@ -8,6 +9,8 @@ import com.finscope.common.enums.investmentobservation.ReactionSampleState;
 
 @Data
 public class ReactionSample {
+    @Getter(onMethod_ = @java.beans.Transient)
+    private transient ReactionHistoricalCase historicalCase;
     private com.finscope.common.enums.investmentobservation.ReactionEventSubtype eventSubtype =
             com.finscope.common.enums.investmentobservation.ReactionEventSubtype.UNCLASSIFIED;
     private String ruleVersion;

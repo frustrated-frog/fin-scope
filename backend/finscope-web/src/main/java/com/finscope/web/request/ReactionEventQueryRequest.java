@@ -2,6 +2,7 @@ package com.finscope.web.request;
 
 import com.finscope.common.enums.investmentobservation.ReactionWorkspaceView;
 import com.finscope.common.enums.investmentobservation.ReactionEventType;
+import com.finscope.common.enums.investmentobservation.ReactionEventSubtype;
 import com.finscope.common.enums.investmentobservation.ReactionResolutionStatus;
 import lombok.Data;
 
@@ -9,8 +10,10 @@ import lombok.Data;
 public class ReactionEventQueryRequest {
     private ReactionWorkspaceView view = ReactionWorkspaceView.TRACKING;
     private ReactionEventType eventType;
+    private ReactionEventSubtype eventSubtype;
     private ReactionResolutionStatus resolutionStatus;
     private String query = "";
+    private boolean companyOnly;
     private boolean followed;
     private boolean changedToday;
     private int page = 1;
@@ -20,8 +23,10 @@ public class ReactionEventQueryRequest {
         var result = new com.finscope.domain.investmentobservation.ReactionEventQuery();
         result.setView(view);
         result.setEventType(eventType);
+        result.setEventSubtype(eventSubtype);
         result.setResolutionStatus(resolutionStatus);
         result.setQuery(query);
+        result.setCompanyOnly(companyOnly);
         result.setFollowed(followed);
         result.setChangedToday(changedToday);
         result.setPage(page);

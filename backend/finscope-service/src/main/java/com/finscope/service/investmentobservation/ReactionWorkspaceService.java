@@ -15,6 +15,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
@@ -53,7 +54,8 @@ public class ReactionWorkspaceService {
     }
 
     public List<ReactionSource> versions(long id) {
-        return repository.sourceVersions(registration.require(id).getSourceIdentity());
+        ReactionSample sample = registration.require(id);
+        return repository.sourceVersions(sample.getSourceIdentity(), historicalKey(sample));
     }
 
     public List<ReactionSample> peers(long id) {
@@ -61,7 +63,8 @@ public class ReactionWorkspaceService {
     }
 
     public List<ReactionSource> sources(long id) {
-        return repository.sources(registration.require(id).getSourceIdentity());
+        ReactionSample sample = registration.require(id);
+        return repository.sources(sample.getSourceIdentity(), historicalKey(sample));
     }
 
     public List<ReactionSample> follow(long id, boolean followed) {
@@ -87,14 +90,16 @@ public class ReactionWorkspaceService {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
         }
         ReactionSample target = registration.require(id);
-        List<ReactionSample> eligible = new ArrayList<>();
-        if (target.getPublishedAt() != null && target.getCalculation() != null && target.getEventSubtype() != ReactionEventSubtype.UNCLASSIFIED) {
+        var distinct = new HashMap<String, ReactionSample>();
+        ReactionEventSubtype subtype = subtype(target);
+        if (!target.isExcluded() && target.getPublishedAt() != null && target.getCalculation() != null && subtype.isSpecific()) {
             long cursor = 0;
             while (true) {
-                List<ReactionSample> page = repository.list(null, cursor, 100);
+                List<ReactionSample> page = repository.comparableCandidates(subtype, cursor);
                 for (ReactionSample candidate : page) {
                     if (eligible(target, candidate)) {
-                        eligible.add(candidate);
+                        String key = caseIdentity(candidate) + "|" + candidate.getInstrumentCode();
+                        distinct.merge(key, candidate, (first, next) -> next.getPublishedAt().isBefore(first.getPublishedAt()) ? next : first);
                     }
                 }
                 if (page.size() < 100) {
@@ -103,8 +108,12 @@ public class ReactionWorkspaceService {
                 cursor = page.get(page.size() - 1).getId();
             }
         }
+        var eligible = distinct.values();
         ReactionHistoryComparison result = new ReactionHistoryComparison();
         result.setSessions(sessions);
+        if (!target.isExcluded() && target.getHistoricalCase() != null && target.getHistoricalCase().topicKey() != null) {
+            result.setRelatedStages(repository.relatedStages(target.getHistoricalCase()));
+        }
         result.setSameCompany(group(target, eligible.stream().filter(value -> value.getInstrumentCode().equals(target.getInstrumentCode())).toList(), sessions));
         result.setOtherCompanies(group(target, eligible.stream().filter(value -> !value.getInstrumentCode().equals(target.getInstrumentCode())).toList(), sessions));
         return result;
@@ -112,10 +121,24 @@ public class ReactionWorkspaceService {
 
     private boolean eligible(ReactionSample target, ReactionSample candidate) {
         return !candidate.isExcluded() && candidate.getState() != ReactionSampleState.DRAFT && !target.getSourceIdentity().equals(candidate.getSourceIdentity())
+                && !caseIdentity(target).equals(caseIdentity(candidate))
                 && candidate.getPublishedAt() != null && candidate.getPublishedAt().isBefore(target.getPublishedAt())
-                && candidate.getEventType() == target.getEventType() && candidate.getEventSubtype() == target.getEventSubtype()
+                && subtype(candidate) == subtype(target)
                 && (candidate.getCalculation() == null || target.getCalculation().getBenchmarkCode().equals(candidate.getCalculation().getBenchmarkCode())
                 && target.getCalculation().getMethodVersion().equals(candidate.getCalculation().getMethodVersion()));
+    }
+
+    private ReactionEventSubtype subtype(ReactionSample sample) {
+        return sample.getHistoricalCase() == null ? sample.getEventSubtype() : sample.getHistoricalCase().subtype();
+    }
+
+    private String historicalKey(ReactionSample sample) {
+        return sample.isExcluded() || sample.getHistoricalCase() == null ? null : sample.getHistoricalCase().key();
+    }
+
+    private String caseIdentity(ReactionSample sample) {
+        String key = historicalKey(sample);
+        return key == null ? "SOURCE:" + sample.getSourceIdentity() : "CASE:" + key;
     }
 
     private ReactionComparisonGroup group(ReactionSample target, List<ReactionSample> eligible, int sessions) {
@@ -134,7 +157,7 @@ public class ReactionWorkspaceService {
         HashSet<String> events = new HashSet<>();
         List<BigDecimal> returns = new ArrayList<>();
         for (ReactionSample value : selected) {
-            events.add(value.getSourceIdentity());
+            events.add(caseIdentity(value));
             ReactionWindow window = value.getCalculation() == null ? null : value.getCalculation().getWindows().stream().filter(item -> item.getSessions() == sessions).findFirst().orElse(null);
             if (window != null && window.getStatus() == ReactionWindowStatus.READY && window.getRelativeReturnPp() != null) {
                 result.setCompleteCount(result.getCompleteCount() + 1);

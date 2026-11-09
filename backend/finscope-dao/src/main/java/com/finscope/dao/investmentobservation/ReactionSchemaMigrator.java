@@ -1,5 +1,8 @@
 package com.finscope.dao.investmentobservation;
 
+import com.finscope.common.enums.investmentobservation.ReactionEventSubtype;
+import com.finscope.common.util.TimeUtil;
+import com.finscope.domain.investmentobservation.ReactionHistoricalCase;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,6 +47,7 @@ public class ReactionSchemaMigrator implements InitializingBean {
         migrateEventSources();
         migrateReactionChanges();
         migrateWorkspace();
+        migrateHistoricalCases();
     }
 
     private void migrateAutomaticSources() {
@@ -122,5 +126,42 @@ public class ReactionSchemaMigrator implements InitializingBean {
             jdbcTemplate.update("INSERT INTO schema_migration VALUES(414,?,?)", "event workspace and immutable source versions", LocalDateTime.now().toString());
         });
     }
+
+    private void migrateHistoricalCases() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            if (jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schema_migration WHERE version=415", Integer.class) > 0) {
+                return;
+            }
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN case_subtype TEXT");
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN case_key TEXT");
+            jdbcTemplate.execute("ALTER TABLE investment_reaction_sample ADD COLUMN case_topic TEXT");
+            long cursor = 0;
+            while (true) {
+                var rows = jdbcTemplate.query("SELECT id,instrument_code,json_extract(snapshot_json,'$.title') AS title,"
+                                + "json_extract(snapshot_json,'$.summary') AS summary,json_extract(snapshot_json,'$.instrumentName') AS name,"
+                                + "CASE WHEN json_type(snapshot_json,'$.publishedAt')='text' THEN json_extract(snapshot_json,'$.publishedAt') END AS published_at,"
+                                + "json_extract(snapshot_json,'$.eventSubtype') AS subtype,json_extract(snapshot_json,'$.automatic') AS automatic,"
+                                + "json_extract(snapshot_json,'$.ruleVersion') AS rule_version "
+                                + "FROM investment_reaction_sample WHERE id>? ORDER BY id LIMIT 250", (rs, index) -> {
+                    String subtype = rs.getString("subtype");
+                    return new CaseMigrationRow(rs.getLong("id"), ReactionHistoricalCase.from(rs.getString("title"), rs.getString("summary"), rs.getString("name"),
+                            rs.getString("instrument_code"), TimeUtil.localDateTime(rs, "published_at"),
+                            subtype == null ? null : ReactionEventSubtype.valueOf(subtype), rs.getBoolean("automatic"), rs.getString("rule_version")));
+                }, cursor);
+                if (rows.isEmpty()) {
+                    break;
+                }
+                jdbcTemplate.batchUpdate("UPDATE investment_reaction_sample SET case_subtype=?,case_key=?,case_topic=? WHERE id=?",
+                        rows.stream().map(row -> new Object[]{row.value().subtype().name(), row.value().key(), row.value().topicKey(), row.id()}).toList());
+                cursor = rows.get(rows.size() - 1).id();
+            }
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_case_key ON investment_reaction_sample(case_key) WHERE case_key IS NOT NULL");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_case_subtype ON investment_reaction_sample(case_subtype,id)");
+            jdbcTemplate.execute("CREATE INDEX idx_reaction_case_topic ON investment_reaction_sample(case_topic) WHERE case_topic IS NOT NULL");
+            jdbcTemplate.update("INSERT INTO schema_migration VALUES(415,?,?)", "derived historical event cases", LocalDateTime.now().toString());
+        });
+    }
+
+    private record CaseMigrationRow(long id, ReactionHistoricalCase value) { }
 
 }

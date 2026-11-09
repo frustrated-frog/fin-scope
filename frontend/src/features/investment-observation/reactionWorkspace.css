@@ -398,6 +398,12 @@
 .reaction-browser-event-type[data-tone='operating'] { color: var(--rw-operating); background: color-mix(in srgb, var(--rw-operating) 9%, transparent); }
 .reaction-browser-meta time { font-variant-numeric: tabular-nums; }
 .reaction-browser-followed { color: var(--rw-accent); font-size: 9px; }
+.reaction-browser-reports {
+  padding-left: 7px;
+  border-left: 1px solid var(--rw-line);
+  color: var(--rw-muted);
+  white-space: nowrap;
+}
 .reaction-browser-company {
   display: flex;
   align-items: center;
@@ -429,6 +435,18 @@
 }
 .reaction-browser-value[data-direction='up'] { color: var(--rw-up); }
 .reaction-browser-value[data-direction='down'] { color: var(--rw-down); }
+.reaction-browser-history-returns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+.reaction-browser-history-returns > span { display: grid; gap: 5px; }
+.reaction-browser-history-returns small { color: var(--rw-muted); font: 10px/1.2 var(--rw-numeric); }
+.reaction-browser-history-returns strong { color: var(--rw-ink); font: 500 13px/1.2 var(--rw-numeric); letter-spacing: -.035em; }
+.reaction-browser-history-returns strong[data-direction='up'] { color: var(--rw-up); }
+.reaction-browser-history-returns strong[data-direction='down'] { color: var(--rw-down); }
 .reaction-browser-unit { font-size: 11px; letter-spacing: 0; opacity: .7; font-weight: 400; }
 .reaction-browser-value > small,
 .reaction-browser-progress > small {

@@ -14,6 +14,8 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
+  const [subtype, setSubtype] = useState('');
+  const [companyOnly, setCompanyOnly] = useState(false);
   const [reason, setReason] = useState('');
   const [followed, setFollowed] = useState(false);
   const [changed, setChanged] = useState(false);
@@ -47,7 +49,13 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
   if (anchor != null) {
     params.set('anchor', String(anchor));
   }
-  if (type) {
+  if (view === 'HISTORY' && subtype) {
+    params.set('eventSubtype', subtype);
+  }
+  if (view === 'HISTORY' && companyOnly) {
+    params.set('companyOnly', 'true');
+  }
+  if (view !== 'HISTORY' && type) {
     params.set('eventType', type);
   }
   if (reason && view === 'PENDING') {
@@ -259,6 +267,10 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     setSearch,
     type,
     setType,
+    subtype,
+    setSubtype,
+    companyOnly,
+    setCompanyOnly,
     reason,
     setReason,
     followed,

@@ -3,7 +3,10 @@ package com.finscope.dao.investmentobservation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finscope.common.enums.investmentobservation.ReactionSampleState;
+import com.finscope.common.enums.investmentobservation.ReactionEventSubtype;
+import com.finscope.common.enums.investmentobservation.ReactionWorkspaceView;
 import com.finscope.domain.investmentobservation.ReactionCalculation;
+import com.finscope.domain.investmentobservation.ReactionEventQuery;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -275,6 +278,53 @@ class ReactionSampleRepositoryTest {
         ReactionSample observed = repository.findById(originalId).orElseThrow();
         assertTrue(repository.exclude(originalId, observed.getRevision(), true));
         assertTrue(repository.findDue(now.plusDays(1), 20).isEmpty());
+    }
+
+    @Test
+    void historicalSearchGroupsSameDisclosureBeforeFilteringAndKeepsSourceVersions() {
+        var earlier = historicalReport("a", "行云科技：前三季度净利润为2.69亿元 同比扭亏为盈", now);
+        var later = historicalReport("b", "行云科技：2026年第三季度净利润2.57亿元，同比增长446.52%", now.plusMinutes(7));
+        var forecast = historicalReport("c", "行云科技：预计前三季度净利润为2.69亿元", now.plusMinutes(8));
+        historicalReport("d", "行云科技：前三季度净利润为2.69亿元 同比扭亏为盈", now.plusDays(1));
+        var repo = new ReactionEventQueryRepository();
+        ReflectionTestUtils.setField(repo, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(repo, "samples", repository);
+        var query = new ReactionEventQuery();
+        query.setView(ReactionWorkspaceView.HISTORY);
+        assertEquals(3, repo.query(query).getTotal());
+        query.setEventSubtype(ReactionEventSubtype.EARNINGS_REPORT);
+        assertEquals(2, repo.query(query).getTotal());
+        query.setQuery("446.52%");
+        var search = repo.query(query);
+        assertEquals(1, search.getTotal());
+        var representative = search.getItems().get(0);
+        assertEquals(earlier.getSourceIdentity(), representative.getSourceIdentity());
+        assertEquals(ReactionEventSubtype.OPERATING_UPDATE, representative.getEventSubtype());
+        assertEquals(2, search.getCaseReportCounts().get(earlier.getSourceIdentity()));
+        assertEquals(later.getSourceIdentity(), repository.findByIdentity(later.getSourceIdentity()).get(0).getSourceIdentity());
+        assertEquals(2, repository.sources(earlier.getSourceIdentity(), representative.getHistoricalCase().key()).size());
+        assertEquals(2, repository.sourceVersions(earlier.getSourceIdentity(), representative.getHistoricalCase().key()).size());
+        assertEquals(java.util.List.of(forecast.getTitle()),
+                repository.relatedStages(representative.getHistoricalCase()).stream().map(stage -> stage.title()).toList());
+        query.setCompanyOnly(true);
+        assertEquals(0, repo.query(query).getTotal());
+        query.setQuery("300209");
+        assertEquals(2, repo.query(query).getTotal());
+    }
+
+    private ReactionSample historicalReport(String key, String title, LocalDateTime publishedAt) {
+        var report = sample();
+        report.setSourceIdentity("EVENT:" + key);
+        report.setSourceOriginKey(key);
+        report.setTitle(title);
+        report.setInstrumentCode("300209.SZ");
+        report.setInstrumentName("行云科技");
+        report.setPublishedAt(publishedAt);
+        report.setEventSubtype(ReactionEventSubtype.OPERATING_UPDATE);
+        report.setState(ReactionSampleState.ARCHIVED);
+        report.setAutomatic(true);
+        assertTrue(repository.captureSource(report));
+        return report;
     }
 
 }
