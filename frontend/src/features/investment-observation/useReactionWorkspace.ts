@@ -133,7 +133,8 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
         ]);
         if (active) {
           setDiscovery(status);
-          if (revisionRef.current != null && latest.revision !== revisionRef.current) {
+          if ((anchor != null && latest.anchor > anchor)
+              || (revisionRef.current != null && latest.revision !== revisionRef.current)) {
             setPending(true);
           }
         }
@@ -236,7 +237,7 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     setChanged(false);
   }
   function openStock(next: ReactionStockSummary) {
-    stockPosition.current = { page, anchor: stockData?.anchor ?? anchor };
+    stockPosition.current = { page, anchor };
     setStock(next);
     setView(next.trackingCount > 0 ? 'TRACKING' : 'HISTORY');
     setExtra(undefined);
@@ -245,7 +246,7 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
   }
   function openAuxiliary(next: 'PENDING' | 'EXCLUDED') {
     if (isStockDirectory) {
-      stockPosition.current = { page, anchor: stockData?.anchor ?? anchor };
+      stockPosition.current = { page, anchor };
     }
     setStock(undefined);
     setView(next);
