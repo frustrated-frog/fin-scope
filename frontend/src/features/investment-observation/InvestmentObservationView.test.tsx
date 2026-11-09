@@ -4,9 +4,20 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { InvestmentObservationView } from './InvestmentObservationView';
 import { reactionSample } from './reactionFixtures.test-support';
-import type { ReactionEventPage, ReactionSample } from './reactionTypes';
+import type { ReactionEventPage, ReactionSample, ReactionStockPage } from './reactionTypes';
 
 const sample = { ...reactionSample, sourceIdentity: 'EVENT:stable' };
+const stock = {
+  code: sample.instrumentCode,
+  name: sample.instrumentName,
+  trackingCount: 1,
+  historyCount: 3,
+  latestTitle: '近期公告',
+};
+function stockPage(total = 1): ReactionStockPage {
+  return { items: [stock], total, anchor: 125, revision: 10, page: 1, size: 20 };
+}
+
 function page(items: ReactionSample[] = [sample], total = items.length): ReactionEventPage {
   return {
     items,
@@ -27,6 +38,9 @@ function setup(handler?: (path: string, init?: RequestInit) => unknown) {
     const custom = handler?.(path, init);
     if (custom !== undefined) {
       return apiResponse(custom);
+    }
+    if (path.includes('/stocks?')) {
+      return apiResponse(stockPage());
     }
     if (path.includes('/events?')) {
       return apiResponse(page());
@@ -50,6 +64,7 @@ function setup(handler?: (path: string, init?: RequestInit) => unknown) {
     addToast: vi.fn(),
     onOpenMajorEvents: vi.fn(),
     onResearch: vi.fn(),
+    onOpenNews: vi.fn(),
   };
   render(<InvestmentObservationView {...props} />);
   return { fetch, ...props };
@@ -59,13 +74,19 @@ afterEach(() => {
   window.history.replaceState({}, '', '/');
 });
 
+async function enterStock() {
+  await userEvent.click(await screen.findByRole('button', { name: /600519\.SH/ }));
+}
+
 async function open() {
+  await enterStock();
   await userEvent.click(await screen.findByRole('button', { name: /设备公司签订重大合同/ }));
   await screen.findByRole('button', { name: '关注事件' });
 }
 
 test('opens an independent accessible detail and returns focus to the unchanged list', async () => {
   setup();
+  await enterStock();
   const row = await screen.findByRole('button', {
     name: /设备公司签订重大合同/,
   });
@@ -85,20 +106,25 @@ test('opens an independent accessible detail and returns focus to the unchanged 
 });
 
 test('server search, pagination, view totals and pending reasons do not depend on the latest hundred', async () => {
-  const { fetch } = setup((path) => (path.includes('/events?') ? page([sample], 125) : undefined));
-  await screen.findByText('共 125 件事件 · 每页 20 件');
+  const { fetch } = setup((path) => (path.includes('/stocks?') ? stockPage(125) : undefined));
+  await screen.findByText('共 125 只股票 · 每页 20 只股票');
   await userEvent.click(screen.getByRole('button', { name: '下一页' }));
   await waitFor(() =>
     expect(
       fetch.mock.calls.some(([path]) => String(path).includes('page=2') && String(path).includes('anchor=125')),
     ).toBe(true),
   );
-  await userEvent.type(screen.getByLabelText('搜索事件或股票'), '旧合同');
+  expect(screen.queryByRole('button', { name: /设备公司签订重大合同/ })).not.toBeInTheDocument();
+  await enterStock();
+  expect(await screen.findByRole('button', { name: /设备公司签订重大合同/ })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /返回股票列表/ }));
+  expect(await screen.findByText('第 2 / 7 页')).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText('搜索股票'), '600519');
   await userEvent.click(screen.getByRole('button', { name: '搜索' }));
   await waitFor(() =>
     expect(
       fetch.mock.calls.some(
-        ([path]) => decodeURIComponent(String(path)).includes('query=旧合同') && String(path).includes('page=1'),
+        ([path]) => String(path).includes('/stocks?') && String(path).includes('query=600519') && String(path).includes('page=1'),
       ),
     ).toBe(true),
   );
@@ -111,19 +137,17 @@ test('server search, pagination, view totals and pending reasons do not depend o
   );
 });
 
-test('history filters case subtypes and related companies and shows merged records', async () => {
+test('stock history sends the exact stock code and shows merged records', async () => {
   const { fetch } = setup((path) => path.includes('/events?') ? {
     ...page([{ ...sample, eventSubtype: 'OPERATING_UPDATE', caseSubtype: 'CONTRACT_AMENDED' }]),
     caseReportCounts: { 'EVENT:stable': 2 },
   } : undefined);
+  await enterStock();
   await userEvent.click(await screen.findByRole('button', { name: /历史案例/ }));
   await userEvent.selectOptions(screen.getByLabelText('事件子类'), 'CONTRACT_AMENDED');
-  await userEvent.click(screen.getByRole('button', { name: '仅搜公司' }));
-  await userEvent.type(screen.getByLabelText('搜索事件或股票'), '600519');
-  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
   await waitFor(() =>
     expect(fetch.mock.calls.some(([path]) =>
-      String(path).includes('query=600519') && String(path).includes('companyOnly=true') &&
+      String(path).includes('stock=600519.SH') &&
       String(path).includes('eventSubtype=CONTRACT_AMENDED'),
     )).toBe(true),
   );
@@ -187,6 +211,7 @@ test('late detail response cannot overwrite the next event', async () => {
         ? Promise.resolve(apiResponse({ ...sample, id: 2, title: '另一事件' }))
         : original(input, init),
   );
+  await enterStock();
   await userEvent.click(await screen.findByRole('button', { name: /设备公司签订重大合同/ }));
   await userEvent.click(screen.getByRole('button', { name: '关闭事件详情' }));
   await userEvent.click(screen.getByRole('button', { name: /另一事件/ }));
@@ -207,6 +232,8 @@ test('missing time shows known stock and optional manual correction without forc
     discoveryIssue: '股票已关联，来源公开时间待补全',
   };
   setup((path) => (path.includes('/events?') ? page([draft]) : path.endsWith('/1') ? draft : undefined));
+  await userEvent.click(screen.getByText('更多'));
+  await userEvent.click(screen.getByRole('button', { name: '待补全记录' }));
   await userEvent.click(await screen.findByRole('button', { name: /设备公司签订重大合同/ }));
   expect(await screen.findByText(/时间待补全 · 股票已关联/)).toBeInTheDocument();
   expect(screen.getByText('手动补充（可选）').closest('details')).not.toHaveAttribute('open');
@@ -245,9 +272,15 @@ test('exclusion is distinct from archive and carries the displayed revision', as
   ).toBe(true);
 });
 
-test('empty state explains automatic tracking without fabricating samples', async () => {
-  setup((path) => (path.includes('/events?') ? page([]) : undefined));
-  expect(await screen.findByRole('heading', { name: '当前没有符合条件的跟踪事件' })).toBeInTheDocument();
+test('known stock without cases offers to search the live news by name', async () => {
+  const { onOpenNews } = setup((path) => decodeURIComponent(path).includes('query=杭电股份') ? {
+    ...stockPage(0), items: [], matchedStock: { code: '603618.SH', name: '杭电股份' },
+  } : undefined);
+  await userEvent.type(screen.getByLabelText('搜索股票'), '杭电股份');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  expect(await screen.findByRole('heading', { name: '杭电股份暂无观察案例' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /搜索实时资讯/ }));
+  expect(onOpenNews).toHaveBeenCalledWith('杭电股份');
 });
 
 test('follow and archive keep optimistic revisions and can be undone from the same detail', async () => {

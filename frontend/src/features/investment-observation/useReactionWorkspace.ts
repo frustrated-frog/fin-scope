@@ -5,23 +5,30 @@ import type {
   ReactionCandidate,
   ReactionEventPage,
   ReactionSample,
+  ReactionStockPage,
+  ReactionStockSummary,
   WorkspaceView,
 } from './reactionTypes';
+
+const PAGE_SIZE = 20;
 
 /** Owns list snapshots and independent detail refresh; polling never reorders a reader's list. */
 export function useReactionWorkspace(addToast: (message: string, type?: 'success' | 'error' | 'info') => void) {
   const [view, setView] = useState<WorkspaceView>('TRACKING');
+  const [stock, setStock] = useState<ReactionStockSummary>();
+  const [stockQuery, setStockQuery] = useState('');
+  const [stockSearch, setStockSearch] = useState('');
+  const [trackingOnly, setTrackingOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [subtype, setSubtype] = useState('');
-  const [companyOnly, setCompanyOnly] = useState(false);
   const [reason, setReason] = useState('');
   const [followed, setFollowed] = useState(false);
   const [changed, setChanged] = useState(false);
   const [page, setPage] = useState(1);
   const [anchor, setAnchor] = useState<number>();
-  const [data, setData] = useState<ReactionEventPage>();
+  const [loaded, setLoaded] = useState<{ path: string; data: ReactionEventPage | ReactionStockPage }>();
   const [discovery, setDiscovery] = useState<DiscoveryStatus>();
   const [selected, setSelected] = useState<ReactionSample>();
   const [detailLoading, setDetailLoading] = useState(false);
@@ -34,49 +41,61 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
   const [reload, setReload] = useState(0);
   const [extra, setExtra] = useState<'manual' | 'legacy'>();
   const [candidates, setCandidates] = useState<ReactionCandidate[]>([]);
+  const stockPosition = useRef<{ page: number; anchor?: number }>({ page: 1 });
   const detailGeneration = useRef(0);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
-  const revisionRef = useRef(data?.revision);
-  revisionRef.current = data?.revision;
+  const revisionRef = useRef<number>();
   const listRef = useRef<HTMLDivElement>(null);
+  const isStockDirectory = !stock && (view === 'TRACKING' || view === 'HISTORY');
   const params = new URLSearchParams({
-    view,
-    query: search,
+    query: isStockDirectory ? stockSearch : search,
     page: String(page),
-    size: '20',
+    size: String(PAGE_SIZE),
   });
   if (anchor != null) {
     params.set('anchor', String(anchor));
   }
-  if (view === 'HISTORY' && subtype) {
-    params.set('eventSubtype', subtype);
+  if (isStockDirectory) {
+    if (trackingOnly) {
+      params.set('trackingOnly', 'true');
+    }
+  } else {
+    params.set('view', view);
+    if (stock) {
+      params.set('stock', stock.code);
+    }
+    if (view === 'HISTORY' && subtype) {
+      params.set('eventSubtype', subtype);
+    }
+    if (view !== 'HISTORY' && type) {
+      params.set('eventType', type);
+    }
+    if (reason && view === 'PENDING') {
+      params.set('resolutionStatus', reason);
+    }
+    if (followed) {
+      params.set('followed', 'true');
+    }
+    if (changed) {
+      params.set('changedToday', 'true');
+    }
   }
-  if (view === 'HISTORY' && companyOnly) {
-    params.set('companyOnly', 'true');
-  }
-  if (view !== 'HISTORY' && type) {
-    params.set('eventType', type);
-  }
-  if (reason && view === 'PENDING') {
-    params.set('resolutionStatus', reason);
-  }
-  if (followed) {
-    params.set('followed', 'true');
-  }
-  if (changed) {
-    params.set('changedToday', 'true');
-  }
-  const path = `/api/investment-reactions/events?${params}`;
+  const listPath = `/api/investment-reactions/${isStockDirectory ? 'stocks' : 'events'}`;
+  const path = `${listPath}?${params}`;
+  const response = loaded?.path === path ? loaded.data : undefined;
+  const data = response && 'counts' in response ? response : undefined;
+  const stockData = response && !('counts' in response) ? response : undefined;
+  revisionRef.current = response?.revision;
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError('');
-    void api<ReactionEventPage>(path)
+    void loadList(path, isStockDirectory)
       .then((result) => {
         if (active) {
-          setData(result);
+          setLoaded({ path, data: result });
           setPending(false);
           listRef.current?.scrollTo?.({ top: 0 });
         }
@@ -110,7 +129,7 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
       try {
         const [status, latest] = await Promise.all([
           api<DiscoveryStatus>('/api/investment-reactions/discovery'),
-          api<ReactionEventPage>(`/api/investment-reactions/events?${check}`),
+          loadList(`${listPath}?${check}`, isStockDirectory),
         ]);
         if (active) {
           setDiscovery(status);
@@ -207,6 +226,40 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     setPage(1);
     setAnchor(undefined);
   }
+  function resetEventFilters() {
+    setQuery('');
+    setSearch('');
+    setType('');
+    setSubtype('');
+    setReason('');
+    setFollowed(false);
+    setChanged(false);
+  }
+  function openStock(next: ReactionStockSummary) {
+    stockPosition.current = { page, anchor: stockData?.anchor ?? anchor };
+    setStock(next);
+    setView(next.trackingCount > 0 ? 'TRACKING' : 'HISTORY');
+    setExtra(undefined);
+    resetEventFilters();
+    resetList();
+  }
+  function openAuxiliary(next: 'PENDING' | 'EXCLUDED') {
+    if (isStockDirectory) {
+      stockPosition.current = { page, anchor: stockData?.anchor ?? anchor };
+    }
+    setStock(undefined);
+    setView(next);
+    setExtra(undefined);
+    resetEventFilters();
+    resetList();
+  }
+  function returnToStocks() {
+    setStock(undefined);
+    setView('TRACKING');
+    setExtra(undefined);
+    setPage(stockPosition.current.page);
+    setAnchor(stockPosition.current.anchor);
+  }
   function refreshList() {
     resetList();
     setReload((value) => value + 1);
@@ -261,6 +314,17 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
   return {
     view,
     setView,
+    stock,
+    isStockDirectory,
+    stockQuery,
+    setStockQuery,
+    setStockSearch,
+    trackingOnly,
+    setTrackingOnly,
+    stockData,
+    openStock,
+    openAuxiliary,
+    returnToStocks,
     query,
     setQuery,
     search,
@@ -269,8 +333,6 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     setType,
     subtype,
     setSubtype,
-    companyOnly,
-    setCompanyOnly,
     reason,
     setReason,
     followed,
@@ -278,6 +340,7 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     changed,
     setChanged,
     page,
+    pageSize: PAGE_SIZE,
     setPage,
     setAnchor,
     data,
@@ -287,7 +350,7 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     detailLoading,
     detailError,
     detailOpen,
-    loading,
+    loading: loading || (!response && !error),
     busy,
     error,
     pending,
@@ -303,6 +366,15 @@ export function useReactionWorkspace(addToast: (message: string, type?: 'success
     updateSample,
     loadManual,
   };
+}
+
+async function loadList(path: string, isStockDirectory: boolean) {
+  const page = await api<ReactionEventPage | ReactionStockPage>(path);
+  if (!page || !Array.isArray(page.items) || typeof page.total !== 'number'
+      || isStockDirectory === ('counts' in page)) {
+    throw new Error('投资观察未返回有效列表，请确认后端已更新后重试');
+  }
+  return page;
 }
 
 function message(reason: unknown) {

@@ -12,13 +12,15 @@ export function LiveNewsPanel({
   setMessage,
   addToast,
   onOpenMajorEvents,
+  initialSearch = '',
 }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onOpenMajorEvents?: () => void;
+  initialSearch?: string;
 }) {
-  const [query, setQuery] = useState<NewsQuery>(initialQuery);
-  const [draft, setDraft] = useState(initialQuery);
+  const [query, setQuery] = useState<NewsQuery>(() => ({ ...initialQuery, query: initialSearch }));
+  const [draft, setDraft] = useState(query);
   const [page, setPage] = useState<NewsPage>();
   const [pending, setPending] = useState<NewsPage>();
   const [filters, setFilters] = useState<SavedFilter[]>([]);

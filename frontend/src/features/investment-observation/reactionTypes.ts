@@ -186,6 +186,24 @@ export const subtypeLabels: Record<string, string> = {
 };
 
 export type WorkspaceView = 'TRACKING' | 'HISTORY' | 'PENDING' | 'EXCLUDED';
+export interface ReactionStockSummary {
+  code: string;
+  name?: string | null;
+  trackingCount: number;
+  historyCount: number;
+  latestTitle: string;
+  latestPublishedAt?: string | null;
+  latestSubtype?: string | null;
+}
+export interface ReactionStockPage {
+  items: ReactionStockSummary[];
+  matchedStock?: { code: string; name?: string | null } | null;
+  total: number;
+  anchor: number;
+  revision: number;
+  page: number;
+  size: number;
+}
 export interface ReactionEventPage {
   automaticEvents?: number;
   linkedEvents?: number;

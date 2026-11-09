@@ -81,7 +81,14 @@ export default function App() {
   const [researchQuestionDraft, setResearchQuestionDraft] = useState('');
   const [pendingRadarEventId, setPendingRadarEventId] = useState<string | number | null>(null);
   const [dashboardRadarEventId, setDashboardRadarEventId] = useState<string | number | null>(null);
+  const [newsStockSearch, setNewsStockSearch] = useState('');
   const [industryChainStockCode, setIndustryChainStockCode] = useState<string>();
+
+  useEffect(() => {
+    if (view !== 'news') {
+      setNewsStockSearch('');
+    }
+  }, [view]);
 
   const addToast = (toastMessage: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -487,6 +494,7 @@ export default function App() {
           setMessage={setMessage}
           addToast={addToast}
           initialRadarEventId={dashboardRadarEventId}
+          initialLiveQuery={newsStockSearch}
           onInitialRadarEventOpened={() => setDashboardRadarEventId(null)}
           onResearch={(eventId, question) => {
             setPendingRadarEventId(eventId);
@@ -503,6 +511,11 @@ export default function App() {
           setMessage={setMessage}
           addToast={addToast}
           onOpenMajorEvents={() => setView('majorEvents')}
+          onOpenNews={(query) => {
+            setDashboardRadarEventId(null);
+            setNewsStockSearch(query);
+            setView('news');
+          }}
           onResearch={(question) => {
             setResearchQuestionDraft(question);
             setView('research');

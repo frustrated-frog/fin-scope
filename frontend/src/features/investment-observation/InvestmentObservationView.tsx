@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import type { DiscoveryStatus, EventType, ReactionSample, WorkspaceView } from './reactionTypes';
 import { dateTime, eventLabels, resolutionLabels, signed, subtypeLabels } from './reactionTypes';
 import { ReactionDetailPanel } from './ReactionDetailPanel';
+import { ReactionStockDirectory } from './ReactionStockDirectory';
 import { LegacyObservations } from './LegacyObservations';
 import './investmentReaction.css';
 import './reactionWorkspace.css';
@@ -16,16 +17,29 @@ export function InvestmentObservationView({
   setMessage,
   addToast,
   onOpenMajorEvents,
+  onOpenNews,
   onResearch,
 }: {
   setMessage: (message: string) => void;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onOpenMajorEvents?: () => void;
+  onOpenNews?: (query: string) => void;
   onResearch?: (question: string) => void;
 }) {
   const {
     view,
     setView,
+    stock,
+    isStockDirectory,
+    stockQuery,
+    setStockQuery,
+    setStockSearch,
+    trackingOnly,
+    setTrackingOnly,
+    stockData,
+    openStock,
+    openAuxiliary,
+    returnToStocks,
     query,
     setQuery,
     setSearch,
@@ -33,8 +47,6 @@ export function InvestmentObservationView({
     setType,
     subtype,
     setSubtype,
-    companyOnly,
-    setCompanyOnly,
     reason,
     setReason,
     followed,
@@ -42,6 +54,7 @@ export function InvestmentObservationView({
     changed,
     setChanged,
     page,
+    pageSize,
     setPage,
     setAnchor,
     data,
@@ -67,6 +80,9 @@ export function InvestmentObservationView({
     updateSample,
     loadManual,
   } = useReactionWorkspace(addToast);
+  const listData = isStockDirectory ? stockData : data;
+  const total = listData?.total ?? 0;
+  const unit = isStockDirectory ? '只股票' : '件事件';
   return (
     <section className="reaction-workspace reaction-browser" aria-label="市场反应观察室">
       <header className="reaction-browser-header">
@@ -79,7 +95,7 @@ export function InvestmentObservationView({
           </span>
           <div>
             <h3>投资观察</h3>
-            <p>跟踪一件事，读懂它之后的市场反应。</p>
+            <p>按股票查看事件与市场反应。</p>
           </div>
         </div>
         <div className="reaction-browser-tools">
@@ -108,33 +124,27 @@ export function InvestmentObservationView({
             <summary>更多<svg aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4" /></svg></summary>
             <div>
               <button onClick={() => void loadManual()}>手动补充</button>
-              <button
-                onClick={() => {
-                  setView('PENDING');
-                  setExtra(undefined);
-                  setReason('');
-                  resetList();
-                }}
-              >
-                待补全记录
-              </button>
+              <button onClick={() => openAuxiliary('PENDING')}>待补全记录</button>
               <button onClick={() => setExtra('legacy')}>历史资料</button>
-              <button
-                onClick={() => {
-                  setView('EXCLUDED');
-                  setExtra(undefined);
-                  resetList();
-                }}
-              >
-                已排除样本
-              </button>
+              <button onClick={() => openAuxiliary('EXCLUDED')}>已排除样本</button>
             </div>
           </details>
         </div>
       </header>
+      {stock && !extra && (
+        <div className="reaction-stock-heading">
+          <button type="button" className="reaction-stock-back" onClick={returnToStocks}>← 返回股票列表</button>
+          <h4>{stock.name || stock.code}</h4>
+          {stock.name && <span>{stock.code}</span>}
+        </div>
+      )}
       <div className="reaction-browser-navigation">
         <nav className="reaction-browser-tabs" aria-label="投资观察视图">
-          {views.map((item) => (
+          {isStockDirectory && <span className="reaction-stock-list-label">股票列表</span>}
+          {!isStockDirectory && !stock && (
+            <button type="button" onClick={returnToStocks}>← 股票列表</button>
+          )}
+          {stock && views.map((item) => (
             <button
               key={item.value}
               aria-pressed={!extra && view === item.value}
@@ -146,7 +156,9 @@ export function InvestmentObservationView({
               }}
             >
               <span className="reaction-browser-tab-label">{item.label}</span>
-              <span className="reaction-browser-count">{data?.counts[item.value]?.toLocaleString('zh-CN') ?? '—'}</span>
+              <span className="reaction-browser-count">{(
+                data ? data.counts[item.value] ?? 0 : item.value === 'TRACKING' ? stock.trackingCount : stock.historyCount
+              ).toLocaleString('zh-CN')}</span>
             </button>
           ))}
           {view === 'PENDING' && <button aria-pressed>待补全记录</button>}
@@ -161,7 +173,7 @@ export function InvestmentObservationView({
       )}
       {extra ? (
         <section className="reaction-browser-extra">
-          <button onClick={() => setExtra(undefined)}>返回事件列表</button>
+          <button onClick={() => setExtra(undefined)}>返回{isStockDirectory ? '股票列表' : '事件列表'}</button>
           {extra === 'legacy' ? (
             <LegacyObservations />
           ) : (
@@ -200,116 +212,125 @@ export function InvestmentObservationView({
             className="reaction-browser-filters"
             onSubmit={(event) => {
               event.preventDefault();
-              setSearch(query);
+              if (isStockDirectory) {
+                setStockSearch(stockQuery.trim());
+              } else {
+                setSearch(query.trim());
+              }
               resetList();
             }}
           >
             <label className="reaction-browser-search">
-              <span className="sr-only">搜索事件或股票</span>
               <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
               <input
-                aria-label="搜索事件或股票"
-                placeholder={view === 'HISTORY' && companyOnly ? '搜索关联公司或股票代码' : '搜索事件、公司或代码'}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                aria-label={isStockDirectory ? '搜索股票' : stock ? '搜索当前股票的事件' : '搜索事件或股票'}
+                placeholder={isStockDirectory ? '搜索股票简称或代码' : stock ? '搜索这只股票的事件' : '搜索事件、公司或代码'}
+                maxLength={200}
+                value={isStockDirectory ? stockQuery : query}
+                onChange={(event) => isStockDirectory ? setStockQuery(event.target.value) : setQuery(event.target.value)}
               />
               <button type="submit">搜索</button>
             </label>
-            {view === 'HISTORY' ? (
+            {isStockDirectory ? (
+              <button
+                type="button"
+                className="reaction-browser-filter-toggle"
+                aria-pressed={trackingOnly}
+                onClick={() => {
+                  setTrackingOnly((value) => !value);
+                  resetList();
+                }}
+              >
+                仅看有跟踪事件
+              </button>
+            ) : (
               <>
-                <select
-                  aria-label="事件子类"
-                  value={subtype}
-                  onChange={(event) => {
-                    setSubtype(event.target.value);
-                    resetList();
-                  }}
-                >
-                  <option value="">全部事件子类</option>
-                  {Object.entries(eventLabels).map(([typeKey, label]) => (
-                    <optgroup key={typeKey} label={label}>
-                      {Object.entries(subtypeLabels).filter(([key]) => key.startsWith(typeKey)).map(([key, name]) => (
-                        <option key={key} value={key}>{name}</option>
-                      ))}
+                {view === 'HISTORY' ? (
+                  <select
+                    aria-label="事件子类"
+                    value={subtype}
+                    onChange={(event) => {
+                      setSubtype(event.target.value);
+                      resetList();
+                    }}
+                  >
+                    <option value="">全部事件子类</option>
+                    {Object.entries(eventLabels).map(([typeKey, label]) => (
+                      <optgroup key={typeKey} label={label}>
+                        {Object.entries(subtypeLabels).filter(([key]) => key.startsWith(typeKey)).map(([key, name]) => (
+                          <option key={key} value={key}>{name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                    <optgroup label="其他旧案例">
+                      <option value="OPERATING_UPDATE">经营进展</option>
+                      <option value="UNCLASSIFIED">未分类</option>
                     </optgroup>
-                  ))}
-                  <optgroup label="其他旧案例">
-                    <option value="OPERATING_UPDATE">经营进展</option>
-                    <option value="UNCLASSIFIED">未分类</option>
-                  </optgroup>
-                </select>
+                  </select>
+                ) : (
+                  <label>
+                    <span className="sr-only">事件类型</span>
+                    <select
+                      aria-label="事件类型"
+                      value={type}
+                      onChange={(event) => {
+                        setType(event.target.value as EventType);
+                        resetList();
+                      }}
+                    >
+                      <option value="">全部事件类型</option>
+                      {Object.entries(eventLabels).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <button
                   type="button"
                   className="reaction-browser-filter-toggle"
-                  aria-pressed={companyOnly}
+                  aria-pressed={followed}
                   onClick={() => {
-                    setCompanyOnly((value) => !value);
+                    setFollowed((value) => !value);
                     resetList();
                   }}
                 >
-                  仅搜公司
+                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="m10 2 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8z" /></svg>
+                  仅关注
                 </button>
+                <button
+                  type="button"
+                  className="reaction-browser-filter-toggle"
+                  aria-pressed={changed}
+                  onClick={() => {
+                    setChanged((value) => !value);
+                    resetList();
+                  }}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M3 11h3l2-6 4 11 2-5h3" /></svg>
+                  有新变化
+                </button>
+                {view === 'PENDING' && (
+                  <select
+                    aria-label="待补全原因"
+                    value={reason}
+                    onChange={(event) => {
+                      setReason(event.target.value);
+                      resetList();
+                    }}
+                  >
+                    <option value="">全部待补全原因</option>
+                    {Object.entries(resolutionLabels)
+                      .filter(([key]) => key !== 'RESOLVED')
+                      .map(([key, label]) => (
+                        <option value={key} key={key}>
+                          {label} · {data?.pendingReasons[key] ?? 0}
+                        </option>
+                      ))}
+                  </select>
+                )}
               </>
-            ) : <label>
-              <span className="sr-only">事件类型</span>
-              <select
-                aria-label="事件类型"
-                value={type}
-                onChange={(event) => {
-                  setType(event.target.value as EventType);
-                  resetList();
-                }}
-              >
-                <option value="">全部事件类型</option>
-                {Object.entries(eventLabels).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>}
-            <button
-              type="button"
-              className="reaction-browser-filter-toggle"
-              aria-pressed={followed}
-              onClick={() => {
-                setFollowed((value) => !value);
-                resetList();
-              }}
-            >
-              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="m10 2 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8z" /></svg>
-              仅关注
-            </button>
-            <button
-              type="button"
-              className="reaction-browser-filter-toggle"
-              aria-pressed={changed}
-              onClick={() => {
-                setChanged((value) => !value);
-                resetList();
-              }}
-            >
-              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M3 11h3l2-6 4 11 2-5h3" /></svg>
-              有新变化
-            </button>
-            {view === 'PENDING' && (
-              <select
-                aria-label="待补全原因"
-                value={reason}
-                onChange={(event) => {
-                  setReason(event.target.value);
-                  resetList();
-                }}
-              >
-                <option value="">全部待补全原因</option>
-                {Object.entries(resolutionLabels)
-                  .filter(([key]) => key !== 'RESOLVED')
-                  .map(([key, label]) => (
-                    <option value={key} key={key}>
-                      {label} · {data?.pendingReasons[key] ?? 0}
-                    </option>
-                  ))}
-              </select>
             )}
           </form>
           {error && (
@@ -322,7 +343,10 @@ export function InvestmentObservationView({
               有新事件或反应变化 · 点击更新列表
             </button>
           )}
-          <div className="reaction-browser-list" ref={listRef} aria-busy={loading}>
+          {isStockDirectory ? (
+            <ReactionStockDirectory data={stockData} loading={loading} failed={Boolean(error)}
+              trackingOnly={trackingOnly} listRef={listRef} onOpenStock={openStock} onOpenNews={onOpenNews} />
+          ) : <div className="reaction-browser-list" ref={listRef} aria-busy={loading}>
             <div className="reaction-browser-columns">
               <span>事件 / 关联股票</span>
               <span>{view === 'HISTORY' ? '相对基准 · pp' : '最新反应'}</span>
@@ -332,7 +356,7 @@ export function InvestmentObservationView({
               <p className="reaction-empty" role="status">
                 正在读取事件…
               </p>
-            ) : !data?.items.length ? (
+            ) : !data && error ? null : !data?.items.length ? (
               <div className="reaction-empty">
                 <h4>{view === 'TRACKING' ? '当前没有符合条件的跟踪事件' : '没有符合条件的事件'}</h4>
                 <p>
@@ -413,26 +437,26 @@ export function InvestmentObservationView({
                 );
               })
             )}
-          </div>
+          </div>}
           <footer className="reaction-browser-pagination">
-            <span>共 {data?.total ?? 0} 件事件 · 每页 20 件</span>
+            <span>{listData ? `共 ${total.toLocaleString('zh-CN')} ${unit} · 每页 ${pageSize} ${unit}` : ''}</span>
             <div>
               <button
                 disabled={loading || page <= 1}
                 onClick={() => {
-                  setAnchor(data?.anchor);
+                  setAnchor(listData?.anchor);
                   setPage((value) => value - 1);
                 }}
               >
                 上一页
               </button>
               <span>
-                第 {page} / {Math.max(1, Math.ceil((data?.total || 0) / 20))} 页
+                第 {page} / {Math.max(1, Math.ceil(total / pageSize))} 页
               </span>
               <button
-                disabled={loading || page * 20 >= (data?.total || 0)}
+                disabled={loading || page * pageSize >= total}
                 onClick={() => {
-                  setAnchor(data?.anchor);
+                  setAnchor(listData?.anchor);
                   setPage((value) => value + 1);
                 }}
               >

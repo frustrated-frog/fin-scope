@@ -28,7 +28,10 @@ const dashboardRadarEvent = {
 
 const responses: Record<string, unknown> = {
   '/api/investment-reactions/recent': [],
-  '/api/investment-reactions/events?view=TRACKING&query=&page=1&size=20': { items: [], total: 0, counts: {}, stockNames: {}, stockCounts: {}, pendingReasons: {}, anchor: 0, revision: 0, page: 1, size: 20 },
+  '/api/investment-reactions/stocks?query=&page=1&size=20': { items: [], total: 0, anchor: 0, revision: 0, page: 1, size: 20 },
+  [`/api/investment-reactions/stocks?query=${encodeURIComponent('杭电股份')}&page=1&size=20`]: {
+    items: [], matchedStock: { code: '603618.SH', name: '杭电股份' }, total: 0, anchor: 0, revision: 0, page: 1, size: 20,
+  },
   '/api/investment-reactions/followed': [],
   '/api/investment-reactions/discovery': { running: false, captured: 0, resolved: 0, message: '自动发现已开启' },
   '/api/investment-observations': {
@@ -483,6 +486,9 @@ beforeEach(() => {
       }
       return mockApiResponse(detail);
     }
+    if (url.startsWith('/api/news/window?')) {
+      return mockApiResponse({ items: [], total: 0, asOfSequence: 0, page: 0, size: 50, sources: [], categoryCounts: {} });
+    }
     return mockApiResponse(state[url] ?? (url.startsWith('/api/investment-reactions/changes?') ? [] : {}));
   }));
 });
@@ -555,7 +561,13 @@ test('opens investment observation as an independent top-level workspace', async
 
   expect(await screen.findByRole('heading', { name: '投资观察' })).toBeInTheDocument();
   expect(screen.getByText('Investment Observation · 投资观察')).toBeInTheDocument();
-  expect(await screen.findByRole('heading', { name: '当前没有符合条件的跟踪事件' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '没有符合条件的股票' })).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText('搜索股票'), '杭电股份');
+  await userEvent.click(screen.getByRole('button', { name: '搜索' }));
+  await userEvent.click(await screen.findByRole('button', { name: /搜索实时资讯/ }));
+  expect(await screen.findByRole('searchbox', { name: '搜索资讯' })).toHaveValue('杭电股份');
+  expect(vi.mocked(fetch).mock.calls.some(([path]) => String(path).startsWith('/api/news/window?')
+    && new URLSearchParams(String(path).split('?')[1]).get('query') === '杭电股份')).toBe(true);
 });
 
 test('dashboard uses a responsive research command layout', () => {

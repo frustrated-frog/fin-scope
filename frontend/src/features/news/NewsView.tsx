@@ -26,6 +26,7 @@ export function NewsView({
                              onResearch,
                              onOpenMajorEvents,
                              initialRadarEventId,
+                             initialLiveQuery,
                              onInitialRadarEventOpened
                          }: {
     setMessage: (message: string) => void;
@@ -33,6 +34,7 @@ export function NewsView({
     onResearch?: (eventId: string | number, question: string) => void;
     onOpenMajorEvents?: () => void;
     initialRadarEventId?: string | number | null;
+    initialLiveQuery?: string;
     onInitialRadarEventOpened?: () => void;
 }) {
     const [mode, setMode] = useState<'live' | 'radar'>(initialRadarEventId ? 'radar' : 'live');
@@ -48,7 +50,8 @@ export function NewsView({
                 </button>
             </nav>
             {mode === 'live' ?
-                <LiveNewsPanel setMessage={setMessage} addToast={addToast} onOpenMajorEvents={onOpenMajorEvents}/> : (
+                <LiveNewsPanel setMessage={setMessage} addToast={addToast}
+                               onOpenMajorEvents={onOpenMajorEvents} initialSearch={initialLiveQuery}/> : (
                     <ResearchRadarPanel {...props} initialEventId={initialRadarEventId}
                                         onInitialEventOpened={onInitialRadarEventOpened}/>
                 )}
