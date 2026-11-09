@@ -13,6 +13,7 @@ public class ReactionEventQueryRequest {
     private ReactionEventSubtype eventSubtype;
     private ReactionResolutionStatus resolutionStatus;
     private String query = "";
+    private String stock;
     private boolean companyOnly;
     private boolean followed;
     private boolean changedToday;
@@ -26,6 +27,7 @@ public class ReactionEventQueryRequest {
         result.setEventSubtype(eventSubtype);
         result.setResolutionStatus(resolutionStatus);
         result.setQuery(query);
+        result.setStock(stock);
         result.setCompanyOnly(companyOnly);
         result.setFollowed(followed);
         result.setChangedToday(changedToday);

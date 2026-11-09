@@ -13,6 +13,7 @@ public class ReactionEventQuery {
     private ReactionEventSubtype eventSubtype;
     private ReactionResolutionStatus resolutionStatus;
     private String query = "";
+    private String stock;
     private boolean companyOnly;
     private boolean followed;
     private boolean changedToday;

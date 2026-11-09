@@ -5,6 +5,8 @@ import com.finscope.common.enums.investmentobservation.ReactionSampleState;
 import com.finscope.common.enums.investmentobservation.ReactionWindowStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
+import com.finscope.dao.instrument.InstrumentRepository;
+import com.finscope.dao.investmentobservation.ReactionEventQueryRepository;
 import com.finscope.dao.investmentobservation.ReactionSampleRepository;
 import com.finscope.domain.investmentobservation.*;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class ReactionWorkspaceService {
@@ -27,16 +30,59 @@ public class ReactionWorkspaceService {
     private ReactionRegistrationService registration;
 
     @Resource
-    private com.finscope.dao.investmentobservation.ReactionEventQueryRepository eventQueries;
+    private ReactionEventQueryRepository eventQueries;
+
+    @Resource
+    private InstrumentRepository instruments;
 
     public ReactionEventPage query(ReactionEventQuery query) {
-        if (query.getView() == null || query.getPage() < 1 || query.getPage() > 100000
-                || query.getSize() < 1 || query.getSize() > 50 || query.getAnchor() < 0
-                || query.getQuery() == null || query.getQuery().length() > 200) {
+        if (query.getView() == null) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+        }
+        validatePage(query.getQuery(), query.getPage(), query.getSize(), query.getAnchor());
+        if (query.getStock() != null) {
+            String code = query.getStock().strip().toUpperCase(Locale.ROOT);
+            if (!code.matches("[0-9]{6}\\.(SH|SZ|BJ)")) {
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+            }
+            query.setStock(code);
         }
         query.setQuery(query.getQuery().trim());
         return eventQueries.query(query);
+    }
+
+    public ReactionStockPage queryStocks(ReactionStockQuery query) {
+        validatePage(query.getQuery(), query.getPage(), query.getSize(), query.getAnchor());
+        query.setQuery(query.getQuery().strip());
+        ReactionStockPage page = eventQueries.queryStocks(query);
+        if (page.getTotal() == 0 && !query.getQuery().isEmpty() && !query.isTrackingOnly()) {
+            page.setMatchedStock(findKnownStock(query.getQuery()));
+        }
+        return page;
+    }
+
+    private ReactionStockMatch findKnownStock(String search) {
+        var matches = instruments.findAll().stream()
+                .filter(instrument -> "STOCK".equals(instrument.getType())
+                        && instrument.getMarket() != null && instrument.getMarket().matches("SH|SZ|BJ"))
+                .filter(instrument -> search.equals(instrument.getName()) || search.equalsIgnoreCase(instrument.getCode())
+                        || search.equalsIgnoreCase(instrument.getCode().replaceFirst("\\.(SH|SZ|BJ)$", "") + "." + instrument.getMarket()))
+                .toList();
+        if (matches.size() != 1) {
+            return null;
+        }
+        var instrument = matches.get(0);
+        var result = new ReactionStockMatch();
+        result.setCode(instrument.getCode().replaceFirst("\\.(SH|SZ|BJ)$", "") + "." + instrument.getMarket());
+        result.setName(instrument.getName());
+        return result;
+    }
+
+    private void validatePage(String query, int page, int size, long anchor) {
+        if (page < 1 || page > 100000 || size < 1 || size > 50 || anchor < 0
+                || query == null || query.length() > 200) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
+        }
     }
 
     public ReactionSample event(String key, String stock) {

@@ -7,6 +7,7 @@ import com.finscope.common.enums.investmentobservation.ReactionEventSubtype;
 import com.finscope.common.enums.investmentobservation.ReactionWorkspaceView;
 import com.finscope.domain.investmentobservation.ReactionCalculation;
 import com.finscope.domain.investmentobservation.ReactionEventQuery;
+import com.finscope.domain.investmentobservation.ReactionStockQuery;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -310,6 +311,61 @@ class ReactionSampleRepositoryTest {
         assertEquals(0, repo.query(query).getTotal());
         query.setQuery("300209");
         assertEquals(2, repo.query(query).getTotal());
+    }
+
+    @Test
+    void stockDirectoryCountsCasesAndKeepsTheSelectedStockInSharedEvents() {
+        historicalReport("a", "行云科技：前三季度净利润为2.69亿元", now);
+        historicalReport("b", "行云科技：2026年第三季度净利润2.57亿元", now.plusMinutes(7));
+        var peer = sample();
+        peer.setSourceIdentity("EVENT:a");
+        peer.setInstrumentCode("600519.SH");
+        peer.setInstrumentName("贵州茅台");
+        peer.setState(ReactionSampleState.OBSERVING);
+        peer.setTitle("同一事件的另一只股票");
+        peer.setPublishedAt(now);
+        repository.create(peer);
+        var current = sample();
+        current.setSourceIdentity("EVENT:current");
+        current.setInstrumentCode("300209.SZ");
+        current.setInstrumentName("行云科技");
+        current.setState(ReactionSampleState.OBSERVING);
+        current.setPublishedAt(now.plusDays(1));
+        current.setTitle("新合同");
+        repository.create(current);
+
+        var queries = new ReactionEventQueryRepository();
+        ReflectionTestUtils.setField(queries, "jdbcTemplate", jdbc);
+        ReflectionTestUtils.setField(queries, "samples", repository);
+        var stocks = new ReactionStockQuery();
+        stocks.setSize(1);
+        var directory = queries.queryStocks(stocks);
+        assertEquals(2, directory.getTotal());
+        var first = directory.getItems().get(0);
+        assertEquals("300209.SZ", first.code());
+        assertEquals(1, first.trackingCount());
+        assertEquals(1, first.historyCount());
+        assertEquals("新合同", first.latestTitle());
+        stocks.setPage(2);
+        stocks.setAnchor(directory.getAnchor());
+        assertEquals("600519.SH", queries.queryStocks(stocks).getItems().get(0).code());
+        stocks.setPage(1);
+        stocks.setQuery("300209");
+        assertEquals(1, queries.queryStocks(stocks).getTotal());
+        stocks.setQuery("同一事件");
+        assertEquals(0, queries.queryStocks(stocks).getTotal());
+
+        var events = new ReactionEventQuery();
+        events.setStock("300209.SZ");
+        events.setView(ReactionWorkspaceView.HISTORY);
+        var history = queries.query(events);
+        assertEquals(1, history.getTotal());
+        assertEquals("300209.SZ", history.getItems().get(0).getInstrumentCode());
+        assertEquals(2, history.getCaseReportCounts().get("EVENT:a"));
+        events.setStock("600519.SH");
+        assertEquals(0, queries.query(events).getTotal());
+        events.setView(ReactionWorkspaceView.TRACKING);
+        assertEquals("600519.SH", queries.query(events).getItems().get(0).getInstrumentCode());
     }
 
     private ReactionSample historicalReport(String key, String title, LocalDateTime publishedAt) {

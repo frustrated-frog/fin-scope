@@ -18,8 +18,10 @@ import com.finscope.service.investmentobservation.ReactionRefreshService;
 import com.finscope.web.request.CreateReactionSampleRequest;
 import com.finscope.web.request.ConfirmReactionSampleRequest;
 import com.finscope.web.request.ArchiveReactionSampleRequest;
+import com.finscope.web.request.ReactionStockQueryRequest;
 import com.finscope.web.response.ApiResponses;
 import com.finscope.web.response.ReactionSampleResponse;
+import com.finscope.web.response.ReactionStockPageResponse;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -45,6 +47,11 @@ public class InvestmentReactionController {
     public ApiResponse<com.finscope.web.response.ReactionEventPageResponse> events(
             @ModelAttribute com.finscope.web.request.ReactionEventQueryRequest query) {
         return ApiResponses.success(com.finscope.web.response.ReactionEventPageResponse.from(workspace.query(query.toQuery())));
+    }
+
+    @GetMapping("/stocks")
+    public ApiResponse<ReactionStockPageResponse> stocks(@ModelAttribute ReactionStockQueryRequest query) {
+        return ApiResponses.success(ReactionStockPageResponse.from(workspace.queryStocks(query.toQuery())));
     }
 
     @GetMapping("/event")
