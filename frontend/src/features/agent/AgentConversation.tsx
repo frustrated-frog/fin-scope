@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -14,8 +14,6 @@ import './AgentConversation.css';
 type AgentConversationProps = {
   endpoint: AgentEndpoint;
   context: AgentPageContext;
-  mode?: 'workspace' | 'compact';
-  suggestions?: readonly string[];
 };
 
 type ConversationMessage = {
@@ -28,14 +26,12 @@ type ConversationMessage = {
 };
 
 const WORKSPACE_SUGGESTIONS = [
-  '概括最近进入工作区的文章与研究线索',
-  '结合自选、新闻和证据，哪些主题最值得继续补证？',
-  '查找一家公司的财务、产业链与已有研究材料'
+  { label: '线索聚合', text: '概括最近进入工作区的文章与研究线索' },
+  { label: '主题补证', text: '结合自选、新闻和证据，哪些主题最值得继续补证？' },
+  { label: '公司研究', text: '查找一家公司的财务、产业链与已有研究材料' }
 ] as const;
 
 const WORKSPACE_SCOPE = ['文章', '研究', '新闻', '市场', '财务', '知识'] as const;
-const WORKSPACE_SUGGESTION_LABELS = ['线索聚合', '主题补证', '公司研究'] as const;
-const MARKET_SUGGESTION_LABELS = ['市场参与', '转折信号', '证据追踪'] as const;
 
 type AnswerMarkdownNode = {
   type: string;
@@ -59,12 +55,7 @@ function hideInternalSourceMarkers() {
   return visit;
 }
 
-export function AgentConversation({
-  endpoint,
-  context,
-  mode = 'workspace',
-  suggestions = WORKSPACE_SUGGESTIONS
-}: AgentConversationProps) {
+export function AgentConversation({ endpoint, context }: AgentConversationProps) {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [busy, setBusy] = useState(false);
@@ -74,7 +65,8 @@ export function AgentConversation({
   const abortRef = useRef<AbortController | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
-  const contextLabel = useMemo(() => presentContext(context), [context]);
+  const { label = 'Agent', hint } = context.navigation ?? {};
+  const contextLabel = hint ? `${label} · ${hint}` : label;
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -194,14 +186,14 @@ export function AgentConversation({
 
   return (
     <section
-      className={`agent-conversation agent-conversation--${mode}`}
+      className="agent-conversation agent-conversation--workspace"
       aria-label="FinScope Agent 对话"
     >
       <header className="agent-conversation-status">
         <div className="agent-context-identity">
           <span className={`agent-status-dot is-${connectionState}`} aria-hidden="true" />
           <span className="agent-context-copy">
-            <small>{mode === 'compact' ? 'MARKET CONTEXT' : 'EVIDENCE NAVIGATOR'}</small>
+            <small>EVIDENCE NAVIGATOR</small>
             <strong>{contextLabel}</strong>
           </span>
         </div>
@@ -236,29 +228,19 @@ export function AgentConversation({
                 <i className="agent-evidence-node agent-evidence-node--three" />
               </div>
               <div className="agent-empty-copy">
-                <span>{mode === 'compact' ? 'MARKET EVIDENCE' : 'FIN//SCOPE EVIDENCE ORBIT'}</span>
-                <h3>
-                  {mode === 'compact'
-                    ? '读取这一刻的市场证据'
-                    : '从问题出发，沿证据抵达结论。'}
-                </h3>
-                <p>
-                  {mode === 'compact'
-                    ? '围绕当前日期与视图，只读检索市场状态、变化和证据边界。'
-                    : '按需检索 FinScope 中的研究材料，串联事实、变化与判断，并在回答中保留证据边界。'}
-                </p>
-                {mode === 'workspace' ? (
-                  <div className="agent-evidence-scope" aria-label="可检索范围">
-                    {WORKSPACE_SCOPE.map((item) => <span key={item}>{item}</span>)}
-                  </div>
-                ) : null}
+                <span>FIN//SCOPE EVIDENCE ORBIT</span>
+                <h3>从问题出发，沿证据抵达结论。</h3>
+                <p>按需检索 FinScope 中的研究材料，串联事实、变化与判断，并在回答中保留证据边界。</p>
+                <div className="agent-evidence-scope" aria-label="可检索范围">
+                  {WORKSPACE_SCOPE.map((item) => <span key={item}>{item}</span>)}
+                </div>
               </div>
             </div>
             <div className="agent-suggestions" aria-label="建议问题">
-              {suggestions.map((suggestion, index) => (
-                <button type="button" key={suggestion} onClick={() => chooseSuggestion(suggestion)}>
-                  <small>{presentSuggestionLabel(mode, index)}</small>
-                  <strong>{suggestion}</strong>
+              {WORKSPACE_SUGGESTIONS.map(({ label, text }) => (
+                <button type="button" key={text} onClick={() => chooseSuggestion(text)}>
+                  <small>{label}</small>
+                  <strong>{text}</strong>
                   <span aria-hidden="true">↗</span>
                 </button>
               ))}
@@ -317,22 +299,18 @@ export function AgentConversation({
 
       <form className="agent-composer" onSubmit={submitQuestion}>
         <div className="agent-composer-heading">
-          <label htmlFor={`agent-question-${mode}`}>
-            {mode === 'compact' ? '向市场状态提问' : '向整个研究工作区提问'}
-          </label>
+          <label htmlFor="agent-question-workspace">向整个研究工作区提问</label>
           <span>Enter 发送 · Shift + Enter 换行</span>
         </div>
         <div className="agent-composer-shell">
           <textarea
-            id={`agent-question-${mode}`}
+            id="agent-question-workspace"
             ref={questionRef}
             value={draft}
             disabled={busy}
             maxLength={4000}
-            rows={mode === 'compact' ? 2 : 3}
-            placeholder={mode === 'compact'
-              ? '例如：今天的市场参与度如何？'
-              : '例如：最近有哪些证据正在改变我对某个主题的判断？'}
+            rows={3}
+            placeholder="例如：最近有哪些证据正在改变我对某个主题的判断？"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleQuestionKeyDown}
           />
@@ -353,28 +331,4 @@ export function AgentConversation({
       </form>
     </section>
   );
-}
-
-function presentContext(context: AgentPageContext): string {
-  if (context.surface === 'market_pulse') {
-    return `${context.business_date ?? '最新交易日'} · ${presentMarketView(context.current_view)}`;
-  }
-  const label = context.navigation?.label ?? 'Agent';
-  return context.navigation?.hint ? `${label} · ${context.navigation.hint}` : label;
-}
-
-function presentMarketView(view: string): string {
-  const labels: Record<string, string> = {
-    panorama: '市场全景',
-    review: '今日雷达',
-    transition: '转折与情景',
-    breadth: '市场宽度',
-    history: '历史演变'
-  };
-  return labels[view] ?? '市场状态';
-}
-
-function presentSuggestionLabel(mode: 'workspace' | 'compact', index: number): string {
-  const labels = mode === 'compact' ? MARKET_SUGGESTION_LABELS : WORKSPACE_SUGGESTION_LABELS;
-  return labels[index] ?? '研究路径';
 }

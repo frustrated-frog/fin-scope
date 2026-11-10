@@ -162,7 +162,6 @@
 .market-pulse-page .market-pulse-controls button:hover:not(:disabled),
 .market-pulse-page .market-pulse-empty button:hover:not(:disabled) { background: #b4e7ef; box-shadow: 0 0 0 3px rgba(142, 208, 223, .13); }
 
-.market-pulse-page .market-pulse-warning { border: 1px solid rgba(232, 189, 118, .28); border-left: 3px solid var(--mp-amber); border-radius: 10px; background: rgba(232, 189, 118, .055); }
 .market-pulse-page .market-pulse-tabs {
   position: static;
   align-self: start;

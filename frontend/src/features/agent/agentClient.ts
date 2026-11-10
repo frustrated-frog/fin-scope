@@ -4,11 +4,8 @@ export type AgentEndpoint = {
 
 export type AgentPageContext = {
   schema_version: 1;
-  surface: 'market_pulse' | 'finscope_workspace';
+  surface: 'finscope_workspace';
   current_view: string;
-  business_date?: string | null;
-  quality_status?: 'READY' | 'PARTIAL' | 'STALE' | 'UNAVAILABLE' | null;
-  generated_at?: string | null;
   navigation?: {
     view: string;
     label: string;

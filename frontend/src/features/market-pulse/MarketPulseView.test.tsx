@@ -191,7 +191,8 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.queryByText('股票研究候选')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '进入行业研究 →' }));
   expect(onOpenStockDiscovery).toHaveBeenCalledWith(expect.objectContaining({ businessDate: '2026-08-21', preferredSectors: ['创新药'] }));
-  expect(screen.getByText(/研究候选不是买入指令/)).toBeInTheDocument();
+  expect(screen.queryByText('研究边界')).not.toBeInTheDocument();
+  expect(screen.queryByText('数据说明')).not.toBeInTheDocument();
 });
 
 test('opens panorama by default and switches to historical evolution', async () => {

@@ -13,7 +13,6 @@ import { RadarOverview } from './RadarOverview';
 import { BreadthWorkspace } from './BreadthWorkspace';
 import './RadarWorkspace.css';
 import './MarketPulseMaterials.css';
-import { MarketAgentOverlay } from './MarketAgentOverlay';
 
 const stageLabels: Record<string, string> = {
   RISK_ON: '放量进攻',
@@ -89,19 +88,6 @@ function isStockDiscoveryCopy(value: string) {
 
 function marketLevelItems(items?: string[]) {
   return items?.filter(item => !isStockDiscoveryCopy(item)) ?? [];
-}
-
-function MarketPulseWarnings({ warnings }: { warnings?: string[] }) {
-  const items = marketLevelItems(warnings);
-  if (!items.length) {
-    return null;
-  }
-  return (
-    <details className="market-pulse-warning">
-      <summary><strong>数据说明</strong><span>{items[0]}</span>{items.length > 1 && <small>另有 {items.length - 1} 项</small>}</summary>
-      {items.length > 1 && <ul>{items.slice(1).map(item => <li key={item}>{item}</li>)}</ul>}
-    </details>
-  );
 }
 
 function MarketTape({ regimes }: { regimes: MarketRegime[] }) {
@@ -454,8 +440,6 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'panorama' && <MarketPanorama workspace={workspace} dates={dates} refreshing={refreshing}
         onLoad={date => void load(date)} onRefresh={() => void refresh()} onOpenStock={onOpenStock} onOpenStockDiscovery={onOpenStockDiscovery} />}
 
-      {view !== 'breadth' && <MarketPulseWarnings warnings={workspace.warnings} />}
-
       {view === 'review' && <>
         {workspace.businessDate && <DailyResearchPanel businessDate={workspace.businessDate} sectors={sectors}
           refreshKey={workspace.generatedAt} onOpenStockDiscovery={onOpenStockDiscovery} onOpenStock={onOpenStock}>
@@ -470,15 +454,8 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
 
       {view === 'history' && <><MarketTape regimes={workspace.recentRegimes ?? []} /><HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} /></>}
 
-      {view === 'breadth' && <>
-        <BreadthWorkspace key={workspace.businessDate} workspace={workspace} dates={dates} refreshing={refreshing}
-          loading={loading} onLoad={date => void load(date)} onRefresh={() => void refresh()} />
-        <MarketPulseWarnings warnings={workspace.warnings} />
-      </>}
-
-      <footer className="market-pulse-disclaimer"><span>研究边界</span><p>研究候选不是买入指令。页面用于提高研究优先级，最终决策仍需核验公司基本面、估值、流动性与个人风险承受能力。</p><time>{workspace.generatedAt ? `生成于 ${workspace.generatedAt.replace('T', ' ').slice(0, 16)}` : ''}</time></footer>
-      <MarketAgentOverlay businessDate={workspace.businessDate} currentView={view}
-        qualityStatus={workspace.qualityStatus} generatedAt={workspace.generatedAt} />
+      {view === 'breadth' && <BreadthWorkspace key={workspace.businessDate} workspace={workspace} dates={dates} refreshing={refreshing}
+        loading={loading} onLoad={date => void load(date)} onRefresh={() => void refresh()} />}
     </section>
   );
 }

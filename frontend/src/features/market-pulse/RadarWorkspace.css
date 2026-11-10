@@ -112,7 +112,6 @@
 .market-pulse-page.is-radar .mp-research-members strong { color: var(--mpr-ink); }
 .market-pulse-page.is-radar .mp-research-status { padding: 0 3px; font-size: 11px; margin-top: -10px; }
 .market-pulse-page.is-radar .mp-research-status button { border: 0; background: transparent; color: var(--mpr-muted); font-size: 11px; text-decoration: underline; text-underline-offset: 3px; }
-.market-pulse-page.is-radar .market-pulse-warning { margin: 0; border: 0; border-left: 2px solid var(--mp-amber); border-radius: 6px; background: color-mix(in srgb, var(--mp-amber) 5%, transparent); color: var(--mpr-muted); font-size: 11px; }
 /* The review is a concise reading surface, with tools beneath the daily signals. */
 .market-pulse-page.is-radar .market-pulse-review > header { padding: 22px 24px 18px; background: transparent; border-bottom: 1px solid var(--mpr-line); gap: 20px; }
 .market-pulse-page.is-radar .market-pulse-review > header h3 { font-size: 21px; line-height: 1.6; letter-spacing: -.025em; max-width: none; }
@@ -162,7 +161,6 @@
 .market-pulse-page.is-radar .mp-research-table-wrap thead { background: var(--mpr-raised); }
 .market-pulse-page.is-radar :is(.mp-theme-card, .mp-research-comparison article) { background: var(--mpr-panel); border-color: var(--mpr-line); border-radius: 10px; }
 .market-pulse-page.is-radar .mp-daily-research dd { color: var(--mpr-ink); font-size: 20px; }
-.market-pulse-page.is-radar .market-pulse-disclaimer { border-color: var(--mpr-line); color: var(--mpr-muted); font-size: 11px; }
 /* One brief entrance; subsequent input remains immediate. */
 .market-pulse-page.is-radar:not([data-interaction="keyboard"]) :is(.mpr-overview, .mp-cohort-lab) { animation: mpr-enter 280ms var(--mpr-ease) both; }
 .market-pulse-page.is-radar:not([data-interaction="keyboard"]) .mpr-shape { transform-origin: 180px 130px; animation: mpr-plot 280ms var(--mpr-ease) both; }
