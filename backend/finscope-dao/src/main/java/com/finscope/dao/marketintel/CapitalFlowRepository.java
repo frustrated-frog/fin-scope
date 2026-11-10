@@ -54,6 +54,16 @@ public class CapitalFlowRepository {
                 mapper, instrumentId, text(from), text(to));
     }
 
+    public List<CapitalFlowPoint> findRecentMinuteVersions(Long instrumentId, LocalDate from, LocalDate to) {
+        return jdbc.query("SELECT * FROM (" +
+                        "SELECT f.*,ROW_NUMBER() OVER (PARTITION BY provider_code,observed_at " +
+                        "ORDER BY retrieved_at DESC,id DESC) AS rn " +
+                        "FROM market_capital_flow_snapshot f WHERE instrument_id=? AND granularity='MINUTE_1' " +
+                        "AND observed_at>=? AND observed_at<?) ranked " +
+                        "WHERE rn=1 ORDER BY observed_at,provider_code",
+                mapper, instrumentId, text(from.atStartOfDay()), text(to.plusDays(1).atStartOfDay()));
+    }
+
     public List<CapitalFlowPoint> findLatest(Long instrumentId, int limit) {
         return jdbc.query("SELECT * FROM market_capital_flow_snapshot WHERE instrument_id=? " +
                         "ORDER BY observed_at DESC,id DESC LIMIT ?", mapper, instrumentId, limit);

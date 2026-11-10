@@ -7,6 +7,7 @@ import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
+import com.finscope.rpc.marketintel.CapitalReplayData;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.JdkFinanceHttpClient;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -41,8 +43,11 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final FinanceHttpClient http;
     private final ObjectMapper json = new ObjectMapper();
-    private static final Set<MarketDataCapability> CAPABILITIES = Collections.singleton(
-            MarketDataCapability.CAPITAL_FLOW_5M);
+    private static final Set<MarketDataCapability> CAPABILITIES = Set.of(
+            MarketDataCapability.CAPITAL_FLOW_5M, MarketDataCapability.CAPITAL_REPLAY_1M);
+    private static final LocalTime FIRST_FLOW_MINUTE = LocalTime.of(9, 31);
+    private static final LocalTime MORNING_CLOSE = LocalTime.of(11, 30);
+    private static final LocalTime FIRST_AFTERNOON_MINUTE = LocalTime.of(13, 1);
 
     @Autowired
     public EastmoneyCapitalFlowProvider(FinanceHttpClient http) {
@@ -84,13 +89,13 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         if (!supports(instrument)) {
             throw new ProviderContractException("UNSUPPORTED_INSTRUMENT", "Eastmoney capital flow requires an A-share stock", false);
         }
-        String secid = ("SH".equals(instrument.getMarket()) ? "1." : "0.") + instrument.getCode();
+        String secid = secid(instrument);
         List<String> warnings = new ArrayList<String>();
 
         FetchAttempt minuteAttempt = attempt(() -> getMinuteFundFlow(secid));
         FetchAttempt dailyAttempt = attempt(() -> getDailyFundFlow(secid));
         FetchAttempt quoteAttempt = attempt(() -> getQuote(secid));
-        FetchAttempt trendAttempt = attempt(() -> getTrend(secid));
+        FetchAttempt trendAttempt = attempt(() -> getTrend(secid, 1));
         FetchAttempt dailyMarketAttempt = attempt(() -> getDailyMarket(secid));
 
         QuoteContext quoteContext = QuoteContext.empty();
@@ -122,7 +127,7 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         List<CapitalFlowPoint> minutes = Collections.emptyList();
         if (minuteAttempt.response != null) {
             try {
-                minutes = parseFlow(minuteAttempt.response, instrument, "MINUTE_1", false, intradayMarket, warnings);
+                minutes = parseFlow(minuteAttempt.response, instrument, "MINUTE_1", false, intradayMarket, warnings, false);
                 if (minutes.isEmpty()) minuteAttempt = FetchAttempt.failed(new ProviderContractException("EMPTY_FUND_FLOW", "实时资金流为空", true));
             } catch (Exception error) { minuteAttempt = FetchAttempt.failed(error); }
         }
@@ -131,7 +136,7 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         List<CapitalFlowPoint> days = Collections.emptyList();
         if (dailyAttempt.response != null) {
             try {
-                days = parseFlow(dailyAttempt.response, instrument, "DAY_1", true, dailyMarket, warnings);
+                days = parseFlow(dailyAttempt.response, instrument, "DAY_1", true, dailyMarket, warnings, false);
                 if (days.isEmpty()) dailyAttempt = FetchAttempt.failed(new ProviderContractException("EMPTY_FUND_FLOW", "历史资金流为空", true));
             } catch (Exception error) { dailyAttempt = FetchAttempt.failed(error); }
         }
@@ -168,6 +173,51 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         return new CapitalFlowData(minutes, days, quoteContext.turnoverRate, quoteContext.volumeRatio, warnings, providerCode());
     }
 
+    @Override
+    public CapitalReplayData fetchReplay(Instrument instrument) {
+        if (!supports(instrument)) {
+            throw new ProviderContractException("UNSUPPORTED_INSTRUMENT", "资金复盘需要 A 股标的", false);
+        }
+        String secid = secid(instrument);
+        List<String> warnings = new ArrayList<>();
+        List<CapitalFlowPoint> prices = new ArrayList<>();
+        List<CapitalFlowPoint> flows = Collections.emptyList();
+        Exception priceFailure = null;
+        try {
+            parseTrends(getTrend(secid, 5)).forEach((time, market) -> {
+                CapitalFlowPoint point = new CapitalFlowPoint();
+                point.setDataDate(time.toLocalDate());
+                point.setObservedAt(time);
+                point.setPrice(market.price);
+                point.setIntervalTradeAmount(market.amount);
+                point.setProviderCode(providerCode());
+                prices.add(point);
+            });
+        } catch (Exception error) {
+            priceFailure = error;
+            addWarning(warnings, "INTRADAY_MARKET_UNAVAILABLE", error);
+        }
+        try {
+            flows = parseFlow(getMinuteFundFlow(secid), instrument, "MINUTE_1", false,
+                    Collections.emptyMap(), warnings, true);
+        } catch (Exception error) {
+            if (prices.isEmpty()) {
+                ProviderContractException schemaFailure = schemaFailure(priceFailure, error);
+                if (schemaFailure != null) {
+                    throw schemaFailure;
+                }
+                throw new ProviderContractException("ALL_REPLAY_SOURCES_FAILED",
+                        "分时行情与分钟资金暂不可用", true, error);
+            }
+            addWarning(warnings, "REALTIME_FUND_FLOW_UNAVAILABLE", error);
+        }
+        return new CapitalReplayData(prices, flows, warnings);
+    }
+
+    private String secid(Instrument instrument) {
+        return ("SH".equals(instrument.getMarket()) ? "1." : "0.") + instrument.getCode();
+    }
+
     private FinanceHttpResponse getMinuteFundFlow(String secid) throws Exception {
         return request(REALTIME_HOST, "fflow/kline/get", "secid=" + secid + "&lmt=500&klt=1&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57");
     }
@@ -182,8 +232,9 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         return request(REALTIME_HOST, "get", "secid=" + secid + "&fields=f43,f47,f48,f50,f168");
     }
 
-    private FinanceHttpResponse getTrend(String secid) throws Exception {
-        return request(HISTORY_HOST, "trends2/get", "secid=" + secid + "&ndays=1&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58");
+    private FinanceHttpResponse getTrend(String secid, int days) throws Exception {
+        return request(HISTORY_HOST, "trends2/get", "secid=" + secid + "&ndays=" + days
+                + "&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58");
     }
 
     private FinanceHttpResponse getDailyMarket(String secid) throws Exception {
@@ -205,12 +256,13 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
     }
 
     private List<CapitalFlowPoint> parseFlow(FinanceHttpResponse response, Instrument instrument, String granularity,
-                                             boolean daily, Map<LocalDateTime, MarketPoint> market, List<String> warnings) throws Exception {
+                                             boolean daily, Map<LocalDateTime, MarketPoint> market,
+                                             List<String> warnings, boolean replay) throws Exception {
         JsonNode lines = data(response).path("klines");
         if (!lines.isArray()) throw drift("missing klines");
         List<CapitalFlowPoint> result = new ArrayList<CapitalFlowPoint>();
         BigDecimal[] previousCumulativeFlow = null;
-        LocalDate previousDate = null;
+        LocalDateTime previousObserved = null;
         for (JsonNode line : lines) {
             String[] fields = line.asText().split(",", -1);
             if (fields.length < 6) throw drift("kline field count");
@@ -223,10 +275,13 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
                 point.setDataDate(observed.toLocalDate());
                 point.setObservedAt(observed);
                 BigDecimal[] rawFlow = new BigDecimal[]{decimal(fields[1]), decimal(fields[2]), decimal(fields[3]), decimal(fields[4]), decimal(fields[5])};
-                if (!daily && (previousDate == null || !previousDate.equals(observed.toLocalDate()))) {
+                if (!daily && (previousObserved == null || !previousObserved.toLocalDate().equals(observed.toLocalDate()))) {
                     previousCumulativeFlow = null;
                 }
-                BigDecimal[] normalizedFlow = daily ? rawFlow : flowDelta(rawFlow, previousCumulativeFlow);
+                BigDecimal[] normalizedFlow = daily ? rawFlow : flowDelta(rawFlow, previousCumulativeFlow, replay);
+                if (replay && !hasFlowBaseline(observed, previousObserved)) {
+                    normalizedFlow = new BigDecimal[rawFlow.length];
+                }
                 point.setMainNetInflow(normalizedFlow[0]);
                 point.setSmallNetInflow(normalizedFlow[1]);
                 point.setMediumNetInflow(normalizedFlow[2]);
@@ -246,7 +301,10 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
                     if (!market.isEmpty()) addWarningOnce(warnings, "TIMELINE_ALIGNMENT_GAP");
                 }
                 result.add(point);
-                if (!daily) { previousCumulativeFlow = rawFlow; previousDate = observed.toLocalDate(); }
+                if (!daily) {
+                    previousCumulativeFlow = rawFlow;
+                    previousObserved = observed;
+                }
             } catch (ProviderContractException error) {
                 throw error;
             } catch (Exception error) {
@@ -256,11 +314,24 @@ public class EastmoneyCapitalFlowProvider implements CapitalFlowProvider {
         return result;
     }
 
-    private static BigDecimal[] flowDelta(BigDecimal[] current, BigDecimal[] previous) {
+    private static boolean hasFlowBaseline(LocalDateTime observed, LocalDateTime previous) {
+        if (observed.toLocalTime().equals(FIRST_FLOW_MINUTE)) {
+            return true;
+        }
+        return previous != null && observed.toLocalDate().equals(previous.toLocalDate())
+                && (previous.plusMinutes(1).equals(observed)
+                || (previous.toLocalTime().equals(MORNING_CLOSE)
+                && observed.toLocalTime().equals(FIRST_AFTERNOON_MINUTE)));
+    }
+
+    private static BigDecimal[] flowDelta(BigDecimal[] current, BigDecimal[] previous, boolean replay) {
         BigDecimal[] result = new BigDecimal[current.length];
         for (int index = 0; index < current.length; index++) {
-            result[index] = current[index] == null ? null
-                    : previous == null || previous[index] == null ? current[index] : current[index].subtract(previous[index]);
+            if (current[index] == null || (replay && previous != null && previous[index] == null)) {
+                continue;
+            }
+            result[index] = previous == null || previous[index] == null
+                    ? current[index] : current[index].subtract(previous[index]);
         }
         return result;
     }

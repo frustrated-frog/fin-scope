@@ -19,8 +19,10 @@ import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.marketintel.ProviderRequestGuard;
 import com.finscope.rpc.marketintel.CapitalFlowData;
 import com.finscope.rpc.marketintel.CapitalFlowProvider;
+import com.finscope.rpc.marketintel.CapitalReplayData;
 import com.finscope.rpc.marketintel.DragonTigerData;
 import com.finscope.rpc.marketintel.DragonTigerProvider;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.quote.QuoteAdapter;
 import com.finscope.rpc.quote.SectorMarketProvider;
 import org.slf4j.Logger;
@@ -370,6 +372,21 @@ public class MarketDataGateway {
         String flightKey = MarketDataCapability.CAPITAL_FLOW_5M.name() + ":" + instrument.getId()
                 + ":" + asOfDate;
         return singleFlight.execute(flightKey, () -> routeCapitalFlow(instrument, asOfDate));
+    }
+
+    public CapitalReplayData fetchCapitalReplay(Instrument instrument) {
+        MarketDataCapability capability = MarketDataCapability.CAPITAL_REPLAY_1M;
+        return singleFlight.execute(capability.name() + ":" + instrument.getId(), () -> {
+            List<CapitalFlowProvider> candidates = capitalFlowProviders.stream()
+                    .filter(provider -> provider.supports(instrument))
+                    .toList();
+            CapitalFlowProvider provider = routePolicy.order(candidates, capability).stream()
+                    .findFirst()
+                    .orElseThrow(() -> new ProviderContractException("REPLAY_PROVIDER_UNAVAILABLE",
+                            "分时复盘数据源暂不可用", true));
+            return executeProvider(provider, capability, requestDeadlineNanos(properties.getCapitalRequestBudgetMs()),
+                    () -> provider.fetchReplay(instrument));
+        });
     }
 
     private CapitalFlowGatewayResult routeCapitalFlow(Instrument instrument, LocalDate asOfDate) {

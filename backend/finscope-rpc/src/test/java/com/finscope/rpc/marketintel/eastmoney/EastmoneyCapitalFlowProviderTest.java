@@ -3,6 +3,7 @@ package com.finscope.rpc.marketintel.eastmoney;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.marketintel.CapitalFlowData;
+import com.finscope.rpc.marketintel.CapitalReplayData;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
 import com.finscope.rpc.marketintel.ProviderContractException;
@@ -27,6 +28,50 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EastmoneyCapitalFlowProviderTest {
+    @Test
+    void replayRequestsFiveTradingDaysAndDoesNotAssignGapToOneMinute() {
+        FinanceHttpClient http = (provider, uri, headers) -> {
+            if (uri.getPath().endsWith("/trends2/get")) {
+                assertTrue(uri.getQuery().contains("ndays=5"));
+                return fixture(uri, "eastmoney-stock-trends.json");
+            }
+            assertTrue(uri.getPath().endsWith("/fflow/kline/get"));
+            return new FinanceHttpResponse(200, """
+                    {"data":{"klines":[
+                      "2026-07-14 09:31,100,0,0,60,40",
+                      "2026-07-14 09:33,140,0,0,85,55",
+                      "2026-07-14 09:34,155,0,0,95,60",
+                      "2026-07-14 11:30,200,0,0,130,70",
+                      "2026-07-14 13:01,204,0,0,135,69"
+                    ]}}
+                    """, Instant.EPOCH, "replay-flow");
+        };
+
+        CapitalReplayData replay = new EastmoneyCapitalFlowProvider(http).fetchReplay(stock());
+
+        assertEquals(2, replay.getPrices().size());
+        assertEquals(new BigDecimal("60"), replay.getFlows().get(0).getLargeNetInflow());
+        assertNull(replay.getFlows().get(1).getLargeNetInflow());
+        assertEquals(new BigDecimal("10"), replay.getFlows().get(2).getLargeNetInflow());
+        assertEquals(new BigDecimal("-1"), replay.getFlows().get(4).getSuperLargeNetInflow());
+    }
+
+    @Test
+    void replayKeepsPricesWhenFlowRequestFails() {
+        FinanceHttpClient http = (provider, uri, headers) -> {
+            if (uri.getPath().endsWith("/trends2/get")) {
+                return fixture(uri, "eastmoney-stock-trends.json");
+            }
+            throw new ProviderContractException("HTTP_503", "flow unavailable", true);
+        };
+
+        CapitalReplayData replay = new EastmoneyCapitalFlowProvider(http).fetchReplay(stock());
+
+        assertFalse(replay.getPrices().isEmpty());
+        assertTrue(replay.getFlows().isEmpty());
+        assertEquals(List.of("REALTIME_FUND_FLOW_UNAVAILABLE:HTTP_503"), replay.getWarnings());
+    }
+
     @Test
     void parsesMinuteDailyQuoteAndAlignsTradeAmount() throws Exception {
         EastmoneyCapitalFlowProvider provider = new EastmoneyCapitalFlowProvider(new FixtureHttpClient());
