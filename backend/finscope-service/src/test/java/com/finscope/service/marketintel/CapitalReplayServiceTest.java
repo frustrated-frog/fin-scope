@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapitalReplayServiceTest {
     @Test
@@ -46,6 +47,15 @@ class CapitalReplayServiceTest {
         assertEquals(1, session.getMinutes().size());
         assertEquals(LocalTime.of(14, 30), session.getMinutes().get(0).getTime());
         assertEquals(BigDecimal.valueOf(200), session.getMinutes().get(0).getLargeNet());
+    }
+
+    @Test
+    void omitsSessionsWhenSavedFlowHasNoTrustworthyMinute() {
+        CapitalReplayView result = CapitalReplayService.assemble(
+                new CapitalReplayData(List.of(), List.of(), List.of()),
+                List.of(point("2026-11-06T14:30", null, 100, "EASTMONEY_DIRECT")));
+
+        assertTrue(result.getSessions().isEmpty());
     }
 
     private CapitalFlowPoint point(String timestamp, Integer price, Integer net, String provider) {

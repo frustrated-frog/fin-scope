@@ -47,7 +47,7 @@ public class CapitalReplayService {
 
     public CapitalReplayView view(Long instrumentId) {
         Instrument instrument = capital.stock(instrumentId);
-        if (!List.of("SH", "SZ", "BJ").contains(instrument.getMarket())) {
+        if (instrument.getMarket() == null || !List.of("SH", "SZ", "BJ").contains(instrument.getMarket())) {
             throw new IllegalArgumentException("资金复盘目前覆盖 A 股");
         }
         LocalDate today = LocalDate.now(MARKET_ZONE);
@@ -74,7 +74,7 @@ public class CapitalReplayService {
         dates.addAll(onlinePrices.keySet());
         dates.addAll(onlineFlows.keySet());
         dates.addAll(storedDays.keySet());
-        List<CapitalReplayView.Session> sessions = dates.stream().limit(SESSION_LIMIT).map(date -> {
+        List<CapitalReplayView.Session> sessions = dates.stream().map(date -> {
             List<CapitalFlowPoint> local = storedDays.getOrDefault(date, List.of());
             List<CapitalFlowPoint> prices = onlinePrices.getOrDefault(date, List.of());
             if (prices.isEmpty()) {
@@ -86,7 +86,7 @@ public class CapitalReplayService {
                         .filter(point -> hasStoredBaseline(point, local)).toList();
             }
             return session(date, prices, flows);
-        }).toList();
+        }).filter(session -> !session.getMinutes().isEmpty()).limit(SESSION_LIMIT).toList();
         return new CapitalReplayView(sessions, online.getWarnings());
     }
 
