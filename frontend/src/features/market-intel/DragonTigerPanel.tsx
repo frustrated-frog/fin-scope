@@ -25,7 +25,7 @@ function seatKey(seat: DragonTigerSeat) {
   return `${seat.direction}:${seat.rank}:${seat.seatCode ?? seat.seatName}`;
 }
 
-function SeatList({ title, seats }: { title: string; seats: DragonTigerSeat[] }) {
+export function DragonTigerSeatList({ title, seats }: { title: string; seats: DragonTigerSeat[] }) {
   return (
     <section className="dragon-tiger-seat-list">
       <h4>{title}</h4>
@@ -86,8 +86,8 @@ function RecordCard({
       </button>
       {expanded && (
         <div className="dragon-tiger-seats">
-          <SeatList title="买入席位 TOP5" seats={record.buySeats ?? []} />
-          <SeatList title="卖出席位 TOP5" seats={record.sellSeats ?? []} />
+          <DragonTigerSeatList title="买入席位 TOP5" seats={record.buySeats ?? []} />
+          <DragonTigerSeatList title="卖出席位 TOP5" seats={record.sellSeats ?? []} />
         </div>
       )}
     </article>

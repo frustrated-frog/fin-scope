@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -113,6 +113,24 @@ beforeEach(() => {
     if (path.includes('/capital-behavior')) {
       return Promise.resolve(overview) as never;
     }
+    if (path.endsWith('/capital-replay')) {
+      return Promise.resolve({
+        sessions: [
+          {
+            date: '2026-07-14', priceProvider: 'EASTMONEY', flowProvider: 'EASTMONEY_CAPITAL_FLOW',
+            minutes: Array.from({ length: 15 }, (_, index) => ({
+              time: `09:${31 + index}:00`, price: 100 + index / 5, tradeAmount: 100_000,
+              largeNet: index < 5 ? -20_000 : 0, superLargeNet: 0
+            }))
+          },
+          {
+            date: '2026-07-13', priceProvider: 'EASTMONEY', flowProvider: null,
+            minutes: [{ time: '14:46:00', price: 101, tradeAmount: 200_000, largeNet: null, superLargeNet: null }]
+          }
+        ],
+        warnings: []
+      }) as never;
+    }
     if (path.includes('/dragon-tiger')) {
       return Promise.resolve(dragonTigerView) as never;
     }
@@ -167,6 +185,28 @@ beforeEach(() => {
     }
     return Promise.reject(new Error(`unexpected api call: ${path}`));
   });
+});
+
+test('opens a same-day replay and preserves price-only history without inferring fund flow', async () => {
+  const user = userEvent.setup();
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+  await screen.findByRole('heading', { name: '资金证据带' });
+  expect(vi.mocked(api)).not.toHaveBeenCalledWith(expect.stringMatching(/capital-replay/), expect.anything());
+
+  await user.click(screen.getByRole('button', { name: '资金复盘' }));
+  const events = await screen.findByLabelText('资金集中区间');
+  await user.click(within(events).getByRole('button', { name: /上涨伴大额净流出/ }));
+  const detail = screen.getByLabelText('区间数据');
+  expect(detail).toHaveTextContent('09:31–09:35');
+  expect(detail).toHaveTextContent('−10.00 万');
+  expect(detail).toHaveTextContent('资金覆盖 5 / 5 分钟');
+  await user.click(within(detail).getByText('查看区间分钟明细'));
+  expect(within(detail).getByRole('table')).toBeVisible();
+
+  await user.selectOptions(screen.getByLabelText('交易日'), '2026-07-13');
+  expect(screen.getByText('该交易日暂未取得分钟资金净额。')).toBeInTheDocument();
+  expect(screen.queryByLabelText('资金集中区间')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('区间数据')).toHaveTextContent('101.00 → 101.00');
 });
 
 afterEach(() => {

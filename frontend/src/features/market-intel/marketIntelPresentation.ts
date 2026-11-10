@@ -11,9 +11,11 @@ const STATUS_LABELS: Record<MarketDataQualityStatus, string> = {
 const PROVIDER_LABELS: Record<string, string> = {
   EASTMONEY: '东方财富',
   EASTMONEY_CAPITAL_FLOW: '东方财富资金流',
+  EASTMONEY_DIRECT: '东方财富直连',
   EASTMONEY_DRAGON_TIGER: '东方财富龙虎榜',
   LAST_GOOD_SNAPSHOT: '本地最近成功快照',
   MARKET_DATA_GATEWAY: '行情数据网关',
+  PYTHON_MARKET_DATA: '行情服务快照',
   SINA_STOCK: '新浪行情',
   TENCENT_STOCK: '腾讯行情'
 };

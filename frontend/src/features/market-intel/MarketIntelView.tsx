@@ -5,6 +5,7 @@ import { DataQualityNotice } from '../../shared/components/DataQualityNotice';
 import { CapitalAgentInterpretationPanel } from './CapitalAgentInterpretationPanel';
 import { CapitalBehaviorPanel } from './CapitalBehaviorPanel';
 import { CapitalResearchBridge } from './CapitalResearchBridge';
+import { CapitalReplayPanel } from './CapitalReplayPanel';
 import { CapitalRuleExplanationCard } from './CapitalRuleExplanationCard';
 import { CapitalHistoricalEvaluationCard } from './CapitalHistoricalEvaluationCard';
 import { DragonTigerPanel } from './DragonTigerPanel';
@@ -45,6 +46,7 @@ export function MarketIntelView({
 }) {
   const [instruments, setInstruments] = useState<MarketIntelInstrument[]>([]);
   const [instrumentId, setInstrumentId] = useState<number | null>(null);
+  const [mode, setMode] = useState<'overview' | 'replay'>('overview');
   const [overview, setOverview] = useState<MarketIntelCapitalOverview | null>(null);
   const [dragonTiger, setDragonTiger] = useState<DragonTigerView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -350,14 +352,16 @@ export function MarketIntelView({
   }
 
   const healthWarnings = marketIntelWarningMessages(overview?.health.warnings ?? []);
+  const selectedInstrument = instruments.find((item) => item.id === instrumentId);
 
   return (
     <div className="market-intel-page">
-      <section className="market-intel-hero">
+      <section className={mode === 'replay' ? 'market-intel-hero capital-replay-hero' : 'market-intel-hero'}>
         <div className="market-intel-hero-copy">
           <p className="market-intel-kicker">Capital behavior research desk</p>
           <h3>{overview?.instrument.name ?? instruments.find((item) => item.id === instrumentId)?.name ?? '资金行为'}</h3>
-          <p>先读事实与规则，再决定是否让 Agent 展开假设。拆单、吸筹、出货都不会被包装成确定结论。</p>
+          <p>{mode === 'replay' ? '沿分时线查看当天的大额资金变化。'
+            : '先读事实与规则，再决定是否让 Agent 展开假设。拆单、吸筹、出货都不会被包装成确定结论。'}</p>
         </div>
         <div className="market-intel-controls">
           <label>
@@ -378,7 +382,7 @@ export function MarketIntelView({
               ? '刷新任务执行中…' : '刷新市场数据'}
           </button>
         </div>
-        {overview && (
+        {mode === 'overview' && overview && (
           <div className="market-intel-health">
             <span className={overview.health.status === 'FRESH_PRIMARY' ? 'fresh'
               : overview.health.status === 'UNAVAILABLE' ? 'empty' : 'stale'}>
@@ -390,7 +394,7 @@ export function MarketIntelView({
             </dl>
           </div>
         )}
-        {overview?.snapshot && (
+        {mode === 'overview' && overview?.snapshot && (
           <DataQualityNotice quality={{
             status: overview.health.status,
             sourceCode: marketDataProviderLabel(overview.health.providerCode),
@@ -399,57 +403,67 @@ export function MarketIntelView({
         )}
       </section>
 
-      {loading && <p className="market-intel-loading" role="status">正在读取市场情报…</p>}
-      {!loading && loadError && !overview && (
-        <section className="market-intel-first-run" role="alert">
-          <div><strong>资金数据读取失败</strong><p>{loadError}</p></div>
-          <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
-        </section>
+      <div className="capital-replay-nav" role="group" aria-label="资金行为视图">
+        <button type="button" aria-pressed={mode === 'overview'} onClick={() => setMode('overview')}>资金概览</button>
+        <button type="button" aria-pressed={mode === 'replay'} onClick={() => setMode('replay')}>资金复盘</button>
+      </div>
+
+      {mode === 'replay' && selectedInstrument && (
+        <CapitalReplayPanel key={selectedInstrument.id} instrument={selectedInstrument} dragonTiger={dragonTiger} />
       )}
-      {!loading && overview && !overview.snapshot && (
-        <section className="market-intel-first-run">
-          <div><strong>这个标的还没有资金快照</strong><p>首次刷新后会保存成交额、换手率与资金时间线，后续解读都基于这份可追溯事实。</p></div>
-          <button className="primary-button" type="button" onClick={refreshCapitalData}>生成第一份资金快照</button>
-        </section>
-      )}
-      {!loading && dragonTigerError && !dragonTiger && (
-        <section className="market-intel-first-run" role="alert">
-          <div><strong>龙虎榜数据读取失败</strong><p>{dragonTigerError}</p></div>
-          <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
-        </section>
-      )}
-      {overview?.snapshot && overview.ruleExplanation && (
-        <div className="market-intel-grid">
-          <div className="market-intel-primary">
-            <CapitalBehaviorPanel overview={overview} />
-            <CapitalResearchBridge overview={overview} addToast={addToast} onOpenQuantResearch={onOpenQuantResearch} />
+      {mode === 'overview' && <>
+        {loading && <p className="market-intel-loading" role="status">正在读取市场情报…</p>}
+        {!loading && loadError && !overview && (
+          <section className="market-intel-first-run" role="alert">
+            <div><strong>资金数据读取失败</strong><p>{loadError}</p></div>
+            <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
+          </section>
+        )}
+        {!loading && overview && !overview.snapshot && (
+          <section className="market-intel-first-run">
+            <div><strong>这个标的还没有资金快照</strong><p>首次刷新后会保存成交额、换手率与资金时间线，后续解读都基于这份可追溯事实。</p></div>
+            <button className="primary-button" type="button" onClick={refreshCapitalData}>生成第一份资金快照</button>
+          </section>
+        )}
+        {!loading && dragonTigerError && !dragonTiger && (
+          <section className="market-intel-first-run" role="alert">
+            <div><strong>龙虎榜数据读取失败</strong><p>{dragonTigerError}</p></div>
+            <button className="primary-button" type="button" onClick={retryOverview}>重新读取</button>
+          </section>
+        )}
+        {overview?.snapshot && overview.ruleExplanation && (
+          <div className="market-intel-grid">
+            <div className="market-intel-primary">
+              <CapitalBehaviorPanel overview={overview} />
+              <CapitalResearchBridge overview={overview} addToast={addToast} onOpenQuantResearch={onOpenQuantResearch} />
+            </div>
+            <aside className="market-intel-interpretation">
+              {agentLoadError && <p className="market-intel-agent-notice" role="alert">{agentLoadError}</p>}
+              <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />
+              <CapitalHistoricalEvaluationCard
+                evaluation={overview.historicalEvaluation ?? null}
+                currentSignalTypes={overview.metrics?.objectiveTags.map((tag) => tag.code) ?? []}
+              />
+              <CapitalAgentInterpretationPanel
+                interpretation={interpretation}
+                factorObservations={overview.factorObservations ?? []}
+                historicalEvaluations={overview.historicalEvaluation?.signals ?? []}
+                evaluationVersion={overview.historicalEvaluation?.evaluationVersion}
+                watchConditions={overview.watchConditions ?? []}
+                busy={agentBusy}
+                onRun={runAgent}
+              />
+            </aside>
           </div>
-          <aside className="market-intel-interpretation">
-            {agentLoadError && <p className="market-intel-agent-notice" role="alert">{agentLoadError}</p>}
-            <CapitalRuleExplanationCard explanation={overview.ruleExplanation} />
-            <CapitalHistoricalEvaluationCard
-              evaluation={overview.historicalEvaluation ?? null}
-              currentSignalTypes={overview.metrics?.objectiveTags.map((tag) => tag.code) ?? []}
-            />
-            <CapitalAgentInterpretationPanel
-              interpretation={interpretation}
-              factorObservations={overview.factorObservations ?? []}
-              historicalEvaluations={overview.historicalEvaluation?.signals ?? []}
-              evaluationVersion={overview.historicalEvaluation?.evaluationVersion}
-              watchConditions={overview.watchConditions ?? []}
-              busy={agentBusy}
-              onRun={runAgent}
-            />
-          </aside>
-        </div>
-      )}
-      {dragonTiger && (
-        <DragonTigerPanel
-          view={dragonTiger}
-          refreshing={autoRefreshState?.instrumentId === instrumentId}
-          refreshError={autoRefreshError}
-        />
-      )}
+        )}
+        {dragonTiger && (
+          <DragonTigerPanel
+            view={dragonTiger}
+            refreshing={autoRefreshState?.instrumentId === instrumentId}
+            refreshError={autoRefreshError}
+          />
+        )}
+      </>}
     </div>
   );
 }
