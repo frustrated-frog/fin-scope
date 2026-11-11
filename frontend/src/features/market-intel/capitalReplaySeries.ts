@@ -20,14 +20,11 @@ export type CapitalReplay = {
 
 export type MinuteRange = { from: number; to: number };
 export type ReplayPoint = ReplayMinute & { minute: number; net: number | null };
-export type ReplayWindow = MinuteRange & { label: string; net: number };
 
 export const OPEN = 9 * 60 + 30;
 export const AM_CLOSE = 11 * 60 + 30;
 export const PM_OPEN = 13 * 60;
 export const CLOSE = 15 * 60;
-const CLOSE_AUCTION = 14 * 60 + 57;
-const WINDOW_MINUTES = 5;
 
 export function minuteLabel(minute: number) {
   return [Math.floor(minute / 60), minute % 60].map((value) => String(value).padStart(2, '0')).join(':');
@@ -69,46 +66,6 @@ export function summarizeRange(points: ReplayPoint[], range: MinuteRange) {
     expectedPrice,
     expectedFlow
   };
-}
-
-export function flowWindows(points: ReplayPoint[]): ReplayWindow[] {
-  const candidates = [];
-  for (let start = 0; start <= points.length - WINDOW_MINUTES; start += 1) {
-    const sample = points.slice(start, start + WINDOW_MINUTES);
-    const first = sample[0];
-    const last = sample[sample.length - 1];
-    if (first.minute <= OPEN || first.minute === PM_OPEN || last.minute >= CLOSE_AUCTION
-      || last.minute - first.minute !== WINDOW_MINUTES - 1
-      || sample.some((point) => point.net === null || point.tradeAmount === null || point.price === null)) {
-      continue;
-    }
-    const net = sample.reduce((total, point) => total + point.net!, 0);
-    const amount = sample.reduce((total, point) => total + point.tradeAmount!, 0);
-    const change = last.price! / first.price! - 1;
-    const prices = sample.map((point) => point.price!);
-    const narrowRange = (Math.max(...prices) - Math.min(...prices)) / first.price! <= 0.004;
-    const label = net > 0
-      ? change >= 0.004 ? '上涨伴大额净流入' : '大额净流入集中'
-      : change >= 0.004 ? '上涨伴大额净流出'
-        : narrowRange ? '价稳伴大额净流出' : '大额净流出集中';
-    candidates.push({ from: first.minute, to: last.minute, net, amount, label });
-  }
-  const magnitudes = candidates.map((value) => Math.abs(value.net)).sort((a, b) => a - b);
-  const threshold = (magnitudes[Math.floor(magnitudes.length / 2)] ?? 0) * 1.5;
-  const windows: ReplayWindow[] = [];
-  for (const candidate of candidates.sort((a, b) => Math.abs(b.net) - Math.abs(a.net))) {
-    if (!candidate.amount || Math.abs(candidate.net) <= threshold || Math.abs(candidate.net) < candidate.amount * 0.15) {
-      continue;
-    }
-    if (windows.some((window) => candidate.from <= window.to && candidate.to >= window.from)) {
-      continue;
-    }
-    windows.push(candidate);
-    if (windows.length === 4) {
-      break;
-    }
-  }
-  return windows;
 }
 
 export function replayMoney(value: number | null, signed = false) {

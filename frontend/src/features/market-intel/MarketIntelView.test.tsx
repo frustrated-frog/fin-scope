@@ -119,7 +119,7 @@ beforeEach(() => {
           {
             date: '2026-07-14', priceProvider: 'EASTMONEY', flowProvider: 'EASTMONEY_CAPITAL_FLOW',
             minutes: Array.from({ length: 15 }, (_, index) => ({
-              time: `09:${31 + index}:00`, price: 100 + index / 5, tradeAmount: 100_000,
+              time: `09:${31 + index}:00`, price: index < 5 ? 100 + index / 5 : index === 5 ? 100.4 : 100, tradeAmount: 100_000,
               largeNet: index < 5 ? -20_000 : 0, superLargeNet: 0
             }))
           },
@@ -194,7 +194,7 @@ test('opens a same-day replay and preserves price-only history without inferring
   expect(vi.mocked(api)).not.toHaveBeenCalledWith(expect.stringMatching(/capital-replay/), expect.anything());
 
   await user.click(screen.getByRole('button', { name: '资金复盘' }));
-  const events = await screen.findByLabelText('资金集中区间');
+  const events = await screen.findByLabelText('关键转折时间线');
   await user.click(within(events).getByRole('button', { name: /上涨伴大额净流出/ }));
   const detail = screen.getByLabelText('区间数据');
   expect(detail).toHaveTextContent('09:31–09:35');
@@ -205,7 +205,7 @@ test('opens a same-day replay and preserves price-only history without inferring
 
   await user.selectOptions(screen.getByLabelText('交易日'), '2026-07-13');
   expect(screen.getByText('该交易日暂未取得分钟资金净额。')).toBeInTheDocument();
-  expect(screen.queryByLabelText('资金集中区间')).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('关键转折时间线')).queryByRole('button')).not.toBeInTheDocument();
   expect(screen.getByLabelText('区间数据')).toHaveTextContent('101.00 → 101.00');
 });
 

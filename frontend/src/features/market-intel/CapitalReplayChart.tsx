@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 
 import { AM_CLOSE, CLOSE, minuteLabel, OPEN, PM_OPEN, replayMoney, tradingSlot } from './capitalReplaySeries';
-import type { MinuteRange, ReplayPoint, ReplayWindow } from './capitalReplaySeries';
+import type { MinuteRange, ReplayPoint } from './capitalReplaySeries';
+import type { ReplayEvent } from './capitalReplayEvents';
 
 const WIDTH = 720;
 const LEFT = 44;
@@ -14,11 +15,11 @@ type Props = {
   points: ReplayPoint[];
   span: MinuteRange;
   selection: MinuteRange;
-  windows: ReplayWindow[];
+  events: ReplayEvent[];
   onSelect: (range: MinuteRange) => void;
 };
 
-export function CapitalReplayChart({ points, span, selection, windows, onSelect }: Props) {
+export function CapitalReplayChart({ points, span, selection, events, onSelect }: Props) {
   const [cursor, setCursor] = useState<number | null>(null);
   const dragStart = useRef<number | null>(null);
   const slotSpan = Math.max(1, tradingSlot(span.to) - tradingSlot(span.from));
@@ -58,7 +59,9 @@ export function CapitalReplayChart({ points, span, selection, windows, onSelect 
   }
 
   function moveSelection(event: KeyboardEvent<SVGSVGElement>) {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
     event.preventDefault();
     const selectedIndex = points.findIndex((point) => point.minute >= selection.to);
     const index = selectedIndex < 0 ? points.length : selectedIndex;
@@ -86,17 +89,25 @@ export function CapitalReplayChart({ points, span, selection, windows, onSelect 
         role="group" aria-label="分时价格、成交额和大额净额图" tabIndex={0}
         onKeyDown={moveSelection}
         onPointerDown={(event) => {
-          if (event.button !== 0) return;
+          if (event.button !== 0) {
+            return;
+          }
           const minute = findPointerMinute(event);
           dragStart.current = minute;
           setCursor(minute);
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => setCursor(findPointerMinute(event))}
-        onPointerLeave={() => { if (dragStart.current === null) setCursor(null); }}
+        onPointerLeave={() => {
+          if (dragStart.current === null) {
+            setCursor(null);
+          }
+        }}
         onPointerCancel={() => { dragStart.current = null; setCursor(null); }}
         onPointerUp={(event) => {
-          if (dragStart.current === null) return;
+          if (dragStart.current === null) {
+            return;
+          }
           const end = findPointerMinute(event);
           const start = dragStart.current;
           dragStart.current = null;
@@ -132,10 +143,14 @@ export function CapitalReplayChart({ points, span, selection, windows, onSelect 
           );
         })}
         {pricePath && <path className="price-line" d={pricePath} />}
-        {windows.filter((window) => window.to >= span.from && window.to <= span.to).map((window) => {
-          const price = points.find((point) => point.minute === window.to)?.price;
-          return price == null ? null : <circle className={window.net > 0 ? 'event in' : 'event out'}
-            key={window.to} cx={x(window.to)} cy={y(price)} r={4} />;
+        {events.map((event, index) => {
+          const minute = Math.min(span.to, event.to);
+          const price = points.find((point) => point.minute === minute)?.price;
+          const color = event.direction === 'flat' ? 'neutral' : event.direction === 'up' ? 'in' : 'out';
+          return price == null ? null : <g key={`${event.from}-${event.to}`} className="event-marker">
+            <circle className={`event ${color}`} cx={x(minute)} cy={y(price)} r={7} />
+            <text x={x(minute)} y={y(price) + 0.5}>{index + 1}</text>
+          </g>;
         })}
         {chartCursor && (
           <line className="cursor" x1={x(chartCursor.minute)} x2={x(chartCursor.minute)} y1={8} y2={296} />

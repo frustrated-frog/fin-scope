@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { CapitalReplayChart } from './CapitalReplayChart';
+import { CapitalReplayTimeline, ReplayFollowup } from './CapitalReplayTimeline';
+import { replayEvents, replayPercent } from './capitalReplayEvents';
 import { DragonTigerSeatList } from './DragonTigerPanel';
 import { marketDataProviderLabel, marketIntelWarningMessages } from './marketIntelPresentation';
 import type { DragonTigerView, MarketIntelInstrument } from './marketIntelTypes';
 import {
-  AM_CLOSE, CLOSE, flowWindows, minuteLabel, OPEN, PM_OPEN, replayMoney, replayPoints, summarizeRange
+  AM_CLOSE, CLOSE, minuteLabel, OPEN, PM_OPEN, replayMoney, replayPoints, summarizeRange
 } from './capitalReplaySeries';
 import type { CapitalReplay, MinuteRange, ReplaySession } from './capitalReplaySeries';
 import './CapitalReplayPanel.css';
@@ -54,21 +56,28 @@ function SeatDisclosure({ view, date }: { view: DragonTigerView | null; date: st
 
 function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTiger: DragonTigerView | null }) {
   const points = useMemo(() => replayPoints(session), [session]);
-  const windows = useMemo(() => flowWindows(points), [points]);
+  const events = useMemo(() => replayEvents(points), [points]);
+  const tape = useRef<HTMLDivElement>(null);
   const [spanIndex, setSpanIndex] = useState(0);
   const [selection, setSelection] = useState<MinuteRange>(() => {
-    if (windows.length) {
-      return windows[0];
+    if (events.length) {
+      return events[0];
     }
     const end = points[points.length - 1].minute;
     return { from: Math.max(points[0].minute, end > AM_CLOSE ? PM_OPEN : OPEN, end - 4), to: end };
   });
   const span = SPANS[spanIndex];
   const visible = points.filter((point) => point.minute >= span.from && point.minute <= span.to);
-  const suggestions = windows.filter((window) => window.from >= span.from && window.to <= span.to)
-    .sort((first, second) => first.from - second.from);
+  const suggestions = events.filter((event) => event.to >= span.from && event.from <= span.to);
   const detail = summarizeRange(points, selection);
-  const selectedWindow = suggestions.find((window) => window.from === selection.from && window.to === selection.to);
+  const selectedEvent = events.find((event) => event.from === selection.from && event.to === selection.to);
+  const selectEvent = (range: MinuteRange) => {
+    if (range.from < span.from || range.to > span.to) {
+      setSpanIndex(0);
+    }
+    setSelection(range);
+    tape.current?.scrollIntoView?.({ block: 'nearest' });
+  };
   const flowPartial = detail.net.count > 0 && detail.net.count < detail.expectedFlow;
   const amountPartial = detail.amount.count > 0 && detail.amount.count < detail.expectedPrice;
   const netShare = detail.net.value !== null && detail.amount.value && !flowPartial && !amountPartial
@@ -77,7 +86,7 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
   return (
     <>
       <div className="capital-replay-workspace">
-        <div className="capital-replay-tape">
+        <div className="capital-replay-tape" ref={tape}>
           <div className="capital-replay-toolbar">
             <h4>分时资金</h4>
             <div role="group" aria-label="图表时段">
@@ -92,26 +101,13 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
             </div>
           </div>
           <CapitalReplayChart key={spanIndex} points={visible} span={span} selection={selection}
-            windows={suggestions} onSelect={setSelection} />
-          {suggestions.length > 0 && (
-            <div className="capital-replay-events" aria-label="资金集中区间"
-              title="每个标记覆盖 5 个连续交易分钟，大额净额绝对值至少占区间成交额的 15%。">
-              {suggestions.map((window) => (
-                <button key={window.from} type="button" className={window.net > 0 ? 'in' : 'out'}
-                  aria-pressed={selectedWindow?.from === window.from} onClick={() => setSelection(window)}>
-                  <time>{rangeLabel(window)}</time><strong>{window.label}</strong>
-                </button>
-              ))}
-            </div>
-          )}
-          {!suggestions.length && <p className="capital-replay-chart-note">
-            {session.flowProvider ? '这一时段没有达到标记条件的完整五分钟资金区间。' : '该交易日暂未取得分钟资金净额。'}
-          </p>}
+            events={suggestions} onSelect={setSelection} />
+          {!session.flowProvider && <p className="capital-replay-chart-note">该交易日暂未取得分钟资金净额。</p>}
         </div>
         <aside className="capital-replay-readout" aria-label="区间数据">
           <header>
             <span>所选时段</span><strong>{rangeLabel(selection)}</strong>
-            {selectedWindow && <small>{selectedWindow.label}</small>}
+            {selectedEvent && <small>{selectedEvent.label}</small>}
           </header>
           <dl>
             <div className="lead">
@@ -125,7 +121,9 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
             <div><dt>{amountPartial ? '已覆盖分钟成交额' : '成交额'}</dt><dd>{replayMoney(detail.amount.value)}</dd></div>
             {netShare !== null && <div><dt>净额 / 成交额</dt><dd>{netShare.toFixed(1)}%</dd></div>}
             <div><dt>区间价格</dt><dd>{detail.startPrice?.toFixed(2) ?? '—'} → {detail.endPrice?.toFixed(2) ?? '—'}</dd></div>
+            {selectedEvent && <div><dt>区间涨跌</dt><dd>{replayPercent(selectedEvent.change)}</dd></div>}
           </dl>
+          {selectedEvent && <ReplayFollowup outcome={selectedEvent.outcome} />}
           <p>资金覆盖 {detail.net.count} / {detail.expectedFlow} 分钟 · 逐笔委托未接入</p>
           <details className="capital-replay-evidence">
             <summary>查看区间分钟明细</summary>
@@ -141,6 +139,7 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
           </details>
         </aside>
       </div>
+      <CapitalReplayTimeline events={suggestions} selection={selection} onSelect={selectEvent} />
       <div className="capital-replay-source">
         <span>价量 {session.priceProvider ? marketDataProviderLabel(
           session.priceProvider === 'EASTMONEY_CAPITAL_FLOW' ? 'EASTMONEY' : session.priceProvider) : '未取得'}</span>
@@ -161,19 +160,27 @@ export function CapitalReplayPanel({ instrument, dragonTiger }: Props) {
   const supported = ['SH', 'SZ', 'BJ'].includes(instrument.market);
 
   useEffect(() => {
-    if (!supported) return;
+    if (!supported) {
+      return;
+    }
     const request = new AbortController();
     setLoading(true);
     setError(null);
     api<CapitalReplay>(`/api/market-intel/instruments/${instrument.id}/capital-replay`, { signal: request.signal })
       .then((value) => {
-        if (!request.signal.aborted) setData(value);
+        if (!request.signal.aborted) {
+          setData(value);
+        }
       })
       .catch((failure: Error) => {
-        if (!request.signal.aborted) setError(failure.message || '分时数据读取失败');
+        if (!request.signal.aborted) {
+          setError(failure.message || '分时数据读取失败');
+        }
       })
       .finally(() => {
-        if (!request.signal.aborted) setLoading(false);
+        if (!request.signal.aborted) {
+          setLoading(false);
+        }
       });
     return () => request.abort();
   }, [instrument.id, supported, attempt]);
