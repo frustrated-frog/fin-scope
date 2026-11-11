@@ -409,7 +409,7 @@ export function MarketIntelView({
       </div>
 
       {mode === 'replay' && selectedInstrument && (
-        <CapitalReplayPanel key={selectedInstrument.id} instrument={selectedInstrument} dragonTiger={dragonTiger} />
+        <CapitalReplayPanel key={selectedInstrument.id} instrument={selectedInstrument} />
       )}
       {mode === 'overview' && <>
         {loading && <p className="market-intel-loading" role="status">正在读取市场情报…</p>}

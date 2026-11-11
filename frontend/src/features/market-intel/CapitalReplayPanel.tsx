@@ -7,9 +7,8 @@ import type { ReplayTimelineMode } from './CapitalReplayTimeline';
 import { ReplayFollowup } from './CapitalReplayFollowup';
 import { replayEvents, replayPercent } from './capitalReplayEvents';
 import { replayStages } from './capitalReplayStages';
-import { DragonTigerSeatList } from './DragonTigerPanel';
-import { marketDataProviderLabel, marketIntelWarningMessages } from './marketIntelPresentation';
-import type { DragonTigerView, MarketIntelInstrument } from './marketIntelTypes';
+import { marketIntelWarningMessages } from './marketIntelPresentation';
+import type { MarketIntelInstrument } from './marketIntelTypes';
 import {
   AM_CLOSE, CLOSE, minuteLabel, OPEN, PM_OPEN, replayMoney, replayPoints, summarizeRange
 } from './capitalReplaySeries';
@@ -25,7 +24,6 @@ const SPANS = [
 
 type Props = {
   instrument: MarketIntelInstrument;
-  dragonTiger: DragonTigerView | null;
 };
 
 function rangeLabel(range: MinuteRange) {
@@ -33,31 +31,7 @@ function rangeLabel(range: MinuteRange) {
     : `${minuteLabel(range.from)}–${minuteLabel(range.to)}`;
 }
 
-function SeatDisclosure({ view, date }: { view: DragonTigerView | null; date: string }) {
-  const records = view?.records.filter((record) => record.tradeDate === date) ?? [];
-  const unavailable = !view || ['NOT_REFRESHED', 'UNAVAILABLE', 'STALE_FALLBACK'].includes(view.health.status);
-  return (
-    <section className="capital-replay-disclosure" aria-labelledby="capital-replay-seats">
-      <header><h4 id="capital-replay-seats">当日龙虎榜披露</h4><span>按榜单统计</span></header>
-      {records.length ? records.map((record) => (
-        <details key={record.id}>
-          <summary>
-            <span>{record.reason}</span>
-            <small>{/连续|累计/.test(record.reason) ? '多日累计'
-              : /^(日|当日)/.test(record.reason) ? '全天' : '见披露区间'}</small>
-          </summary>
-          <div className="dragon-tiger-seats">
-            <DragonTigerSeatList title="买入席位" seats={record.buySeats} />
-            <DragonTigerSeatList title="卖出席位" seats={record.sellSeats} />
-          </div>
-        </details>
-      )) : <p>{unavailable ? '该日龙虎榜数据暂未取得。' : '已读取的龙虎榜数据中没有该日披露。'}</p>}
-      <p>机构专用和营业部席位按榜单列出。披露金额没有盘中时间。</p>
-    </section>
-  );
-}
-
-function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTiger: DragonTigerView | null }) {
+function ReplayDesk({ session }: { session: ReplaySession }) {
   const points = useMemo(() => replayPoints(session), [session]);
   const events = useMemo(() => replayEvents(points), [points]);
   const stages = useMemo(() => replayStages(points, events), [points, events]);
@@ -164,18 +138,11 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
       <CapitalReplayTimeline events={suggestions} stages={visibleStages} mode={timelineMode} onModeChange={changeTimelineMode}
         selection={selection} onSelect={selectEvent}
         hasPriceSequence={hasPriceSequence} />
-      <div className="capital-replay-source">
-        <span>价量 {session.priceProvider ? marketDataProviderLabel(
-          session.priceProvider === 'EASTMONEY_CAPITAL_FLOW' ? 'EASTMONEY' : session.priceProvider) : '未取得'}</span>
-        <span>资金 {session.flowProvider ? marketDataProviderLabel(session.flowProvider) : '未取得'}</span>
-        <span>大额净额为大单与超大单净额之和</span>
-      </div>
-      <SeatDisclosure view={dragonTiger} date={session.date} />
     </>
   );
 }
 
-export function CapitalReplayPanel({ instrument, dragonTiger }: Props) {
+export function CapitalReplayPanel({ instrument }: Props) {
   const [data, setData] = useState<CapitalReplay | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -237,8 +204,7 @@ export function CapitalReplayPanel({ instrument, dragonTiger }: Props) {
       {error && <p className="capital-replay-notice" role="alert">{error}{session ? '，当前显示上次读取的数据。' : '。请刷新分时重试。'}</p>}
       {supported && !loading && !error && !session && <p className="capital-replay-empty">近期交易日暂无可用的分时记录。</p>}
       {warnings.length > 0 && <p className="capital-replay-notice">{warnings.join(' · ')}</p>}
-      {session && <ReplayDesk key={session.date} session={session}
-        dragonTiger={dragonTiger?.instrument.id === instrument.id ? dragonTiger : null} />}
+      {session && <ReplayDesk key={session.date} session={session} />}
     </section>
   );
 }

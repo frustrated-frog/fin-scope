@@ -28,7 +28,7 @@ beforeEach(() => {
 
 test('links chronological cards to the selected price range and subsequent performance', async () => {
   const user = userEvent.setup();
-  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  render(<CapitalReplayPanel instrument={instrument} />);
   const timeline = await screen.findByLabelText('关键转折时间线');
   await user.click(within(timeline).getByRole('button', { name: /全部区间/ }));
   const cards = within(screen.getByRole('list', { name: '全部区间列表' })).getAllByRole('button');
@@ -53,7 +53,7 @@ test('links chronological cards to the selected price range and subsequent perfo
 
 test('keeps afternoon turns available after changing the time span', async () => {
   const user = userEvent.setup();
-  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  render(<CapitalReplayPanel instrument={instrument} />);
   const timeline = await screen.findByLabelText('关键转折时间线');
   await user.click(screen.getByRole('button', { name: '午后' }));
   expect(within(screen.getByRole('list', { name: '盘面阶段列表' })).getAllByRole('button', { name: /^\d{2} / })).toHaveLength(1);
@@ -72,7 +72,7 @@ test('shows price turns with explicit missing fund coverage and a pending follow
     date: '2026-11-10', priceProvider: 'EASTMONEY', flowProvider: null,
     minutes: minutes(571).slice(0, 3).map((point) => ({ ...point, largeNet: null, superLargeNet: null }))
   }], warnings: [] });
-  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  render(<CapitalReplayPanel instrument={instrument} />);
   const timeline = await screen.findByLabelText('关键转折时间线');
   await user.click(within(timeline).getByRole('button', { name: /全部区间/ }));
   const card = within(screen.getByRole('list', { name: '全部区间列表' })).getByRole('button');
@@ -89,7 +89,7 @@ test('explains missing minute prices instead of claiming there were no turning p
       ...point, price: index === 15 ? 100 : null, tradeAmount: index === 15 ? 100_000 : null
     }))
   }], warnings: ['INTRADAY_MARKET_UNAVAILABLE'] });
-  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  render(<CapitalReplayPanel instrument={instrument} />);
   const timeline = await screen.findByLabelText('关键转折时间线');
   expect(timeline).toHaveTextContent('连续分钟价格缺失，暂不能识别转折');
   expect(screen.getByText(/价格覆盖 1 个，成交额覆盖 1 个/)).toBeInTheDocument();
@@ -98,7 +98,7 @@ test('explains missing minute prices instead of claiming there were no turning p
 
 test('defaults to a coarse stage view and expands every constituent interval with chart selection intact', async () => {
   const user = userEvent.setup();
-  const { container } = render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  const { container } = render(<CapitalReplayPanel instrument={instrument} />);
   const stages = await screen.findByRole('list', { name: '盘面阶段列表' });
   expect(within(stages).getAllByRole('button', { name: /^\d{2} / })).toHaveLength(2);
   expect(container.querySelectorAll('.event-marker')).toHaveLength(2);
@@ -118,7 +118,7 @@ test('does not include an afternoon stage that only touches the tail boundary', 
   vi.mocked(api).mockResolvedValue({ sessions: [{
     date: '2026-11-10', priceProvider: 'EASTMONEY', flowProvider: 'EASTMONEY_CAPITAL_FLOW', minutes: minutes(860)
   }], warnings: [] });
-  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  render(<CapitalReplayPanel instrument={instrument} />);
   await screen.findByRole('list', { name: '盘面阶段列表' });
   await user.click(screen.getByRole('button', { name: '尾盘' }));
   const stages = screen.getByRole('list', { name: '盘面阶段列表' });

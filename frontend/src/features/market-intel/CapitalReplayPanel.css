@@ -66,8 +66,7 @@
 .capital-replay h3, .capital-replay h4, .capital-replay p { margin: 0; }
 
 .capital-replay-header,
-.capital-replay-toolbar,
-.capital-replay-disclosure > header {
+.capital-replay-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -104,7 +103,7 @@
   background: var(--surface);
 }
 
-.capital-replay-toolbar h4, .capital-replay-disclosure h4 { font-size: 15px; }
+.capital-replay-toolbar h4 { font-size: 15px; }
 .capital-replay-toolbar > div { display: flex; flex-wrap: wrap; gap: 3px; }
 .capital-replay-toolbar button { font-size: 12px; padding: 4px 9px; }
 .capital-replay-chart-legend {
@@ -309,22 +308,12 @@
 .capital-replay p.capital-replay-chart-note { margin-top: 9px; }
 
 .capital-replay-evidence { margin-top: 10px; font-size: 11px; }
-.capital-replay-evidence summary, .capital-replay-disclosure summary { color: var(--ink); cursor: pointer; }
+.capital-replay-evidence summary { color: var(--ink); cursor: pointer; }
 .capital-replay-evidence > div { overflow: auto; max-height: 210px; margin-top: 6px; }
 .capital-replay-evidence table { width: 100%; border-collapse: collapse; text-align: right; white-space: nowrap; }
 .capital-replay-evidence thead { position: sticky; top: 0; background: var(--surface); }
 .capital-replay-evidence th, .capital-replay-evidence td { padding: 5px 3px; border-bottom: 1px solid var(--line); }
 .capital-replay-evidence tbody { font-family: var(--replay-mono); }
-.capital-replay-source { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 9px 1px; color: var(--muted); font-size: 11px; }
-
-.capital-replay-disclosure { padding: 13px 2px 0; border-top: 1px solid var(--replay-border); }
-.capital-replay-disclosure header span,
-.capital-replay-disclosure p,
-.capital-replay-disclosure small { color: var(--muted); font-size: 12px; }
-.capital-replay-disclosure details, .capital-replay-disclosure p { margin-top: 7px; }
-.capital-replay-disclosure summary { font-size: 13px; }
-.capital-replay-disclosure summary small { margin-left: 9px; }
-.capital-replay-disclosure .dragon-tiger-seats { margin-top: 7px; }
 .capital-replay p.capital-replay-empty, .capital-replay p.capital-replay-notice {
   margin-top: 14px;
   padding: 11px 13px;
