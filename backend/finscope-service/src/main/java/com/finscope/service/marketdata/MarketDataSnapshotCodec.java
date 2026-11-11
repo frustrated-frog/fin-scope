@@ -12,6 +12,8 @@ import com.finscope.domain.instrument.SectorMarketSnapshot;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.domain.marketintel.CapitalFlowPoint;
+import com.finscope.rpc.marketintel.CapitalReplayData;
 import com.finscope.rpc.marketintel.DragonTigerData;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +32,7 @@ public class MarketDataSnapshotCodec {
     private static final int QUOTE_SCHEMA_VERSION = 1;
     private static final int SECTOR_CATALOG_SCHEMA_VERSION = 1;
     private static final int DRAGON_TIGER_SCHEMA_VERSION = 1;
+    private static final int CAPITAL_REPLAY_SCHEMA_VERSION = 1;
     private final ObjectMapper mapper;
 
     public MarketDataSnapshotCodec(ObjectMapper mapper) {
@@ -123,6 +126,37 @@ public class MarketDataSnapshotCodec {
             return Optional.of(mapper.readValue(snapshot.getPayloadJson(), DragonTigerData.class));
         } catch (IOException error) {
             return Optional.empty();
+        }
+    }
+
+    public Optional<CapitalReplayData> decodeCapitalReplay(MarketDataSnapshot snapshot) {
+        if (snapshot == null || snapshot.getCapability() != MarketDataCapability.CAPITAL_REPLAY_1M
+                || snapshot.getSchemaVersion() != CAPITAL_REPLAY_SCHEMA_VERSION
+                || !sha256(snapshot.getPayloadJson()).equals(snapshot.getPayloadHash())) {
+            return Optional.empty();
+        }
+        try {
+            JsonNode root = mapper.readTree(snapshot.getPayloadJson());
+            if (!root.path("prices").isArray() || !root.path("flows").isArray()) {
+                return Optional.empty();
+            }
+            return Optional.of(new CapitalReplayData(
+                    Arrays.asList(mapper.treeToValue(root.path("prices"), CapitalFlowPoint[].class)),
+                    Arrays.asList(mapper.treeToValue(root.path("flows"), CapitalFlowPoint[].class)), List.of()));
+        } catch (IOException error) {
+            return Optional.empty();
+        }
+    }
+
+    public MarketDataSnapshot capitalReplaySnapshot(String scopeKey, CapitalReplayData data,
+                                                     LocalDateTime asOf, LocalDateTime retrievedAt) {
+        try {
+            String payload = mapper.writeValueAsString(new CapitalReplayData(data.getPrices(), data.getFlows(), List.of()));
+            return new MarketDataSnapshot(MarketDataCapability.CAPITAL_REPLAY_1M, scopeKey,
+                    "CAPITAL_REPLAY", "EASTMONEY", asOf, retrievedAt, payload, sha256(payload),
+                    CAPITAL_REPLAY_SCHEMA_VERSION, retrievedAt);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("资金复盘快照序列化失败", error);
         }
     }
 

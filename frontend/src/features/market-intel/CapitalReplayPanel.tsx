@@ -69,6 +69,10 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
   const span = SPANS[spanIndex];
   const visible = points.filter((point) => point.minute >= span.from && point.minute <= span.to);
   const suggestions = events.filter((event) => event.to >= span.from && event.from <= span.to);
+  const priceCount = visible.filter((point) => point.price !== null).length;
+  const amountCount = visible.filter((point) => point.tradeAmount !== null).length;
+  const hasPriceSequence = visible.some((point, index) => index > 0 && point.price !== null
+    && visible[index - 1].price !== null && point.minute === visible[index - 1].minute + 1);
   const detail = summarizeRange(points, selection);
   const selectedEvent = events.find((event) => event.from === selection.from && event.to === selection.to);
   const selectEvent = (range: MinuteRange) => {
@@ -102,6 +106,9 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
           </div>
           <CapitalReplayChart key={spanIndex} points={visible} span={span} selection={selection}
             events={suggestions} onSelect={setSelection} />
+          {(priceCount < visible.length || amountCount < visible.length) && <p className="capital-replay-chart-note">
+            已取得的 {visible.length} 个分钟点中，价格覆盖 {priceCount} 个，成交额覆盖 {amountCount} 个。缺失段不连线、不参与转折判断。
+          </p>}
           {!session.flowProvider && <p className="capital-replay-chart-note">该交易日暂未取得分钟资金净额。</p>}
         </div>
         <aside className="capital-replay-readout" aria-label="区间数据">
@@ -139,7 +146,8 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
           </details>
         </aside>
       </div>
-      <CapitalReplayTimeline events={suggestions} selection={selection} onSelect={selectEvent} />
+      <CapitalReplayTimeline events={suggestions} selection={selection} onSelect={selectEvent}
+        hasPriceSequence={hasPriceSequence} />
       <div className="capital-replay-source">
         <span>价量 {session.priceProvider ? marketDataProviderLabel(
           session.priceProvider === 'EASTMONEY_CAPITAL_FLOW' ? 'EASTMONEY' : session.priceProvider) : '未取得'}</span>

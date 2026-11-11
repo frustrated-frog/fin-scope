@@ -45,6 +45,9 @@ public class CapitalReplayService {
     @Autowired
     private MarketDataGateway marketData;
 
+    @Autowired
+    private CapitalReplaySnapshotService snapshots;
+
     public CapitalReplayView view(Long instrumentId) {
         Instrument instrument = capital.stock(instrumentId);
         if (instrument.getMarket() == null || !List.of("SH", "SZ", "BJ").contains(instrument.getMarket())) {
@@ -53,17 +56,20 @@ public class CapitalReplayService {
         LocalDate today = LocalDate.now(MARKET_ZONE);
         List<CapitalFlowPoint> stored = flowRepository.findRecentMinuteVersions(
                 instrumentId, today.minusDays(LOCAL_LOOKBACK_DAYS), today);
+        CapitalReplayData online;
         try {
-            return assemble(marketData.fetchCapitalReplay(instrument), stored);
+            online = marketData.fetchCapitalReplay(instrument);
         } catch (ProviderContractException error) {
             log.warn("资金复盘在线读取失败 instrumentId={} errorType={}", instrumentId, error.getErrorType(), error);
-            CapitalReplayView fallback = assemble(new CapitalReplayData(List.of(), List.of(),
-                    List.of("INTRADAY_MARKET_UNAVAILABLE", "REALTIME_FUND_FLOW_UNAVAILABLE")), stored);
+            CapitalReplayView fallback = assemble(snapshots.retain(instrumentId,
+                    new CapitalReplayData(List.of(), List.of(),
+                            List.of("INTRADAY_MARKET_UNAVAILABLE", "REALTIME_FUND_FLOW_UNAVAILABLE")), today), stored);
             if (fallback.getSessions().isEmpty()) {
                 throw error;
             }
             return fallback;
         }
+        return assemble(snapshots.retain(instrumentId, online, today), stored);
     }
 
     static CapitalReplayView assemble(CapitalReplayData online, List<CapitalFlowPoint> stored) {

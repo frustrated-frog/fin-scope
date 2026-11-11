@@ -15,10 +15,11 @@ export function ReplayFollowup({ outcome }: { outcome: ReplayOutcome }) {
   );
 }
 
-export function CapitalReplayTimeline({ events, selection, onSelect }: {
+export function CapitalReplayTimeline({ events, selection, onSelect, hasPriceSequence }: {
   events: ReplayEvent[];
   selection: MinuteRange;
   onSelect: (range: MinuteRange) => void;
+  hasPriceSequence: boolean;
 }) {
   return (
     <section className="capital-replay-timeline" aria-label="关键转折时间线">
@@ -56,7 +57,9 @@ export function CapitalReplayTimeline({ events, selection, onSelect }: {
             </button>
           </li>
         ))}
-      </ol> : <p className="capital-replay-chart-note">这一时段没有达到识别条件的完整转折区间。</p>}
+      </ol> : <p className="capital-replay-chart-note">{hasPriceSequence
+        ? '这一时段没有达到识别条件的完整转折区间。'
+        : '连续分钟价格缺失，暂不能识别转折；已取得的资金净额仍可查看。'}</p>}
     </section>
   );
 }

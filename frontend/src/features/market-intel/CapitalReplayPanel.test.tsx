@@ -76,3 +76,17 @@ test('shows price turns with explicit missing fund coverage and a pending follow
   expect(card).toHaveTextContent('待观察');
   expect(screen.getByText('该交易日暂未取得分钟资金净额。')).toBeInTheDocument();
 });
+
+test('explains missing minute prices instead of claiming there were no turning points', async () => {
+  vi.mocked(api).mockResolvedValue({ sessions: [{
+    date: '2026-11-11', priceProvider: 'EASTMONEY_DIRECT', flowProvider: 'EASTMONEY_DIRECT',
+    minutes: minutes(571).map((point, index) => ({
+      ...point, price: index === 15 ? 100 : null, tradeAmount: index === 15 ? 100_000 : null
+    }))
+  }], warnings: ['INTRADAY_MARKET_UNAVAILABLE'] });
+  render(<CapitalReplayPanel instrument={instrument} dragonTiger={null} />);
+  const timeline = await screen.findByLabelText('关键转折时间线');
+  expect(timeline).toHaveTextContent('连续分钟价格缺失，暂不能识别转折');
+  expect(screen.getByText(/价格覆盖 1 个，成交额覆盖 1 个/)).toBeInTheDocument();
+  expect(within(timeline).queryByRole('button')).not.toBeInTheDocument();
+});

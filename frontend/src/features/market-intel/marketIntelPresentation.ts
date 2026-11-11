@@ -25,6 +25,8 @@ const WARNING_LABELS: Record<string, string> = {
   INTRADAY_MARKET_UNAVAILABLE: '日内行情暂不可用',
   DAILY_MARKET_UNAVAILABLE: '日线行情暂不可用',
   REALTIME_FUND_FLOW_UNAVAILABLE: '实时资金流暂不可用',
+  CAPITAL_REPLAY_SNAPSHOT_FALLBACK: '已使用按交易日保存的分时快照',
+  CAPITAL_REPLAY_SNAPSHOT_UNAVAILABLE: '分时快照暂不可读写，仍保留本次在线数据',
   HISTORICAL_FUND_FLOW_UNAVAILABLE: '历史资金流暂不可用',
   TIMELINE_ALIGNMENT_GAP: '部分时间点行情未与资金流对齐'
 };
