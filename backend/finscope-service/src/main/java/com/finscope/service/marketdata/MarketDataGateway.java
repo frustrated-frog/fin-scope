@@ -13,6 +13,7 @@ import com.finscope.domain.marketdata.MarketDataQualityStatus;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.domain.marketdata.MarketDataProviderAttempt;
 import com.finscope.domain.marketintel.DragonTigerRecord;
+import com.finscope.domain.marketintel.CapitalFlowPoint;
 import com.finscope.rpc.marketdata.MarketDataProvider;
 import com.finscope.rpc.marketdata.ProviderResult;
 import com.finscope.rpc.marketintel.ProviderCallDeadline;
@@ -380,12 +381,44 @@ public class MarketDataGateway {
             List<CapitalFlowProvider> candidates = capitalFlowProviders.stream()
                     .filter(provider -> provider.supports(instrument))
                     .toList();
-            CapitalFlowProvider provider = routePolicy.order(candidates, capability).stream()
-                    .findFirst()
-                    .orElseThrow(() -> new ProviderContractException("REPLAY_PROVIDER_UNAVAILABLE",
-                            "分时复盘数据源暂不可用", true));
-            return executeProvider(provider, capability, requestDeadlineNanos(properties.getCapitalRequestBudgetMs()),
-                    () -> provider.fetchReplay(instrument));
+            List<CapitalFlowPoint> prices = List.of();
+            List<CapitalFlowPoint> flows = List.of();
+            Set<String> warnings = new LinkedHashSet<>();
+            long deadline = requestDeadlineNanos(properties.getCapitalRequestBudgetMs());
+            for (CapitalFlowProvider provider : routePolicy.order(candidates, capability)) {
+                if (remainingMillis(deadline) <= 0L || Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+                try {
+                    CapitalReplayData fetched = executeProvider(provider, capability, deadline,
+                            () -> provider.fetchReplay(instrument));
+                    if (fetched.getPrices().size() > prices.size()) {
+                        prices = fetched.getPrices();
+                    }
+                    if (fetched.getFlows().size() > flows.size()) {
+                        flows = fetched.getFlows();
+                    }
+                    warnings.addAll(fetched.getWarnings());
+                    if (!prices.isEmpty() && !flows.isEmpty()) {
+                        break;
+                    }
+                } catch (ProviderContractException error) {
+                    log.warn("资金复盘数据源失败 instrumentId={} provider={} errorType={}",
+                            instrument.getId(), provider.providerCode(), error.getErrorType(), error);
+                }
+            }
+            if (prices.isEmpty() && flows.isEmpty()) {
+                throw new ProviderContractException("REPLAY_PROVIDER_UNAVAILABLE", "分时复盘数据源暂不可用", true);
+            }
+            warnings.removeIf(warning -> warning.startsWith("INTRADAY_MARKET_UNAVAILABLE")
+                    || warning.startsWith("REALTIME_FUND_FLOW_UNAVAILABLE"));
+            if (prices.isEmpty()) {
+                warnings.add("INTRADAY_MARKET_UNAVAILABLE");
+            }
+            if (flows.isEmpty()) {
+                warnings.add("REALTIME_FUND_FLOW_UNAVAILABLE");
+            }
+            return new CapitalReplayData(prices, flows, new ArrayList<>(warnings));
         });
     }
 

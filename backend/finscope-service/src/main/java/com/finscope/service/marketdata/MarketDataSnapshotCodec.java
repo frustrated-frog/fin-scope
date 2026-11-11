@@ -153,7 +153,7 @@ public class MarketDataSnapshotCodec {
         try {
             String payload = mapper.writeValueAsString(new CapitalReplayData(data.getPrices(), data.getFlows(), List.of()));
             return new MarketDataSnapshot(MarketDataCapability.CAPITAL_REPLAY_1M, scopeKey,
-                    "CAPITAL_REPLAY", "EASTMONEY", asOf, retrievedAt, payload, sha256(payload),
+                    "CAPITAL_REPLAY", "MULTI_SOURCE", asOf, retrievedAt, payload, sha256(payload),
                     CAPITAL_REPLAY_SCHEMA_VERSION, retrievedAt);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("资金复盘快照序列化失败", error);

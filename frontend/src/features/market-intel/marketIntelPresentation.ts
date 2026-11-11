@@ -17,12 +17,14 @@ const PROVIDER_LABELS: Record<string, string> = {
   MARKET_DATA_GATEWAY: '行情数据网关',
   PYTHON_MARKET_DATA: '行情服务快照',
   SINA_STOCK: '新浪行情',
-  TENCENT_STOCK: '腾讯行情'
+  TENCENT_STOCK: '腾讯行情',
+  TENCENT_INTRADAY: '腾讯分时行情'
 };
 
 const WARNING_LABELS: Record<string, string> = {
   QUOTE_UNAVAILABLE: '实时报价暂不可用',
   INTRADAY_MARKET_UNAVAILABLE: '日内行情暂不可用',
+  INTRADAY_AMOUNT_GAP: '部分分钟成交额缺失，已保留价格',
   DAILY_MARKET_UNAVAILABLE: '日线行情暂不可用',
   REALTIME_FUND_FLOW_UNAVAILABLE: '实时资金流暂不可用',
   CAPITAL_REPLAY_SNAPSHOT_FALLBACK: '已使用按交易日保存的分时快照',
