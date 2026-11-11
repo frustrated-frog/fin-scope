@@ -1,13 +1,9 @@
-import { AM_CLOSE, CLOSE, OPEN, PM_OPEN } from './capitalReplaySeries';
+import { AM_CLOSE, OPEN, PM_OPEN } from './capitalReplaySeries';
 import type { MinuteRange, ReplayPoint } from './capitalReplaySeries';
 
-export type ReplayOutcome = {
-  status: 'AVAILABLE' | 'PENDING' | 'INCOMPLETE';
-  through: number;
-  horizon: string;
-  label: string;
-  change: number | null;
-};
+import { replayOutcome } from './capitalReplayOutcome';
+import type { ReplayOutcome } from './capitalReplayOutcome';
+export type { ReplayOutcome } from './capitalReplayOutcome';
 
 export type ReplayEvent = MinuteRange & {
   label: string;
@@ -30,7 +26,6 @@ const RAPID_MINUTES = 10;
 const VOLUME_EXPANSION = 1.5;
 const FLOW_SHARE = 0.15;
 const FLOW_MINUTES = 5;
-const FOLLOWUP_MINUTES = 10;
 const NUMERIC_TOLERANCE = 1e-10;
 
 export function replayPercent(value: number) {
@@ -41,21 +36,13 @@ export function replayPhase(minute: number) {
   return minute <= AM_CLOSE ? '上午' : minute < 14 * 60 + 30 ? '午后' : '尾盘';
 }
 
-function sessionIndex(minute: number) {
-  return minute <= AM_CLOSE ? minute - OPEN : AM_CLOSE - OPEN + minute - PM_OPEN;
-}
-
-function sessionMinute(index: number) {
-  return index <= AM_CLOSE - OPEN ? OPEN + index : PM_OPEN + index - (AM_CLOSE - OPEN);
-}
-
 function completeSum(points: ReplayPoint[], read: (point: ReplayPoint) => number | null) {
   const values = points.map(read);
   return values.length && values.every((value) => value !== null && Number.isFinite(value))
     ? values.reduce<number>((total, value) => total + value!, 0) : null;
 }
 
-function continuousPriceRuns(points: ReplayPoint[]) {
+export function continuousPriceRuns(points: ReplayPoint[]) {
   const runs: ReplayPoint[][] = [];
   let run: ReplayPoint[] = [];
   for (const point of points) {
@@ -116,52 +103,14 @@ function priceLegs(run: ReplayPoint[]): MinuteRange[] {
   return legs;
 }
 
-function followup(points: ReplayPoint[], range: MinuteRange, change: number): ReplayOutcome {
-  const endIndex = sessionIndex(range.to);
-  const targetIndex = Math.min(endIndex + FOLLOWUP_MINUTES, sessionIndex(CLOSE));
-  const through = sessionMinute(targetIndex);
-  const horizon = targetIndex - endIndex < FOLLOWUP_MINUTES ? '至收盘' : '后续 10 个交易分钟';
-  const base = { through, horizon, change: null };
-  if (targetIndex === endIndex) {
-    return { ...base, status: 'PENDING', label: '已收盘，无后续区间' };
-  }
-  if (Math.max(...points.map((point) => point.minute)) < through) {
-    return { ...base, status: 'PENDING', label: '待观察' };
-  }
-  // 13:00 is an optional snapshot at the lunch boundary, not an extra trading minute.
-  const prices = new Map(points.filter((point) => point.minute !== PM_OPEN)
-    .map((point) => [sessionIndex(point.minute), point.price]));
-  const startPrice = points.find((point) => point.minute === range.to)?.price;
-  for (let index = endIndex + 1; index <= targetIndex; index += 1) {
-    const price = prices.get(index);
-    if (price == null || price <= 0 || !Number.isFinite(price)) {
-      return { ...base, status: 'INCOMPLETE', label: '后续分钟缺失，暂不判断' };
-    }
-  }
-  const afterChange = prices.get(targetIndex)! / startPrice! - 1;
-  const move = Math.abs(change);
-  const retraced = change === 0 ? 0 : -Math.sign(change) * afterChange * (1 + change) / move;
-  let label = Math.abs(afterChange) < 0.002 ? '变化不大' : afterChange > 0 ? '随后走高' : '随后走低';
-  if (move >= MIN_MOVE - NUMERIC_TOLERANCE && Math.abs(afterChange) >= 0.002) {
-    label = Math.sign(afterChange) === Math.sign(change)
-      ? change > 0 ? '继续走高' : '继续走低'
-      : change > 0 ? '小幅回落' : '小幅修复';
-  }
-  if (move >= MIN_MOVE - NUMERIC_TOLERANCE && retraced >= 1 - NUMERIC_TOLERANCE) {
-    label = change > 0 ? '涨幅全部回吐' : '跌幅全部修复';
-  } else if (move >= MIN_MOVE - NUMERIC_TOLERANCE && retraced >= 0.5 - NUMERIC_TOLERANCE) {
-    label = change > 0 ? '涨幅回吐过半' : '跌幅修复过半';
-  }
-  return { through, horizon, status: 'AVAILABLE', label, change: afterChange };
-}
-
-function describeEvent(points: ReplayPoint[], run: ReplayPoint[], range: MinuteRange, flowOnly = false): ReplayEvent {
+export function describeReplayRange(points: ReplayPoint[], run: ReplayPoint[], range: MinuteRange, flowOnly = false): ReplayEvent {
   const sample = run.filter((point) => point.minute >= range.from && point.minute <= range.to);
   const first = sample[0];
   const last = sample[sample.length - 1];
   const change = last.price! / first.price! - 1;
   const amount = completeSum(sample, (point) => point.tradeAmount);
-  const net = completeSum(sample, (point) => point.net);
+  const flowSample = sample.filter((point) => point.minute !== OPEN && point.minute !== PM_OPEN);
+  const net = flowOnly && flowSample.length !== sample.length ? null : completeSum(flowSample, (point) => point.net);
   const prior = run.filter((point) => point.minute < range.from).slice(-sample.length);
   const priorAmount = prior.length === sample.length ? completeSum(prior, (point) => point.tradeAmount) : null;
   const volumeRatio = amount !== null && priorAmount !== null && priorAmount > 0 ? amount / priorAmount : null;
@@ -181,8 +130,8 @@ function describeEvent(points: ReplayPoint[], run: ReplayPoint[], range: MinuteR
   }
   return {
     ...range, label, direction: flowOnly ? 'flat' : up ? 'up' : 'down', change, amount, net, volumeRatio,
-    flowCount: sample.filter((point) => point.net !== null).length, minuteCount: sample.length,
-    context: replayPhase(range.from), outcome: followup(points, range, change)
+    flowCount: flowSample.filter((point) => point.net !== null).length, minuteCount: flowSample.length,
+    context: replayPhase(range.from), outcome: replayOutcome(points, range)
   };
 }
 
@@ -190,13 +139,13 @@ function describeEvent(points: ReplayPoint[], run: ReplayPoint[], range: MinuteR
 export function replayEvents(points: ReplayPoint[]): ReplayEvent[] {
   const ordered = [...points].sort((first, second) => first.minute - second.minute);
   const runs = continuousPriceRuns(ordered);
-  const events = runs.flatMap((run) => priceLegs(run).map((range) => describeEvent(ordered, run, range)));
+  const events = runs.flatMap((run) => priceLegs(run).map((range) => describeReplayRange(ordered, run, range)));
   const flowCandidates: ReplayEvent[] = [];
   const magnitudes: number[] = [];
   for (const run of runs) {
     for (let start = 0; start <= run.length - FLOW_MINUTES; start += 1) {
       const sample = run.slice(start, start + FLOW_MINUTES);
-      const event = describeEvent(ordered, run, { from: sample[0].minute, to: sample[FLOW_MINUTES - 1].minute }, true);
+      const event = describeReplayRange(ordered, run, { from: sample[0].minute, to: sample[FLOW_MINUTES - 1].minute }, true);
       if (event.net !== null && event.amount !== null && event.amount > 0) {
         magnitudes.push(Math.abs(event.net));
         if (Math.abs(event.net) / event.amount >= FLOW_SHARE) {
