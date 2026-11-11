@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { CapitalReplayChart } from './CapitalReplayChart';
-import { CapitalReplayTimeline, ReplayFollowup } from './CapitalReplayTimeline';
+import { CapitalReplayTimeline } from './CapitalReplayTimeline';
+import type { ReplayTimelineMode } from './CapitalReplayTimeline';
+import { ReplayFollowup } from './CapitalReplayFollowup';
 import { replayEvents, replayPercent } from './capitalReplayEvents';
+import { replayStages } from './capitalReplayStages';
 import { DragonTigerSeatList } from './DragonTigerPanel';
 import { marketDataProviderLabel, marketIntelWarningMessages } from './marketIntelPresentation';
 import type { DragonTigerView, MarketIntelInstrument } from './marketIntelTypes';
@@ -57,24 +60,36 @@ function SeatDisclosure({ view, date }: { view: DragonTigerView | null; date: st
 function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTiger: DragonTigerView | null }) {
   const points = useMemo(() => replayPoints(session), [session]);
   const events = useMemo(() => replayEvents(points), [points]);
+  const stages = useMemo(() => replayStages(points, events), [points, events]);
+  const [timelineMode, setTimelineMode] = useState<ReplayTimelineMode>('stages');
   const tape = useRef<HTMLDivElement>(null);
   const [spanIndex, setSpanIndex] = useState(0);
   const [selection, setSelection] = useState<MinuteRange>(() => {
-    if (events.length) {
-      return events[0];
+    if (stages.length) {
+      return stages[0];
     }
     const end = points[points.length - 1].minute;
     return { from: Math.max(points[0].minute, end > AM_CLOSE ? PM_OPEN : OPEN, end - 4), to: end };
   });
   const span = SPANS[spanIndex];
   const visible = points.filter((point) => point.minute >= span.from && point.minute <= span.to);
-  const suggestions = events.filter((event) => event.to >= span.from && event.from <= span.to);
+  const suggestions = events.filter((event) => event.to > span.from && event.from < span.to);
+  const visibleStages = stages.filter((stage) => stage.to > span.from && stage.from < span.to);
+  const markers = timelineMode === 'stages' ? visibleStages : suggestions;
   const priceCount = visible.filter((point) => point.price !== null).length;
   const amountCount = visible.filter((point) => point.tradeAmount !== null).length;
   const hasPriceSequence = visible.some((point, index) => index > 0 && point.price !== null
     && visible[index - 1].price !== null && point.minute === visible[index - 1].minute + 1);
   const detail = summarizeRange(points, selection);
-  const selectedEvent = events.find((event) => event.from === selection.from && event.to === selection.to);
+  const candidates = timelineMode === 'stages' ? [...stages, ...events] : [...events, ...stages];
+  const selectedEvent = candidates.find((event) => event.from === selection.from && event.to === selection.to);
+  const changeTimelineMode = (mode: ReplayTimelineMode) => {
+    setTimelineMode(mode);
+    const first = mode === 'stages' ? visibleStages[0] : suggestions[0];
+    if (first) {
+      setSelection(first);
+    }
+  };
   const selectEvent = (range: MinuteRange) => {
     if (range.from < span.from || range.to > span.to) {
       setSpanIndex(0);
@@ -105,7 +120,7 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
             </div>
           </div>
           <CapitalReplayChart key={spanIndex} points={visible} span={span} selection={selection}
-            events={suggestions} onSelect={setSelection} />
+            events={markers} onSelect={setSelection} />
           {(priceCount < visible.length || amountCount < visible.length) && <p className="capital-replay-chart-note">
             已取得的 {visible.length} 个分钟点中，价格覆盖 {priceCount} 个，成交额覆盖 {amountCount} 个。缺失段不连线、不参与转折判断。
           </p>}
@@ -146,7 +161,8 @@ function ReplayDesk({ session, dragonTiger }: { session: ReplaySession; dragonTi
           </details>
         </aside>
       </div>
-      <CapitalReplayTimeline events={suggestions} selection={selection} onSelect={selectEvent}
+      <CapitalReplayTimeline events={suggestions} stages={visibleStages} mode={timelineMode} onModeChange={changeTimelineMode}
+        selection={selection} onSelect={selectEvent}
         hasPriceSequence={hasPriceSequence} />
       <div className="capital-replay-source">
         <span>价量 {session.priceProvider ? marketDataProviderLabel(

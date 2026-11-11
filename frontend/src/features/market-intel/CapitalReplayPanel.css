@@ -167,7 +167,7 @@
 .capital-replay-method summary { cursor: pointer; }
 .capital-replay-method[open] { max-width: 340px; }
 .capital-replay-method p { line-height: 1.7; }
-.capital-replay-timeline ol {
+.capital-replay-timeline > ol {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
@@ -208,7 +208,7 @@
   color: var(--event-color);
   font: 600 15px var(--replay-mono);
 }
-.capital-replay-event-body { flex: 1; min-width: 0; }
+.capital-replay-event-body { display: block; flex: 1; min-width: 0; }
 .capital-replay-event-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }
 .capital-replay-event-heading time { color: var(--muted); font: 11px var(--replay-mono); }
 .capital-replay-event-heading small { color: var(--muted); font-size: 11px; }
@@ -216,20 +216,66 @@
 .capital-replay-event-metrics { display: flex; flex-wrap: wrap; gap: 4px 13px; margin-top: 9px; color: var(--muted); font-size: 11px; }
 .capital-replay-event-metrics b { color: var(--ink); font: 500 11px var(--replay-mono); }
 .capital-replay-followup {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 9px;
+  display: block;
   margin-top: 11px;
   padding-top: 9px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
-.capital-replay-followup strong { color: var(--ink); font-size: 12px; font-weight: 500; }
-.capital-replay-followup span:last-child:not(:first-child) { flex-basis: 100%; font-family: var(--replay-mono); }
-.capital-replay-followup[data-status="PENDING"] strong { color: var(--mi-amber); }
+.capital-replay-followup-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 9px; }
+.capital-replay-followup-heading strong { color: var(--ink); font-size: 12px; font-weight: 500; }
+.capital-replay-followup-endpoint { display: block; margin-top: 3px; font: 10px/1.6 var(--replay-mono); }
+.capital-replay-followup-path { display: flex; flex-wrap: wrap; gap: 3px 14px; margin-top: 6px; }
+.capital-replay-followup-path b, .capital-replay-close b { color: var(--ink); font: 500 11px var(--replay-mono); }
+.capital-replay-followup-return { display: block; margin-top: 4px; color: var(--mi-amber); }
+.capital-replay-close { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; }
+.capital-replay-close small { color: var(--ink); font-size: 11px; }
+.capital-replay-followup[data-status="PENDING"] .capital-replay-followup-heading strong { color: var(--mi-amber); }
+.capital-replay-levels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+.capital-replay-levels button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.capital-replay-levels button[aria-pressed="true"] {
+  border-color: var(--mi-cyan);
+  color: var(--ink);
+  background: var(--mi-cyan-soft);
+}
+.capital-replay-timeline > .capital-replay-stage-list { max-height: none; overflow: visible; }
+.capital-replay-stage-list > li { min-width: 0; align-self: start; }
+.capital-replay-stage-list > li > .capital-replay-event { height: auto; }
+.capital-replay-stage-details {
+  margin-top: 5px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11px;
+}
+.capital-replay-stage-details > summary { cursor: pointer; }
+.capital-replay-stage-details ol {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  max-height: 560px;
+  overflow-y: auto;
+  margin: 10px 0 0;
+  padding: 3px;
+  list-style: none;
+  scrollbar-width: thin;
+}
+.capital-replay-stage-details .capital-replay-event { height: auto; padding: 10px; }
+.capital-replay-stage-details .capital-replay-event-title { font-size: 13px; }
+.capital-replay-tape { scroll-margin-top: 100px; }
 .capital-replay-plot .event.neutral { fill: var(--mi-cyan); }
 .capital-replay-plot .event-marker text {
   fill: var(--surface);
@@ -294,7 +340,7 @@
 }
 
 @media (max-width: 760px) {
-  .capital-replay-timeline ol { grid-template-columns: minmax(0, 1fr); }
+  .capital-replay-timeline > ol { grid-template-columns: minmax(0, 1fr); }
   .capital-replay-timeline > header { flex-wrap: wrap; }
 }
 

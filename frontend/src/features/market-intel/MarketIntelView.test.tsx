@@ -195,6 +195,7 @@ test('opens a same-day replay and preserves price-only history without inferring
 
   await user.click(screen.getByRole('button', { name: '资金复盘' }));
   const events = await screen.findByLabelText('关键转折时间线');
+  await user.click(within(events).getByRole('button', { name: /全部区间/ }));
   await user.click(within(events).getByRole('button', { name: /上涨伴大额净流出/ }));
   const detail = screen.getByLabelText('区间数据');
   expect(detail).toHaveTextContent('09:31–09:35');
