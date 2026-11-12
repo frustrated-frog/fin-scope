@@ -162,16 +162,19 @@ def test_specialist_trains_serializes_and_attaches_without_replacing_incumbent(h
     from test_overnight import history, request
     from test_overnight_context import snapshot
     from finscope_market_data.overnight.engine import group_bars
+    from finscope_market_data.overnight.direction_dataset import FEATURES
     from finscope_market_data.overnight.up_selection import fit_up_selection, attach_up_selection, PROTOCOL as UP_PROTOCOL
-    fitted = fit_up_selection(history_rows, '2026-07-01T12:00:00', '14:30', {})
+    base = [{**row, 'features': row['features'][:len(FEATURES)]} for row in history_rows]
+    fitted = fit_up_selection(base, '2026-07-01T12:00:00', '14:30', {}, readiness={'days': []})
     fitted = json.loads(json.dumps(fitted, allow_nan=False))
     assert fitted['protocol'] == UP_PROTOCOL
     assert fitted['model']['selected'] == 'PRIOR'
-    assert fitted['audit']['selection']['reason'] == 'INSUFFICIENT_CANDIDATE_HISTORY'
-    bars = history(35)
+    assert fitted['audit']['selection']['reason'] == 'INSUFFICIENT_COMPLETE_CANDIDATES'
+    bars = history(180)
     day = bars[-1].ended_at.date()
     context = {**snapshot(str(day)), 'universeFingerprint': 'pool'}
-    artifact = {'id': 'model', 'universeFingerprint': 'pool', 'upSelection': fitted}
+    artifact = {'id': 'model', 'universeFingerprint': 'pool', 'upSelection': fitted,
+                'createdAt': f'{day}T08:00:00', 'labelsThrough': '2026-07-01T00:00:00'}
     report = {'dataThrough': f'{day}T14:30:00', 'closeDirection': {'upProbability': .61}}
     attach_up_selection(report, group_bars(bars), request(day), artifact, SimpleNamespace(at=lambda *args: context))
     assert report['closeDirection']['upProbability'] == .61

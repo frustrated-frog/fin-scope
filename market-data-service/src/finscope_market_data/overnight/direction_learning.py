@@ -16,7 +16,7 @@ from finscope_market_data.overnight.direction_candidates import (
     BASE_RECIPE, MULTISCALE_RECIPE, RECENCY_HALF_LIFE, candidate_probabilities, fit_candidates,
 )
 from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, LEGACY_PROTOCOL, select_direction
-from finscope_market_data.overnight.up_selection import POLICY as UP_POLICY, PROTOCOL as UP_PROTOCOL, select_up_candidates
+from finscope_market_data.overnight.up_selection import POLICY as UP_POLICY, LEGACY_PROTOCOL as UP_PROTOCOL, select_up_candidates
 
 SELECTION_DAYS = 20
 TEST_DAYS = 20

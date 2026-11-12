@@ -40,7 +40,7 @@ def missing_reason(report, forecast, outcome, decision, target_at, now, *, proto
 
 def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROUPS,
                              forecast_field='marketGroups', validate=missing_reason, row_fields=(), summarizer=None,
-                             cohort_validate=None):
+                             cohort_validate=None, starts=None):
     through = now.isoformat()
     cohorts = scheduled_cohorts(meta, through)
     originals = {}
@@ -60,6 +60,9 @@ def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROU
         mode = 'AFTER_CLOSE_HOLDING' if cutoff == '15:00' else 'TAIL_ENTRY'
         decision = f'{day}T{cutoff}:00'
         for name in group_names:
+            start_key = (mode, cutoff, name)
+            if starts is not None and start_key in starts and (starts[start_key] is None or day < starts[start_key]):
+                continue
             group = groups[(mode, cutoff, name)]
             group['scheduled'] += len(cohort['candidates'])
             group['days'] += 1

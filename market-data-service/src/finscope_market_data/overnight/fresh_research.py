@@ -12,18 +12,21 @@ from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARC
 from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
 from finscope_market_data.overnight.selection_research import train_index_only, attach_selection
 
-GROUPS = ('FRESH', 'CALIBRATED', 'INDEX')
+GROUPS = ('FRESH', 'CALIBRATED', 'INDEX', 'ADAPTIVE')
 INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
 logger = logging.getLogger(__name__)
 
 
 def train_fresh_research(rows, history, through, cutoff):
     result = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
-    fitted = fit_fresh_direction(rows, through, cutoff)
+    fitted = fit_fresh_direction(rows, through, cutoff, with_adaptive=True)
     if fitted is None:
         return result
     fitted['features'] = list(FEATURES)
     result['models']['FRESH'] = fitted
+    adaptive = fitted.pop('adaptive')
+    adaptive['features'] = list(FEATURES)
+    result['models']['ADAPTIVE'] = adaptive
     result['status'] = 'SHADOW'
     base, enhanced = paired_index_rows(rows, history)
     result['indexAudit'] = {'rowCount': len(base), 'dayCount': len({r['signalDate'] for r in base}),
@@ -78,7 +81,7 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         value = {'group': name, 'protocol': PROTOCOL, 'target': TARGET, 'validated': False,
                  'status': 'WAITING_MODEL', 'reason': '等待新训练方案；原判断继续保留'}
         parent['freshModels'].append(value)
-        model = models.get('INDEX' if name == 'INDEX' else 'FRESH')
+        model = models.get(name if name in ('INDEX', 'ADAPTIVE') else 'FRESH')
         expected = FEATURES + INDEX_FEATURES if name == 'INDEX' else FEATURES
         if (not timely or research.get('protocol') != PROTOCOL or not model
                 or model.get('features') != list(expected)):
@@ -86,10 +89,11 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         if local is None or (name == 'INDEX' and (index is None or received >= decision)):
             value.update(status='MISSING_FEATURES', reason='判断前的完整输入不足，保留缺口')
             continue
-        baseline = models.get('INDEX_BASELINE') if name == 'INDEX' else artifact.get('closeDirection')
+        baseline = (models.get('INDEX_BASELINE') if name == 'INDEX' else models.get('FRESH')
+                    if name == 'ADAPTIVE' else artifact.get('closeDirection'))
         if name == 'INDEX' and (not baseline or baseline.get('features') != list(FEATURES)):
             continue
-        if name == 'FRESH' and not baseline:
+        if name in ('FRESH', 'ADAPTIVE') and not baseline:
             continue
         x = local + index if name == 'INDEX' else local
         forecast = direction_prediction(model, x, {})
@@ -100,6 +104,7 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         probability = forecast['calibratedUpProbability'] if name == 'CALIBRATED' else raw
         audit = model['audit']
         value.update(status='SHADOW', upProbability=probability, rawUpProbability=raw,
+            assessmentStatus=forecast['assessmentStatus'], modelFitThrough=forecast['modelFitThrough'],
             matchedBaselineProbability=matched, liveProbability=parent['upProbability'],
             selectedModel=forecast['selectedModel'], calibrationStatus=forecast['calibrationStatus'],
             artifactId=artifact['id'], trainedAt=artifact['createdAt'], referenceAt=decision,
@@ -107,6 +112,7 @@ def attach_fresh_research(report, request, grouped, artifact, history):
             featureFingerprint=hashlib.sha256(json.dumps(x, allow_nan=False).encode()).hexdigest(),
             trainingThrough=audit['trainingThrough'], legacyTrainingThrough=audit['legacyTrainingThrough'],
             calibrationThrough=audit['calibrationThrough'],
+            selection=audit.get('selection') if name == 'ADAPTIVE' else None,
             indexHistoryReceivedAt=received if name == 'INDEX' else None,
             indexHistoryFingerprint=history_fingerprint(history) if name == 'INDEX' else None,
             reason='新训练方案独立留档，尚未证明优于当前预测')

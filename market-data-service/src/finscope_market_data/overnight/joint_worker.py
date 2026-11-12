@@ -16,7 +16,7 @@ from finscope_market_data.overnight.joint_learning import fit_target
 from finscope_market_data.overnight.universe import POOL_KEY
 from finscope_market_data.overnight.candidate_cohort import frozen_cohorts
 from finscope_market_data.overnight.up_selection import PROTOCOL as UP_PROTOCOL, fit_up_selection
-from finscope_market_data.overnight.candidate_dataset import extend_candidate_rows
+from finscope_market_data.overnight.candidate_readiness import build_actual_candidate_panel
 
 from finscope_market_data.overnight.market_ablation import evaluate_market_groups
 from finscope_market_data.overnight.market_research import PROTOCOL as MARKET_PROTOCOL
@@ -26,6 +26,7 @@ from finscope_market_data.overnight.fresh_research import PROTOCOL as FRESH_PROT
 from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY, history_revision
 from finscope_market_data.overnight.selection_evaluation import PROTOCOL as SELECTION_PROTOCOL
 from finscope_market_data.overnight.relative_strength import PROTOCOL as RELATIVE_PROTOCOL
+from finscope_market_data.overnight.fresh_direction import ADAPTIVE_REVISION
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class OvernightJointWorker:
         for profile in profiles(context):
             index_history = meta.get(INDEX_HISTORY_KEY) or {}
             revision = history_revision(index_history)
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{SELECTION_PROTOCOL}|{RELATIVE_PROTOCOL}|{revision}|{profile.key}'
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{SELECTION_PROTOCOL}|{RELATIVE_PROTOCOL}|{ADAPTIVE_REVISION}|{revision}|{profile.key}'
             job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
             if not job:
                 continue
@@ -88,13 +89,14 @@ class OvernightJointWorker:
                     challenger, context_rows = fit_context_direction(self.automation.service.store, codes, profile.cutoff, now)
                 except Exception:
                     logger.exception('Context direction training failed; retaining incumbent models')
-                specialist, selection_cohorts, selection_rows = None, {}, []
-                if context_rows and profile.mode == 'TAIL_ENTRY':
+                specialist, selection_cohorts, selection_rows, candidate_readiness = None, {}, [], None
+                if profile.mode == 'TAIL_ENTRY':
                     try:
                         selection_cohorts = frozen_cohorts(meta, now.isoformat(), profile.cutoff)
-                        selection_rows = extend_candidate_rows(context_rows, self.automation.service.store,
-                            self.research.contexts, selection_cohorts, profile.cutoff, now)
-                        specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts)
+                        selection_rows, candidate_readiness = build_actual_candidate_panel(direction_rows,
+                            self.automation.service.store, selection_cohorts, profile.cutoff, now)
+                        specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts,
+                                                      readiness=candidate_readiness)
                     except Exception:
                         logger.exception('Up-candidate training failed; retaining direction models')
                 ranking = None
@@ -118,6 +120,7 @@ class OvernightJointWorker:
                     'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
                     'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking,
+                    'candidateReadiness': candidate_readiness,
                     'freshResearch': fresh, 'marketModels': market_models, 'trainingJobKey': job['key']},
                     {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,
                      'indexHistory': index_history, 'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}

@@ -121,6 +121,7 @@ class OvernightJointResearch:
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
                 'weeklyDirectionAudit': self.meta.get('weeklyDirectionAudit'),
+                'candidateForward': self.meta.get('candidateForward'),
                 'marketForward': self.meta.get('marketForward'),
                 'freshForward': self.meta.get('freshForward'),
                 'selectionForward': self.meta.get('selectionForward'),

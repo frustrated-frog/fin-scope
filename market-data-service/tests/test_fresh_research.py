@@ -94,7 +94,7 @@ def test_actual_publication_reload_attachment_preserves_incumbent(tmp_path, rese
     attach_fresh_research(value, request(day), group_bars(bars), loaded, index_history)
     parent = value['closeDirection']
     assert parent['upProbability'] == .61
-    assert len(parent['freshModels']) == 3
+    assert len(parent['freshModels']) == len(GROUPS)
     assert all(r['status'] == 'SHADOW' and not r['validated'] for r in parent['freshModels'])
     expected = direction_prediction(loaded['closeDirection'], direction_features(group_bars(bars), day, '14:30', '605058.SH'), {})
     assert parent['freshModels'][0]['matchedBaselineProbability'] == expected['rawUpProbability']

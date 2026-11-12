@@ -13,6 +13,7 @@ from finscope_market_data.overnight.market_validation import summarize_market_fo
 from finscope_market_data.overnight.fresh_validation import summarize_fresh_forward
 from finscope_market_data.overnight.selection_validation import summarize_selection_forward
 from finscope_market_data.overnight.weekly_diagnostics import build_weekly_diagnostics
+from finscope_market_data.overnight.candidate_validation import summarize_candidate_forward
 
 logger = logging.getLogger(__name__)
 REFRESH_INTERVAL = timedelta(minutes=5)
@@ -55,6 +56,7 @@ class OvernightValidationWorker:
             'marketForward': lambda: summarize_market_forward(store, meta, now),
             'freshForward': lambda: summarize_fresh_forward(store, meta, now),
             'selectionForward': lambda: summarize_selection_forward(store, meta, now),
+            'candidateForward': lambda: summarize_candidate_forward(store, meta, now),
             'jointForward': lambda: summarize_forward(store, now, meta),
             'closeDirectionForward': lambda: summarize_direction(store, now, meta),
             'contextDirectionForward': lambda: summarize_direction(store, now, meta, challenger=True),
