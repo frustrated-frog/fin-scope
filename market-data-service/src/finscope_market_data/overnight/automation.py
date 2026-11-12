@@ -3,6 +3,8 @@ import hashlib
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+from time import monotonic
 from datetime import datetime, timedelta
 
 from finscope_market_data.forecast.trading_calendar import next_session
@@ -14,6 +16,7 @@ from finscope_market_data.overnight.history_backfill import DESIRED_DAYS
 logger = logging.getLogger(__name__)
 SLOTS = (('14:20', '14:30'), ('14:40', '14:45'))
 MAX_EVALUATION_CANDIDATES = 18
+POLL_SECONDS = 20
 
 
 class OvernightAutomation:
@@ -22,6 +25,7 @@ class OvernightAutomation:
         self.scanner = scanner
         self.store = AutomationStore(service.store)
         self.clock = service.clock
+        self._tick_lock = Lock()
 
     def sync_context(self, context: AutomationContext):
         value = {**context.model_dump(mode='json', by_alias=True), 'receivedAt': self.clock().isoformat()}
@@ -63,10 +67,27 @@ class OvernightAutomation:
                 'jobs': [{k: v for k, v in job.items() if k != 'token'} for job in self.store.jobs(history=True)]},
             'jobs': [{k: v for k, v in job.items() if k not in ('token', 'observations')} for job in jobs]}
 
-    def tick(self):
+    def tick(self, queued_at=None):
+        if not self._tick_lock.acquire(blocking=False):
+            return
+        started = monotonic()
+        try:
+            self._tick(queued_at)
+        finally:
+            try:
+                heartbeat = self.store.get('heartbeat') or {}
+                self.store.put('heartbeat', {**heartbeat, 'lastFinishedAt': self.clock().isoformat(),
+                                            'durationSeconds': round(monotonic() - started, 3)})
+            finally:
+                self._tick_lock.release()
+
+    def _tick(self, queued_at):
         now = self.clock()
         old_heartbeat = self.store.get('heartbeat')
-        self.store.put('heartbeat', {'lastTickAt': now.isoformat(), 'error': None})
+        previous = (old_heartbeat or {}).get('lastTickAt')
+        self.store.put('heartbeat', {'lastTickAt': now.isoformat(), 'previousTickAt': previous, 'error': None,
+            'gapSeconds': max(0, (now - datetime.fromisoformat(previous)).total_seconds()) if previous else None,
+            'queueDelaySeconds': max(0, (now - queued_at).total_seconds()) if queued_at else None})
         context = self.store.get('context') or AutomationContext().model_dump(mode='json', by_alias=True)
         if not context['enabled']:
             return
@@ -93,7 +114,13 @@ class OvernightAutomation:
             existing = self.store.job(key)
             if existing and existing['status'] == 'RUNNING':
                 self.store.finish(existing, now, status='INTERRUPTED', reason='运行超过尾盘有效窗口，未记作按时预测')
-            self.store.miss(key, now, metadata)
+            scan = self.store.job(f'{day}|SCAN|{cutoff}')
+            heartbeat = self.store.get('heartbeat') or {}
+            diagnostic = {'scanStatus': scan.get('status') if scan else 'NOT_STARTED',
+                'previousTickAt': heartbeat.get('previousTickAt'), 'detectedAt': now.isoformat(),
+                'gapSeconds': heartbeat.get('gapSeconds'), 'queueDelaySeconds': heartbeat.get('queueDelaySeconds')}
+            reason_code = 'PREDICTION_WINDOW_EXPIRED' if scan and scan.get('status') == 'COMPLETED' else 'SCAN_NOT_READY'
+            self.store.miss(key, now, {**metadata, 'reasonCode': reason_code, 'windowDiagnostic': diagnostic})
             return
         if now < datetime.fromisoformat(f'{day}T{prepare}'):
             return
@@ -115,7 +142,7 @@ class OvernightAutomation:
                 except Exception as error:
                     self.store.finish(job, self.clock(), status='FAILED', reason=f'候选扫描失败：{type(error).__name__}: {error}')
             scan = self.store.job(scan_key)
-            if scan and scan['status'] == 'COMPLETED' and hasattr(self.service, 'prewarm'):
+            if scan and scan['status'] == 'COMPLETED' and self.clock() < cutoff_at and hasattr(self.service, 'prewarm'):
                 # One acquisition per minute during the preparation window, durable across restarts.
                 warm_key = f'{day}|PREWARM|{cutoff}|{now:%H:%M}'
                 warm = self.store.claim(warm_key, now, {**metadata, 'phase': 'PREWARM'})
@@ -128,7 +155,8 @@ class OvernightAutomation:
             return
         scan = self.store.job(scan_key)
         if not scan or scan['status'] != 'COMPLETED' or datetime.fromisoformat(scan['snapshotAt']) >= cutoff_at:
-            self.store.finish(job, now, status='MISSED', reason='决策前没有有效候选快照；下个窗口自动再扫描')
+            self.store.finish(job, now, status='MISSED', reasonCode='SCAN_NOT_READY',
+                              reason='决策前没有有效候选快照；下个窗口自动再扫描')
             return
         requests = [OvernightRequest(instrument_code=row['instrumentCode'], signal_date=day,
             mode='TAIL_ENTRY', cutoff=cutoff, cost_bps=context['tailCostBps']) for row in scan['candidates']]
@@ -192,16 +220,20 @@ class OvernightAutomation:
                 break
 
     async def run(self, stop):
-        while not stop.is_set():
-            try:
-                await asyncio.to_thread(self.tick)
-            except Exception as error:
-                logger.exception('Automatic overnight research failed; next tick will retry')
-                self.store.put('heartbeat', {'lastTickAt': self.clock().isoformat(), 'error': type(error).__name__})
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
-            except TimeoutError:
-                pass
+        # Prediction windows must not queue behind default-executor backfills.
+        # Await each tick before submitting another: one worker, no task backlog.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix='overnight-scheduler') as executor:
+            loop = asyncio.get_running_loop()
+            while not stop.is_set():
+                try:
+                    await loop.run_in_executor(executor, self.tick, self.clock())
+                except Exception as error:
+                    logger.exception('Automatic overnight research failed; next tick will retry')
+                    self.store.put('heartbeat', {**(self.store.get('heartbeat') or {}), 'error': type(error).__name__})
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=POLL_SECONDS)
+                except TimeoutError:
+                    pass
 
 
 def rank_candidates(results):
