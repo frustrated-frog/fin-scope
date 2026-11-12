@@ -15,6 +15,9 @@ class OvernightStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript('''
+                CREATE TABLE IF NOT EXISTS overnight_data_revision (
+                    id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
+                INSERT OR IGNORE INTO overnight_data_revision VALUES(1,0);
                 CREATE TABLE IF NOT EXISTS overnight_capture_plan (
                     id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS overnight_capture_run (
@@ -51,8 +54,46 @@ class OvernightStore:
 
     def save_bars(self, code, bars):
         with self.connect() as db:
-            db.executemany('INSERT INTO overnight_minute VALUES(?,?,?) ON CONFLICT(code,ended_at) DO UPDATE SET payload=excluded.payload',
+            before = db.total_changes
+            db.executemany('''INSERT INTO overnight_minute VALUES(?,?,?) ON CONFLICT(code,ended_at)
+                DO UPDATE SET payload=excluded.payload WHERE payload!=excluded.payload''',
                 [(code, b.ended_at.isoformat(), b.model_dump_json()) for b in bars])
+            if db.total_changes > before:
+                self.advance_revision(db)
+
+    @staticmethod
+    def advance_revision(db):
+        db.execute('UPDATE overnight_data_revision SET version=version+1 WHERE id=1')
+
+    def data_revision(self):
+        with self.connect() as db:
+            return db.execute('SELECT version FROM overnight_data_revision WHERE id=1').fetchone()[0]
+
+    def research_bars(self, code, through):
+        """Completed archived days may repair research inputs, never frozen forecasts."""
+        with self.connect() as db:
+            live = db.execute('SELECT payload FROM overnight_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
+                              (code, through.isoformat())).fetchall()
+            history = db.execute('SELECT payload FROM overnight_historical_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
+                                 (code, through.isoformat())).fetchall()
+        from collections import defaultdict
+        days, archived = defaultdict(list), defaultdict(list)
+        for row in live:
+            bar = MinuteBar.model_validate_json(row[0])
+            days[bar.ended_at.date()].append(bar)
+        for row in history:
+            bar = MinuteBar.model_validate_json(row[0])
+            archived[bar.ended_at.date()].append(bar)
+        for day, bars in archived.items():
+            if not days[day]:
+                days[day] = bars
+            elif len(days[day]) < 48 and len(bars) == 48:
+                try:
+                    compare_history({b.ended_at.isoformat(): b for b in days[day]}, bars)
+                except ValueError:
+                    continue
+                days[day] = bars
+        return [bar for day in sorted(days) for bar in days[day]]
 
     def bars(self, code, through):
         with self.connect() as db:
@@ -72,6 +113,8 @@ class OvernightStore:
 
     def import_history(self, code, bars, source, now):
         """Stage history separately; never replace captured days or frozen reports."""
+        if not bars:
+            raise ValueError('历史分钟数据为空，保留上次导入状态')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             existing = {row[0]: MinuteBar.model_validate_json(row[1]) for row in db.execute(
@@ -82,8 +125,11 @@ class OvernightStore:
                 'SELECT ended_at FROM overnight_historical_minute WHERE code=?', (code,))}
             additions = [bar for bar in bars if str(bar.ended_at.date()) not in days
                          and bar.ended_at.isoformat() not in previous_stamps]
+            before = db.total_changes
             db.executemany('INSERT OR IGNORE INTO overnight_historical_minute VALUES(?,?,?)',
                 [(code, bar.ended_at.isoformat(), bar.model_dump_json()) for bar in bars])
+            if db.total_changes > before:
+                self.advance_revision(db)
             result = {'sourceCode': source, 'importedAt': now.isoformat(), 'addedBars': len(additions),
                       'addedDays': len({bar.ended_at.date() for bar in additions}), **quality,
                       'firstDate': str(bars[0].ended_at.date()) if bars else None,

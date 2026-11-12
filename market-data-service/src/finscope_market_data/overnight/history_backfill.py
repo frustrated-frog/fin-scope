@@ -7,6 +7,7 @@ from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.models import OvernightRequest
 from finscope_market_data.overnight.universe import POOL_KEY, POOL_SIZE, extend_universe
 from finscope_market_data.forecast.trading_calendar import previous_session
+from finscope_market_data.overnight.training_inputs import gap_codes
 
 logger = logging.getLogger(__name__)
 DESIRED_DAYS = 140
@@ -38,6 +39,8 @@ class OvernightHistoryBackfill:
         pool = [row['instrumentCode'] for row in (universe or {}).get('members', [])]
         latest_session = previous_session(now.date())
         codes = [position['instrumentCode'] for position in context['positions']]
+        gaps = set(gap_codes(self.store))
+        codes.extend(sorted(gaps))
         scans = [job for job in self.store.jobs() if job.get('phase') == 'DISCOVER' and job['status'] == 'COMPLETED']
         for job in scans[:2]:
             codes.extend(row['instrumentCode'] for row in job.get('candidates', []))
@@ -46,8 +49,8 @@ class OvernightHistoryBackfill:
         for code in list(dict.fromkeys(codes))[:200]:
             enough = coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS
             imported = self.minutes.history_import(code)
-            current = latest_session and (imported or {}).get('lastDate', '') >= str(latest_session)
-            if enough and (code not in pool or current):
+            current = latest_session and ((imported or {}).get('lastDate') or '') >= str(latest_session)
+            if code not in gaps and enough and (code not in pool or current):
                 continue
             try:
                 OvernightRequest(instrument_code=code, signal_date=now.date(), mode='TAIL_ENTRY', cutoff='14:30')
@@ -61,7 +64,7 @@ class OvernightHistoryBackfill:
             try:
                 # Today remains the live provider's responsibility, even after close.
                 through = datetime.combine(now.date() - timedelta(days=1), datetime.min.time()).replace(hour=15)
-                if enough and imported and code in pool:
+                if enough and imported and code in pool and code not in gaps:
                     start = datetime.fromisoformat(imported['lastDate']) - timedelta(days=5)
                     bars = self.provider.fetch(code, through, start=start.date())
                 else:

@@ -33,7 +33,7 @@ def build_actual_candidate_panel(base, store, cohorts, cutoff, through):
             elif (day, code) not in original:
                 pending[code].append(record)
     for code, items in pending.items():
-        grouped = group_bars(store.bars(code, through))
+        grouped = group_bars(getattr(store, 'research_bars', store.bars)(code, through))
         for record in items:
             day = datetime.fromisoformat(record['signalDate']).date()
             outcome = close_outcome(grouped, day, through, cutoff)

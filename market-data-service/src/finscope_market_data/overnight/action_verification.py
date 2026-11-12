@@ -24,8 +24,11 @@ class ActionVerificationStore:
         if result['throughDate'] >= str(received.date()):
             raise ValueError('仅核验已完成交易日的公司行为')
         with self.store.connect() as db:
+            before = db.total_changes
             db.execute('INSERT OR IGNORE INTO overnight_action_verification VALUES(?,?,?)',
                        (result['instrumentCode'], received.isoformat(), json.dumps(value)))
+            if db.total_changes > before:
+                self.store.advance_revision(db)
 
     def latest(self, code, through):
         with self.store.connect() as db:

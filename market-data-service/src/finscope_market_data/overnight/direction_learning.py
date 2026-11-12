@@ -86,7 +86,8 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE
     elif selection_policy == UP_POLICY:
         selected, selection_audit = select_up_candidates(probabilities, selection)
     # Selection labels may now train the chosen recipe; calibration remains separate.
-    model = fit_candidates(training + selection, recipe)
+    final_training = training + [row for row in selection if row.get('trainingEligible', True)]
+    model = fit_candidates(final_training, recipe)
     model['selected'] = selected
     cy = np.array([r['actualReturn'] > 0 for r in calibration])
     raw = candidate_probabilities(model, [r['features'] for r in calibration])[selected]
@@ -98,7 +99,7 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE
     return {'model': model, 'audit': {'selected': selected, 'selectionBrier': scores, 'selection': selection_audit,
         'recipe': recipe, 'recencyHalfLifeSessions': RECENCY_HALF_LIFE if recipe == MULTISCALE_RECIPE else None,
         'trainingThrough': max(r['exitAt'] for r in training), 'selectionStart': min(r['signalDate'] for r in selection),
-        'modelFitThrough': max(r['exitAt'] for r in training + selection),
+        'modelFitThrough': max(r['exitAt'] for r in final_training),
         'selectionThrough': max(r['exitAt'] for r in selection), 'calibrationStart': min(r['signalDate'] for r in calibration),
         'calibrationThrough': max(r['exitAt'] for r in calibration),
         'trainingDays': len({r['signalDate'] for r in training}),

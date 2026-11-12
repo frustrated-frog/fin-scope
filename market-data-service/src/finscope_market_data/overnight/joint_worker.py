@@ -27,6 +27,10 @@ from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KE
 from finscope_market_data.overnight.selection_evaluation import PROTOCOL as SELECTION_PROTOCOL
 from finscope_market_data.overnight.relative_strength import PROTOCOL as RELATIVE_PROTOCOL
 from finscope_market_data.overnight.fresh_direction import ADAPTIVE_REVISION
+from finscope_market_data.overnight.action_verification import ActionVerificationStore
+from finscope_market_data.overnight.training_inputs import input_revision, refresh_allowed, GAP_KEY
+import hashlib
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +65,12 @@ class OvernightJointWorker:
         for profile in profiles(context):
             index_history = meta.get(INDEX_HISTORY_KEY) or {}
             revision = history_revision(index_history)
-            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{SELECTION_PROTOCOL}|{RELATIVE_PROTOCOL}|{ADAPTIVE_REVISION}|{revision}|{profile.key}'
-            job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()), **profile.dump()})
+            data_revision = input_revision(self.automation.service.store, meta, universe, index_history, now.isoformat())
+            if not refresh_allowed(meta.jobs(phase='JOINT'), profile, data_revision, now):
+                continue
+            key = f'{now.date()}|JOINT|{PROTOCOL}|{DIRECTION_PROTOCOL}|{CONTEXT_PROTOCOL}|{UP_PROTOCOL}|{MARKET_PROTOCOL}|{RANKING_PROTOCOL}|{FRESH_PROTOCOL}|{SELECTION_PROTOCOL}|{RELATIVE_PROTOCOL}|{ADAPTIVE_REVISION}|{revision}|{data_revision}|{profile.key}'
+            job = meta.claim(key, now, {'phase': 'JOINT', 'signalDate': str(now.date()),
+                                       'inputRevision': data_revision, **profile.dump()})
             if not job:
                 continue
             try:
@@ -74,6 +82,9 @@ class OvernightJointWorker:
                     if fitted is not None:
                         targets[target] = fitted
                 direction_rows, direction_data = build_direction_panel(self.automation.service.store, codes, profile.cutoff, now)
+                direction_rows, actions = ActionVerificationStore(self.automation.service.store).annotate(direction_rows, now)
+                direction_data.update(actionVerification=actions,
+                    fingerprint=hashlib.sha256(json.dumps(direction_rows, sort_keys=True, allow_nan=False).encode()).hexdigest())
                 direction = fit_direction(direction_rows, now.isoformat(), profile.cutoff)
                 if len(targets) != len(TARGETS):
                     targets = {}
@@ -95,6 +106,7 @@ class OvernightJointWorker:
                         selection_cohorts = frozen_cohorts(meta, now.isoformat(), profile.cutoff)
                         selection_rows, candidate_readiness = build_actual_candidate_panel(direction_rows,
                             self.automation.service.store, selection_cohorts, profile.cutoff, now)
+                        meta.put(f'{GAP_KEY}|{profile.cutoff}', candidate_readiness)
                         specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts,
                                                       readiness=candidate_readiness)
                         candidate_readiness['status'] = 'READY' if specialist else 'INSUFFICIENT_TRAINING_HISTORY'
@@ -124,6 +136,7 @@ class OvernightJointWorker:
                     'features': list(FEATURES), 'data': data_audit, 'context': pool_context, 'targets': targets,
                     'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking,
                     'candidateReadiness': candidate_readiness,
+                    'inputRevision': data_revision,
                     'freshResearch': fresh, 'marketModels': market_models, 'trainingJobKey': job['key']},
                     {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,
                      'indexHistory': index_history, 'selectionCohorts': [{'signalDate': day, 'cutoff': cutoff, **value}
