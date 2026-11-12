@@ -12,6 +12,7 @@ from finscope_market_data.overnight.joint_validation import summarize_forward
 from finscope_market_data.overnight.market_validation import summarize_market_forward
 from finscope_market_data.overnight.fresh_validation import summarize_fresh_forward
 from finscope_market_data.overnight.selection_validation import summarize_selection_forward
+from finscope_market_data.overnight.weekly_diagnostics import build_weekly_diagnostics
 
 logger = logging.getLogger(__name__)
 REFRESH_INTERVAL = timedelta(minutes=5)
@@ -50,6 +51,7 @@ class OvernightValidationWorker:
         store = self.automation.service.store
         evaluations = {
             'errorAudit': lambda: build_error_audit(store, meta, self.research.contexts, now),
+            'weeklyDirectionAudit': lambda: build_weekly_diagnostics(store, meta, self.research.contexts, now),
             'marketForward': lambda: summarize_market_forward(store, meta, now),
             'freshForward': lambda: summarize_fresh_forward(store, meta, now),
             'selectionForward': lambda: summarize_selection_forward(store, meta, now),

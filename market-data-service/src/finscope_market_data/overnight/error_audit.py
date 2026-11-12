@@ -10,6 +10,7 @@ from finscope_market_data.overnight.candidate_evaluation import evaluate_candida
 from finscope_market_data.overnight.direction_dataset import PROTOCOL, TARGET
 from finscope_market_data.overnight.joint_dataset import date_weights
 from finscope_market_data.overnight.tail_ranking_research import valid_forecast, summarize_ranking
+from finscope_market_data.overnight.up_detection import evidence, probability, summarize_detection
 
 
 def slice_metrics(rows):
@@ -32,7 +33,7 @@ def market_state(snapshot):
     return 'UP' if mean >= .005 else 'DOWN' if mean <= -.005 else 'MIXED'
 
 
-def build_error_audit(store, meta, contexts, now):
+def build_error_audit(store, meta, contexts, now, *, since=None):
     cohorts = scheduled_cohorts(meta, now.isoformat())
     reports = {}
     for report in sorted(store.iter_history(), key=lambda r: (r['generatedAt'], r['id'])):
@@ -43,6 +44,8 @@ def build_error_audit(store, meta, contexts, now):
         reports.setdefault(key, report)
     groups = defaultdict(lambda: {'rows': [], 'missing': Counter(), 'scheduled': 0, 'complete': [], 'cohorts': []})
     for (day, cutoff), cohort in sorted(cohorts.items()):
+        if since and day < since:
+            continue
         target = next_session(datetime.fromisoformat(day).date())
         if target is None or f'{target}T15:00:00' >= now.isoformat():
             continue
@@ -66,7 +69,8 @@ def build_error_audit(store, meta, contexts, now):
                 'lane': candidate.get('selectionLane', 'UNKNOWN'), 'marketState': market_state(snapshot),
                 'board': 'GEM' if code.startswith('3') else 'MAIN',
                 'confidence': 'HIGH' if abs(direction['upProbability'] - .5) >= .1 else 'LOW',
-                'upSelection': (report.get('closeDirection') or {}).get('upSelection')}
+                'upSelection': (report.get('closeDirection') or {}).get('upSelection'),
+                **evidence(report, direction, snapshot, now)}
             ranking = (report.get('closeDirection') or {}).get('tailRanking')
             row['tailRanking'] = ranking if ranking and valid_forecast(ranking, direction, report) else None
             group['rows'].append(row)
@@ -82,7 +86,7 @@ def missing_reason(report, direction, outcome, now):
         return 'MISSING_PREDICTION'
     if direction.get('protocol') != PROTOCOL or direction.get('target') != TARGET:
         return 'LEGACY_PROTOCOL'
-    if direction.get('upProbability') is None or not direction.get('artifactId'):
+    if probability(direction.get('upProbability')) is None or not direction.get('artifactId'):
         return 'MISSING_MODEL'
     if (outcome.get('status') != 'SETTLED' or not isinstance(outcome.get('actualUp'), bool)
             or outcome.get('exitAt', '') >= now.isoformat()):
@@ -105,6 +109,7 @@ def summarize(key, group):
         'completeDays': len(group['complete']), 'cohortCount': len(group['cohorts']),
         'metrics': slice_metrics(rows) if rows else None, 'slices': slices,
         'upCandidates': evaluate_candidates(complete),
+        'upDetection': summarize_detection(complete),
         'selectionComparison': selection_comparison(complete),
         'rankingComparison': summarize_ranking(complete) if mode == 'TAIL_ENTRY' else None}
 

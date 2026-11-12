@@ -102,6 +102,7 @@ class OvernightJointResearch:
         gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if compatible else {}
         forecast = direction_prediction(fitted, x, gate.get('calibrationGate'))
         report['closeDirection'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
+            'trainingThrough': fitted['audit'].get('trainingThrough'),
             'dataFingerprint': fitted['data']['fingerprint'], 'forwardDays': gate.get('dayCount', 0),
             'forwardStatus': gate.get('status', 'ACCUMULATING'),
             'validated': bool((report.get('jointResearch') or {}).get('cohort') == 'AUTOMATIC' and gate.get('eligible')),
@@ -119,6 +120,7 @@ class OvernightJointResearch:
                 'closeDirectionForward': self.meta.get('closeDirectionForward'),
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
+                'weeklyDirectionAudit': self.meta.get('weeklyDirectionAudit'),
                 'marketForward': self.meta.get('marketForward'),
                 'freshForward': self.meta.get('freshForward'),
                 'selectionForward': self.meta.get('selectionForward'),
