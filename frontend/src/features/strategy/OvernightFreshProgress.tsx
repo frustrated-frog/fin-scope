@@ -4,7 +4,7 @@ import { OvernightSelectionProgress } from './OvernightSelectionProgress';
 import { selectionProtocol } from './overnightSelectionTypes';
 
 const protocol = 'overnight-fresh-direction-v1';
-const labels = { FRESH: '最新样本训练', CALIBRATED: '滚动概率校准', INDEX: '增加指数走势' };
+const labels = { FRESH: '最新样本训练', CALIBRATED: '滚动概率校准', INDEX: '增加指数走势', ADAPTIVE: '近期预测重新择模' };
 const percent = (value?: number) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 
 export function OvernightFreshProgress({ state, mode }: { state: OvernightJointState; mode: OvernightMode }) {
@@ -41,6 +41,6 @@ export function OvernightFreshProgress({ state, mode }: { state: OvernightJointS
               ? state.selectionForward.groups.find(row => row.mode === mode && row.cutoff === model.profile.cutoff) : undefined} />}
       </div>;
     })}
-    <p>三项改动分别检验。指数使用此前已完成的日线；没有有效历史的股票日不伪造输入，次日统计保留缺口。</p>
+    <p>各项改动分别检验。重新择模使用此前已到期的样本外预测；指数使用此前已完成的日线。没有有效历史的股票日保留缺口。</p>
   </section>;
 }
