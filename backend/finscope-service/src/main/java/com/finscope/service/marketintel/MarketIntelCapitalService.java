@@ -91,6 +91,7 @@ public class MarketIntelCapitalService {
         view.setIntradayTimeline(timeline);
         view.setDailyTrend(dailyTrend);
         view.setMetrics(metrics.derive(timeline, dailyTrend, snapshot.getSignals()));
+        CapitalMarketEnrichmentService.applyMarketQuote(view.getMetrics(), snapshot.getFacts());
         view.setRuleExplanation(rules.explain(snapshot.getFacts(), snapshot.getSignals()));
         view.setHistoricalEvaluation(evaluations.findBySnapshotId(snapshot.getId()).orElse(null));
         view.setFactorObservations(factorResult.getObservations());
@@ -138,17 +139,21 @@ public class MarketIntelCapitalService {
                 .max(Comparator.comparing(CapitalFlowPoint::getObservedAt)).orElse(null);
         CapitalFlowPoint currentContext = latestMinute != null && (latestDaily == null
                 || latestMinute.getDataDate().isAfter(latestDaily.getDataDate())) ? latestMinute : latestDaily;
-        if (currentContext == null || currentContext.getIntervalTradeAmount() == null
-                || currentContext.getTradeVolume() == null || currentContext.getTurnoverRate() == null
-                || currentContext.getVolumeRatio() == null) {
+        CapitalFlowPoint quote = CapitalMarketEnrichmentService.latestMarketQuote(snapshot.getFacts());
+        CapitalFlowPoint marketContext = quote != null && freshness.isFresh(quote.getObservedAt()) ? quote : currentContext;
+        if (marketContext == null || (marketContext.getIntervalTradeAmount() == null && marketContext.getCumulativeTradeAmount() == null)
+                || marketContext.getTradeVolume() == null || marketContext.getTurnoverRate() == null
+                || marketContext.getVolumeRatio() == null) {
             warnings.add("成交额、成交量、换手率或量比尚未补齐");
         }
-        LocalDateTime factAsOf = currentContext == null ? snapshot.getAsOf() : currentContext.getObservedAt();
+        LocalDateTime factAsOf = currentContext == null ? null : currentContext.getObservedAt();
         boolean stale = !freshness.isFresh(factAsOf);
-        if (stale && !warnings.contains("资金数据已落后于当前交易时点，请刷新成功后再判断")) {
+        if (currentContext == null) {
+            warnings.add("资金数据尚未取得，当前仅展示可用行情");
+        } else if (stale && !warnings.contains("资金数据已落后于当前交易时点，请刷新成功后再判断")) {
             warnings.add("资金数据已落后于当前交易时点，请刷新成功后再判断");
         }
-        health.setStatus(stale ? "STALE_FALLBACK"
+        health.setStatus(currentContext == null ? (quote == null ? "UNAVAILABLE" : "PARTIAL_FRESH") : stale ? "STALE_FALLBACK"
                 : warnings.isEmpty() ? "FRESH_PRIMARY" : "PARTIAL_FRESH");
         health.setWarnings(warnings);
         return health;

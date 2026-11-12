@@ -91,6 +91,26 @@ class MarketIntelPersistenceTest {
     }
 
     @Test
+    void dailyWindowCountsTradingDaysRatherThanPayloadVersions() {
+        CapitalFlowPoint older = point("day-older");
+        older.setGranularity("DAY_1");
+        older.setDataDate(LocalDate.of(2026, 7, 13));
+        older.setObservedAt(older.getDataDate().atTime(15, 0));
+        flows.saveAll(List.of(older));
+        CapitalFlowPoint first = point("day-first");
+        first.setGranularity("DAY_1");
+        CapitalFlowPoint revised = point("day-revised");
+        revised.setGranularity("DAY_1");
+        revised.setRetrievedAt(first.getRetrievedAt().plusMinutes(1));
+        flows.saveAll(List.of(first, revised));
+        List<CapitalFlowPoint> days = flows.findLatestDailyDays(7L, 2);
+        assertEquals(2, days.size());
+        assertEquals(revised.getId(), days.get(0).getId());
+        assertEquals(older.getId(), days.get(1).getId());
+        assertEquals(1, flows.findLatestDailyDays(7L, 1).size());
+    }
+
+    @Test
     void dragonTigerFactsAreVersionedAndQueriesReturnLatestBusinessVersion() {
         DragonTigerRecord first = dragonTiger("payload-v1", new BigDecimal("100"));
         DragonTigerRecord revised = dragonTiger("payload-v2", new BigDecimal("120"));

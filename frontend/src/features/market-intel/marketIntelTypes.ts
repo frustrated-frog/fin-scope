@@ -39,6 +39,7 @@ export type CapitalBehaviorMetrics = {
     mainNetInflow?: number;
     mainNetInflowSharePct?: number;
     observedAt?: string;
+    marketObservedAt?: string;
   } | null;
   intradayStreak: CapitalFlowStreak;
   dailyStreak: CapitalFlowStreak;

@@ -944,3 +944,18 @@ function agentInterpretation(
     disclaimer: '仅用于研究，不构成投资建议'
   };
 }
+
+test('行情与资金分别显示各自的时间，补行情不会把旧资金标为最新', async () => {
+  const fallback = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation((path: string, options?: RequestInit) => {
+    if (path.includes('/capital-behavior')) {
+      return Promise.resolve({ ...overview, metrics: { ...overview.metrics, latest: {
+        ...overview.metrics.latest, observedAt: '2026-07-14T15:00:00', marketObservedAt: '2026-07-15T10:30:00'
+      } } }) as never;
+    }
+    return fallback(path, options);
+  });
+  render(<MarketIntelView addToast={vi.fn()} setMessage={vi.fn()} />);
+  expect(await screen.findByText(/行情截至 07\/15 10:30/)).toBeInTheDocument();
+  expect(screen.getByText(/资金截至 07\/14 15:00/)).toBeInTheDocument();
+});

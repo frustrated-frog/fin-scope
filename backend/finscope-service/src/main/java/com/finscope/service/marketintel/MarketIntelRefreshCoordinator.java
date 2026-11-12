@@ -45,50 +45,38 @@ public class MarketIntelRefreshCoordinator {
     private static final Logger log = LoggerFactory.getLogger(MarketIntelRefreshCoordinator.class);
     private static final int STORED_DAILY_READ_LIMIT = 320;
     private static final int EVALUATION_DAILY_LIMIT = 250;
-    private final MarketIntelCapitalService capital;
-    private final MarketDataGateway gateway;
-    private final CapitalFlowRepository flows;
-    private final CapitalBehaviorSignalService signalService;
-    private final CapitalBehaviorSnapshotFactory snapshotsFactory;
-    private final CapitalBehaviorSnapshotRepository snapshots;
-    private final CapitalRuleExplanationService ruleService;
-    private final CapitalInterpretationRepository interpretations;
-    private final CapitalFactAssembler facts;
-    private final MarketIntelRefreshRunRepository runs;
-    private final CapitalFactorEvaluationService evaluationService;
-    private final CapitalBehaviorEvaluationRepository evaluations;
-    private final DragonTigerRepository dragonTiger;
+    @Resource
+    private MarketIntelCapitalService capital;
+    @Resource
+    private MarketDataGateway gateway;
+    @Resource
+    private CapitalFlowRepository flows;
+    @Resource
+    private CapitalBehaviorSignalService signalService;
+    @Resource
+    private CapitalBehaviorSnapshotFactory snapshotsFactory;
+    @Resource
+    private CapitalBehaviorSnapshotRepository snapshots;
+    @Resource
+    private CapitalRuleExplanationService ruleService;
+    @Resource
+    private CapitalInterpretationRepository interpretations;
+    @Resource
+    private CapitalFactAssembler facts;
+    @Resource
+    private MarketIntelRefreshRunRepository runs;
+    @Resource
+    private CapitalFactorEvaluationService evaluationService;
+    @Resource
+    private CapitalBehaviorEvaluationRepository evaluations;
+    @Resource
+    private DragonTigerRepository dragonTiger;
+
+    @Resource
+    private CapitalMarketEnrichmentService enrichment;
 
     @Resource(name = "marketIntelRefreshExecutor")
     private Executor executor;
-
-    public MarketIntelRefreshCoordinator(MarketIntelCapitalService capital,
-                                         MarketDataGateway gateway,
-                                         CapitalFlowRepository flows,
-                                         CapitalBehaviorSignalService signalService,
-                                         CapitalBehaviorSnapshotFactory snapshotsFactory,
-                                         CapitalBehaviorSnapshotRepository snapshots,
-                                         CapitalRuleExplanationService ruleService,
-                                         CapitalInterpretationRepository interpretations,
-                                         CapitalFactAssembler facts,
-                                         MarketIntelRefreshRunRepository runs,
-                                         CapitalFactorEvaluationService evaluationService,
-                                         CapitalBehaviorEvaluationRepository evaluations,
-                                         DragonTigerRepository dragonTiger) {
-        this.capital = capital;
-        this.gateway = gateway;
-        this.flows = flows;
-        this.signalService = signalService;
-        this.snapshotsFactory = snapshotsFactory;
-        this.snapshots = snapshots;
-        this.ruleService = ruleService;
-        this.interpretations = interpretations;
-        this.facts = facts;
-        this.runs = runs;
-        this.evaluationService = evaluationService;
-        this.evaluations = evaluations;
-        this.dragonTiger = dragonTiger;
-    }
 
     public MarketIntelRefreshRun requestRefresh(Long instrumentId) {
         Instrument instrument = capital.stock(instrumentId);
@@ -149,10 +137,17 @@ public class MarketIntelRefreshCoordinator {
             Instrument instrument, MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
         String warning = routed.getWarning() == null
                 ? "资金流在线数据源不可用" : routed.getWarning();
-        if (snapshots.findLatest(instrument.getId()).isPresent()) {
-            runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.SKIPPED, 0,
-                    MarketDataQualityStatus.STALE_FALLBACK.name(), warning);
-            return DimensionOutcome.degraded();
+        java.util.Optional<CapitalBehaviorSnapshot> saved = snapshots.findLatest(instrument.getId());
+        if (saved.isPresent()) {
+            List<CapitalFlowPoint> savedMinutes = saved.get().getFacts().stream()
+                    .filter(point -> point.getGranularity() != null && point.getGranularity().startsWith("MINUTE_")).toList();
+            List<CapitalFlowPoint> savedDays = saved.get().getFacts().stream()
+                    .filter(point -> "DAY_1".equals(point.getGranularity())).toList();
+            CapitalFlowData cached = new CapitalFlowData(savedMinutes, savedDays, null, null,
+                    Collections.singletonList(warning), routed.getSourceCode());
+            return persistFresh(instrument, step, new CapitalFlowGatewayResult(cached,
+                    MarketDataQualityStatus.STALE_FALLBACK, routed.getSourceCode(), routed.getRetrievedAt(),
+                    warning, routed.getErrorType(), routed.getRefreshId()));
         }
         runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.FAILED, 0,
                 routed.getErrorType() == null ? MarketDataQualityStatus.UNAVAILABLE.name() : routed.getErrorType(),
@@ -163,7 +158,10 @@ public class MarketIntelRefreshCoordinator {
     private DimensionOutcome persistFresh(
             Instrument instrument, MarketIntelRefreshStep step, CapitalFlowGatewayResult routed) {
         CapitalFlowData data = applyFallbacks(instrument, routed.getData());
-        List<CapitalFlowPoint> points = data.allPoints();
+        List<CapitalFlowPoint> enrichmentInput = new ArrayList<>(data.allPoints());
+        snapshots.findLatest(instrument.getId()).map(CapitalBehaviorSnapshot::getFacts)
+                .map(CapitalMarketEnrichmentService::latestMarketQuote).ifPresent(enrichmentInput::add);
+        List<CapitalFlowPoint> points = enrichment.enrich(instrument, enrichmentInput);
         if (points.isEmpty()) {
             runs.updateStep(step.getId(), MarketIntelRefreshStep.Status.EMPTY, 0, null, null);
             return DimensionOutcome.degraded();
@@ -328,8 +326,8 @@ public class MarketIntelRefreshCoordinator {
 
     private List<CapitalFlowPoint> latestStoredDays(Long instrumentId) {
         Map<LocalDate, CapitalFlowPoint> distinct = new LinkedHashMap<LocalDate, CapitalFlowPoint>();
-        List<CapitalFlowPoint> stored = flows.findLatestByGranularity(
-                instrumentId, "DAY_1", STORED_DAILY_READ_LIMIT);
+        List<CapitalFlowPoint> stored = flows.findLatestDailyDays(
+                instrumentId, STORED_DAILY_READ_LIMIT);
         if (stored != null) {
             for (CapitalFlowPoint point : stored) {
                 if (point.getDataDate() != null && !distinct.containsKey(point.getDataDate())) {
@@ -425,9 +423,12 @@ public class MarketIntelRefreshCoordinator {
     }
 
     private static final class DimensionOutcome {
-        private final int successCount;
-        private final int failureCount;
-        private final boolean degraded;
+        @Resource
+    private int successCount;
+        @Resource
+    private int failureCount;
+        @Resource
+    private boolean degraded;
 
         private DimensionOutcome(int successCount, int failureCount, boolean degraded) {
             this.successCount = successCount;

@@ -107,7 +107,8 @@ export function CapitalBehaviorPanel({ overview }: { overview: MarketIntelCapita
             </div>
             <span className="market-intel-metric-note">
               资金占比 = 主力净额 ÷ 同周期成交额
-              {latestMetrics.observedAt && <time dateTime={latestMetrics.observedAt}>截至 {formatTime(latestMetrics.observedAt, true)} {formatTime(latestMetrics.observedAt)}</time>}
+              {latestMetrics.marketObservedAt && <time dateTime={latestMetrics.marketObservedAt}>行情截至 {formatTime(latestMetrics.marketObservedAt, true)} {formatTime(latestMetrics.marketObservedAt)}</time>}
+              {latestMetrics.observedAt && <time dateTime={latestMetrics.observedAt}>资金截至 {formatTime(latestMetrics.observedAt, true)} {formatTime(latestMetrics.observedAt)}</time>}
             </span>
           </header>
           <dl className="market-intel-metric-grid">

@@ -24,6 +24,7 @@ public class CapitalBehaviorMetrics {
         private BigDecimal mainNetInflow;
         private BigDecimal mainNetInflowSharePct;
         private LocalDateTime observedAt;
+        private LocalDateTime marketObservedAt;
     }
 
     @Data

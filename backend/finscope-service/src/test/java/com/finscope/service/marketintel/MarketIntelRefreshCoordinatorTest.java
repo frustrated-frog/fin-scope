@@ -60,14 +60,28 @@ class MarketIntelRefreshCoordinatorTest {
     private final CapitalInterpretationRepository interpretations = mock(CapitalInterpretationRepository.class);
     private final CapitalFactAssembler facts = mock(CapitalFactAssembler.class);
     private final MarketIntelRefreshRunRepository runs = mock(MarketIntelRefreshRunRepository.class);
-    private final MarketIntelRefreshCoordinator coordinator = new MarketIntelRefreshCoordinator(
-            capital, gateway, flows, signalService, snapshotFactory, snapshots,
-            ruleService, interpretations, facts, runs, evaluationService, evaluations, dragonTiger);
+    private final MarketIntelRefreshCoordinator coordinator = new MarketIntelRefreshCoordinator();
+    private final CapitalMarketEnrichmentService enrichment = mock(CapitalMarketEnrichmentService.class);
     private Instrument instrument;
     private MarketIntelRefreshRun run;
 
     @BeforeEach
     void setUp() {
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "capital", capital);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "gateway", gateway);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "flows", flows);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "signalService", signalService);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "ruleService", ruleService);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "interpretations", interpretations);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "facts", facts);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "runs", runs);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "evaluationService", evaluationService);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "evaluations", evaluations);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "dragonTiger", dragonTiger);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "enrichment", enrichment);
+        org.springframework.test.util.ReflectionTestUtils.setField(coordinator, "snapshotsFactory", snapshotFactory);
+        when(enrichment.enrich(any(Instrument.class), anyList())).thenAnswer(call -> call.getArgument(1));
         instrument = new Instrument();
         instrument.setId(7L);
         instrument.setType("STOCK");
@@ -94,14 +108,21 @@ class MarketIntelRefreshCoordinatorTest {
         when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class))).thenReturn(
                 CapitalFlowGatewayResult.unavailable("EASTMONEY_CAPITAL_FLOW",
                         "资金源均不可用，保留上一份资金快照", "r-9"));
-        when(snapshots.findLatest(7L)).thenReturn(Optional.of(new CapitalBehaviorSnapshot()));
+        CapitalFlowPoint day = point(201L, "DAY_1", LocalDateTime.of(2026, 7, 14, 15, 0));
+        CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, day.getObservedAt(),
+                Collections.singletonList(day), Collections.emptyList(), "cached");
+        saved.setId(31L);
+        when(snapshots.findLatest(7L)).thenReturn(Optional.of(saved));
+        when(snapshotFactory.create(eq(7L), anyList(), anyList(), anyList())).thenReturn(saved);
+        when(snapshots.save(saved)).thenReturn(saved);
+        when(ruleService.explain(anyList(), anyList())).thenReturn(new CapitalRuleExplanation());
 
         coordinator.refresh(run, instrument);
 
-        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 1, 0);
-        verify(runs).updateStep(19L, MarketIntelRefreshStep.Status.SKIPPED, 0,
-                "STALE_FALLBACK", "资金源均不可用，保留上一份资金快照");
-        verify(flows, never()).saveAll(anyList());
+        verify(runs).finishRun(11L, MarketIntelRefreshRun.Status.PARTIAL, 2, 0);
+        verify(enrichment).enrich(eq(instrument), argThat(values -> values.size() == 1));
+        verify(flows).saveAll(anyList());
+        verify(evaluationService).evaluate(saved);
     }
 
     @Test
@@ -128,7 +149,7 @@ class MarketIntelRefreshCoordinatorTest {
                 "DAILY_MARKET_UNAVAILABLE:CONNECTION_ERROR"), "EASTMONEY_CAPITAL_FLOW");
         when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
                 .thenReturn(CapitalFlowGatewayResult.freshPrimary("EASTMONEY_CAPITAL_FLOW", partial, null, "r-11"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 320))
+        when(flows.findLatestDailyDays(7L, 320))
                 .thenReturn(Collections.singletonList(staleDaily));
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Arrays.asList(staleDaily, minute), Collections.emptyList(), "merged");
@@ -168,7 +189,7 @@ class MarketIntelRefreshCoordinatorTest {
         when(gateway.fetchCapitalFlow(eq(instrument), any(LocalDate.class)))
                 .thenReturn(CapitalFlowGatewayResult.freshPrimary(
                         "EASTMONEY_CAPITAL_FLOW", shortFresh, null, "r-history"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(stored);
+        when(flows.findLatestDailyDays(7L, 320)).thenReturn(stored);
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L,
                 fresh.get(fresh.size() - 1).getObservedAt(), fresh, Collections.emptyList(), "history-merged");
         saved.setId(35L);
@@ -216,7 +237,7 @@ class MarketIntelRefreshCoordinatorTest {
                 .thenReturn(new QuoteGatewayResult(Collections.singletonList(quote),
                         com.finscope.domain.marketdata.MarketDataQualityStatus.FRESH_FALLBACK,
                         "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), null, null, "q-1"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(Collections.emptyList());
+        when(flows.findLatestDailyDays(7L, 320)).thenReturn(Collections.emptyList());
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Collections.singletonList(minute), Collections.emptyList(), "quote-merged");
         saved.setId(32L);
@@ -250,7 +271,7 @@ class MarketIntelRefreshCoordinatorTest {
                         com.finscope.domain.marketdata.MarketDataQualityStatus.STALE_FALLBACK,
                         "TENCENT_STOCK", quote.getAsOf(), quote.getAsOf(), 86400L,
                         "报价源不可用，正在显示旧报价", "q-2"));
-        when(flows.findLatestByGranularity(7L, "DAY_1", 320)).thenReturn(Collections.emptyList());
+        when(flows.findLatestDailyDays(7L, 320)).thenReturn(Collections.emptyList());
         CapitalBehaviorSnapshot saved = CapitalBehaviorSnapshot.of(7L, minute.getObservedAt(),
                 Collections.singletonList(minute), Collections.emptyList(), "stale-quote-not-used");
         saved.setId(33L);

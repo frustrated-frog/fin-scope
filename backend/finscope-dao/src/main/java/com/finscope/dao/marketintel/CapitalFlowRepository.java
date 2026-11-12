@@ -74,6 +74,14 @@ public class CapitalFlowRepository {
                         "ORDER BY observed_at DESC,id DESC LIMIT ?", mapper, instrumentId, granularity, limit);
     }
 
+    /** 每个交易日只取最新事实版本，避免重复抓取挤占历史日期窗口。 */
+    public List<CapitalFlowPoint> findLatestDailyDays(Long instrumentId, int limit) {
+        return jdbc.query("SELECT * FROM (SELECT f.*,ROW_NUMBER() OVER (PARTITION BY data_date " +
+                        "ORDER BY retrieved_at DESC,id DESC) AS rn FROM market_capital_flow_snapshot f " +
+                        "WHERE instrument_id=? AND granularity='DAY_1') ranked " +
+                        "WHERE rn=1 ORDER BY data_date DESC LIMIT ?", mapper, instrumentId, limit);
+    }
+
     public List<CapitalFlowPoint> findDailyPointInTime(LocalDate from, LocalDate to, LocalDateTime asOfTime) {
         validatePointInTimeRequest(from, to, asOfTime);
         return queryDailyPointInTime(from, to, asOfTime, null);
