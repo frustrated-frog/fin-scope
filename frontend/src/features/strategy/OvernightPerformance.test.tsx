@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { OvernightPerformance } from './OvernightPerformance';
@@ -28,4 +29,18 @@ test('does not mix old close-to-close statistics into the decision-price score',
   render(<OvernightPerformance state={state} mode="TAIL_ENTRY" revision={0} />);
   expect(screen.getByText('等待第一批真实结果')).toBeVisible();
   expect(screen.queryByText('通过前瞻对照')).not.toBeInTheDocument();
+});
+
+test('prioritizes this week and lets the user expand cumulative diagnostics', async () => {
+  const state: OvernightJointState = { protocol: 'test', poolSize: 0, targetSize: 120, readySymbols: 0,
+    minimumSymbols: 20, models: [], jobs: [], weeklyDirectionAudit: {
+      protocol: 'overnight-weekly-diagnostics-v1', target: 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE',
+      periodStart: '2026-11-09', periodEnd: '2026-11-12', computedAt: '2026-11-12T18:42:00',
+      archives: [], groups: [], windows: [],
+    } };
+  render(<OvernightPerformance state={state} mode="TAIL_ENTRY" revision={0} />);
+  expect(screen.getByRole('region', { name: '本周看涨识别' })).toBeVisible();
+  expect(screen.getByText('选出的股票，后来怎么样')).not.toBeVisible();
+  await userEvent.click(screen.getByText('累计方向验证'));
+  expect(screen.getByText('选出的股票，后来怎么样')).toBeVisible();
 });
