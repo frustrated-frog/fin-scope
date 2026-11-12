@@ -1,6 +1,7 @@
 import type { OvernightJointState } from './overnightJointTypes';
 import type { OvernightMode } from './overnightTypes';
 import { OvernightErrorAudit } from './OvernightErrorAudit';
+import { OvernightWeeklyPerformance } from './OvernightWeeklyPerformance';
 
 
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -8,8 +9,12 @@ const percent = (value?: number | null) => value == null ? '—' : `${(value * 1
 export function OvernightPerformance({ state, mode }: { state?: OvernightJointState; mode: OvernightMode; revision: number }) {
   const currentTarget = state?.closeDirectionForward?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE';
   const groups = currentTarget ? state?.closeDirectionForward?.groups.filter(group => group.mode === mode) ?? [] : [];
+  const weeklyReady = state?.weeklyDirectionAudit?.protocol === 'overnight-weekly-diagnostics-v1'
+    && state.weeklyDirectionAudit.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE';
   return <div className="overnight-performance">
     <header className="overnight-view-heading"><span>前瞻验证 / 涨跌方向</span><h4>预测是否经得起次日检验</h4><p>只统计当时冻结、次日到期的真实对照。不同决策时点分别看，不合并成一个漂亮的准确率。</p></header>
+    <OvernightWeeklyPerformance audit={state?.weeklyDirectionAudit} mode={mode} />
+    <details open={!weeklyReady}><summary>累计方向验证</summary>
     <section aria-label="次日涨跌表现">
       <div className="overnight-auto-section-title"><h5>次日涨跌</h5><span>次日收盘相对判断时参考价</span></div>
       {!groups.length && <div className="overnight-quiet-state"><h4>等待第一批真实结果</h4><p>自动研究完成后，次日行情将回填。样本未到期时，准确率保持空缺。</p></div>}
@@ -21,6 +26,7 @@ export function OvernightPerformance({ state, mode }: { state?: OvernightJointSt
         <small>历史比例基准使用预测时的上涨比例；同一天多只股票仍计一个交易日。</small>
       </article>)}</div>
     </section>
+    </details>
     <OvernightErrorAudit audit={state?.errorAudit} mode={mode} />
   </div>;
 }

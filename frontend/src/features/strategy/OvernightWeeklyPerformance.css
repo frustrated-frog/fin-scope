@@ -1,0 +1,29 @@
+.overnight-weekly { margin: 20px 0 28px; background: transparent; }
+.overnight-weekly > header, .overnight-weekly article > header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; }
+.overnight-weekly header span, .overnight-weekly small { color: var(--muted); font-size: 11px; line-height: 1.8; }
+.overnight-weekly > header h4 { margin: 10px 0 12px; font: 550 21px ui-rounded, "PingFang SC", system-ui, sans-serif; }
+.overnight-weekly p { font-size: 12px; line-height: 1.85; color: var(--muted); }
+.overnight-weekly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 24px; }
+.overnight-weekly article { padding: 18px 0; border-top: 1px solid var(--overnight-rule); min-width: 0; }
+.overnight-weekly h5 { font-size: 13px; margin: 0; }
+.overnight-weekly-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 24px 0 16px; }
+.overnight-weekly-metrics dt { font-size: 12px; color: var(--muted); }
+.overnight-weekly-metrics dd { font: 500 30px "SFMono-Regular", ui-monospace, monospace; margin: 10px 0 6px; color: var(--overnight-blue); font-variant-numeric: tabular-nums; }
+.overnight-weekly-baseline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 0; font-size: 12px; border-block: 1px solid var(--line); margin: 12px 0; }
+.overnight-weekly summary { cursor: pointer; font-size: 12px; padding: 12px 0; }
+.overnight-weekly summary:focus-visible { outline: 2px solid var(--overnight-blue); outline-offset: 3px; }
+.overnight-weekly-gaps { border-left: 2px solid var(--overnight-amber); padding-left: 14px; margin: 12px 0 20px; }
+.overnight-weekly-gaps summary { color: var(--overnight-amber); }
+.overnight-weekly-table { overflow-x: auto; }
+.overnight-weekly table { width: 100%; font-size: 11px; border-collapse: collapse; background: transparent; }
+.overnight-weekly caption { text-align: left; color: var(--muted); padding: 10px 0; }
+.overnight-weekly th, .overnight-weekly td { text-align: right; padding: 10px 5px; border-bottom: 1px solid var(--line); background: transparent; font-variant-numeric: tabular-nums; }
+.overnight-weekly th:first-child { text-align: left; padding-left: 0; }
+.overnight-weekly th { font-weight: 500; }
+.overnight-weekly-example { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; font-size: 11px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.overnight-weekly-example small { grid-column: 1 / -1; }
+.overnight-weekly-footnote { border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 600px) {
+  .overnight-weekly-example { grid-template-columns: 1fr; }
+  .overnight-weekly-metrics dd { font-size: 27px; }
+}

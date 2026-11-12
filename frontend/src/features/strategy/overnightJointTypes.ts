@@ -2,6 +2,7 @@ import type { OvernightMode } from './overnightTypes';
 import type { OvernightDirectionForward, OvernightDirectionMetrics } from './overnightDirectionTypes';
 import type { ErrorAudit } from './overnightErrorTypes';
 import type { SameDaySelection, SelectionForwardGroup } from './overnightSelectionTypes';
+import type { WeeklyDirectionAudit } from './weeklyDirectionTypes';
 
 export interface OvernightJointPrediction {
   status: string; adopted: boolean; qualified: boolean; artifactId: string;
@@ -40,6 +41,7 @@ export interface OvernightJointState {
     dayCount: number; pairedCount: number; scheduledCount: number;
     metrics?: { accuracy: number; comparisons: Record<string, { accuracy: number }> } | null }> };
   errorAudit?: ErrorAudit;
+  weeklyDirectionAudit?: WeeklyDirectionAudit;
   validationWorker?: { status: string; lastTickAt: string; lastCompletedAt?: string | null; intervalSeconds: number };
   marketAblation?: Array<{ cutoff: string; groups: Array<{ group: string; status: string; dayCount: number; requiredDays: number }> }>;
   marketForward?: { groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
