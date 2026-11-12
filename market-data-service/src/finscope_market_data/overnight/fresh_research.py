@@ -17,17 +17,27 @@ INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
 logger = logging.getLogger(__name__)
 
 
-def train_fresh_research(rows, history, through, cutoff):
-    result = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
-    fitted = fit_fresh_direction(rows, through, cutoff, with_adaptive=True)
-    if fitted is None:
-        return result
-    fitted['features'] = list(FEATURES)
-    result['models']['FRESH'] = fitted
-    adaptive = fitted.pop('adaptive')
-    adaptive['features'] = list(FEATURES)
-    result['models']['ADAPTIVE'] = adaptive
+def train_fresh_research(rows, history, through, cutoff, *, previous=None):
+    result = previous or {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
+    if not result['models'].get('FRESH'):
+        fitted = fit_fresh_direction(rows, through, cutoff, with_adaptive=True)
+        if fitted is None:
+            return result
+        fitted['features'] = list(FEATURES)
+        result['models']['FRESH'] = fitted
+        adaptive = fitted.pop('adaptive')
+        adaptive['features'] = list(FEATURES)
+        result['models']['ADAPTIVE'] = adaptive
     result['status'] = 'SHADOW'
+    try:
+        return train_index_research(result, rows, history, through, cutoff)
+    except Exception:
+        logger.exception('Index training failed; retaining fresh and adaptive checkpoints')
+        result.update(status='PARTIAL', indexAudit={'status': 'FAILED', 'reason': '指数训练失败，保留基础训练结果并重试'})
+        return result
+
+
+def train_index_research(result, rows, history, through, cutoff):
     base, enhanced = paired_index_rows(rows, history)
     result['indexAudit'] = {'rowCount': len(base), 'dayCount': len({r['signalDate'] for r in base}),
         'featureCount': len(INDEX_FEATURES), 'scope': 'PREVIOUS_COMPLETED_INDEX_DAYS',
@@ -64,6 +74,7 @@ def train_fresh_research(rows, history, through, cutoff):
             result['models']['INDEX_ONLY'] = index_only
     except Exception:
         logger.exception('Index-only experiment failed; preserving existing freshness models')
+        result['status'] = 'PARTIAL'
         result['stockSelection'] = {'status': 'FAILED', 'reason': '仅指数对照训练失败，保留已有模型'}
     return result
 
@@ -75,7 +86,11 @@ def attach_fresh_research(report, request, grouped, artifact, history):
     local = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
     timely = artifact.get('createdAt', '9999') < decision and artifact.get('labelsThrough', '9999') < decision
     models = research.get('models') or {}
-    index = index_features(history, request.signal_date)
+    try:
+        index = index_features(history, request.signal_date)
+    except (TypeError, ValueError):
+        logger.exception('Index inputs invalid; retaining independent base forecasts')
+        index = None
     received = max((r.get('receivedAt', '9999') for r in history.values()), default='9999')
     for name in GROUPS:
         value = {'group': name, 'protocol': PROTOCOL, 'target': TARGET, 'validated': False,

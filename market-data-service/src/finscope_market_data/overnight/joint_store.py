@@ -50,14 +50,22 @@ class OvernightJointStore:
 
     def for_job(self, key):
         with self.store.connect() as db:
-            row = db.execute("SELECT id FROM overnight_joint_artifact WHERE json_extract(payload, '$.trainingJobKey')=? LIMIT 1",
+            row = db.execute("SELECT id FROM overnight_joint_artifact WHERE json_extract(payload, '$.trainingJobKey')=? ORDER BY created_at DESC,id LIMIT 1",
                              (key,)).fetchone()
         return row[0] if row else None
+
+    def checkpoint(self, identifier):
+        with self.store.connect() as db:
+            row = db.execute('SELECT payload,panel FROM overnight_joint_artifact WHERE id=?', (identifier,)).fetchone()
+        if not row:
+            return None
+        return json.loads(row[0]), json.loads(gzip.decompress(row[1]))
 
     def latest(self, profile_key, as_of):
         with self.store.connect() as db:
             row = db.execute('''SELECT payload FROM overnight_joint_artifact
                 WHERE profile_key=? AND created_at<=? AND labels_through<? AND created_at>=?
+                AND COALESCE(json_extract(payload,'$.trainingStatus'),'COMPLETED')='COMPLETED'
                 ORDER BY created_at DESC, id LIMIT 1''',
                 (profile_key, as_of.isoformat(), as_of.isoformat(), (as_of - timedelta(days=14)).isoformat())).fetchone()
         return json.loads(row[0]) if row else None
