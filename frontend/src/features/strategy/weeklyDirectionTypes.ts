@@ -12,6 +12,7 @@ export interface UpDetection {
   baselineOnlyCount?: number;
   daily: Array<UpDetectionMetrics & { signalDate: string }>;
   comparisons: Record<string, UpDetectionMetrics | null>;
+  comparisonPairs?: Record<string, { pairedDays: number; primary: UpDetectionMetrics | null; challenger: UpDetectionMetrics | null }>;
   missedExampleTotal: number;
   missedExamples: Array<{ signalDate: string; instrumentCode: string; probability: number;
     rawProbability: number | null; calibratedProbability: number | null;

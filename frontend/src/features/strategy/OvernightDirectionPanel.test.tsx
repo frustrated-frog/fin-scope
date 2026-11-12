@@ -124,6 +124,16 @@ test('explains the frozen decision price instead of using the later close as ref
   expect(screen.queryByText(/¥120.00/)).not.toBeInTheDocument();
 });
 
+test('explains the actual adopted model and stale-validation fallback', () => {
+  const { rerender } = render(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
+    productionStatus: 'ACTIVE', activeSource: 'ADAPTIVE_DIRECTION', validated: true } }} />);
+  expect(screen.getByText(/本次已采用方向滚动择模/)).toBeVisible();
+  rerender(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
+    productionStatus: 'STALE_VALIDATION' } }} />);
+  expect(screen.getByText(/验证统计已过期，本次保留原判断/)).toBeVisible();
+  expect(screen.queryByText(/本次已采用/)).not.toBeInTheDocument();
+});
+
 test('keeps multiscale research behind details and displays candidate coverage with precision', async () => {
   render(<OvernightDirectionPanel report={{ ...report, closeDirection: { ...report.closeDirection!,
     historical: { ...report.closeDirection!.historical!, upCandidates: { topK: 3, selectedDays: 2, dayCount: 20,

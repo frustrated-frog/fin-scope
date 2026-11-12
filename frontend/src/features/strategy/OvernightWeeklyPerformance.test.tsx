@@ -38,3 +38,16 @@ test('separates holdings and hides incompatible evidence', () => {
   rerender(<OvernightWeeklyPerformance audit={{ ...audit, target: 'old' }} mode="TAIL_ENTRY" />);
   expect(screen.queryByRole('region', { name: '本周看涨识别' })).not.toBeInTheDocument();
 });
+
+test('shows adaptive paired evidence even when index evidence is missing', async () => {
+  const group = audit.groups[0];
+  render(<OvernightWeeklyPerformance audit={{ ...audit, groups: [{ ...group, upDetection: { ...group.upDetection,
+    comparisonPairs: { ADAPTIVE: { pairedDays: 2, primary: score, challenger: { ...score, upPrecision: .6, upRecall: .75 } },
+      INDEX: { pairedDays: 0, primary: null, challenger: null } } } }] }} mode="TAIL_ENTRY" />);
+  await userEvent.click(screen.getByText('逐日结果与漏判分析'));
+  expect(screen.getByText('滚动择模')).toBeVisible();
+  expect(screen.getByText('2 日')).toBeVisible();
+  expect(screen.getByText('— / 60.0%')).toBeVisible();
+  expect(screen.getByText('0.0% / 75.0%')).toBeVisible();
+  expect(screen.getAllByText('— / —')).toHaveLength(2);
+});

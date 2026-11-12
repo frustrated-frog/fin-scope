@@ -16,7 +16,7 @@ export function OvernightFreshProgress({ state, mode }: { state: OvernightJointS
       </section> : null;
   }
   return <section className="overnight-context-comparison" aria-label="新训练方案对照">
-    <p>新训练方案自动留档，主判断保持原方案。下方仅显示实际发生的次日结果。</p>
+    <p>新训练方案自动留档，下方仅显示实际发生的次日结果。方向滚动择模是否采用，以独立验收和当次预测记录为准。</p>
     {models.map(model => {
       const research = model.freshResearch!;
       const audit = research.models.FRESH?.audit;
@@ -31,7 +31,7 @@ export function OvernightFreshProgress({ state, mode }: { state: OvernightJointS
           return <div className="overnight-direction-summary-row" key={group}>
             <b>{label}</b><span>{!trained ? '数据积累中' : forward?.dayCount ? `${forward.dayCount} 个完整交易日` : '等待真实次日结果'}</span>
             {forward?.metrics && <small>新方案 / 配对基准命中率 {percent(forward.metrics.accuracy)} / {percent(forward.metrics.comparisons.MATCHED_BASELINE?.accuracy)}
-              · 已配对 {forward.pairedCount} / {forward.scheduledCount} 条 · 尚未证明有效</small>}
+              · 已配对 {forward.pairedCount} / {forward.scheduledCount} 条 · 此处仅为对照统计</small>}
             {!forward?.metrics && !!forward?.scheduledCount && <small>已配对 {forward.pairedCount} / {forward.scheduledCount} 条，尚无完整日期可统计；缺失记录仍保留。</small>}
           </div>;
         })}

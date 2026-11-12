@@ -1,6 +1,7 @@
 import { OvernightMarketProgress } from './OvernightMarketProgress';
 import { OvernightFreshProgress } from './OvernightFreshProgress';
 import { OvernightCandidateProgress } from './OvernightCandidateProgress';
+import { OvernightProductionProgress } from './OvernightProductionProgress';
 import type { OvernightReport, OvernightMode } from './overnightTypes';
 import type { OvernightJointState } from './overnightJointTypes';
 import { isBaselineDirection } from './overnightDirectionPresentation';
@@ -37,6 +38,9 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
       {direction.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE' ? <p>比较 {report.targetDate ?? '次一交易日'} 收盘价与本次 {report.cutoff} 参考价 ¥{direction.referencePrice?.toFixed(2) ?? report.referencePrice?.toFixed(2) ?? '—'}。仅使用判断时点及之前的数据。</p> : <p>旧版口径：比较 {report.targetDate ?? '次一交易日'} 与 {report.signalDate} 的收盘价，不扣交易成本。本次预测仅使用截至 {report.cutoff} 的数据。</p>}
       {!direction.validated && <p className="overnight-direction-status">{phases[direction.forwardStatus ?? 'ACCUMULATING']} · {direction.forwardDays ?? 0} / 60 个交易日。当前结果保留观察。</p>}
       {direction.activeSource === 'CONTEXT_DIRECTION' && <p className="overnight-direction-status">已采用通过前瞻对照的{challengerName}方案，持续监测表现。</p>}
+      {direction.productionStatus === 'ACTIVE' && <p className="overnight-direction-status">本次已采用{direction.activeSource === 'ROLLING_DIRECTION' ? '真实候选择模' : '方向滚动择模'}，通过前瞻验收并持续监测。</p>}
+      {direction.productionStatus === 'STALE_VALIDATION' && <p className="overnight-direction-status">新方案的验证统计已过期，本次保留原判断。</p>}
+      {direction.productionStatus === 'FALLBACK' && <p className="overnight-direction-status">新方案的验证或本次数据未达到启用条件，保留原判断。</p>}
       {actual?.status === 'SETTLED' && <div className="overnight-direction-outcome"><b>次日实际{actual.actualUp ? '上涨' : actual.actualReturn === 0 ? '持平' : '下跌'} {percent(actual.actualReturn)}</b>
         <span>{prior ? '仅核验历史比例对照，不计作个股判断能力' : actual.correct ? '本次方向判断命中' : '本次方向判断未命中'}</span></div>}
       <details><summary>查看涨跌验证依据</summary>
@@ -75,7 +79,7 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
       <p>{direction.upSelection.reason}</p>
       <p>{direction.upSelection.selectedModel === 'PRIOR' ? '真实候选历史或选择优势不足，暂时保留基准。'
         : direction.upSelection.upProbability == null ? '等待有效模型与数据。'
-          : `专用方案上涨概率 ${percent(direction.upSelection.upProbability)}，不替换当前主判断。`}</p>
+          : `专用方案上涨概率 ${percent(direction.upSelection.upProbability)}，${direction.activeSource === 'ROLLING_DIRECTION' ? '本次已通过验收采用。' : '本次未替换主判断。'}`}</p>
     </details>}
   </section>;
 }
@@ -100,6 +104,7 @@ export function OvernightDirectionSummary({ state, mode }: { state: OvernightJoi
       <small>方向命中 / 基准 {percent(group.metrics?.accuracy)} / {percent(group.metrics?.comparisons.HISTORICAL_PRIOR?.accuracy)} · 两类平均识别 {percent(group.metrics?.balancedAccuracy)} · 可核验 {percent(group.coverage)}</small>
     </div>)}
     {models.map(model => <p key={model.id}>{model.profile.cutoff} · {model.closeDirection?.data.symbolCount} 只股票参与涨跌学习。历史开发对照：方向命中 {percent(model.closeDirection?.audit.historical.accuracy)} / 基准 {percent(model.closeDirection?.audit.historical.comparisons.HISTORICAL_PRIOR?.accuracy)}。仅供诊断。</p>)}
+    <OvernightProductionProgress state={state} mode={mode} />
     <OvernightFreshProgress state={state} mode={mode} />
     {mode === 'TAIL_ENTRY' && <OvernightCandidateProgress state={state} />}
     <p>环境增强方案：{snapshot ? `最近采集 ${snapshot.signalDate} ${snapshot.observedAt.slice(11, 16)} · ${snapshot.capturedSymbols} / ${snapshot.expectedSymbols} 只研究池股票。` : '等待交易时段自动采集环境数据。'}</p>

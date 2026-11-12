@@ -46,6 +46,10 @@ export interface OvernightJointState {
   errorAudit?: ErrorAudit;
   weeklyDirectionAudit?: WeeklyDirectionAudit;
   candidateForward?: { protocol: string; groups: CandidateForwardGroup[] };
+  productionDirection?: { protocol: string; target: string; computedAt: string; groups: Array<{
+    key: string; mode: OvernightMode; cutoff: string; group: string; status: string; eligible: boolean;
+    dayCount: number; requiredDays: number; recentCoverage: number; checkpointPassed: boolean;
+  }> };
   validationWorker?: { status: string; lastTickAt: string; lastCompletedAt?: string | null; intervalSeconds: number };
   marketAblation?: Array<{ cutoff: string; groups: Array<{ group: string; status: string; dayCount: number; requiredDays: number }> }>;
   marketForward?: { groups: Array<{ mode: OvernightMode; cutoff: string; group: string;
@@ -55,5 +59,6 @@ export interface OvernightJointState {
     receivedAt: string; capturedSymbols: number; expectedSymbols: number;
     relativeStrength?: { protocol: string; expectedIndices: number; capturedIndices: number; pairedSymbols: number };
     market?: { quality: string; capturedSymbols?: number; expectedSymbols?: number; reason?: string } }>;
-  jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string }>;
+  jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string; attempts?: number;
+    cutoff?: string; failedComponents?: string[]; componentStatus?: Record<string, { status: string }> }>;
 }

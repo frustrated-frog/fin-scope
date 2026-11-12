@@ -32,7 +32,7 @@ test('displays paired real evidence and rejects incompatible versions', () => {
     cutoff: '14:30', group: 'FRESH', dayCount: 2, pairedCount: 6, scheduledCount: 9,
     metrics: { accuracy: .5, comparisons: { MATCHED_BASELINE: { accuracy: .6667 } } } }] };
   const { rerender } = render(<OvernightFreshProgress state={{ ...state, freshForward: result }} mode="TAIL_ENTRY" />);
-  expect(screen.getByText(/50.0% \/ 66.7%/)).toHaveTextContent('已配对 6 / 9 条 · 尚未证明有效');
+  expect(screen.getByText(/50.0% \/ 66.7%/)).toHaveTextContent('已配对 6 / 9 条 · 此处仅为对照统计');
   rerender(<OvernightFreshProgress state={{ ...state, freshForward: { ...result, protocol: 'old' } }} mode="TAIL_ENTRY" />);
   expect(screen.queryByText(/50.0%/)).not.toBeInTheDocument();
 });
