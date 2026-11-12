@@ -118,13 +118,12 @@ def summarize(key, group):
 
 def selection_comparison(rows):
     # Complete paired days only: a missing challenger must not improve its score.
-    from finscope_market_data.overnight.up_selection import PROTOCOL as SELECTION_PROTOCOL
     by_day = defaultdict(list)
     for row in rows:
         by_day[row['signalDate']].append(row)
     paired = [row for values in by_day.values() if all(
-        (r.get('upSelection') or {}).get('protocol') == SELECTION_PROTOCOL
-        and r['upSelection'].get('upProbability') is not None for r in values) for row in values]
+        r.get('selectionValidated') for r in values)
+        and len({r['upSelection']['artifactId'] for r in values}) == 1 for row in values]
     return {'status': 'SHADOW', 'eligible': False, 'pairedDays': len({r['signalDate'] for r in paired}),
             'incumbent': evaluate_candidates(paired),
             'challenger': evaluate_candidates([{**r, 'probability': r['upSelection']['upProbability']} for r in paired])}

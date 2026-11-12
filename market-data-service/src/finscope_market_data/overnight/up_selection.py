@@ -5,6 +5,7 @@ import numpy as np
 
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 from finscope_market_data.overnight.joint_dataset import date_weights
+from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
 LEGACY_PROTOCOL = 'overnight-up-selection-v1'
 PROTOCOL = 'overnight-candidate-rolling-v2'
@@ -63,7 +64,8 @@ def attach_up_selection(report, grouped, request, artifact, contexts):
         return
     parent = report['closeDirection']
     parent['upSelection'] = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'WAITING_MODEL',
-                             'reason': '看涨候选专用方案等待后台训练和真实候选积累', 'validated': False}
+                             'reason': '看涨候选专用方案等待后台训练和真实候选积累', 'validated': False,
+                             'trainingPolicy': TRAINING_POLICY}
     parent['rollingSelectionModels'] = [dict(parent['upSelection'], group='ROLLING')]
     fitted = artifact.get('upSelection')
     decision = report['dataThrough']
@@ -78,6 +80,7 @@ def attach_up_selection(report, grouped, request, artifact, contexts):
     # The specialist never replaces the main forecast from a historical score.
     forecast = direction_prediction(fitted, local, {})
     parent['upSelection'] = {**forecast, 'artifactId': artifact['id'], 'validated': False, 'group': 'ROLLING',
+        'trainingPolicy': artifact.get('trainingPolicy'),
         'trainedAt': artifact['createdAt'], 'referenceAt': decision,
         'referencePrice': grouped[request.signal_date][request.cutoff].close,
         'matchedBaselineProbability': parent['upProbability'], 'liveProbability': parent['upProbability'],

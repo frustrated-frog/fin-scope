@@ -51,7 +51,7 @@ def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROU
         key = (report['signalDate'], report['cutoff'], report['instrumentCode'])
         originals.setdefault(key, report)
     group_names = tuple(groups)
-    groups = defaultdict(lambda: {'scheduled': 0, 'paired': 0, 'days': 0, 'missing': Counter(), 'rows': []})
+    groups = defaultdict(lambda: {'scheduled': 0, 'paired': 0, 'days': 0, 'plannedDates': [], 'missing': Counter(), 'rows': []})
     for (day, cutoff), cohort in sorted(cohorts.items()):
         target = next_session(datetime.fromisoformat(day).date())
         target_at = f'{target}T15:00:00'
@@ -66,6 +66,7 @@ def summarize_market_forward(store, meta, now, *, protocol=PROTOCOL, groups=GROU
             group = groups[(mode, cutoff, name)]
             group['scheduled'] += len(cohort['candidates'])
             group['days'] += 1
+            group['plannedDates'].append(day)
             rows = []
             for code in sorted(cohort['candidates']):
                 report = originals.get((day, cutoff, code), {})

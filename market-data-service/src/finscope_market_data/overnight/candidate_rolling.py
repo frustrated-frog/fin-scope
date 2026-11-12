@@ -12,7 +12,7 @@ from finscope_market_data.overnight.direction_dataset import FEATURES, TARGET
 from finscope_market_data.overnight.direction_learning import covered_matured_rows
 from finscope_market_data.overnight.fresh_direction import fresh_refit
 from finscope_market_data.overnight.joint_dataset import TRAIN_DAYS, date_weights
-from finscope_market_data.overnight.up_detection import detection
+from finscope_market_data.overnight.detection_metrics import detection
 from finscope_market_data.overnight.up_selection import PROTOCOL
 
 SELECTION_DAYS = 20

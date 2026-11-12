@@ -6,13 +6,13 @@ import numpy as np
 from finscope_market_data.overnight.direction_dataset import TARGET
 from finscope_market_data.overnight.market_validation import missing_reason, summarize_market_forward
 from finscope_market_data.overnight.selection_evaluation import selection_weights
-from finscope_market_data.overnight.up_detection import detection
+from finscope_market_data.overnight.detection_metrics import detection
 from finscope_market_data.overnight.up_selection import PROTOCOL
 
 ARMS = ('ROLLING', 'INCUMBENT', 'MOMENTUM', 'UNIFORM')
 
 
-def introduced_cohorts(store, through, field, protocol, names):
+def introduced_cohorts(store, through, field, protocol, names, *, training_policy=None):
     starts = {(mode, cutoff, name): None for mode, cutoff in
               (('TAIL_ENTRY', '14:30'), ('TAIL_ENTRY', '14:45'), ('AFTER_CLOSE_HOLDING', '15:00')) for name in names}
     for report in sorted(store.iter_history(), key=lambda r: (r['generatedAt'], r['id'])):
@@ -21,12 +21,13 @@ def introduced_cohorts(store, through, field, protocol, names):
             continue
         for forecast in (report.get('closeDirection') or {}).get(field) or []:
             key = (report['mode'], report['cutoff'], forecast.get('group'))
-            if key in starts and forecast.get('protocol') == protocol and forecast.get('target') == TARGET:
+            if (key in starts and forecast.get('protocol') == protocol and forecast.get('target') == TARGET
+                    and (training_policy is None or forecast.get('trainingPolicy') == training_policy)):
                 starts[key] = min(starts[key] or report['signalDate'], report['signalDate'])
     return starts
 
 
-def paired_ranks(rows):
+def paired_ranks(rows, *, include_days=False):
     by_day = defaultdict(list)
     for row in rows:
         by_day[row['signalDate']].append(row)
@@ -46,7 +47,7 @@ def paired_ranks(rows):
         selected = [r for r in days if kind == 'forced' or r['candidateCount']]
         result[kind] = {'selectedDays': len(selected), 'precision': {
             name: float(np.mean([r[kind][name] for r in selected])) if selected else None for name in ARMS}}
-    return result
+    return {**result, **({'days': days} if include_days else {})}
 
 
 def valid_candidate(report, forecast, outcome, decision, target_at, now):

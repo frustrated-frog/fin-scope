@@ -11,6 +11,7 @@ from finscope_market_data.overnight.direction_learning import direction_predicti
 from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARCH_DAYS, TEST_DAYS, fit_fresh_direction
 from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
 from finscope_market_data.overnight.selection_research import train_index_only, attach_selection
+from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
 GROUPS = ('FRESH', 'CALIBRATED', 'INDEX', 'ADAPTIVE')
 INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
@@ -94,6 +95,7 @@ def attach_fresh_research(report, request, grouped, artifact, history):
     received = max((r.get('receivedAt', '9999') for r in history.values()), default='9999')
     for name in GROUPS:
         value = {'group': name, 'protocol': PROTOCOL, 'target': TARGET, 'validated': False,
+                 'trainingPolicy': TRAINING_POLICY,
                  'status': 'WAITING_MODEL', 'reason': '等待新训练方案；原判断继续保留'}
         parent['freshModels'].append(value)
         model = models.get(name if name in ('INDEX', 'ADAPTIVE') else 'FRESH')
@@ -119,6 +121,8 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         probability = forecast['calibratedUpProbability'] if name == 'CALIBRATED' else raw
         audit = model['audit']
         value.update(status='SHADOW', upProbability=probability, rawUpProbability=raw,
+            trainingPolicy=artifact.get('trainingPolicy'), baselineProbability=forecast['baselineProbability'],
+            historical=forecast['historical'],
             assessmentStatus=forecast['assessmentStatus'], modelFitThrough=forecast['modelFitThrough'],
             matchedBaselineProbability=matched, liveProbability=parent['upProbability'],
             selectedModel=forecast['selectedModel'], calibrationStatus=forecast['calibrationStatus'],

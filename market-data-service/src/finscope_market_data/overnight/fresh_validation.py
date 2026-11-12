@@ -25,7 +25,8 @@ def invalid_fresh_forecast(report, forecast, outcome, decision, target_at, now, 
 
 
 def summarize_fresh_forward(store, meta, now):
-    from finscope_market_data.overnight.candidate_validation import introduced_cohorts
+    from finscope_market_data.overnight.candidate_validation import introduced_cohorts, valid_cohort
     starts = introduced_cohorts(store, now.isoformat(), 'freshModels', PROTOCOL, ('ADAPTIVE',))
     return summarize_market_forward(store, meta, now, protocol=PROTOCOL, groups=GROUPS,
-                                    forecast_field='freshModels', validate=invalid_fresh_forecast, starts=starts)
+                                    forecast_field='freshModels', validate=invalid_fresh_forecast, starts=starts,
+                                    row_fields=('artifactId',), cohort_validate=valid_cohort)

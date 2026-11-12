@@ -28,7 +28,7 @@ from finscope_market_data.overnight.selection_evaluation import PROTOCOL as SELE
 from finscope_market_data.overnight.relative_strength import PROTOCOL as RELATIVE_PROTOCOL
 from finscope_market_data.overnight.fresh_direction import ADAPTIVE_REVISION
 from finscope_market_data.overnight.action_verification import ActionVerificationStore
-from finscope_market_data.overnight.training_inputs import input_revision, refresh_allowed, GAP_KEY
+from finscope_market_data.overnight.training_inputs import input_revision, refresh_allowed, GAP_KEY, REVISION as TRAINING_POLICY
 from finscope_market_data.overnight.training_checkpoint import TrainingCheckpoint
 import hashlib
 import json
@@ -126,7 +126,7 @@ class OvernightJointWorker:
             'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
             'features': list(FEATURES), 'data': data['data'], 'context': data['context'], 'targets': targets,
             'closeDirection': direction, 'contextDirection': challenger, 'upSelection': specialist, 'tailRanking': ranking,
-            'candidateReadiness': readiness, 'inputRevision': job['inputRevision'],
+            'candidateReadiness': readiness, 'inputRevision': job['inputRevision'], 'trainingPolicy': TRAINING_POLICY,
             'freshResearch': fresh, 'marketModels': market_models, 'trainingJobKey': job['key'],
             'trainingStatus': 'PARTIAL' if partial else 'COMPLETED', 'componentStatus': checkpoint.summary()},
             {'tradeRows': panel, 'directionRows': direction_rows, 'contextRows': context_rows, 'selectionRows': selection_rows,

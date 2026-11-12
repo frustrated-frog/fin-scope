@@ -147,14 +147,16 @@ def test_external_candidates_require_original_context_and_match_live_feature_ord
 
 
 def test_specialist_comparison_uses_whole_paired_days():
-    from finscope_market_data.overnight.up_selection import PROTOCOL as UP_PROTOCOL
-    reports = [report(f'60000{i}.SH', .6) for i in range(3)]
+    from test_candidate_validation import values
+    reports = values()
     for r in reports[:2]:
-        r['closeDirection']['upSelection'] = {'protocol': UP_PROTOCOL, 'upProbability': .7}
+        r['closeDirection']['upSelection'] = r['closeDirection']['rollingSelectionModels'][0]
     assert audit(reports)['groups'][0]['selectionComparison']['pairedDays'] == 0
-    reports[-1]['closeDirection']['upSelection'] = {'protocol': UP_PROTOCOL, 'upProbability': .7}
+    reports[-1]['closeDirection']['upSelection'] = reports[-1]['closeDirection']['rollingSelectionModels'][0]
     comparison = audit(reports)['groups'][0]['selectionComparison']
     assert comparison['pairedDays'] == 1 and not comparison['eligible']
+    reports[-1]['closeDirection']['upSelection']['selection']['selectionThrough'] = '2099-01-01'
+    assert audit(reports)['groups'][0]['selectionComparison']['pairedDays'] == 0
 
 
 def test_specialist_trains_serializes_and_attaches_without_replacing_incumbent(history_rows):
