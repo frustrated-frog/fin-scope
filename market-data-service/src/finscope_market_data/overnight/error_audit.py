@@ -33,7 +33,7 @@ def market_state(snapshot):
     return 'UP' if mean >= .005 else 'DOWN' if mean <= -.005 else 'MIXED'
 
 
-def build_error_audit(store, meta, contexts, now, *, since=None):
+def build_error_audit(store, meta, contexts, now, *, since=None, use_incumbent=True):
     cohorts = scheduled_cohorts(meta, now.isoformat())
     reports = {}
     for report in sorted(store.iter_history(), key=lambda r: (r['generatedAt'], r['id'])):
@@ -49,6 +49,7 @@ def build_error_audit(store, meta, contexts, now, *, since=None):
         target = next_session(datetime.fromisoformat(day).date())
         if target is None or f'{target}T15:00:00' >= now.isoformat():
             continue
+        target_at = f'{target}T15:00:00'
         mode = 'AFTER_CLOSE_HOLDING' if cutoff == '15:00' else 'TAIL_ENTRY'
         group = groups[f'{mode}|{cutoff}']
         group['cohorts'].append(cohort['fingerprint'])
@@ -58,9 +59,10 @@ def build_error_audit(store, meta, contexts, now, *, since=None):
             group['scheduled'] += 1
             report = reports.get((day, cutoff, code), {})
             direction = report.get('closeDirection') or {}
-            direction = direction.get('incumbentPrediction') or direction
+            if use_incumbent:
+                direction = direction.get('incumbentPrediction') or direction
             outcome = (report.get('outcome') or {}).get('closeDirection') or {}
-            missing = missing_reason(report, direction, outcome, now)
+            missing = missing_reason(report, direction, outcome, now, target_at)
             if missing:
                 group['missing'][missing] += 1
                 continue
@@ -70,7 +72,7 @@ def build_error_audit(store, meta, contexts, now, *, since=None):
                 'board': 'GEM' if code.startswith('3') else 'MAIN',
                 'confidence': 'HIGH' if abs(direction['upProbability'] - .5) >= .1 else 'LOW',
                 'upSelection': (report.get('closeDirection') or {}).get('upSelection'),
-                **evidence(report, direction, snapshot, now)}
+                **evidence(report, direction, snapshot, now, target_at)}
             ranking = (report.get('closeDirection') or {}).get('tailRanking')
             row['tailRanking'] = ranking if ranking and valid_forecast(ranking, direction, report) else None
             group['rows'].append(row)
@@ -81,7 +83,7 @@ def build_error_audit(store, meta, contexts, now, *, since=None):
             'groups': [summarize(key, value) for key, value in sorted(groups.items())]}
 
 
-def missing_reason(report, direction, outcome, now):
+def missing_reason(report, direction, outcome, now, target_at):
     if not report:
         return 'MISSING_PREDICTION'
     if direction.get('protocol') != PROTOCOL or direction.get('target') != TARGET:
@@ -89,7 +91,7 @@ def missing_reason(report, direction, outcome, now):
     if probability(direction.get('upProbability')) is None or not direction.get('artifactId'):
         return 'MISSING_MODEL'
     if (outcome.get('status') != 'SETTLED' or not isinstance(outcome.get('actualUp'), bool)
-            or outcome.get('exitAt', '') >= now.isoformat()):
+            or outcome.get('exitAt') != target_at or outcome['exitAt'] >= now.isoformat()):
         return 'MISSING_OUTCOME'
     return None
 

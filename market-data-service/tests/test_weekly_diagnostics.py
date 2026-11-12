@@ -66,3 +66,21 @@ def test_unavailable_probability_does_not_crash_or_inflate_diagnostics():
     result = audit(values)['groups'][0]
     assert result['missing'] == {'MISSING_MODEL': 1}
     assert result['upDetection']['metrics'] is None
+
+
+def test_weekly_scores_displayed_prediction_and_rejects_wrong_settlement_day():
+    from test_overnight_error_audit import audit
+    values = [report(f'60000{i}.SH', .7) for i in range(3)]
+    for value in values:
+        value['closeDirection']['incumbentPrediction'] = {**value['closeDirection'], 'upProbability': .4}
+    meta = SimpleNamespace(iter_jobs=lambda phase: [scan()] if phase == 'DISCOVER' else [], job=lambda key: None)
+    store = SimpleNamespace(iter_history=lambda: iter(values))
+    contexts = SimpleNamespace(at=lambda *args: None)
+    now = datetime(2026, 9, 23, 18)
+    result = build_weekly_diagnostics(store, meta, contexts, now)['groups'][0]
+    assert result['upDetection']['metrics']['predictedUpCount'] == 3
+    assert audit(values)['groups'][0]['upDetection']['metrics']['predictedUpCount'] == 0
+    values[0]['outcome']['closeDirection']['exitAt'] = '2026-09-21T15:00:00'
+    result = build_weekly_diagnostics(store, meta, contexts, now)['groups'][0]
+    assert result['missing'] == {'MISSING_OUTCOME': 1}
+    assert result['upDetection']['metrics'] is None

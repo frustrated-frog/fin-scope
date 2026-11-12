@@ -12,13 +12,13 @@ def probability(value):
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and 0 <= value <= 1 else None
 
 
-def evidence(report, direction, snapshot, now):
+def evidence(report, direction, snapshot, now, target_at):
     outcome = (report.get('outcome') or {}).get('closeDirection') or {}
     decision = f"{report['signalDate']}T{report['cutoff']}:00"
     alternatives = {}
     for forecast in (report.get('closeDirection') or {}).get('freshModels', []):
         if forecast.get('group') in ('FRESH', 'CALIBRATED', 'INDEX') and not invalid_fresh_forecast(
-                report, forecast, outcome, decision, outcome.get('exitAt', ''), now.isoformat()):
+                report, forecast, outcome, decision, target_at, now.isoformat()):
             alternatives[forecast['group']] = forecast['upProbability']
     indices = (snapshot or {}).get('indices', {})
     returns = [row['return'] for row in indices.values() if isinstance(row.get('return'), (int, float)) and math.isfinite(row['return'])]

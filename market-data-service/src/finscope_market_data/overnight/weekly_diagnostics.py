@@ -9,7 +9,7 @@ PROTOCOL = 'overnight-weekly-diagnostics-v1'
 
 def build_weekly_diagnostics(store, meta, contexts, now):
     start = now.date() - timedelta(days=now.weekday())
-    result = build_error_audit(store, meta, contexts, now, since=str(start))
+    result = build_error_audit(store, meta, contexts, now, since=str(start), use_incumbent=False)
     windows = []
     day = start
     while day <= now.date():
