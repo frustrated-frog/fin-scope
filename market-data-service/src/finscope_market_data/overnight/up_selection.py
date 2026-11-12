@@ -1,4 +1,4 @@
-"""Select an up-candidate specialist in the purged selection window only."""
+"""Rolling actual-candidate selection, with the legacy selector kept reproducible."""
 import hashlib
 import json
 import numpy as np
@@ -72,7 +72,8 @@ def attach_up_selection(report, grouped, request, artifact, contexts):
         return
     local = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
     if local is None or parent.get('upProbability') is None:
-        parent['upSelection'].update(status='MISSING_FEATURES', reason='候选专用方案所需历史或环境数据不足')
+        parent['upSelection'].update(status='MISSING_FEATURES', reason='候选专用方案所需历史分钟数据不足')
+        parent['rollingSelectionModels'] = [dict(parent['upSelection'], group='ROLLING')]
         return
     # The specialist never replaces the main forecast from a historical score.
     forecast = direction_prediction(fitted, local, {})

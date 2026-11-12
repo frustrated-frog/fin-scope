@@ -97,8 +97,11 @@ class OvernightJointWorker:
                             self.automation.service.store, selection_cohorts, profile.cutoff, now)
                         specialist = fit_up_selection(selection_rows, now.isoformat(), profile.cutoff, selection_cohorts,
                                                       readiness=candidate_readiness)
+                        candidate_readiness['status'] = 'READY' if specialist else 'INSUFFICIENT_TRAINING_HISTORY'
                     except Exception:
                         logger.exception('Up-candidate training failed; retaining direction models')
+                        candidate_readiness = {**(candidate_readiness or {}), 'status': 'FAILED',
+                            'computedAt': now.isoformat(), 'reason': '候选滚动择模失败，原判断继续保留；等待下次训练'}
                 ranking = None
                 if context_rows and profile.mode == 'TAIL_ENTRY':
                     try:

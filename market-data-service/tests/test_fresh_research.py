@@ -15,6 +15,7 @@ from finscope_market_data.overnight.direction_dataset import direction_features
 from finscope_market_data.overnight.direction_learning import direction_prediction
 from finscope_market_data.overnight.fresh_research import GROUPS, PROTOCOL, train_fresh_research, attach_fresh_research
 from finscope_market_data.overnight.fresh_validation import summarize_fresh_forward
+from finscope_market_data.overnight.fresh_direction import ADAPTIVE_REVISION
 from finscope_market_data.overnight.index_history import (
     INDEX_CODES, KEY, OvernightIndexHistory, index_features, paired_index_rows, history_revision,
 )
@@ -153,6 +154,7 @@ def fresh_reports():
         value['closeDirection']['freshModels'] = [{**value['closeDirection']['marketGroups'][0],
             'group': name, 'protocol': PROTOCOL, 'featureFingerprint': 'input',
             'trainingThrough': '2026-09-18T15:00:00', 'calibrationThrough': '2026-09-18T15:00:00',
+            'selection': {'method': ADAPTIVE_REVISION, 'selectionThrough': '2026-09-18T15:00:00'},
             'indexHistoryFingerprint': 'index', 'indexHistoryReceivedAt': '2026-09-21T08:00:00'} for name in GROUPS]
     return values
 
@@ -172,3 +174,16 @@ def test_fresh_validation_requires_complete_original_cohort_and_separate_groups(
     assert groups['INDEX']['dayCount'] == 0 and groups['INDEX']['missing'] == {'INVALID_EVIDENCE': 1}
     assert groups['FRESH']['dayCount'] == 1
     assert all(r['dayCount'] == 0 and r['coverage'] == pytest.approx(2 / 3) for r in fresh_audit(values[1:])['groups'])
+
+
+def test_adaptive_selection_must_precede_training_and_starts_only_when_introduced():
+    values = fresh_reports()
+    for value in values:
+        value['closeDirection']['freshModels'] = [r for r in value['closeDirection']['freshModels'] if r['group'] != 'ADAPTIVE']
+    assert all(r['group'] != 'ADAPTIVE' for r in fresh_audit(values)['groups'])
+    values = fresh_reports()
+    values[0]['closeDirection']['freshModels'][-1]['selection']['selectionThrough'] = '2026-09-21T15:00:00'
+    groups = {r['group']: r for r in fresh_audit(values)['groups']}
+    assert groups['ADAPTIVE']['dayCount'] == 0
+    assert groups['ADAPTIVE']['missing'] == {'INVALID_EVIDENCE': 1}
+    assert groups['FRESH']['dayCount'] == 1

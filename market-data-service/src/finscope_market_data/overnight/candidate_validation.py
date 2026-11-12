@@ -54,10 +54,17 @@ def valid_candidate(report, forecast, outcome, decision, target_at, now):
     if reason:
         return reason
     momentum = forecast.get('momentumScore')
+    selection = forecast.get('selection') or {}
     if (not forecast.get('featureFingerprint') or forecast.get('modelFitThrough', '9999') >= forecast['trainedAt']
+            or not selection.get('reason')
+            or (selection.get('selectionThrough') is not None and selection['selectionThrough'] >= forecast['trainedAt'])
             or isinstance(momentum, bool) or not isinstance(momentum, (int, float)) or not np.isfinite(momentum)):
         return 'INVALID_EVIDENCE'
     return None
+
+
+def valid_cohort(rows):
+    return 'MIXED_MODEL_ARTIFACTS' if len({r['artifactId'] for r in rows}) != 1 else None
 
 
 def summarize(key, group):
@@ -74,5 +81,5 @@ def summarize(key, group):
 def summarize_candidate_forward(store, meta, now):
     starts = introduced_cohorts(store, now.isoformat(), 'rollingSelectionModels', PROTOCOL, ('ROLLING',))
     return summarize_market_forward(store, meta, now, protocol=PROTOCOL, groups=('ROLLING',),
-        forecast_field='rollingSelectionModels', validate=valid_candidate, row_fields=('momentumScore',),
-        summarizer=summarize, starts=starts)
+        forecast_field='rollingSelectionModels', validate=valid_candidate, row_fields=('momentumScore', 'artifactId'),
+        summarizer=summarize, starts=starts, cohort_validate=valid_cohort)
