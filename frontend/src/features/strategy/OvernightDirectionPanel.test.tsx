@@ -33,14 +33,27 @@ test('separates price direction from trading profit and discloses weak evidence'
 test('does not present a historical proportion as model skill or missing data as zero', () => {
   const { rerender } = render(<OvernightDirectionPanel report={{ ...report, closeDirection: {
     ...report.closeDirection!, selectedModel: 'PRIOR' } }} />);
-  expect(screen.getByText('历史参考，尚无模型优势')).toBeVisible();
+  expect(screen.getByText('个股判断证据不足')).toBeVisible();
   expect(screen.queryByText('模型偏向上涨')).not.toBeInTheDocument();
-  expect(screen.getByText('历史上涨比例')).toBeVisible();
+  expect(screen.getByText(/历史上涨比例/)).toBeVisible();
+  expect(screen.queryByText(/未上涨概率/)).not.toBeInTheDocument();
   rerender(<OvernightDirectionPanel report={{ ...report, closeDirection: {
     protocol: 'test', target: 'test', status: 'WAITING_MODEL', reason: '正在自动补齐样本' } }} />);
   expect(screen.getByText('次日涨跌正在准备')).toBeVisible();
   expect(screen.getByText('正在自动补齐样本')).toBeVisible();
   expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
+});
+
+test('uses final fitting cutoff and does not turn a degenerate model into individual evidence', async () => {
+  render(<OvernightDirectionPanel report={{ ...report, closeDirection: {
+    ...report.closeDirection!, assessmentStatus: 'BASELINE_ONLY', modelFitThrough: '2026-10-12T15:00:00',
+    initialTrainingThrough: '2026-09-04T15:00:00' }, outcome: { status: 'SETTLED', targets: [],
+      closeDirection: { status: 'SETTLED', actualUp: true, actualReturn: .02, correct: true } } }} />);
+  expect(screen.getByText('个股判断证据不足')).toBeVisible();
+  expect(screen.queryByText('本次方向判断命中')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByText('查看涨跌验证依据'));
+  expect(screen.getByText(/最终模型拟合截止 2026-10-12/)).toBeVisible();
+  expect(screen.getByText(/初始训练段截止 2026-09-04/)).toBeVisible();
 });
 
 test('shows actual price outcome and keeps old reports compatible', () => {

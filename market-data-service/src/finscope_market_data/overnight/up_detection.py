@@ -24,7 +24,8 @@ def evidence(report, direction, snapshot, now, target_at):
     returns = [row['return'] for row in indices.values() if isinstance(row.get('return'), (int, float)) and math.isfinite(row['return'])]
     return {'rawProbability': probability(direction.get('rawUpProbability')),
         'calibratedProbability': probability(direction.get('calibratedUpProbability')),
-        'trainedAt': direction.get('trainedAt'), 'trainingThrough': direction.get('trainingThrough'),
+        'trainedAt': direction.get('trainedAt'), 'modelFitThrough': direction.get('modelFitThrough'),
+        'baselineOnly': direction.get('assessmentStatus') == 'BASELINE_ONLY' or direction.get('selectedModel') == 'PRIOR',
         'indexReturn': float(np.mean(returns)) if len(returns) == 3 else None,
         'alternatives': alternatives}
 
@@ -56,8 +57,9 @@ def summarize_detection(rows):
     missed = sorted((r for r in rows if r['actualUp'] and r['probability'] < .5),
                     key=lambda r: (r['signalDate'], r['instrumentCode']), reverse=True)
     fields = ('signalDate', 'instrumentCode', 'probability', 'rawProbability', 'calibratedProbability',
-              'trainedAt', 'trainingThrough', 'marketState', 'indexReturn')
+              'trainedAt', 'modelFitThrough', 'marketState', 'indexReturn', 'baselineOnly')
     return {'metrics': detection(rows), 'noUpDays': sum(all(r['probability'] < .5 for r in items) for items in daily.values()),
+        'baselineOnlyCount': sum(bool(r.get('baselineOnly')) for r in rows),
         'daily': [{'signalDate': day, **detection(items)} for day, items in sorted(daily.items())],
         'missedExamples': [{key: r.get(key) for key in fields} for r in missed[:20]],
         'missedExampleTotal': len(missed), 'pairedDays': len({r['signalDate'] for r in paired}),

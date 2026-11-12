@@ -6,6 +6,7 @@ import { OvernightJointPanel, OvernightJointRanking } from './OvernightJointPane
 import './OvernightAutomationPanel.css';
 import { OvernightSheet } from './OvernightSheet';
 import { OvernightPerformance } from './OvernightPerformance';
+import { isBaselineDirection } from './overnightDirectionPresentation';
 
 const states: Record<string, string> = {
   NO_PREDICTION: '未生成有效预测', COMPLETED: '执行完成', RUNNING: '正在处理', FAILED: '执行失败', MISSED: '错过窗口',
@@ -70,7 +71,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
     .map(row => {
       const direction = row.report?.closeDirection ?? row.result.direction;
       const score = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
-        && direction.selectedModel !== 'PRIOR' && row.result.evidenceKind !== 'RETROSPECTIVE'
+        && !isBaselineDirection(direction) && row.result.evidenceKind !== 'RETROSPECTIVE'
         && row.report?.evidenceKind !== 'RETROSPECTIVE' ? direction.upProbability ?? -1 : -1;
       return { ...row, direction, score };
     }).sort((a, b) => b.score - a.score || a.result.instrumentCode.localeCompare(b.result.instrumentCode));
@@ -122,7 +123,7 @@ export function OvernightAutomationPanel({ mode, records, renderReport, view = '
     <div className="overnight-candidate-list">{visibleResults.map(({ job, result, direction }) => {
       const candidate = job.candidates?.find(item => item.instrumentCode === result.instrumentCode);
       const currentTarget = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE';
-      const prior = direction?.selectedModel === 'PRIOR';
+      const prior = isBaselineDirection(direction);
       const probability = currentTarget && !prior ? direction?.upProbability : undefined;
       return <button type="button" className="overnight-candidate" key={`${job.key}-${result.instrumentCode}`}
         onClick={() => setSelected(`${job.key}-${result.instrumentCode}`)}>

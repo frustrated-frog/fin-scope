@@ -12,6 +12,8 @@ export interface OvernightCloseDirection {
   upProbability?: number; notUpProbability?: number; direction?: 'UP' | 'NOT_UP';
   rawUpProbability?: number; calibratedUpProbability?: number; probabilitySource?: string;
   selectedModel?: string; baselineProbability?: number; historical?: OvernightDirectionMetrics;
+  assessmentStatus?: 'BASELINE_ONLY' | 'MODEL_ESTIMATE';
+  modelFitThrough?: string | null; initialTrainingThrough?: string | null;
   forwardDays?: number; forwardStatus?: string; validated?: boolean; artifactId?: string;
   challenger?: OvernightContextDirection;
   activeSource?: string;

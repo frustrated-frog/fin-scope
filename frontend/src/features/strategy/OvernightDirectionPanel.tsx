@@ -2,6 +2,7 @@ import { OvernightMarketProgress } from './OvernightMarketProgress';
 import { OvernightFreshProgress } from './OvernightFreshProgress';
 import type { OvernightReport, OvernightMode } from './overnightTypes';
 import type { OvernightJointState } from './overnightJointTypes';
+import { isBaselineDirection } from './overnightDirectionPresentation';
 import './OvernightDirectionPanel.css';
 
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -20,23 +21,26 @@ export function OvernightDirectionPanel({ report }: { report: OvernightReport })
   const actual = report.outcome?.closeDirection;
   const challenger = direction.challenger;
   const challengerName = challenger?.historyWindows?.length ? '多周期增强' : '环境增强';
-  const prior = direction.selectedModel === 'PRIOR';
-  const title = probability == null ? '次日涨跌正在准备' : prior ? '历史参考，尚无模型优势'
+  const prior = isBaselineDirection(direction);
+  const title = probability == null ? '次日涨跌正在准备' : prior ? '个股判断证据不足'
     : probability >= .5 ? '模型偏向上涨' : '模型偏向未上涨';
   return <section className="overnight-direction" aria-label="次日收盘涨跌预测">
     <header><div><span>次日涨跌 · {report.cutoff} 判断</span><h5>{title}</h5></div>
       <small data-validated={!!direction.validated}>{direction.validated ? '通过前瞻对照' : '尚未验证有效'}</small></header>
     {probability == null ? <p>{direction.reason}</p> : <>
-      <dl className="overnight-direction-probabilities">
-        <div><dt>{prior ? '历史上涨比例' : '上涨概率'}</dt><dd>{percent(probability)}</dd></div>
+      {prior ? <div className="overnight-direction-baseline"><p>当前仅有历史平均参考，无法据此区分这只股票明天会不会涨。</p>
+        <span>历史上涨比例 <b>{percent(probability)}</b></span></div> : <dl className="overnight-direction-probabilities">
+        <div><dt>上涨概率</dt><dd>{percent(probability)}</dd></div>
         <div><dt>未上涨概率<span>含持平</span></dt><dd>{percent(direction.notUpProbability ?? 1 - probability)}</dd></div>
-      </dl>
+      </dl>}
       {direction.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE' ? <p>比较 {report.targetDate ?? '次一交易日'} 收盘价与本次 {report.cutoff} 参考价 ¥{direction.referencePrice?.toFixed(2) ?? report.referencePrice?.toFixed(2) ?? '—'}。仅使用判断时点及之前的数据。</p> : <p>旧版口径：比较 {report.targetDate ?? '次一交易日'} 与 {report.signalDate} 的收盘价，不扣交易成本。本次预测仅使用截至 {report.cutoff} 的数据。</p>}
       {!direction.validated && <p className="overnight-direction-status">{phases[direction.forwardStatus ?? 'ACCUMULATING']} · {direction.forwardDays ?? 0} / 60 个交易日。当前结果保留观察。</p>}
       {direction.activeSource === 'CONTEXT_DIRECTION' && <p className="overnight-direction-status">已采用通过前瞻对照的{challengerName}方案，持续监测表现。</p>}
       {actual?.status === 'SETTLED' && <div className="overnight-direction-outcome"><b>次日实际{actual.actualUp ? '上涨' : actual.actualReturn === 0 ? '持平' : '下跌'} {percent(actual.actualReturn)}</b>
-        <span>{actual.correct ? '本次方向判断命中' : '本次方向判断未命中'}</span></div>}
+        <span>{prior ? '仅核验历史比例对照，不计作个股判断能力' : actual.correct ? '本次方向判断命中' : '本次方向判断未命中'}</span></div>}
       <details><summary>查看涨跌验证依据</summary>
+        <p>最终模型拟合截止 {direction.modelFitThrough?.slice(0, 10) ?? '旧档案未明确记录'}。
+          {direction.initialTrainingThrough && <>初始训练段截止 {direction.initialTrainingThrough.slice(0, 10)}，最终拟合还包含之后的选择段。</>}</p>
         <p>目标是未复权价格涨跌；普通除权分红尚未完整核验。新旧预测口径分开验证。</p>
         {history && <dl className="overnight-direction-metrics">
           <div><dt>历史方向命中 / 简单基准</dt><dd>{percent(history.accuracy)} / {percent(history.comparisons.HISTORICAL_PRIOR?.accuracy)}</dd></div>

@@ -9,12 +9,13 @@ export interface UpDetectionMetrics {
 
 export interface UpDetection {
   metrics: UpDetectionMetrics | null; noUpDays: number; pairedDays: number;
+  baselineOnlyCount?: number;
   daily: Array<UpDetectionMetrics & { signalDate: string }>;
   comparisons: Record<string, UpDetectionMetrics | null>;
   missedExampleTotal: number;
   missedExamples: Array<{ signalDate: string; instrumentCode: string; probability: number;
     rawProbability: number | null; calibratedProbability: number | null;
-    trainedAt: string | null; trainingThrough: string | null; indexReturn: number | null }>;
+    trainedAt: string | null; modelFitThrough?: string | null; indexReturn: number | null }>;
 }
 
 export interface WeeklyDirectionAudit {

@@ -10,6 +10,10 @@
 .overnight-direction .overnight-direction-probabilities dd { margin: 8px 0 0; font: 500 26px ui-monospace, "SFMono-Regular", monospace; font-variant-numeric: tabular-nums; }
 .overnight-direction p, .overnight-direction-summary p { font-size: 12px; line-height: 1.8; color: var(--muted); }
 .overnight-direction-status { padding-left: 10px; border-left: 2px solid var(--overnight-amber); }
+.overnight-direction-baseline { padding: 12px 16px; margin: 18px 0; border-left: 2px solid var(--overnight-amber); background: transparent; }
+.overnight-direction-baseline p { margin: 0 0 8px; }
+.overnight-direction-baseline span { color: var(--muted); font-size: 12px; }
+.overnight-direction-baseline b { margin-left: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .overnight-direction-outcome { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 12px; margin: 16px 0; }
 .overnight-direction-outcome span { color: var(--muted); }
 .overnight-direction summary, .overnight-direction-summary > summary { cursor: pointer; font-size: 12px; padding: 8px 0; }

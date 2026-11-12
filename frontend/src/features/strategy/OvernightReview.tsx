@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isBaselineDirection } from './overnightDirectionPresentation';
 import type { OvernightMode, OvernightReport } from './overnightTypes';
 
 const percent = (value?: number) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -23,7 +24,7 @@ export function OvernightReview({ records, mode, busy, onSettle, onSelect }: {
       const probability = direction?.upProbability;
       const actualReturn = probability != null && actual?.status === 'SETTLED' ? actual.actualReturn : undefined;
       const correct = probability != null && actual?.status === 'SETTLED' ? actual.correct : undefined;
-      const baseline = direction?.selectedModel === 'PRIOR';
+      const baseline = isBaselineDirection(direction);
       const targetLabel = direction?.target === 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE'
         ? `相对 ${item.cutoff} 参考价` : direction ? '旧版 · 相对当日收盘' : '未记录涨跌预测';
       return <button type="button" className="overnight-review-row" key={item.id ?? `${item.instrumentCode}-${item.signalDate}-${item.cutoff}`} onClick={() => onSelect(item)}>

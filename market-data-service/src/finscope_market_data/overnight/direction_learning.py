@@ -98,6 +98,7 @@ def fit_direction_before(rows, through, *, selection_policy='BRIER', recipe=BASE
     return {'model': model, 'audit': {'selected': selected, 'selectionBrier': scores, 'selection': selection_audit,
         'recipe': recipe, 'recencyHalfLifeSessions': RECENCY_HALF_LIFE if recipe == MULTISCALE_RECIPE else None,
         'trainingThrough': max(r['exitAt'] for r in training), 'selectionStart': min(r['signalDate'] for r in selection),
+        'modelFitThrough': max(r['exitAt'] for r in training + selection),
         'selectionThrough': max(r['exitAt'] for r in selection), 'calibrationStart': min(r['signalDate'] for r in calibration),
         'calibrationThrough': max(r['exitAt'] for r in calibration),
         'trainingDays': len({r['signalDate'] for r in training}),
@@ -154,7 +155,12 @@ def direction_prediction(fitted, features, live_gate=None):
     gate = live_gate if live_gate is not None else fitted['model'].get('calibrationGate', {})
     source = calibration_source(gate)
     p = float(adjusted[0] if source == 'INTERCEPT' else raw[0])
+    audit = fitted['audit']
+    baseline = fitted['model']['selected'] == 'PRIOR' or 'tree' not in fitted['model']
     return {'protocol': fitted.get('protocol', PROTOCOL), 'target': TARGET, 'status': 'SHADOW', 'upProbability': p,
+            'assessmentStatus': 'BASELINE_ONLY' if baseline else 'MODEL_ESTIMATE',
+            'modelFitThrough': audit.get('modelFitThrough') or audit.get('selectionThrough') or audit.get('trainingThrough'),
+            'initialTrainingThrough': audit.get('trainingThrough') if audit.get('selectionThrough') else None,
             'notUpProbability': 1 - p, 'rawUpProbability': float(raw[0]),
             'calibratedUpProbability': float(adjusted[0]), 'probabilitySource': source,
             'direction': 'UP' if p >= .5 else 'NOT_UP', 'selectedModel': fitted['model']['selected'],

@@ -27,6 +27,7 @@ export function OvernightWeeklyPerformance({ audit, mode }: { audit?: WeeklyDire
       const score = detail.metrics;
       return <article key={group.key}>
         <header><h5>{group.cutoff} → 次日收盘</h5><span>{group.completeDays} 个完整日期 · 尚在验证</span></header>
+        {!!detail.baselineOnlyCount && <p className="overnight-direction-status">其中 {detail.baselineOnlyCount} 条仅为历史比例对照，缺少个股区分证据；下方保留原始结果，不视作有效选股能力。</p>}
         <dl className="overnight-weekly-metrics">
           <div><dt>看涨命中率</dt><dd>{percent(score?.upPrecision)}</dd><small>看涨后，实际上涨的比例</small></div>
           <div><dt>上涨识别率</dt><dd>{percent(score?.upRecall)}</dd><small>实际上涨中，提前识别的比例</small></div>
@@ -51,7 +52,7 @@ export function OvernightWeeklyPerformance({ audit, mode }: { audit?: WeeklyDire
           {detail.missedExamples.map(row => <div className="overnight-weekly-example" key={`${row.signalDate}|${row.instrumentCode}`}>
             <b>{row.signalDate.slice(5)} · {row.instrumentCode}</b><span>当时上涨概率 {percent(row.probability)}</span>
             <small>原始 {percent(row.rawProbability)} / 校准 {percent(row.calibratedProbability)} · 判断前指数均涨跌 {percent(row.indexReturn)}</small>
-            <small>模型生成 {row.trainedAt?.replace('T', ' ').slice(0, 16) ?? '未记录'} · 训练样本截止 {row.trainingThrough?.slice(0, 10) ?? '旧档案未记录'}</small>
+            <small>模型生成 {row.trainedAt?.replace('T', ' ').slice(0, 16) ?? '未记录'} · 最终拟合截止 {row.modelFitThrough?.slice(0, 10) ?? '旧档案未明确记录'}</small>
           </div>)}
         </details>
       </article>;
