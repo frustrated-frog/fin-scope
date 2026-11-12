@@ -64,3 +64,14 @@ def test_partial_training_keeps_last_model_and_resumes_only_failed_component(tmp
     assert calls['candidate'] == 2
     store.save_bars(codes[0], [])
     assert meta.jobs(phase='JOINT')[0]['attempts'] == 2
+    from test_overnight_history import bar
+    store.save_bars(codes[0], [bar('2026-11-11T09:35:00')])
+    task.tick()
+    assert calls == {'direction': 1, 'candidate': 2, 'data': 1}
+    now[0] += timedelta(minutes=30)
+    task.tick()
+    assert calls == {'direction': 2, 'candidate': 3, 'data': 2}
+    assert len(meta.jobs(phase='JOINT')) == 2
+    assert meta.jobs(phase='JOINT')[0]['status'] == 'COMPLETED'
+    task.tick()
+    assert calls['data'] == 2

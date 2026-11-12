@@ -1,5 +1,6 @@
 """Read-only candidate replay using a frozen training panel and archived minute prices."""
 import argparse
+from contextlib import contextmanager
 from datetime import datetime
 import gzip
 import json
@@ -9,7 +10,8 @@ from types import SimpleNamespace
 
 from finscope_market_data.overnight.candidate_readiness import build_actual_candidate_panel
 from finscope_market_data.overnight.candidate_rolling import fit_rolling_candidates
-from finscope_market_data.overnight.models import MinuteBar
+from finscope_market_data.overnight.action_verification import ActionVerificationStore
+from finscope_market_data.overnight.store import OvernightStore
 
 
 def audit(database, through, cutoff):
@@ -23,15 +25,26 @@ def audit(database, through, cutoff):
             raise ValueError('没有可用的原始训练档案')
         artifact, panel = json.loads(source[0]), json.loads(gzip.decompress(source[1]))
         cohorts = {(r['signalDate'], r['cutoff']): r for r in panel['selectionCohorts']}
+        @contextmanager
+        def connect():
+            # Share this read transaction; never invoke a store schema constructor.
+            yield db
+
+        source_store = SimpleNamespace(connect=connect)
         def bars(code, at):
-            return [MinuteBar.model_validate_json(row[0]) for row in db.execute(
-                'SELECT payload FROM overnight_effective_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
-                (code, at.isoformat()))]
-        rows, readiness = build_actual_candidate_panel(panel['directionRows'], SimpleNamespace(bars=bars),
+            return OvernightStore.research_bars(source_store, code, at)
+
+        def latest_action(code, at):
+            row = db.execute('SELECT payload FROM overnight_action_verification WHERE code=? AND received_at<=? ORDER BY received_at DESC LIMIT 1',
+                             (code, at.isoformat())).fetchone()
+            return json.loads(row[0]) if row else None
+
+        base_rows, actions = ActionVerificationStore.annotate(SimpleNamespace(latest=latest_action), panel['directionRows'], through)
+        rows, readiness = build_actual_candidate_panel(base_rows, SimpleNamespace(bars=bars),
                                                        cohorts, cutoff, through)
     fitted = fit_rolling_candidates(rows, cohorts, readiness, through.isoformat(), cutoff)
     return {'sourceArtifact': artifact['id'], 'sourceCreatedAt': artifact['createdAt'],
-        'through': through.isoformat(), 'readiness': readiness,
+        'through': through.isoformat(), 'readiness': readiness, 'actionVerification': actions,
         'previousSelection': (artifact.get('upSelection') or {}).get('audit', {}).get('selection'),
         'newAudit': fitted['audit'] if fitted else None,
         'scope': '只读历史开发诊断；原训练池固定，补读历史价格不代表当时已有新模型预测'}
