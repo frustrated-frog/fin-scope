@@ -7,13 +7,10 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.domain.marketintel.CapitalBehaviorEvaluation;
 import com.finscope.domain.marketintel.CapitalSignalEvaluation;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,15 +31,13 @@ public class CapitalBehaviorEvaluationRepository {
         try {
             String signalsJson = mapper.writeValueAsString(value.getSignals());
             String dataGapsJson = mapper.writeValueAsString(value.getDataGaps());
-            KeyHolder keys = new GeneratedKeyHolder();
             jdbc.update(connection -> {
                 PreparedStatement statement = connection.prepareStatement("INSERT OR IGNORE INTO " +
                                 "market_capital_behavior_evaluation(instrument_id,snapshot_id,as_of,data_from,data_to," +
                                 "evaluation_version,factor_version,signal_version,input_fingerprint,status," +
                                 "daily_sample_count,evaluable_event_count,coverage_rate,missing_loss_rate," +
                                 "history_quality_status,price_coverage_rate,amount_coverage_rate," +
-                                "signals_json,data_gaps_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        Statement.RETURN_GENERATED_KEYS);
+                                "signals_json,data_gaps_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
                 statement.setLong(1, value.getInstrumentId());
                 statement.setLong(2, value.getSnapshotId());
                 statement.setString(3, text(value.getAsOf()));
@@ -64,12 +59,10 @@ public class CapitalBehaviorEvaluationRepository {
                 statement.setString(19, dataGapsJson);
                 statement.setString(20, text(value.getCreatedAt()));
                 return statement;
-            }, keys);
-            Long id = keys.getKey() == null
-                    ? jdbc.queryForObject("SELECT id FROM market_capital_behavior_evaluation WHERE " +
+            });
+            Long id = jdbc.queryForObject("SELECT id FROM market_capital_behavior_evaluation WHERE " +
                                     "snapshot_id=? AND evaluation_version=? AND input_fingerprint=?",
-                            Long.class, value.getSnapshotId(), value.getEvaluationVersion(), value.getInputFingerprint())
-                    : keys.getKey().longValue();
+                            Long.class, value.getSnapshotId(), value.getEvaluationVersion(), value.getInputFingerprint());
             value.setId(id);
             return value;
         } catch (Exception error) {

@@ -8,12 +8,9 @@ import com.finscope.domain.marketintel.CapitalBehaviorSignal;
 import com.finscope.domain.marketintel.CapitalBehaviorSnapshot;
 import com.finscope.domain.marketintel.CapitalFlowPoint;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -33,22 +30,21 @@ public class CapitalBehaviorSnapshotRepository {
             final String factsJson = mapper.writeValueAsString(snapshot.getFacts());
             final String signalsJson = mapper.writeValueAsString(snapshot.getSignals());
             final String warningsJson = mapper.writeValueAsString(snapshot.getWarnings());
-            KeyHolder keys = new GeneratedKeyHolder();
             jdbc.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement("INSERT OR IGNORE INTO " +
                         "market_capital_behavior_snapshot(instrument_id,as_of,fingerprint,quality_status," +
-                        "facts_json,signals_json,warnings_json,created_at) VALUES(?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                        "facts_json,signals_json,warnings_json,created_at) VALUES(?,?,?,?,?,?,?,?)");
                 ps.setLong(1, snapshot.getInstrumentId()); ps.setString(2, snapshot.getAsOf().toString());
                 ps.setString(3, snapshot.getFingerprint()); ps.setString(4, snapshot.getQualityStatus());
                 ps.setString(5, factsJson);
                 ps.setString(6, signalsJson);
                 ps.setString(7, warningsJson);
                 ps.setString(8, snapshot.getCreatedAt().toString()); return ps;
-            }, keys);
-            Long id = keys.getKey() == null ? jdbc.queryForObject("SELECT id FROM market_capital_behavior_snapshot " +
+            });
+            // SQLite INSERT OR IGNORE 的 generated key 可能是同连接上一次插入的 ID。
+            Long id = jdbc.queryForObject("SELECT id FROM market_capital_behavior_snapshot " +
                             "WHERE instrument_id=? AND as_of=? AND fingerprint=?", Long.class,
-                    snapshot.getInstrumentId(), snapshot.getAsOf().toString(), snapshot.getFingerprint())
-                    : keys.getKey().longValue();
+                    snapshot.getInstrumentId(), snapshot.getAsOf().toString(), snapshot.getFingerprint());
             snapshot.setId(id); return snapshot;
         } catch (Exception e) { throw new BusinessException(BizErrorCode.CAPITAL_SNAPSHOT_PERSIST_FAILED, e); }
     }

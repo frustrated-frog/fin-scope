@@ -132,6 +132,27 @@ class MarketIntelPersistenceTest {
     }
 
     @Test
+    void duplicateSnapshotResolvesItsOwnIdAfterAnotherInsertOnTheSameConnection() {
+        org.springframework.transaction.support.TransactionTemplate transaction =
+                new org.springframework.transaction.support.TransactionTemplate(
+                        new DataSourceTransactionManager(jdbc.getDataSource()));
+        transaction.executeWithoutResult(status -> {
+            CapitalFlowPoint point = point("duplicate-snapshot");
+            flows.saveAll(List.of(point));
+            CapitalBehaviorSnapshot original = CapitalBehaviorSnapshot.of(7L, point.getObservedAt(),
+                    List.of(point), List.of(), "original");
+            snapshots.save(original);
+            Long originalId = original.getId();
+            CapitalBehaviorSnapshot other = CapitalBehaviorSnapshot.of(7L, point.getObservedAt(),
+                    List.of(point), List.of(), "other");
+            snapshots.save(other);
+            snapshots.save(original);
+            assertEquals(originalId, original.getId());
+            assertEquals("original", snapshots.findById(original.getId()).orElseThrow().getFingerprint());
+        });
+    }
+
+    @Test
     void snapshotRoundTripsStructuredFacts() {
         CapitalFlowPoint point = point("payload-2");
         flows.saveAll(Collections.singletonList(point));
@@ -180,8 +201,14 @@ class MarketIntelPersistenceTest {
         value.setPriceCoverageRate(new BigDecimal("0.980000"));
         value.setAmountCoverageRate(new BigDecimal("0.950000"));
 
-        evaluations.save(value);
-        evaluations.save(value);
+        new org.springframework.transaction.support.TransactionTemplate(
+                new DataSourceTransactionManager(jdbc.getDataSource())).executeWithoutResult(status -> {
+            evaluations.save(value);
+            Long originalId = value.getId();
+            flows.saveAll(List.of(point("interleaved-evaluation-insert")));
+            evaluations.save(value);
+            assertEquals(originalId, value.getId());
+        });
 
         CapitalBehaviorEvaluation restored = evaluations.findBySnapshotId(snapshot.getId())
                 .orElseThrow(AssertionError::new);
