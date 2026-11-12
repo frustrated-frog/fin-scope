@@ -36,6 +36,7 @@ class TencentCapitalReplayProviderTest {
         assertEquals(new BigDecimal("150.00"), data.getPrices().get(3).getIntervalTradeAmount());
         assertEquals("2026-11-11T09:31", data.getPrices().get(1).getObservedAt().toString());
         assertEquals("fixture-hash", data.getPrices().get(1).getPayloadHash());
+        assertEquals(new BigDecimal("5"), data.getPrices().get(1).getTradeVolume());
         assertTrue(data.getFlows().isEmpty());
         assertNull(data.getPrices().get(0).getLargeNetInflow());
     }

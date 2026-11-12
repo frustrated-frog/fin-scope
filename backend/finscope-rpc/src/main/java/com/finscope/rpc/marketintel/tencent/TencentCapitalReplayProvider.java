@@ -116,6 +116,7 @@ public class TencentCapitalReplayProvider implements CapitalFlowProvider {
         List<CapitalFlowPoint> points = new ArrayList<>();
         LocalTime previousTime = null;
         BigDecimal previousAmount = null;
+        BigDecimal previousVolume = null;
         for (JsonNode line : day.path("data")) {
             String[] fields = line.asText().trim().split("\\s+");
             if (fields.length != 4) {
@@ -127,7 +128,8 @@ public class TencentCapitalReplayProvider implements CapitalFlowProvider {
             }
             BigDecimal price = new BigDecimal(fields[1]);
             BigDecimal cumulativeAmount = new BigDecimal(fields[3]);
-            if (price.signum() <= 0 || cumulativeAmount.signum() < 0
+            BigDecimal cumulativeVolume = new BigDecimal(fields[2]);
+            if (price.signum() <= 0 || cumulativeAmount.signum() < 0 || cumulativeVolume.signum() < 0
                     || previousTime != null && !time.isAfter(previousTime)) {
                 throw new ProviderContractException("SCHEMA_DRIFT", "腾讯分时分钟值异常", false);
             }
@@ -147,6 +149,11 @@ public class TencentCapitalReplayProvider implements CapitalFlowProvider {
             point.setObservedAt(date.atTime(time));
             point.setPrice(price);
             point.setIntervalTradeAmount(amount);
+            BigDecimal volume = time.equals(OPEN) ? cumulativeVolume
+                    : consecutive ? cumulativeVolume.subtract(previousVolume) : null;
+            if (volume != null && volume.signum() >= 0) {
+                point.setTradeVolume(volume);
+            }
             point.setCumulativeTradeAmount(cumulativeAmount);
             point.setRetrievedAt(LocalDateTime.ofInstant(response.getRetrievedAt(), ZoneId.of("Asia/Shanghai")));
             point.setPayloadHash(response.getPayloadHash());
@@ -155,6 +162,7 @@ public class TencentCapitalReplayProvider implements CapitalFlowProvider {
             points.add(point);
             previousTime = time;
             previousAmount = cumulativeAmount;
+            previousVolume = cumulativeVolume;
         }
         return points;
     }

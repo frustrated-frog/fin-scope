@@ -440,6 +440,7 @@ public class MarketDataGateway {
         String lastErrorMessage = null;
         long requestDeadline = requestDeadlineNanos(properties.getCapitalRequestBudgetMs());
         Set<String> attemptedSources = new LinkedHashSet<String>();
+        CapitalFlowGatewayResult dailyFallback = null;
         for (CapitalFlowProvider provider : ordered) {
             if (remainingMillis(requestDeadline) <= 0L) {
                 lastErrorType = "REQUEST_BUDGET_EXCEEDED";
@@ -474,7 +475,22 @@ public class MarketDataGateway {
                 }
                 CapitalFlowGatewayResult result = new CapitalFlowGatewayResult(fetched.getData(), status,
                         fetched.getData().getProviderCode(), fetched.getRetrievedAt(), warning, null, refreshId);
-                finishCapitalAudit(runId, result, attemptedSources, fetched.getData().allPoints().size());
+                if (result.getData().getMinutePoints().isEmpty()) {
+                    if (dailyFallback == null || result.getData().getDailyPoints().size()
+                            > dailyFallback.getData().getDailyPoints().size()) {
+                        dailyFallback = result;
+                    }
+                    continue;
+                }
+                if (dailyFallback != null && result.getData().getDailyPoints().isEmpty()) {
+                    CapitalFlowData merged = new CapitalFlowData(result.getData().getMinutePoints(),
+                            dailyFallback.getData().getDailyPoints(), result.getData().getTurnoverRate(),
+                            result.getData().getVolumeRatio(), result.getData().getWarnings(),
+                            result.getSourceCode() + "," + dailyFallback.getSourceCode(), result.getQualityStatus());
+                    result = new CapitalFlowGatewayResult(merged, result.getQualityStatus(), merged.getProviderCode(),
+                            result.getRetrievedAt(), result.getWarning(), result.getErrorType(), refreshId);
+                }
+                finishCapitalAudit(runId, result, attemptedSources, result.getData().allPoints().size());
                 return result;
             } catch (RuntimeException error) {
                 lastErrorMessage = message(error);
@@ -483,6 +499,10 @@ public class MarketDataGateway {
                 }
                 attempts.add(provider.providerCode() + "：" + lastErrorMessage);
             }
+        }
+        if (dailyFallback != null) {
+            finishCapitalAudit(runId, dailyFallback, attemptedSources, dailyFallback.getData().allPoints().size());
+            return dailyFallback;
         }
         String source = attemptedSources.isEmpty() ? null : String.join(",", attemptedSources);
         String reason = attempts.isEmpty() ? "没有健康且支持该标的的数据源" : String.join("；", attempts);

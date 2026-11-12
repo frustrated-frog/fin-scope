@@ -47,6 +47,21 @@ public class CapitalMarketEnrichmentService {
         } catch (RuntimeException error) {
             log.warn("资金研究历史行情补齐失败 instrumentId={}", instrument.getId(), error);
         }
+        repairLegacyMinuteContext(result);
+        if (result.stream().anyMatch(point -> "MINUTE_1".equals(point.getGranularity()))) {
+            try {
+                Map<java.time.LocalDateTime, CapitalFlowPoint> minutes = market.fetchMinuteHistory(instrument).stream()
+                        .collect(Collectors.toMap(CapitalFlowPoint::getObservedAt, Function.identity()));
+                for (CapitalFlowPoint point : result) {
+                    CapitalFlowPoint context = minutes.get(point.getObservedAt());
+                    if ("MINUTE_1".equals(point.getGranularity()) && context != null) {
+                        fillMinute(point, context);
+                    }
+                }
+            } catch (RuntimeException error) {
+                log.warn("资金研究分钟价量补齐失败 instrumentId={}", instrument.getId(), error);
+            }
+        }
         try {
             CapitalFlowPoint quote = market.fetchQuote(instrument);
             for (CapitalFlowPoint point : result) {
@@ -96,9 +111,37 @@ public class CapitalMarketEnrichmentService {
         latest.setMarketObservedAt(quote.getObservedAt());
     }
 
+    private void repairLegacyMinuteContext(List<CapitalFlowPoint> points) {
+        for (CapitalFlowPoint point : points) {
+            if ("EASTMONEY_DIRECT".equals(point.getProviderCode()) && "MINUTE_1".equals(point.getGranularity())
+                    && point.getCalculationVersion() != null && point.getCalculationVersion().startsWith("python-market-data-v1")) {
+                point.setPrice(null);
+                point.setTradeVolume(null);
+                point.setIntervalTradeAmount(null);
+                point.setCumulativeTradeAmount(null);
+                point.setQualityStatus("PARTIAL");
+                point.setId(null);
+                point.setCalculationVersion("python-market-data-v2");
+                point.setPayloadHash(JdkFinanceHttpClient.sha256(point.getPayloadHash() + "|minute-context-v2"));
+            }
+        }
+    }
+
+    private void fillMinute(CapitalFlowPoint point, CapitalFlowPoint context) {
+        fillDaily(point, context);
+        if (point.getCumulativeTradeAmount() == null && context.getCumulativeTradeAmount() != null) {
+            point.setCumulativeTradeAmount(context.getCumulativeTradeAmount());
+            markEnriched(point, context);
+        }
+        if (point.getPrice() != null && point.getIntervalTradeAmount() != null) {
+            point.setQualityStatus("COMPLETE");
+        }
+    }
+
     private void fillDaily(CapitalFlowPoint point, CapitalFlowPoint bar) {
         boolean changed = false;
-        if (point.getPrice() == null && bar.getPrice() != null) {
+        // 统一采用同日不复权行情，避免公开资金源的价格与复权 K 线混用。
+        if (bar.getPrice() != null && (point.getPrice() == null || point.getPrice().compareTo(bar.getPrice()) != 0)) {
             point.setPrice(bar.getPrice());
             changed = true;
         }

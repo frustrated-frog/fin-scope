@@ -30,6 +30,12 @@ public class TencentCapitalMarketClient {
     private FinanceHttpClient http;
     @Autowired
     private ObjectMapper json;
+    @Autowired
+    private TencentCapitalReplayProvider intraday;
+
+    public List<CapitalFlowPoint> fetchMinuteHistory(Instrument instrument) {
+        return intraday.fetchReplay(instrument).getPrices();
+    }
 
     public CapitalFlowPoint fetchQuote(Instrument instrument) {
         String symbol = symbol(instrument);

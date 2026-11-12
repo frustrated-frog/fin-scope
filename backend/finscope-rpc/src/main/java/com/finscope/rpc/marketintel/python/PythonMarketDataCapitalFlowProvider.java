@@ -244,6 +244,12 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
             point.setPrice(decimal(node.get("price")));
             point.setTradeVolume(decimal(node.get("volume")));
             point.setIntervalTradeAmount(decimal(node.get("amount")));
+            // 此来源的分钟价量由当前累计报价回填，不能视为这一分钟的成交。
+            if ("EASTMONEY_DIRECT".equals(source) && "MINUTE_1".equals(point.getGranularity())) {
+                point.setPrice(null);
+                point.setTradeVolume(null);
+                point.setIntervalTradeAmount(null);
+            }
             point.setTurnoverRate(decimal(node.get("turnover_rate")));
             point.setVolumeRatio(decimal(node.get("volume_ratio")));
             point.setMainNetInflow(decimal(node.get("main_net_inflow")));
@@ -251,10 +257,14 @@ public class PythonMarketDataCapitalFlowProvider implements CapitalFlowProvider 
             point.setLargeNetInflow(decimal(node.get("large_net_inflow")));
             point.setMediumNetInflow(decimal(node.get("medium_net_inflow")));
             point.setSmallNetInflow(decimal(node.get("small_net_inflow")));
-            point.setCalculationVersion("python-market-data-v1");
+            point.setCalculationVersion("python-market-data-v2");
             point.setRetrievedAt(retrievedAt);
             point.setPayloadHash(response.getPayloadHash());
             point.setQualityStatus(stale ? "STALE" : defaultText(node, "quality_status", "COMPLETE"));
+            if ("MINUTE_1".equals(point.getGranularity())
+                    && (point.getPrice() == null || point.getIntervalTradeAmount() == null)) {
+                point.setQualityStatus("PARTIAL");
+            }
             result.add(point);
         }
         return result;

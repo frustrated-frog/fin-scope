@@ -87,6 +87,53 @@ class CapitalMarketEnrichmentServiceTest {
         assertEquals("2026-11-12T13:50", CapitalMarketEnrichmentService.latestMarketQuote(result).getObservedAt().toString());
     }
 
+    @Test
+    void repairsLegacyCumulativeAmountAndMatchesMinuteContextByExactTimestamp() {
+        CapitalFlowPoint first = point("MINUTE_1", "2026-11-12T09:31:00");
+        first.setProviderCode("EASTMONEY_DIRECT");
+        first.setCalculationVersion("python-market-data-v1");
+        first.setMainNetInflow(new BigDecimal("20"));
+        first.setIntervalTradeAmount(new BigDecimal("10000000"));
+        CapitalFlowPoint next = point("MINUTE_1", "2026-11-12T09:32:00");
+        CapitalFlowPoint context = point("MINUTE_1", "2026-11-12T09:31:00");
+        context.setPrice(new BigDecimal("52.90"));
+        context.setIntervalTradeAmount(new BigDecimal("31706598"));
+        context.setCumulativeTradeAmount(new BigDecimal("43926638"));
+        context.setTradeVolume(new BigDecimal("5979"));
+        when(market.fetchDailyHistory(stock)).thenReturn(List.of());
+        when(market.fetchMinuteHistory(stock)).thenReturn(List.of(context));
+        when(market.fetchQuote(stock)).thenReturn(quote());
+        List<CapitalFlowPoint> result = service.enrich(stock, List.of(first, next));
+        assertEquals(context.getIntervalTradeAmount(), result.get(0).getIntervalTradeAmount());
+        assertEquals(context.getCumulativeTradeAmount(), result.get(0).getCumulativeTradeAmount());
+        assertEquals(context.getTradeVolume(), result.get(0).getTradeVolume());
+        assertEquals(first.getMainNetInflow(), result.get(0).getMainNetInflow());
+        assertEquals("COMPLETE", result.get(0).getQualityStatus());
+        assertNull(result.get(1).getIntervalTradeAmount());
+        assertNull(result.get(1).getPrice());
+        assertEquals(first.getObservedAt(), result.get(0).getObservedAt());
+        assertEquals(new BigDecimal("10000000"), first.getIntervalTradeAmount());
+        CapitalBehaviorMetrics metrics = new CapitalBehaviorMetricsService().derive(List.of(result.get(0)), List.of(), List.of());
+        assertEquals(context.getCumulativeTradeAmount(), metrics.getLatest().getTradeAmount());
+    }
+
+    @Test
+    void normalizesExistingAdjustedPriceToUnadjustedHistoryWithoutOverwritingFundNumbers() {
+        CapitalFlowPoint daily = point("DAY_1", "2026-11-11T15:00:00");
+        daily.setPrice(new BigDecimal("48.2"));
+        daily.setIntervalTradeAmount(new BigDecimal("123000000"));
+        daily.setMainNetInflow(new BigDecimal("-1000000"));
+        CapitalFlowPoint bar = point("DAY_1", "2026-11-11T15:00:00");
+        bar.setPrice(new BigDecimal("52.97"));
+        when(market.fetchDailyHistory(stock)).thenReturn(List.of(bar));
+        when(market.fetchQuote(stock)).thenReturn(quote());
+        CapitalFlowPoint normalized = service.enrich(stock, List.of(daily)).get(0);
+        assertEquals(bar.getPrice(), normalized.getPrice());
+        assertEquals(daily.getIntervalTradeAmount(), normalized.getIntervalTradeAmount());
+        assertEquals(daily.getMainNetInflow(), normalized.getMainNetInflow());
+        assertEquals(new BigDecimal("48.2"), daily.getPrice());
+    }
+
     private CapitalFlowPoint quote() {
         CapitalFlowPoint quote = point("QUOTE", "2026-11-12T13:50:00");
         quote.setCumulativeTradeAmount(new BigDecimal("745500000"));

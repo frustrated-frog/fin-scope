@@ -124,6 +124,32 @@ class MarketDataGatewayCapitalFlowTest {
         assertTrue(result.getWarning().contains("分钟资金流暂不可用"));
     }
 
+    @Test
+    void dailyOnlyPrimaryDoesNotPreventAnAvailableMinuteSourceFromBeingUsed() {
+        FakeCapitalProvider daily = new FakeCapitalProvider("DAILY_FLOW", "SINA", 10);
+        daily.data = dailyData("DAILY_FLOW");
+        FakeCapitalProvider minute = new FakeCapitalProvider("MINUTE_FLOW", "EASTMONEY", 20);
+        minute.data = data("MINUTE_FLOW");
+        CapitalFlowGatewayResult result = gateway(daily, minute)
+                .fetchCapitalFlow(instrument(), LocalDate.of(2026, 7, 14));
+        assertEquals(1, minute.calls.get());
+        assertEquals(1, result.getData().getMinutePoints().size());
+        assertEquals(1, result.getData().getDailyPoints().size());
+    }
+
+    @Test
+    void preservesDailySuccessWhenTheMinuteFallbackFails() {
+        FakeCapitalProvider daily = new FakeCapitalProvider("DAILY_FLOW", "SINA", 10);
+        daily.data = dailyData("DAILY_FLOW");
+        FakeCapitalProvider minute = new FakeCapitalProvider("MINUTE_FLOW", "EASTMONEY", 20);
+        minute.failure = new ProviderContractException("CONNECTION_ERROR", "minute unavailable", true);
+        CapitalFlowGatewayResult result = gateway(daily, minute)
+                .fetchCapitalFlow(instrument(), LocalDate.of(2026, 7, 14));
+        assertEquals(1, minute.calls.get());
+        assertEquals("DAILY_FLOW", result.getSourceCode());
+        assertEquals(1, result.getData().getDailyPoints().size());
+    }
+
     private MarketDataGateway gateway(CapitalFlowProvider... providers) {
         return gateway(Runnable::run, providers);
     }

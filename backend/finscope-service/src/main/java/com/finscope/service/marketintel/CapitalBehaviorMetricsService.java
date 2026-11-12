@@ -62,7 +62,8 @@ public class CapitalBehaviorMetricsService {
 
     private CapitalBehaviorMetrics.Latest intradayLatest(List<CapitalFlowPoint> currentDay, CapitalFlowPoint sameDayDaily) {
         CapitalFlowPoint last = last(currentDay);
-        BigDecimal tradeAmount = sum(currentDay, Metric.AMOUNT);
+        BigDecimal tradeAmount = last.getCumulativeTradeAmount() == null
+                ? sum(currentDay, Metric.AMOUNT) : last.getCumulativeTradeAmount();
         BigDecimal tradeVolume = sum(currentDay, Metric.VOLUME);
         BigDecimal mainNetInflow = sum(currentDay, Metric.MAIN_NET_INFLOW);
         CapitalBehaviorMetrics.Latest latest = new CapitalBehaviorMetrics.Latest();

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,8 +44,11 @@ class PythonMarketDataCapitalFlowProviderTest {
         assertEquals(1, data.getDailyPoints().size());
         CapitalFlowPoint minute = data.getMinutePoints().get(0);
         assertEquals(new BigDecimal("1000000.0"), minute.getMainNetInflow());
-        assertEquals(new BigDecimal("11.23"), minute.getPrice());
-        assertEquals("COMPLETE", minute.getQualityStatus());
+        assertNull(minute.getPrice());
+        assertNull(minute.getIntervalTradeAmount());
+        assertNull(minute.getTradeVolume());
+        assertEquals("python-market-data-v2", minute.getCalculationVersion());
+        assertEquals("PARTIAL", minute.getQualityStatus());
         assertTrue(data.getWarnings().contains("source:EASTMONEY_DIRECT"));
     }
 
