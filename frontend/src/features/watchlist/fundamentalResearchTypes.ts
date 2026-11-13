@@ -3,6 +3,16 @@ export type FundamentalWatchStatus = 'TRACKING' | 'SUPPORTED' | 'CHALLENGED' | '
 export interface BusinessNotes {
   revenueModel: string; customers: string; costDrivers: string; advantage: string; sourceUrl: string; revision: number; updatedAt?: string;
 }
+export interface FundamentalBusinessFinding {
+  aspect: 'REVENUE_MODEL' | 'CUSTOMER_CASH' | 'COST_DRIVERS' | 'COMPETITIVE_ADVANTAGE';
+  label: string; noteField: 'revenueModel' | 'customers' | 'costDrivers' | 'advantage'; content: string;
+  support: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'CONTRADICTED'; runId: number; generatedAt?: string;
+  sources: Array<{ evidenceRef: string; title: string; url: string; publishedAt?: string; contentOrigin?: string }>;
+}
+export interface FundamentalBusinessResearch {
+  status: 'IDLE' | 'RUNNING' | 'READY' | 'PARTIAL' | 'FAILED'; latestRunId?: number; message: string;
+  showingPrevious: boolean; findings: FundamentalBusinessFinding[];
+}
 export interface FundamentalMetric {
   label: string; value: number | string; unit: string; conceptCode: string; reportId: number; periodEnd: string;
 }
@@ -54,6 +64,13 @@ export const watchStatusLabels: Record<FundamentalWatchStatus, string> = {
   TRACKING: '持续跟踪', SUPPORTED: '得到支持', CHALLENGED: '出现反证', CLOSED: '已结束',
 };
 export const emptyNotes: BusinessNotes = { revenueModel: '', customers: '', costDrivers: '', advantage: '', sourceUrl: '', revision: 0 };
+
+export function fundamentalReviewDate(days = 0, now = new Date()) {
+  const date = new Date(now.getTime() + days * 86400000);
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const value = (type: string) => parts.find(part => part.type === type)?.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
 
 export function fundamentalValue(value: number | string, unit: string) {
   const number = Number(value);

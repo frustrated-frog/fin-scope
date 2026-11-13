@@ -174,6 +174,30 @@ class StockLearningCardRepositoryTest {
     }
 
     @Test
+    void findsCompletedBusinessMaterialBehindANewerRunningVersion() {
+        var card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
+        var ready = new StockLearningCardRun();
+        ready.setCardId(card.getId());
+        ready.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        ready.setStatus("READY");
+        ready.setGenerationMode("MODEL_ASSISTED");
+        var business = claim("PROFIT_MODEL", "收入认识", 1);
+        business.setStatus("READY");
+        var saved = repository.appendRun(ready, Arrays.asList(business), Arrays.asList());
+        var active = new StockLearningCardRun();
+        active.setCardId(card.getId());
+        active.setFrameworkCode("LIUJIE_BUYSIDE_RESEARCH_V1");
+        active.setStatus("RUNNING");
+        active.setGenerationMode("CONTROLLED");
+        repository.appendRun(active, Arrays.asList(), Arrays.asList());
+        var material = repository.recentCompletedBusinessRuns(card.getId());
+        assertEquals(1, material.size());
+        assertEquals(saved.getId(), material.get(0).getId());
+        assertEquals("PROFIT_MODEL", material.get(0).getClaims().get(0).getDimensionCode());
+        assertEquals(0, repository.recentCompletedBusinessRuns(999L).size());
+    }
+
+    @Test
     void persistsTraceableEvidenceForEachLearningDimension() {
         StockLearningCard card = repository.findOrCreate(1L, "LIUJIE_BUYSIDE_RESEARCH_V1");
         StockLearningCardRun run = new StockLearningCardRun();

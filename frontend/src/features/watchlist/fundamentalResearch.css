@@ -89,6 +89,22 @@
 .fr-comparison dd strong { font-size: 11px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .fr-watch .fr-comparison-waiting { margin: 12px 0; color: var(--muted); font-size: 11px; }
 .fr-review-next { display: block; margin-top: 6px; color: var(--muted); }
+.fr-business-research { margin: 20px 0 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.fr-business-research > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.fr-business-research > header p { font-size: 11px; line-height: 1.8; color: var(--muted); margin: 0 0 14px; }
+.fr-business-research > header button { flex-shrink: 0; padding: 8px 12px; border: 1px solid var(--fr-accent); border-radius: 7px; color: var(--fr-accent); background: transparent; font-size: 12px; }
+.fr-business-findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.fr-business-findings article { min-width: 0; padding: 17px; border-radius: 8px; background: color-mix(in srgb, var(--fr-accent) 4%, var(--surface)); border: 1px solid var(--line); }
+.fr-finding-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }
+.fr-finding-heading > span { font-size: 10px; color: var(--muted); }
+.fr-finding-heading > span[data-support='CONTRADICTED'] { color: var(--fr-attention); }
+.fr-business-findings article > p { font-size: 12px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fr-business-findings ul { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 7px; }
+.fr-business-findings li { display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; font-size: 10px; color: var(--muted); }
+.fr-business-findings li a { color: var(--fr-accent); overflow-wrap: anywhere; }
+.fr-business-findings footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.fr-business-findings footer small { color: var(--muted); font-size: 10px; }
+.fr-business-findings footer button { border: 0; padding: 3px 0; background: transparent; color: var(--fr-accent); font-size: 11px; }
 .fundamental-research :is(button, input, textarea, select, summary, a):focus-visible { outline: 2px solid var(--fr-accent); outline-offset: 3px; }
 @media (max-width: 1000px) {
   .fr-orientation { grid-template-columns: 1fr 1fr; }
@@ -97,7 +113,8 @@
 }
 @media (max-width: 640px) {
   .fr-heading { flex-direction: column; gap: 14px; }
-  .fr-orientation, .fr-business-layout, .fr-insights, .fr-form-grid { grid-template-columns: 1fr; }
+  .fr-orientation, .fr-business-layout, .fr-insights, .fr-form-grid, .fr-business-findings { grid-template-columns: 1fr; }
+  .fr-business-research > header { flex-wrap: wrap; }
   .fr-business-layout, .fr-insight, .fr-orientation { padding: 17px; }
   .fr-business-notes { padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .fr-editor { padding: 15px; }

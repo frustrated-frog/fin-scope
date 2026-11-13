@@ -8,6 +8,10 @@ import type { FundamentalWorkspace, FundamentalWatch } from './fundamentalResear
 
 vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 vi.mock('./StockFundamentalsPanel', () => ({ StockFundamentalsPanel: ({ code }: { code: string }) => <p>季度趋势 {code}</p> }));
+vi.mock('./FundamentalBusinessResearchPanel', () => ({ FundamentalBusinessResearchPanel: ({ onAdopt }: { onAdopt: (finding: unknown) => void }) => <button onClick={() => onAdopt({
+  aspect: 'REVENUE_MODEL', label: '收入来源', noteField: 'revenueModel', content: '来自公开资料的主营业务认识', support: 'PARTIALLY_SUPPORTED', runId: 1,
+  sources: [{ evidenceRef: 'E1', title: '公司资料', url: 'https://example.com/company' }],
+})}>选取研究内容</button> }));
 const base = '/api/watchlist/stocks/603618/fundamental-research';
 const watch: FundamentalWatch = {
   id: 7, originKey: 'FINANCIAL:143:EARNINGS_QUALITY', title: '利润有没有变成现金', hypothesis: '等待回款改善', baseline: '三季报经营现金为负',
@@ -97,4 +101,22 @@ test('filters due items and submits the exact displayed comparison with a new re
   const payload = JSON.parse(vi.mocked(api).mock.lastCall![1]!.body as string);
   expect(payload.comparisonToken).toBe('a'.repeat(64));
   expect(payload.nextReviewDate).toBe('2027-04-30');
+});
+
+test('adopting research appends sources to an unsaved draft and preserves other manual notes', async () => {
+  const local = workspace();
+  local.notes = { ...emptyNotes, customers: '我记录的客户情况', sourceUrl: 'https://example.com/my-notes', revision: 3 };
+  vi.mocked(api).mockResolvedValue(local);
+  render(<StockFundamentalResearchPanel code="603618" />);
+  await screen.findByText('-1.66 亿元');
+  await userEvent.click(screen.getByRole('button', { name: '补充经营笔记' }));
+  await userEvent.type(screen.getByLabelText('收入从哪里来'), '尚未保存的收入笔记');
+  await userEvent.click(screen.getByRole('button', { name: '选取研究内容' }));
+  const content = (screen.getByLabelText('收入从哪里来') as HTMLTextAreaElement).value;
+  expect(content).toContain('尚未保存的收入笔记');
+  expect(content).toContain('来自公开资料的主营业务认识');
+  expect(content).toContain('https://example.com/company');
+  expect(screen.getByLabelText('客户与回款')).toHaveValue('我记录的客户情况');
+  expect(screen.getByLabelText('参考材料链接')).toHaveValue('https://example.com/my-notes');
+  expect(api).toHaveBeenCalledTimes(1);
 });

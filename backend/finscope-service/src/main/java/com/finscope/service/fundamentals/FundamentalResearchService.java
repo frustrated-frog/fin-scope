@@ -7,7 +7,6 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.fundamentals.FundamentalResearchRepository;
-import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.fundamentals.CompanyBusinessNotes;
 import com.finscope.domain.fundamentals.FundamentalResearchWorkspace;
 import com.finscope.domain.fundamentals.FundamentalWatch;
@@ -35,7 +34,7 @@ import java.util.Set;
 @Slf4j
 public class FundamentalResearchService {
     @Resource
-    private InstrumentRepository instruments;
+    private FundamentalStockResolver stocks;
     @Resource
     private FundamentalResearchRepository repository;
     @Resource
@@ -205,14 +204,6 @@ public class FundamentalResearchService {
     }
 
     private Instrument requireStock(String code) {
-        if (code == null || !code.matches("[0-9]{6}")) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
-        }
-        Instrument instrument = instruments.findByCodeAndType(code, "STOCK")
-                .orElseThrow(() -> new ResourceNotFoundException("股票标的不存在"));
-        if (!Set.of("SH", "SZ", "BJ").contains(instrument.getMarket())) {
-            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "基本面研究当前支持 A 股股票");
-        }
-        return instrument;
+        return stocks.require(code);
     }
 }

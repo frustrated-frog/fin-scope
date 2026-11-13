@@ -65,7 +65,9 @@ class FundamentalResearchServiceTest {
         reactions = mock(ReactionSampleRepository.class);
         profiles = mock(CompanyBusinessProfileClient.class);
         fundamentals = mock(StockFundamentalsService.class);
-        ReflectionTestUtils.setField(service, "instruments", instruments);
+        var resolver = new FundamentalStockResolver();
+        ReflectionTestUtils.setField(resolver, "instruments", instruments);
+        ReflectionTestUtils.setField(service, "stocks", resolver);
         var materials = new FundamentalResearchMaterialService();
         ReflectionTestUtils.setField(materials, "reports", reports);
         ReflectionTestUtils.setField(materials, "financials", financials);

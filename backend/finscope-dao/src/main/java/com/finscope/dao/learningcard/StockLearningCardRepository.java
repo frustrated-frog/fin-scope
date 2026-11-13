@@ -170,6 +170,15 @@ public class StockLearningCardRepository {
                 (rs, row) -> rs.getLong(1), cardId);
         return ids.isEmpty() ? Optional.empty() : findRun(ids.get(0));
     }
+
+    /** 有界回溯已完成研究，更新运行或局部失败时仍可展示带日期的既有经营材料。 */
+    public List<StockLearningCardRun> recentCompletedBusinessRuns(Long cardId) {
+        List<Long> ids = jdbcTemplate.query("SELECT r.id FROM stock_learning_card_run r WHERE r.card_id=? "
+                        + "AND r.status IN ('READY','DEGRADED','FAILED') AND EXISTS (SELECT 1 FROM stock_learning_card_claim c "
+                        + "WHERE c.run_id=r.id AND c.status='READY' AND c.dimension_code IN ('PROFIT_MODEL','COMPETITION')) "
+                        + "ORDER BY r.id DESC LIMIT 5", (rs, row) -> rs.getLong(1), cardId);
+        return ids.stream().map(this::findRun).flatMap(Optional::stream).toList();
+    }
     public List<StockLearningCardSummary> summaries() {
         return jdbcTemplate.query("SELECT i.code,i.name,r.status,r.stage,r.summary,c.updated_at,r.completed_at,"
                         + "(SELECT COUNT(*) FROM stock_learning_card_claim cl WHERE cl.run_id=r.id AND cl.status='READY') completed_dimensions "
