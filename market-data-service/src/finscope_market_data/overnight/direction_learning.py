@@ -13,7 +13,7 @@ from finscope_market_data.overnight.candidate_evaluation import evaluate_candida
 from finscope_market_data.overnight.joint_dataset import CALIBRATION_DAYS, MAX_DAYS, MIN_SYMBOLS, TRAIN_DAYS, date_weights
 from finscope_market_data.overnight.joint_learning import sigmoid
 from finscope_market_data.overnight.direction_candidates import (
-    BASE_RECIPE, MULTISCALE_RECIPE, RECENCY_HALF_LIFE, candidate_probabilities, fit_candidates,
+    BASE_RECIPE, MULTISCALE_RECIPE, RECENCY_HALF_LIFE, CANDIDATE_RECIPE, candidate_probabilities, fit_candidates,
 )
 from finscope_market_data.overnight.direction_selection import POLICY, PROTOCOL as CONTEXT_PROTOCOL, LEGACY_PROTOCOL, select_direction
 from finscope_market_data.overnight.up_selection import POLICY as UP_POLICY, LEGACY_PROTOCOL as UP_PROTOCOL, select_up_candidates
@@ -157,7 +157,8 @@ def direction_prediction(fitted, features, live_gate=None):
     source = calibration_source(gate)
     p = float(adjusted[0] if source == 'INTERCEPT' else raw[0])
     audit = fitted['audit']
-    baseline = fitted['model']['selected'] == 'PRIOR' or 'tree' not in fitted['model']
+    baseline = fitted['model']['selected'] == 'PRIOR' or ('tree' not in fitted['model']
+        and fitted['model']['selected'] != CANDIDATE_RECIPE)
     return {'protocol': fitted.get('protocol', PROTOCOL), 'target': TARGET, 'status': 'SHADOW', 'upProbability': p,
             'assessmentStatus': 'BASELINE_ONLY' if baseline else 'MODEL_ESTIMATE',
             'modelFitThrough': audit.get('modelFitThrough') or audit.get('selectionThrough') or audit.get('trainingThrough'),

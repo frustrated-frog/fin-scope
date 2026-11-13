@@ -41,13 +41,14 @@ def audit(database, through, cutoff):
 
         base_rows, actions = ActionVerificationStore.annotate(SimpleNamespace(latest=latest_action), panel['directionRows'], through)
         rows, readiness = build_actual_candidate_panel(base_rows, SimpleNamespace(bars=bars),
-                                                       cohorts, cutoff, through)
+            cohorts, cutoff, through,
+            annotate=lambda extra, at: ActionVerificationStore.annotate(SimpleNamespace(latest=latest_action), extra, at))
     fitted = fit_rolling_candidates(rows, cohorts, readiness, through.isoformat(), cutoff)
     return {'sourceArtifact': artifact['id'], 'sourceCreatedAt': artifact['createdAt'],
         'through': through.isoformat(), 'readiness': readiness, 'actionVerification': actions,
         'previousSelection': (artifact.get('upSelection') or {}).get('audit', {}).get('selection'),
         'newAudit': fitted['audit'] if fitted else None,
-        'scope': '只读历史开发诊断；原训练池固定，补读历史价格不代表当时已有新模型预测'}
+        'scope': '只读历史开发诊断；真实候选按时间参加拟合，补读历史价格不代表当时已有新模型预测'}
 
 
 if __name__ == '__main__':

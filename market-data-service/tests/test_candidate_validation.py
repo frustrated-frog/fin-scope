@@ -53,6 +53,18 @@ def test_a_complete_cohort_cannot_mix_models_trained_at_different_times():
     assert group['dayCount'] == 0 and group['missing'] == {'MIXED_MODEL_ARTIFACTS': 3}
 
 
+def test_candidate_only_forecast_requires_its_own_past_training_audit():
+    from finscope_market_data.overnight.candidate_training import PROTOCOL as TRAINING_PROTOCOL, RECIPE
+    rows = values()
+    for row in rows:
+        row['closeDirection']['rollingSelectionModels'][0].update(selectedModel=RECIPE, candidateTraining={
+            'protocol': TRAINING_PROTOCOL, 'status': 'READY', 'trainingDays': 5, 'trainingRows': 30,
+            'trainingThrough': '2026-09-18T15:00:00'})
+    assert audit(rows)['groups'][0]['dayCount'] == 1
+    rows[0]['closeDirection']['rollingSelectionModels'][0]['candidateTraining']['trainingThrough'] = '2099-01-01'
+    assert audit(rows)['groups'][0]['dayCount'] == 0
+
+
 def test_original_is_preserved_and_equal_count_ties_do_not_create_stock_skill():
     rows = values()
     late = deepcopy(rows[0])

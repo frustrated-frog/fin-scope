@@ -11,7 +11,7 @@ PROTOCOL = 'overnight-candidate-readiness-v1'
 MAX_COHORT_DAYS = 60
 
 
-def build_actual_candidate_panel(base, store, cohorts, cutoff, through):
+def build_actual_candidate_panel(base, store, cohorts, cutoff, through, *, annotate=None):
     original = {(r['signalDate'], r['instrumentCode']): r for r in base}
     if len(original) != len(base):
         raise ValueError('候选样本存在重复股票日期')
@@ -56,6 +56,8 @@ def build_actual_candidate_panel(base, store, cohorts, cutoff, through):
         days.append({'signalDate': day, 'targetAt': items[0]['targetAt'], 'expectedCount': len(items),
                      'availableCount': reasons['AVAILABLE'], 'complete': reasons['AVAILABLE'] == len(items),
                      'missing': {k: v for k, v in reasons.items() if k != 'AVAILABLE'}})
+    if annotate is not None:
+        extra, _ = annotate(extra, through)
     return base + extra, {'protocol': PROTOCOL, 'cutoff': cutoff, 'computedAt': through.isoformat(),
         'featureScope': 'DECISION_TIME_STOCK_FEATURES', 'days': days, 'records': records,
         'reasonCounts': dict(Counter(r['reason'] for r in records)),

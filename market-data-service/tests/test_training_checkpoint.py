@@ -43,7 +43,7 @@ def test_partial_training_keeps_last_model_and_resumes_only_failed_component(tmp
     monkeypatch.setattr(worker, 'fit_target', lambda *args: deepcopy(fitted))
     monkeypatch.setattr(worker, 'fit_direction', direction)
     monkeypatch.setattr(worker, 'fit_context_direction', lambda *args: (None, []))
-    monkeypatch.setattr(worker, 'build_actual_candidate_panel', lambda *args: ([row], {'days': [], 'records': []}))
+    monkeypatch.setattr(worker, 'build_actual_candidate_panel', lambda *args, **kwargs: ([row], {'days': [], 'records': []}))
     monkeypatch.setattr(worker, 'fit_up_selection', candidate)
     monkeypatch.setattr(worker, 'evaluate_market_groups', lambda *args, **kwargs: None)
     monkeypatch.setattr(worker, 'train_fresh_research', lambda *args, **kwargs: None)

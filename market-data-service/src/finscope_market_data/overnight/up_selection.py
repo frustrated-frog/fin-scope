@@ -8,7 +8,7 @@ from finscope_market_data.overnight.joint_dataset import date_weights
 from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
 LEGACY_PROTOCOL = 'overnight-up-selection-v1'
-PROTOCOL = 'overnight-candidate-rolling-v2'
+PROTOCOL = 'overnight-candidate-rolling-v3'
 POLICY = 'UP_CANDIDATES_V1'
 MIN_SELECTION_DAYS = 10
 
@@ -87,5 +87,7 @@ def attach_up_selection(report, grouped, request, artifact, contexts):
         'featureFingerprint': hashlib.sha256(json.dumps(local, allow_nan=False).encode()).hexdigest(),
         'momentumScore': local[0], 'selection': {key: fitted['audit']['selection'].get(key) for key in
             ('reason', 'selectionDays', 'plannedDays', 'candidateCoverage', 'selectionThrough')},
-        'selectionScope': fitted['selectionScope'], 'reason': '最近真实候选上的滚动择模；概率与排序同时核验'}
+        'selectionScope': fitted['selectionScope'], 'trainingScope': fitted['trainingScope'],
+        'candidateTraining': fitted['audit'].get('candidateTraining'),
+        'reason': '使用过去完整尾盘候选训练；与原判断并行验证，未通过前瞻验收前不替换'}
     parent['rollingSelectionModels'] = [parent['upSelection']]

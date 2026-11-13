@@ -94,9 +94,15 @@ def test_nested_refit_uses_latest_labels_and_never_selects_on_its_test_day(direc
     assert restored['audit']['modelFitThrough'] == max(r['exitAt'] for r in direction_rows)
     assert restored['audit']['selection']['selectionDays'] == 20
     assert restored['audit']['historical']['dayCount'] == 24
+    assert restored['trainingScope'] == 'ACTUAL_COMPLETE_CANDIDATES'
+    assert restored['audit']['candidateTraining']['status'] == 'READY'
+    assert restored['model']['selected'] == 'ACTUAL_CANDIDATE_LOGISTIC'
+    assert restored['audit']['candidateComparison']['dayCount'] < 24
+    assert not restored['audit']['candidateComparison']['eligible']
     for fold in restored['audit']['folds']:
         assert fold['modelFitThrough'] < fold['predictionAt']
         assert fold['selection']['selectionThrough'] is None or fold['selection']['selectionThrough'] < fold['predictionAt']
+        assert fold['candidateTraining']['trainingThrough'] is None or fold['candidateTraining']['trainingThrough'] < fold['predictionAt']
     assert restored['audit']['folds'][0]['selected'] == 'PRIOR'
     assert direction_prediction(restored, direction_rows[-1]['features'])['modelFitThrough'] == restored['audit']['modelFitThrough']
 

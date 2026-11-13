@@ -82,6 +82,7 @@ def activation():
         'closeDirection': {'protocol': 'original', 'target': TARGET, 'upProbability': .4, 'referencePrice': 10,
                            'rollingSelectionModels': [forecast]}}
     gate = {'key': 'test', 'group': 'ROLLING', 'mode': 'TAIL_ENTRY', 'cutoff': '14:30', 'eligible': True,
+            'sourceProtocol': CANDIDATE_PROTOCOL,
             'status': 'QUALIFIED', 'outcomeThrough': '2026-11-11T15:00:00', 'dayCount': 60}
     monitor = {'protocol': PROTOCOL, 'target': TARGET, 'trainingPolicy': TRAINING_POLICY,
                'computedAt': '2026-11-12T09:00:00', 'groups': [gate]}
@@ -98,7 +99,7 @@ def test_live_activation_preserves_original_and_uses_frozen_past_gate():
     assert main['activeSource'] == 'ROLLING_DIRECTION'
 
 
-@pytest.mark.parametrize('scenario', ['future', 'expired', 'degraded', 'prior', 'wrong_policy', 'reference', 'retrospective'])
+@pytest.mark.parametrize('scenario', ['future', 'expired', 'degraded', 'prior', 'wrong_policy', 'reference', 'old_gate', 'retrospective'])
 def test_future_stale_degraded_or_unusable_forecasts_keep_original(scenario):
     report, monitor = activation()
     forecast = report['closeDirection']['rollingSelectionModels'][0]
@@ -114,6 +115,8 @@ def test_future_stale_degraded_or_unusable_forecasts_keep_original(scenario):
         forecast['trainingPolicy'] = 'old'
     elif scenario == 'reference':
         forecast['referencePrice'] = 11
+    elif scenario == 'old_gate':
+        monitor['groups'][0]['sourceProtocol'] = 'overnight-candidate-rolling-v2'
     else:
         report['evidenceKind'] = 'RETROSPECTIVE'
     activate_direction(report, monitor)
