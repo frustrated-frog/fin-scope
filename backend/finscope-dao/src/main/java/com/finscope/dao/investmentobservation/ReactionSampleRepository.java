@@ -181,6 +181,12 @@ public class ReactionSampleRepository {
                 .stream().findFirst();
     }
 
+    public List<ReactionSample> recentForStock(String code, String market) {
+        return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE instrument_code IN (?,?) "
+                        + "AND excluded=0 AND state<>'DRAFT' ORDER BY json_extract(snapshot_json,'$.publishedAt') DESC,id DESC LIMIT 12",
+                mapper, code, code + "." + market);
+    }
+
     public Optional<ReactionSample> findBySource(long majorEventId, String instrumentCode) {
         return jdbcTemplate.query("SELECT * FROM investment_reaction_sample WHERE major_event_id=? AND instrument_code=?",
                 mapper, majorEventId, instrumentCode).stream().findFirst();
