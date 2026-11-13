@@ -101,3 +101,42 @@ def test_development_metrics_pair_ready_dates_and_do_not_fake_small_sample_inter
     assert audit['plannedDays'] == 7 and audit['arms']['CANDIDATE']['accuracy'] == pytest.approx(1.)
     assert not audit['eligible'] and audit['uncertaintyStatus'] == 'INSUFFICIENT_DAYS'
     assert audit['comparisons']['POOL_ROLLING']['accuracyDifferenceLower'] is None
+
+
+def test_more_equal_stock_observations_on_one_date_do_not_change_regularization_weight():
+    rows, cohorts, readiness = panel()
+    model, _ = fit_candidate_training(rows, cohorts, readiness, '2026-11-01', '14:30')
+    copies = [{**r, 'instrumentCode': r['instrumentCode']+'-copy'} for r in rows[:6]]
+    cohorts[('2026-10-01', '14:30')]['candidates'].update({r['instrumentCode']: {} for r in copies})
+    readiness['days'][0]['expectedCount'] += len(copies)
+    repeated, _ = fit_candidate_training(rows+copies, cohorts, readiness, '2026-11-01', '14:30')
+    assert repeated['coef'] == pytest.approx(model['coef'])
+    assert repeated['intercept'] == pytest.approx(model['intercept'])
+
+
+def test_serialized_candidate_model_attaches_automatically_without_replacing_main(monkeypatch):
+    from types import SimpleNamespace
+    from finscope_market_data.overnight import direction_dataset
+    from finscope_market_data.overnight.up_selection import PROTOCOL, attach_up_selection
+    from finscope_market_data.overnight.candidate_training import RECIPE
+    rows, cohorts, readiness = panel()
+    specialized, audit = fit_candidate_training(rows, cohorts, readiness, '2026-11-01', '14:30')
+    width = len(FEATURES)
+    model = {'mean': [0.]*width, 'scale': [1.]*width, 'clipLow': [0.]*width, 'clipHigh': [0.]*width,
+        'prior': .4, 'actualCandidate': specialized, 'selected': RECIPE, 'baselineProbability': .4,
+        'calibration': {'slope': 1., 'intercept': 0., 'status': 'NOT_FITTED'}}
+    fitted = {'protocol': PROTOCOL, 'features': list(FEATURES), 'model': model, 'trainingScope': 'ACTUAL_COMPLETE_CANDIDATES',
+        'selectionScope': 'FIXED_CANDIDATE_RECIPE', 'audit': {'modelFitThrough': audit['trainingThrough'],
+            'historical': {}, 'candidateTraining': audit,
+            'selection': {'reason': 'NO_CANDIDATE_ADVANTAGE', 'selectionThrough': audit['trainingThrough']}}}
+    artifact = json.loads(json.dumps({'id': 'test-model', 'createdAt': '2026-11-01T19:00:00',
+        'labelsThrough': audit['trainingThrough'], 'upSelection': fitted}))
+    day = date(2026, 11, 2)
+    request = SimpleNamespace(mode='TAIL_ENTRY', signal_date=day, cutoff='14:30', instrument_code='candidate-5')
+    report = {'dataThrough': '2026-11-02T14:30:00', 'closeDirection': {'upProbability': .4}}
+    monkeypatch.setattr(direction_dataset, 'direction_features', lambda *args: rows[5]['features'])
+    attach_up_selection(report, {day: {'14:30': SimpleNamespace(close=10)}}, request, artifact, None)
+    forecast = report['closeDirection']['rollingSelectionModels'][0]
+    assert forecast['selectedModel'] == RECIPE and forecast['assessmentStatus'] == 'MODEL_ESTIMATE'
+    assert forecast['upProbability'] > .5 and report['closeDirection']['upProbability'] == .4
+    assert not forecast['validated'] and forecast['candidateTraining']['trainingRows'] == 72

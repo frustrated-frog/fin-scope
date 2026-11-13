@@ -71,6 +71,15 @@ def test_missing_planned_days_cannot_disappear_from_checkpoint_coverage():
     assert result['checkpoint']['coverage'] == .75 and not result['eligible']
 
 
+def test_candidate_protocol_cannot_reuse_the_previous_training_checkpoint():
+    meta = Meta()
+    key = ('TAIL_ENTRY', '14:30', 'ROLLING')
+    meta.put_once(f'{PROTOCOL}|{TRAINING_POLICY}|{"|".join(key)}', {'passed': True, 'dates': ['old']})
+    result = qualify(key, group(59), meta, datetime(2026, 11, 14))
+    assert result['status'] == 'ACCUMULATING' and result['checkpoint'] is None
+    assert result['sourceProtocol'] == CANDIDATE_PROTOCOL
+
+
 def activation():
     forecast = {'group': 'ROLLING', 'protocol': CANDIDATE_PROTOCOL, 'trainingPolicy': TRAINING_POLICY,
         'status': 'SHADOW', 'assessmentStatus': 'MODEL_ESTIMATE', 'selectedModel': 'SHAPE_LOGISTIC',
