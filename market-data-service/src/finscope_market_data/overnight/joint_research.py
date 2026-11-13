@@ -17,6 +17,7 @@ from finscope_market_data.overnight.tail_ranking_research import attach_tail_ran
 from finscope_market_data.overnight.fresh_research import attach_fresh_research
 from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY
 from finscope_market_data.overnight.production_direction import activate_direction, KEY as PRODUCTION_KEY
+from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ class OvernightJointResearch:
     def status(self, now):
         universe = self.meta.get(POOL_KEY) or {}
         coverage = self.meta.get('jointCoverage') or {}
-        return {'protocol': PROTOCOL, 'poolSize': len(universe.get('members', [])),
+        return {'protocol': PROTOCOL, 'trainingPolicy': TRAINING_POLICY, 'poolSize': len(universe.get('members', [])),
                 'targetSize': universe.get('targetSize', 120), 'readySymbols': coverage.get('readySymbols', 0),
                 'minimumSymbols': coverage.get('minimumSymbols', 20), 'coverageAt': coverage.get('updatedAt'),
                 'scope': universe.get('scope'), 'limitation': universe.get('limitation'),

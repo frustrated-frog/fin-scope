@@ -5,24 +5,33 @@ logger = logging.getLogger(__name__)
 
 
 class TrainingCheckpoint:
-    def __init__(self, saved=None):
+    def __init__(self, saved=None, progress=None):
         self.components = (saved or {}).get('components', {})
         self.data = (saved or {}).get('data', {})
+        self.progress = progress
 
     def run(self, name, operation, default=None):
         previous = self.components.get(name, {})
         if previous.get('status') in ('READY', 'INSUFFICIENT_DATA'):
+            self.notify(name)
             return previous['result']
+        self.components[name] = {**previous, 'status': 'RUNNING'}
+        self.notify(name)
         try:
             result = operation()
             failed = isinstance(result, dict) and result.get('status') == 'PARTIAL'
             self.components[name] = {'status': 'FAILED' if failed else 'READY' if result is not None else 'INSUFFICIENT_DATA',
                                      'result': result, 'reason': '部分训练失败' if failed else None}
-            return result
         except Exception as error:
             logger.exception('Overnight training component %s failed', name)
             self.components[name] = {'status': 'FAILED', 'reason': type(error).__name__, 'result': default}
-            return default
+            result = default
+        self.notify(name)
+        return result
+
+    def notify(self, name):
+        if self.progress:
+            self.progress(name, self.summary())
 
     @property
     def failed(self):

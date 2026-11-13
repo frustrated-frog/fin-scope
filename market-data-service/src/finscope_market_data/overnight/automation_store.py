@@ -13,6 +13,9 @@ class AutomationStore:
                     key TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS overnight_automation_job (
                     key TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS overnight_job_phase_started
+                    ON overnight_automation_job(json_extract(payload,'$.phase'),
+                        json_extract(payload,'$.startedAt') DESC,key DESC);
             ''')
 
     def get(self, key):
@@ -34,12 +37,13 @@ class AutomationStore:
         with self.store.connect() as db:
             if phase or history:
                 rows = db.execute('''SELECT payload FROM overnight_automation_job
-                    WHERE json_extract(payload, '$.phase')=? ORDER BY key DESC LIMIT ?''',
+                    WHERE json_extract(payload, '$.phase')=?
+                    ORDER BY json_extract(payload,'$.startedAt') DESC,key DESC LIMIT ?''',
                     (phase or 'HISTORY', limit)).fetchall()
             else:
                 rows = db.execute('''SELECT payload FROM overnight_automation_job
                     WHERE COALESCE(json_extract(payload, '$.phase'), '') NOT IN ('HISTORY','JOINT','ACTIONS','CONTEXT','PREWARM','INDEX_HISTORY')
-                    ORDER BY key DESC LIMIT ?''', (limit,)).fetchall()
+                    ORDER BY json_extract(payload,'$.startedAt') DESC,key DESC LIMIT ?''', (limit,)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
     def job(self, key):
@@ -85,7 +89,17 @@ class AutomationStore:
             current = json.loads(row[0]) if row else {}
             if current.get('token') == job['token'] and current.get('status') == 'RUNNING':
                 db.execute('UPDATE overnight_automation_job SET payload=? WHERE key=?',
-                           (json.dumps({**job, **result, 'finishedAt': now.isoformat()}), job['key']))
+                           (json.dumps({**current, **result, 'finishedAt': now.isoformat()}), job['key']))
+
+    def training_progress(self, job, now, stage, components):
+        with self.store.connect() as db:
+            updated = db.execute('''UPDATE overnight_automation_job SET payload=json_set(payload,
+                '$.trainingStage',?,'$.progressAt',?,'$.componentStatus',json(?))
+                WHERE key=? AND json_extract(payload,'$.token')=?
+                AND json_extract(payload,'$.status')='RUNNING' ''',
+                (stage, now.isoformat(), json.dumps(components), job['key'], job['token'])).rowcount
+        if updated != 1:
+            raise ValueError('训练任务租约已更新，旧任务不能更新进度')
 
     def miss(self, key, now, metadata):
         value = {**metadata, 'key': key, 'status': 'MISSED', 'startedAt': now.isoformat(),
