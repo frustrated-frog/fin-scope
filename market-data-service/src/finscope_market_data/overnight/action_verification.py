@@ -7,6 +7,7 @@ import logging
 from finscope_market_data.forecast.trading_calendar import previous_session
 from finscope_market_data.overnight.automation_models import AutomationContext
 from finscope_market_data.overnight.universe import POOL_KEY
+from finscope_market_data.overnight.candidate_cohort import frozen_cohorts
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,11 @@ class OvernightActionVerification:
         if end is None:
             return
         universe = meta.get(POOL_KEY) or {}
-        for member in universe.get('members', [])[:120]:
-            code = member['instrumentCode']
+        cohorts = frozen_cohorts(meta, now.isoformat())
+        recent = sorted(cohorts, reverse=True)[:120]
+        codes = [code for key in recent for code in sorted(cohorts[key]['candidates'])]
+        codes.extend(member['instrumentCode'] for member in universe.get('members', [])[:120])
+        for code in dict.fromkeys(codes):
             last = self.store.latest(code, now)
             if last and last['throughDate'] >= str(end):
                 continue

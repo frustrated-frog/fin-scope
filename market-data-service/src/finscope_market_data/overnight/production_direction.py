@@ -58,7 +58,8 @@ def rank_healthy(rows, *, confident):
 def qualify(key, group, meta, now):
     rows, planned = group['rows'], sorted(set(group['plannedDates']))
     complete = sorted({r['signalDate'] for r in rows})
-    checkpoint_key = f'{PROTOCOL}|{TRAINING_POLICY}|{"|".join(key)}'
+    source_protocol = CANDIDATE_PROTOCOL if key[2] == 'ROLLING' else FRESH_PROTOCOL
+    checkpoint_key = f'{PROTOCOL}|{TRAINING_POLICY}|{source_protocol}|{"|".join(key)}'
     checkpoint = meta.get(checkpoint_key)
     if checkpoint is None and len(complete) >= REQUIRED_DAYS:
         dates = complete[:REQUIRED_DAYS]
@@ -82,7 +83,7 @@ def qualify(key, group, meta, now):
             healthy = healthy and rank_healthy(recent, confident=False)
     status = 'ACCUMULATING' if checkpoint is None else 'CHECKPOINT_FAILED' if not checkpoint['passed'] else 'QUALIFIED' if healthy else 'MONITORING_DEGRADED'
     last = next_session(datetime.fromisoformat(complete[-1]).date()) if complete else None
-    return {'key': '|'.join(key), 'mode': key[0], 'cutoff': key[1], 'group': key[2],
+    return {'key': '|'.join(key), 'mode': key[0], 'cutoff': key[1], 'group': key[2], 'sourceProtocol': source_protocol,
         'status': status, 'eligible': status == 'QUALIFIED', 'dayCount': len(complete), 'requiredDays': REQUIRED_DAYS,
         'checkpointPassed': bool(checkpoint and checkpoint['passed']), 'checkpoint': checkpoint,
         'scheduledCount': group['scheduled'], 'pairedCount': group['paired'], 'missing': dict(group['missing']),
@@ -132,6 +133,8 @@ def activate_direction(report, monitor):
     for name in ('ROLLING', 'ADAPTIVE'):
         gate = next((g for g in monitor.get('groups', []) if g['mode'] == report['mode'] and g['cutoff'] == report['cutoff'] and g['group'] == name), {})
         forecast = next((f for f in forecasts if f.get('group') == name), {})
+        if gate.get('sourceProtocol') != (CANDIDATE_PROTOCOL if name == 'ROLLING' else FRESH_PROTOCOL):
+            continue
         if not gate.get('eligible') or gate.get('status') != 'QUALIFIED' or (gate.get('outcomeThrough') or '9999') >= decision:
             continue
         if (forecast.get('status') != 'SHADOW' or forecast.get('trainingPolicy') != TRAINING_POLICY

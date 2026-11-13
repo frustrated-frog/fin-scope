@@ -8,6 +8,7 @@ from finscope_market_data.overnight.market_validation import missing_reason, sum
 from finscope_market_data.overnight.selection_evaluation import selection_weights
 from finscope_market_data.overnight.detection_metrics import detection
 from finscope_market_data.overnight.up_selection import PROTOCOL
+from finscope_market_data.overnight.candidate_training import PROTOCOL as TRAINING_PROTOCOL, RECIPE, MIN_DAYS, MIN_ROWS
 
 ARMS = ('ROLLING', 'INCUMBENT', 'MOMENTUM', 'UNIFORM')
 
@@ -54,6 +55,12 @@ def valid_candidate(report, forecast, outcome, decision, target_at, now):
     reason = missing_reason(report, forecast, outcome, decision, target_at, now, protocol=PROTOCOL, require_context=False)
     if reason:
         return reason
+    if forecast.get('selectedModel') == RECIPE:
+        training = forecast.get('candidateTraining') or {}
+        if (training.get('protocol') != TRAINING_PROTOCOL or training.get('status') != 'READY'
+                or (training.get('trainingThrough') or '9999') >= forecast['trainedAt']
+                or training.get('trainingDays', 0) < MIN_DAYS or training.get('trainingRows', 0) < MIN_ROWS):
+            return 'INVALID_CANDIDATE_TRAINING'
     momentum = forecast.get('momentumScore')
     selection = forecast.get('selection') or {}
     if (not forecast.get('featureFingerprint') or forecast.get('modelFitThrough', '9999') >= forecast['trainedAt']

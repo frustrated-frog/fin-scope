@@ -34,3 +34,27 @@ def test_action_audit_preserves_labels_and_all_evaluation_rows(tmp_path):
     assert audit['verifiedRows'] == audit['affectedRows'] == 1
     assert not verified[0]['trainingEligible']
     assert not store.annotate([row], datetime(2026, 9, 30, 18))[0][0]['actionsVerified']
+
+
+def test_automatic_action_audit_includes_frozen_candidates_outside_public_pool(tmp_path):
+    from types import SimpleNamespace
+    from finscope_market_data.overnight.automation_store import AutomationStore
+    from finscope_market_data.overnight.action_verification import OvernightActionVerification
+    from finscope_market_data.overnight.universe import POOL_KEY
+    store = OvernightStore(tmp_path / 'outside.db')
+    meta = AutomationStore(store)
+    now = datetime(2026, 11, 14)
+    meta.put(POOL_KEY, {'members': [{'instrumentCode': '600000.SH'}]})
+    job = meta.claim('2026-11-13|SCAN|14:30', datetime(2026, 11, 13, 14, 20),
+                     {'phase': 'DISCOVER', 'signalDate': '2026-11-13', 'cutoff': '14:30'})
+    meta.finish(job, now, status='COMPLETED', snapshotAt='2026-11-13T14:20:00',
+                candidates=[{'instrumentCode': '605058.SH'}])
+    calls = []
+    def fetch(code, start, end):
+        calls.append(code)
+        return {'instrumentCode': code, 'fromDate': str(start), 'throughDate': str(end), 'exDates': []}
+    automation = SimpleNamespace(clock=lambda: now, store=meta, service=SimpleNamespace(store=store))
+    worker = OvernightActionVerification(automation, SimpleNamespace(fetch=fetch))
+    worker.tick()
+    worker.tick()
+    assert calls == ['605058.SH', '600000.SH']

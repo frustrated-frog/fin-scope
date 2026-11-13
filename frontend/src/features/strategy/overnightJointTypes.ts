@@ -3,7 +3,7 @@ import type { OvernightDirectionForward, OvernightDirectionMetrics } from './ove
 import type { ErrorAudit } from './overnightErrorTypes';
 import type { SameDaySelection, SelectionForwardGroup } from './overnightSelectionTypes';
 import type { WeeklyDirectionAudit } from './weeklyDirectionTypes';
-import type { CandidateReadiness, CandidateSelectionAudit, CandidateForwardGroup } from './overnightCandidateTypes';
+import type { CandidateReadiness, CandidateSelectionAudit, CandidateForwardGroup, CandidateTraining, CandidateTrainingComparison } from './overnightCandidateTypes';
 
 export interface OvernightJointPrediction {
   status: string; adopted: boolean; qualified: boolean; artifactId: string;
@@ -32,7 +32,8 @@ export interface OvernightJointState {
       historical: { dayCount: number; accuracy: number; brierScore: number } }>;
     closeDirection?: { target?: string; data: { symbolCount: number }; audit: { historical: OvernightDirectionMetrics } } | null;
     candidateReadiness?: CandidateReadiness | null;
-    upSelection?: { protocol: string; audit: { modelFitThrough?: string; selection: CandidateSelectionAudit } } | null;
+    upSelection?: { protocol: string; audit: { modelFitThrough?: string; selection: CandidateSelectionAudit;
+      candidateTraining?: CandidateTraining; candidateComparison?: CandidateTrainingComparison } } | null;
     freshResearch?: { protocol: string; status: string;
       stockSelection?: { protocol?: string; status: string; historical?: SameDaySelection };
       indexAudit?: { status?: string; dayCount?: number; nonConstantFeatures?: number };

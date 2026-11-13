@@ -108,7 +108,8 @@ class OvernightJointWorker:
         if profile.mode == 'TAIL_ENTRY':
             cohorts = frozen_cohorts(meta, through.isoformat(), profile.cutoff)
             selection_rows, readiness = checkpoint.run('CANDIDATE_INPUTS', lambda: build_actual_candidate_panel(direction_rows,
-                self.automation.service.store, cohorts, profile.cutoff, through),
+                self.automation.service.store, cohorts, profile.cutoff, through,
+                annotate=ActionVerificationStore(self.automation.service.store).annotate),
                 ([], {'status': 'FAILED', 'computedAt': through.isoformat(), 'records': [], 'reason': '候选样本准备失败，后台有限重试'}))
             meta.put(f'{GAP_KEY}|{profile.cutoff}', readiness)
             if 'CANDIDATE_INPUTS' not in checkpoint.failed:

@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from finscope_market_data.overnight.joint_dataset import date_weights
 from finscope_market_data.overnight.joint_learning import TREE_PARAMETERS, booster, sigmoid
 from finscope_market_data.overnight.multiscale_features import FEATURES as HISTORY_FEATURES
+from finscope_market_data.overnight.candidate_training import RECIPE as CANDIDATE_RECIPE, candidate_training_probability
 
 BASE_RECIPE = 'BASE'
 MULTISCALE_RECIPE = 'MULTISCALE_RECENCY_V1'
@@ -69,8 +70,10 @@ def candidate_probabilities(model, features):
     x = (np.clip(np.asarray(features), model['clipLow'], model['clipHigh']) - model['mean']) / model['scale']
     prior = np.full(len(x), model['prior'])
     extra = HISTORY_CANDIDATES if model.get('recipe') == MULTISCALE_RECIPE else ()
+    candidate = model.get('actualCandidate')
+    specialized = {CANDIDATE_RECIPE: candidate_training_probability(candidate, features)} if candidate else {}
     if 'tree' not in model:
-        return {name: prior.copy() for name in CANDIDATES + extra}
+        return {name: prior.copy() for name in CANDIDATES + extra} | specialized
     width = model.get('shapeWidth', x.shape[1])
     session = sigmoid(x[:, :14] @ model['session']['coef'] + model['session']['intercept'])
     shape = sigmoid(x[:, :width] @ model['shape']['coef'] + model['shape']['intercept'])
@@ -80,4 +83,4 @@ def candidate_probabilities(model, features):
         fitted = model[key]
         linear = sigmoid(x @ fitted['linear']['coef'] + fitted['linear']['intercept'])
         result[name] = .5 * (linear + booster(fitted['tree']).predict(x, num_threads=2))
-    return result
+    return result | specialized
