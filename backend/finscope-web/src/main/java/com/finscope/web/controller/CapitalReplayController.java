@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 public class CapitalReplayController {
@@ -15,7 +16,7 @@ public class CapitalReplayController {
     private CapitalReplayService replay;
 
     @GetMapping("/api/market-intel/instruments/{id}/capital-replay")
-    public ApiResponse<CapitalReplayView> replay(@PathVariable Long id) {
-        return ApiResponses.success(replay.view(id));
+    public ApiResponse<CapitalReplayView> replay(@PathVariable Long id, @RequestParam(defaultValue = "true") boolean refresh) {
+        return ApiResponses.success(replay.view(id, refresh));
     }
 }

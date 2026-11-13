@@ -49,6 +49,10 @@ public class CapitalReplayService {
     private CapitalReplaySnapshotService snapshots;
 
     public CapitalReplayView view(Long instrumentId) {
+        return view(instrumentId, true);
+    }
+
+    public CapitalReplayView view(Long instrumentId, boolean refresh) {
         Instrument instrument = capital.stock(instrumentId);
         if (instrument.getMarket() == null || !List.of("SH", "SZ", "BJ").contains(instrument.getMarket())) {
             throw new IllegalArgumentException("资金复盘目前覆盖 A 股");
@@ -56,6 +60,9 @@ public class CapitalReplayService {
         LocalDate today = LocalDate.now(MARKET_ZONE);
         List<CapitalFlowPoint> stored = flowRepository.findRecentMinuteVersions(
                 instrumentId, today.minusDays(LOCAL_LOOKBACK_DAYS), today);
+        if (!refresh) {
+            return assemble(snapshots.read(instrumentId, today), stored);
+        }
         CapitalReplayData online;
         try {
             online = marketData.fetchCapitalReplay(instrument);

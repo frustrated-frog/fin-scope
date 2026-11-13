@@ -31,6 +31,20 @@ public class CapitalReplaySnapshotService {
     @Autowired
     private MarketDataSnapshotCodec codec;
 
+    /** Agent 只读查询：加载已有证据，不抓取、不更新快照。 */
+    public CapitalReplayData read(Long instrumentId, LocalDate today) {
+        List<CapitalFlowPoint> prices = new ArrayList<>();
+        List<CapitalFlowPoint> flows = new ArrayList<>();
+        for (LocalDate day = today.minusDays(14); !day.isAfter(today); day = day.plusDays(1)) {
+            repository.find(MarketDataCapability.CAPITAL_REPLAY_1M, instrumentId + ":" + day)
+                    .flatMap(codec::decodeCapitalReplay).ifPresent(saved -> {
+                        prices.addAll(saved.getPrices());
+                        flows.addAll(saved.getFlows());
+                    });
+        }
+        return new CapitalReplayData(prices, flows, List.of());
+    }
+
     // Only local reads and writes are serialized; no remote calls run under this lock.
     public synchronized CapitalReplayData retain(Long instrumentId, CapitalReplayData fresh, LocalDate today) {
         List<CapitalFlowPoint> prices = new ArrayList<>();

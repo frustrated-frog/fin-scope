@@ -22,6 +22,28 @@ import static org.mockito.ArgumentMatchers.*;
 
 class CapitalReplayServiceTest {
     @Test
+    void readOnlyReplayDoesNotFetchOrPersistMarketData() {
+        MarketIntelCapitalService capital = mock(MarketIntelCapitalService.class);
+        CapitalFlowRepository flows = mock(CapitalFlowRepository.class);
+        MarketDataGateway gateway = mock(MarketDataGateway.class);
+        CapitalReplaySnapshotService snapshots = mock(CapitalReplaySnapshotService.class);
+        CapitalReplayService service = new CapitalReplayService();
+        ReflectionTestUtils.setField(service, "capital", capital);
+        ReflectionTestUtils.setField(service, "flowRepository", flows);
+        ReflectionTestUtils.setField(service, "marketData", gateway);
+        ReflectionTestUtils.setField(service, "snapshots", snapshots);
+        Instrument stock = new Instrument();
+        stock.setMarket("SH");
+        when(capital.stock(40L)).thenReturn(stock);
+        when(flows.findRecentMinuteVersions(eq(40L), any(), any())).thenReturn(List.of());
+        when(snapshots.read(eq(40L), any())).thenReturn(new CapitalReplayData(List.of(
+                point("2026-11-11T09:31", 5297, null, "TENCENT")), List.of(), List.of()));
+        assertEquals(1, service.view(40L, false).getSessions().size());
+        verifyNoInteractions(gateway);
+        verify(snapshots, never()).retain(any(), any(), any());
+    }
+
+    @Test
     void onlineFailureRestoresSavedReplayBeforeFallingBackToSparseCapitalFacts() {
         MarketIntelCapitalService capital = mock(MarketIntelCapitalService.class);
         CapitalFlowRepository flows = mock(CapitalFlowRepository.class);
