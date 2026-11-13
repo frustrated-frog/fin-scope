@@ -759,17 +759,17 @@
   }
 }
 
-.agent-session-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--border); }
+.agent-session-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--line); }
 .agent-session-controls label { display: flex; align-items: center; gap: 8px; }
 .agent-session-controls select { max-width: min(420px, 55vw); }
 .agent-source-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-.agent-source-cards button { display: grid; gap: 5px; text-align: left; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); }
+.agent-source-cards button { display: grid; gap: 5px; text-align: left; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--ink); }
 .agent-source-cards small { color: var(--muted); }
 .agent-source-dialog { position: fixed; inset: 0; z-index: 100; background: #080e1dcc; display: grid; place-items: center; padding: 24px; }
-.agent-source-document { width: min(900px, 100%); max-height: 85vh; overflow: auto; border: 1px solid var(--border); border-radius: 18px; padding: 24px; background: var(--surface); color: var(--text); }
+.agent-source-document { width: min(900px, 100%); max-height: 85vh; overflow: auto; border: 1px solid var(--line); border-radius: 18px; padding: 24px; background: var(--surface); color: var(--ink); }
 .agent-source-document pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .agent-source-document > button { float: right; }
-.agent-evidence-fields > div { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 4fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.agent-evidence-fields > div { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 4fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .agent-evidence-fields dt { color: var(--muted); }
 .agent-evidence-fields dd { margin: 0; overflow-wrap: anywhere; }
 
@@ -780,3 +780,6 @@
 .agent-session-controls button { padding: 7px 12px; border: 1px solid var(--agent-border); border-radius: 9px; background: transparent; color: var(--agent-text); font-size: 12px; }
 .agent-session-controls button:hover:not(:disabled) { background: var(--agent-card-hover); }
 .agent-session-controls button:disabled { opacity: .5; }
+
+.agent-source-document > button { padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-2); color: var(--ink); }
+.agent-source-document > a { color: var(--accent-3); text-underline-offset: 3px; }
