@@ -39,6 +39,16 @@ function ReplayDesk({ session }: { session: ReplaySession }) {
   const tape = useRef<HTMLDivElement>(null);
   const [spanIndex, setSpanIndex] = useState(0);
   const [selection, setSelection] = useState<MinuteRange>(() => {
+    const query = new URLSearchParams(window.location.search);
+    const from = query.get('replayFrom');
+    const to = query.get('replayTo');
+    if (query.get('replayDate') === session.date && from && to && /^\d{2}:\d{2}$/.test(from) && /^\d{2}:\d{2}$/.test(to)) {
+      const lower = Number(from.slice(0, 2)) * 60 + Number(from.slice(3));
+      const upper = Number(to.slice(0, 2)) * 60 + Number(to.slice(3));
+      if (lower >= OPEN && upper <= CLOSE && lower <= upper) {
+        return { from: lower, to: upper };
+      }
+    }
     if (stages.length) {
       return stages[0];
     }
@@ -144,7 +154,7 @@ function ReplayDesk({ session }: { session: ReplaySession }) {
 
 export function CapitalReplayPanel({ instrument }: Props) {
   const [data, setData] = useState<CapitalReplay | null>(null);
-  const [date, setDate] = useState<string | null>(null);
+  const [date, setDate] = useState<string | null>(() => new URLSearchParams(window.location.search).get('replayDate'));
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +167,7 @@ export function CapitalReplayPanel({ instrument }: Props) {
     const request = new AbortController();
     setLoading(true);
     setError(null);
-    api<CapitalReplay>(`/api/market-intel/instruments/${instrument.id}/capital-replay`, { signal: request.signal })
+    api<CapitalReplay>(`/api/market-intel/instruments/${instrument.id}/capital-replay${attempt === 0 && new URLSearchParams(window.location.search).has('agentView') ? '?refresh=false' : ''}`, { signal: request.signal })
       .then((value) => {
         if (!request.signal.aborted) {
           setData(value);

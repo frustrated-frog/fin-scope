@@ -29,6 +29,7 @@ export type AgentMessageResult = {
   completion_reason: string | null;
   tools: AgentToolTrace[];
   clarification_id: string | null;
+  sources?: AgentSource[];
 };
 
 type SendAgentMessageInput = {
@@ -233,4 +234,90 @@ function clearStoredSession(): void {
   } catch {
     // Nothing else is required when browser storage is unavailable.
   }
+}
+
+export type AgentSource = {
+  call_id: string;
+  run_id: string;
+  label: string;
+  source_id?: string;
+  href?: string | null;
+};
+export type AgentSession = { session_id: string; title: string; updated_at: string };
+export type AgentJob = {
+  input_id: string;
+  status: 'running' | 'cancelling' | 'finished' | 'cancelled' | 'interrupted' | 'failed';
+  phase: string;
+  tools: (Omit<AgentToolTrace, 'status'> & { status: 'running' | 'succeeded' | 'failed' })[];
+  result: AgentMessageResult | null;
+};
+export type AgentHistory = {
+  turns: { run_id: string; input_id: string; ordinal: number; user: string; assistant?: string;
+    status: string; task_outcome: string; calls: { call_id: string; tool_name: string; artifact?: unknown; failure?: string }[] }[];
+  requests: { input_id: string; text: string; status: AgentJob['status']; result: AgentMessageResult | null }[];
+  before: number | null;
+};
+
+// 每个 Sidecar 各自保存会话, 切换服务不会把一个实例的会话发给另一个实例。
+export function selectedAgentSession(endpoint: AgentEndpoint): string | null {
+  try {
+    return localStorage.getItem(`${SESSION_STORAGE_KEY}:${endpoint.href}`)
+      ?? (localStorage.getItem('weavria.finscope.endpoint') === null ? localStorage.getItem(SESSION_STORAGE_KEY) : null);
+  } catch { return null; }
+}
+export function selectAgentSession(endpoint: AgentEndpoint, id: string | null) {
+  try {
+    const key = `${SESSION_STORAGE_KEY}:${endpoint.href}`;
+    if (id) {
+      localStorage.setItem(key, id);
+    }
+    else {
+      localStorage.removeItem(key);
+    }
+    localStorage.setItem('weavria.finscope.endpoint', endpoint.href);
+  } catch { /* 浏览器禁用存储时仍允许当前页对话。 */ }
+}
+export async function newAgentSession(endpoint: AgentEndpoint): Promise<string> {
+  const payload = await requestJson(`${endpoint.href}/api/sessions`, { method: 'POST' });
+  if (!isRecord(payload) || typeof payload.session_id !== 'string') {
+    throw new AgentApiError(200, '会话响应格式不正确');
+  }
+  selectAgentSession(endpoint, payload.session_id);
+  return payload.session_id;
+}
+export async function listAgentSessions(endpoint: AgentEndpoint, signal?: AbortSignal): Promise<AgentSession[]> {
+  const value = await requestJson(`${endpoint.href}/api/sessions`, { signal });
+  if (!Array.isArray(value)) {
+    throw new AgentApiError(200, '会话列表响应格式不正确');
+  }
+  return value as AgentSession[];
+}
+export async function loadAgentHistory(endpoint: AgentEndpoint, id: string, signal?: AbortSignal, before?: number): Promise<AgentHistory> {
+  const value = await requestJson(`${endpoint.href}/api/sessions/${encodeURIComponent(id)}/history${before ? `?before=${before}` : ''}`, { signal });
+  if (!isRecord(value) || !Array.isArray(value.turns) || !Array.isArray(value.requests)) {
+    throw new AgentApiError(200, '历史响应格式不正确');
+  }
+  return value as AgentHistory;
+}
+export function newAgentInputId() { return createInputId(); }
+export async function startAgentRequest(endpoint: AgentEndpoint, id: string, inputId: string, input: SendAgentMessageInput): Promise<AgentJob> {
+  return jobRequest(endpoint, id, inputId, '', { method: 'POST', signal: input.signal,
+    body: JSON.stringify({ input_id: inputId, text: input.text, context: input.context, clarification_id: input.clarificationId ?? null }) });
+}
+export async function readAgentRequest(endpoint: AgentEndpoint, id: string, inputId: string, signal?: AbortSignal) {
+  return jobRequest(endpoint, id, inputId, `/${encodeURIComponent(inputId)}`, { signal });
+}
+export async function cancelAgentRequest(endpoint: AgentEndpoint, id: string, inputId: string) {
+  return jobRequest(endpoint, id, inputId, `/${encodeURIComponent(inputId)}/cancel`, { method: 'POST' });
+}
+async function jobRequest(endpoint: AgentEndpoint, id: string, _inputId: string, suffix: string, options: RequestInit): Promise<AgentJob> {
+  const value = await requestJson(`${endpoint.href}/api/sessions/${encodeURIComponent(id)}/requests${suffix}`, options);
+  if (!isRecord(value) || typeof value.input_id !== 'string' || typeof value.status !== 'string'
+    || !Array.isArray(value.tools) || value.result !== null && !isMessageResult(value.result)) {
+    throw new AgentApiError(200, '执行状态响应格式不正确');
+  }
+  return value as AgentJob;
+}
+export async function readAgentSource(endpoint: AgentEndpoint, sessionId: string, source: AgentSource, signal?: AbortSignal): Promise<unknown> {
+  return requestJson(`${endpoint.href}/api/sessions/${encodeURIComponent(sessionId)}/sources/${encodeURIComponent(source.run_id)}/${encodeURIComponent(source.call_id)}`, { signal });
 }

@@ -78,7 +78,8 @@ export function MarketIntelView({
       .then((values) => {
         if (cancelled) return;
         setInstruments(values);
-        setInstrumentId((current) => current ?? values[0]?.id ?? null);
+        const linked = Number(new URLSearchParams(window.location.search).get('instrument'));
+        setInstrumentId((current) => current ?? values.find((item) => item.id === linked)?.id ?? values[0]?.id ?? null);
         if (!values.length) setLoading(false);
       })
       .catch((error) => {
@@ -132,7 +133,7 @@ export function MarketIntelView({
           const value = dragonTigerResult.value;
           setDragonTiger(value);
           setDragonTigerError(null);
-          if (shouldAutoRefreshDragonTiger(value, new Date())) {
+          if (!new URLSearchParams(window.location.search).has('agentView') && shouldAutoRefreshDragonTiger(value, new Date())) {
             void refreshMarketData(instrumentId, 'auto', version);
           }
         } else {

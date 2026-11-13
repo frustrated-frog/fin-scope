@@ -126,3 +126,15 @@ test('does not include an afternoon stage that only touches the tail boundary', 
   expect(stages).toHaveTextContent('14:30–14:35');
   expect(stages).not.toHaveTextContent('14:20–14:30');
 });
+
+test('opens the cited trading date and range using saved replay without refreshing it', async () => {
+  const previous = window.location.href;
+  window.history.replaceState({}, '', '?agentView=marketIntel&instrument=7&replayDate=2026-11-10&replayFrom=14:31&replayTo=14:33');
+  try {
+    render(<CapitalReplayPanel instrument={instrument} />);
+    expect(await screen.findByLabelText('区间数据')).toHaveTextContent('14:31–14:33');
+    expect(vi.mocked(api)).toHaveBeenCalledWith('/api/market-intel/instruments/7/capital-replay?refresh=false', expect.anything());
+  } finally {
+    window.history.replaceState({}, '', previous);
+  }
+});

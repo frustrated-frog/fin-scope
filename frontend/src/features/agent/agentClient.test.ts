@@ -64,3 +64,19 @@ function jsonResponse(payload: unknown, status = 200): Response {
     headers: { 'Content-Type': 'application/json' }
   });
 }
+
+it('keeps the same input id through asynchronous polling and server cancellation', async () => {
+  const { startAgentRequest, readAgentRequest, cancelAgentRequest } = await import('./agentClient');
+  const job = { input_id: 'stable-input', status: 'running', phase: '正在理解问题', tools: [], result: null };
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => jsonResponse({ ...job,
+    status: url.endsWith('/cancel') ? 'cancelled' : 'running' }));
+  vi.stubGlobal('fetch', fetchMock);
+  const endpoint = { href: 'https://agent.example' };
+  await startAgentRequest(endpoint, 's', 'stable-input', { text: '研究', context: {
+    schema_version: 1, surface: 'finscope_workspace', current_view: 'agent'
+  } });
+  await readAgentRequest(endpoint, 's', 'stable-input');
+  await cancelAgentRequest(endpoint, 's', 'stable-input');
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).input_id).toBe('stable-input');
+  expect(fetchMock.mock.calls[2][0]).toBe('https://agent.example/api/sessions/s/requests/stable-input/cancel');
+});

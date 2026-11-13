@@ -7,6 +7,7 @@ import { AgentView } from './AgentView';
 describe('AgentView', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])));
   });
 
   it('shows setup guidance when the Agent URL is absent', () => {
@@ -51,7 +52,7 @@ describe('AgentView', () => {
         tools: [{ call_id: 'call-1', tool_name: 'finscope.research.list', status: 'succeeded' }],
         clarification_id: null
       }));
-    vi.stubGlobal('fetch', fetchMock);
+    installSidecar(fetchMock);
     render(<AgentView agentUrl="https://agent.example/" />);
 
     await user.type(
@@ -66,7 +67,7 @@ describe('AgentView', () => {
       method: 'POST'
     }));
     const [, messageOptions] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(fetchMock.mock.calls[1][0]).toBe('https://agent.example/api/sessions/session-1/messages');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://agent.example/api/sessions/session-1/requests');
     expect(JSON.parse(String(messageOptions.body))).toEqual(expect.objectContaining({
       text: '概括最近的研究线索',
       clarification_id: null,
@@ -85,7 +86,7 @@ describe('AgentView', () => {
 
   it('hides internal source markers in answers while preserving Markdown and failed tool traces', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('fetch', vi.fn()
+    installSidecar(vi.fn()
       .mockResolvedValueOnce(jsonResponse({ session_id: 'session-1' }, 201))
       .mockResolvedValueOnce(jsonResponse({
         session_id: 'session-1',
@@ -120,7 +121,7 @@ describe('AgentView', () => {
 
   it('shows a Sidecar error inside the native conversation', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('fetch', vi.fn()
+    installSidecar(vi.fn()
       .mockResolvedValueOnce(jsonResponse({ session_id: 'session-1' }, 201))
       .mockResolvedValueOnce(jsonResponse({ detail: '上游模型暂不可用' }, 502)));
     render(<AgentView agentUrl="https://agent.example" />);
@@ -128,7 +129,7 @@ describe('AgentView', () => {
     await user.type(screen.getByRole('textbox'), '检查连接');
     await user.click(screen.getByRole('button', { name: '发送' }));
 
-    expect(await screen.findByText('任务未完成：上游模型暂不可用')).toBeInTheDocument();
+    expect(await screen.findByText('上游模型暂不可用')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('上次运行失败')).toBeInTheDocument());
   });
 });
@@ -139,3 +140,80 @@ function jsonResponse(payload: unknown, status = 200): Response {
     headers: { 'Content-Type': 'application/json' }
   });
 }
+
+// 独立模拟 Sidecar 的 GET 投影与异步 POST, 保留原测试对消息内容和 Markdown 的断言。
+function installSidecar(posts: ReturnType<typeof vi.fn>) {
+  let lastText = '', lastInput = '', result: Record<string, unknown> | null = null;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (options?.method === 'POST') {
+      const response: Response = await posts(url, options);
+      if (!url.endsWith('/requests') || !response.ok) {
+        return response;
+      }
+      const input = JSON.parse(String(options.body));
+      lastText = input.text; lastInput = input.input_id;
+      result = await response.json();
+      return jsonResponse({ input_id: lastInput, status: 'finished', result, tools: [], phase: '完成' }, 202);
+    }
+    if (url.endsWith('/history')) {
+      return jsonResponse({ turns: [], requests: result ? [{
+      input_id: lastInput, text: lastText, status: 'finished', result
+    }] : [], before: null });
+    }
+    return jsonResponse([]);
+  }));
+}
+
+describe('Agent execution and history', () => {
+  beforeEach(() => { localStorage.clear(); });
+  it('restores prior messages and opens the actual stored evidence without rerunning a tool', async () => {
+    localStorage.setItem('weavria.finscope.sessionId:https://agent.example', 'session-old');
+    const source = { call_id: 'read-1', run_id: 'run-old', label: '澳弘电子资金复盘', href: '?agentView=marketIntel&instrument=40&replayDate=2026-11-12&replayFrom=14%3A16&replayTo=14%3A20' };
+    const result = { session_id: 'session-old', run_id: 'run-old', status: 'completed', task_outcome: 'unverified', answer: '这里是旧回答。', error: null, completion_reason: null, tools: [], clarification_id: null, sources: [source] };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/sources/run-old/read-1')) {
+        return jsonResponse({ data: { date: '2026-11-12', largeNet: 10000 } });
+      }
+      if (url.endsWith('/history')) {
+        return jsonResponse({ turns: [], requests: [{ input_id: 'old', text: '分析澳弘电子', status: 'finished', result }], before: null });
+      }
+      return jsonResponse([{ session_id: 'session-old', title: '资金复盘', updated_at: '' }]);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AgentView agentUrl="https://agent.example" />);
+    expect(await screen.findByText('这里是旧回答。')).toBeInTheDocument();
+    expect(screen.getByText('分析澳弘电子')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /澳弘电子资金复盘/ }));
+    expect(await screen.findByRole('dialog', { name: '证据详情' })).toBeInTheDocument();
+    expect(await screen.findByText('10000')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '在业务页面查看' })).toHaveAttribute('href', source.href);
+    await userEvent.click(screen.getByRole('button', { name: '关闭证据' }));
+    await userEvent.click(screen.getByRole('button', { name: '新建对话' }));
+    expect(screen.queryByText('这里是旧回答。')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/requests'))).toBe(false);
+  });
+
+  it('reattaches to an active request and sends cancellation to the server', async () => {
+    localStorage.setItem('weavria.finscope.sessionId:https://agent.example', 'session-active');
+    let stopped = false;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/history')) {
+        return jsonResponse({ turns: [], requests: [{ input_id: 'pending', text: '分析资金', status: 'running', result: null }], before: null });
+      }
+      if (url.includes('/requests/pending')) {
+        if (url.endsWith('/cancel')) {
+          stopped = true;
+        }
+        return jsonResponse({ input_id: 'pending', status: stopped ? 'cancelled' : 'running', phase: '正在读取财报', tools: [{ call_id: 'r', tool_name: 'read_finscope_resource', status: 'running' }], result: null });
+      }
+      return jsonResponse([]);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AgentView agentUrl="https://agent.example" />);
+    expect(await screen.findByText('正在读取财报')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '停止运行' }));
+    expect(await screen.findByText('运行已停止。', {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/requests/pending/cancel'))).toBe(true);
+    expect(screen.getByRole('textbox')).toBeEnabled();
+  });
+});

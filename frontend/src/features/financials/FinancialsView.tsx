@@ -104,6 +104,13 @@ export function FinancialsView({
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const report = new URLSearchParams(window.location.search).get('report');
+    if (new URLSearchParams(window.location.search).get('agentView') === 'financials' && report && /^\d+$/.test(report)) {
+      void loadReport(Number(report));
+    }
+  }, []);
+
   async function loadReport(reportId: number, sequence = ++loadSequence.current) {
     setBusy(true);
     setError('');
@@ -114,6 +121,7 @@ export function FinancialsView({
       ]);
       if (sequence !== loadSequence.current) return;
       setView(detail);
+      setInstrumentId(detail.instrument.id);
       setDocuments(files);
       setReportYear(detail.report.periodEnd.slice(0, 4));
       setReportType(detail.report.reportType);

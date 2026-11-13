@@ -52,6 +52,8 @@ function isResearchRunActive(status?: string) {
 
 export default function App() {
   const [view, setView] = useState<View>(() => (
+    ['marketIntel', 'financials'].includes(new URLSearchParams(window.location.search).get('agentView') ?? '')
+      ? new URLSearchParams(window.location.search).get('agentView') as View :
     new URLSearchParams(window.location.search).has('reactionEvent') || new URLSearchParams(window.location.search).has('reactionSample')
       ? 'investmentObservation' : new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
   ));
