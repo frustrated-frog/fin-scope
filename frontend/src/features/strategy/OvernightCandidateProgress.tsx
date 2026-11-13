@@ -49,8 +49,8 @@ export function OvernightCandidateProgress({ state }: { state: OvernightJointSta
             <p><b>{readiness.support.status === 'SHIFT_DETECTED' ? '候选特征与训练池存在明显差异' : '候选与训练池对照'}</b></p>
             {readiness.support.features.length ? <>
               <p>{readiness.support.dayCount} 个完整日期中，{readiness.support.outsidePoolRows} / {readiness.support.candidateRows} 条候选来自原训练池之外。按日期等权比较：</p>
-              <div className="overnight-candidate-audit-table"><table><caption>特征中位数 · 同日期间</caption>
-                <thead><tr><th>特征</th><th>训练池</th><th>实际候选</th><th>候选超出训练池常见区间</th></tr></thead>
+              <div className="overnight-candidate-audit-table overnight-candidate-support-table" tabIndex={0} role="region" aria-label="候选特征差异，可横向滚动"><table><caption>特征中位数 · 同日期间</caption>
+                <thead><tr><th>特征</th><th>训练池</th><th>实际候选</th><th>常见区间外占比</th></tr></thead>
                 <tbody>{readiness.support.features.map(row => <tr key={row.code}><th>{featureName(row.code)}</th>
                   <td>{featureValue(row.code, row.poolMedian)}</td><td>{featureValue(row.code, row.candidateMedian)}</td>
                   <td>{percent(row.outsideCentralRangeRate)}</td></tr>)}</tbody>

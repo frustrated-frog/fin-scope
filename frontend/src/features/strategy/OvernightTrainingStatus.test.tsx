@@ -38,3 +38,11 @@ test('model readiness needs the current policy and a complete artifact', async (
   expect(screen.getByText('0 / 1 个时点新版就绪')).toBeVisible();
   expect(screen.queryByText(/14:30/)).not.toBeInTheDocument();
 });
+
+test('missing stage reports stay unknown instead of displaying zero finished work', async () => {
+  render(<OvernightTrainingStatus state={{ ...state, jobs: [{ ...state.jobs[1], componentStatus: undefined,
+    progressAt: undefined, trainingStage: undefined }] }} mode="TAIL_ENTRY" />);
+  await userEvent.click(screen.getByText('训练状态'));
+  expect(screen.getByText('等待训练阶段回报。')).toBeVisible();
+  expect(screen.queryByText(/已结束 0/)).not.toBeInTheDocument();
+});

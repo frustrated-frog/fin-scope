@@ -27,7 +27,7 @@ export function OvernightTrainingStatus({ state, mode }: { state: OvernightJoint
     {rows.map(row => <div className="overnight-direction-summary-row" key={row.cutoff}>
       <b>{row.cutoff} · {row.status}</b>
       <span>{row.model ? row.ready ? '当前使用新版模型' : '当前保留上一版本' : '尚无可用模型'}</span>
-      {row.job?.status === 'RUNNING' && <small>已结束 {row.done} 项检查与训练。
+      {row.job?.status === 'RUNNING' && <small>{row.job.componentStatus && <>已结束 {row.done} 项检查与训练。</>}
         {row.job.progressAt ? `最近进度 ${row.job.progressAt.replace('T', ' ').slice(0, 19)}` : '等待训练阶段回报。'}</small>}
       {row.model && <small>当前模型生成于 {row.model.createdAt.replace('T', ' ').slice(0, 16)} · 样本结果截至 {row.model.labelsThrough.slice(0, 10)}</small>}
     </div>)}
