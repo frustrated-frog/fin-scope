@@ -20,6 +20,8 @@
 }
 
 .app-shell[data-view="agent"] .topbar {
+  margin-inline: 0;
+  padding-inline: clamp(16px, 2.6vw, 36px);
   border-bottom-color: rgba(89, 139, 177, .17);
   background: rgba(229, 238, 247, .7);
   backdrop-filter: blur(22px) saturate(125%);
