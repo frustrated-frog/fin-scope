@@ -16,6 +16,7 @@ from finscope_market_data.overnight.market_research import attach_market_directi
 from finscope_market_data.overnight.tail_ranking_research import attach_tail_ranking
 from finscope_market_data.overnight.fresh_research import attach_fresh_research
 from finscope_market_data.overnight.index_history import KEY as INDEX_HISTORY_KEY
+from finscope_market_data.overnight.production_direction import activate_direction, KEY as PRODUCTION_KEY
 
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class OvernightJointResearch:
             logger.exception('Tail ranking attachment failed; preserving main direction')
             report['closeDirection']['tailRanking'] = {'status': 'UNAVAILABLE', 'validated': False,
                 'reason': '独立排序暂不可用，主预测保留'}
+        activate_direction(report, self.meta.get(PRODUCTION_KEY) or {})
         x = current_features(grouped, request.signal_date, request.cutoff, request.instrument_code, artifact['context'])
         if x is None or not report['targets']:
             return
@@ -102,7 +104,7 @@ class OvernightJointResearch:
         gate = next((g for g in monitor.get('groups', []) if g['key'] == key), {}) if compatible else {}
         forecast = direction_prediction(fitted, x, gate.get('calibrationGate'))
         report['closeDirection'] = {**forecast, 'artifactId': artifact['id'], 'trainedAt': artifact['createdAt'],
-            'trainingThrough': fitted['audit'].get('trainingThrough'),
+            'trainingThrough': forecast['modelFitThrough'],
             'dataFingerprint': fitted['data']['fingerprint'], 'forwardDays': gate.get('dayCount', 0),
             'forwardStatus': gate.get('status', 'ACCUMULATING'),
             'validated': bool((report.get('jointResearch') or {}).get('cohort') == 'AUTOMATIC' and gate.get('eligible')),
@@ -121,6 +123,8 @@ class OvernightJointResearch:
                 'contextDirectionForward': self.meta.get('contextDirectionForward'),
                 'errorAudit': self.meta.get('errorAudit'),
                 'weeklyDirectionAudit': self.meta.get('weeklyDirectionAudit'),
+                'candidateForward': self.meta.get('candidateForward'),
+                'productionDirection': self.meta.get(PRODUCTION_KEY),
                 'marketForward': self.meta.get('marketForward'),
                 'freshForward': self.meta.get('freshForward'),
                 'selectionForward': self.meta.get('selectionForward'),

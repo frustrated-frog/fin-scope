@@ -80,6 +80,9 @@ def test_direction_can_learn_both_classes_and_calibration_preserves_order(direct
     prediction = direction_prediction(portable, direction_rows[0]['features'])
     assert prediction['status'] == 'SHADOW'
     assert prediction['upProbability'] + prediction['notUpProbability'] == pytest.approx(1)
+    assert prediction['modelFitThrough'] == direction_fit['audit']['selectionThrough']
+    assert prediction['initialTrainingThrough'] == direction_fit['audit']['trainingThrough']
+    assert prediction['modelFitThrough'] > prediction['initialTrainingThrough']
 
 
 def test_direction_model_selection_and_calibration_never_see_future(direction_rows, direction_fit):
@@ -103,6 +106,15 @@ def test_single_class_does_not_fabricate_discrimination(direction_rows):
     assert fitted['model']['selected'] == 'PRIOR'
     assert fitted['model']['calibration']['status'] == 'NOT_FITTED'
     assert direction_prediction({**fitted, 'audit': {'historical': {}}}, rows[0]['features'])['direction'] == 'NOT_UP'
+    assert direction_prediction({**fitted, 'audit': {'historical': {}}}, rows[0]['features'])['assessmentStatus'] == 'BASELINE_ONLY'
+
+
+def test_old_artifacts_resolve_final_refit_without_rewriting_initial_training(direction_fit, direction_rows):
+    legacy = deepcopy(direction_fit)
+    del legacy['audit']['modelFitThrough']
+    forecast = direction_prediction(legacy, direction_rows[0]['features'])
+    assert forecast['modelFitThrough'] == legacy['audit']['selectionThrough']
+    assert legacy['audit']['trainingThrough'] < forecast['modelFitThrough']
 
 
 def test_sparse_latest_day_cannot_shift_training_or_daily_evaluation(direction_rows, direction_fit):

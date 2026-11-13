@@ -14,7 +14,7 @@ const audit: WeeklyDirectionAudit = { protocol: 'overnight-weekly-diagnostics-v1
     missing: { MISSING_PREDICTION: 1 }, upDetection: { metrics: score, noUpDays: 1, pairedDays: 0,
       daily: [{ ...score, signalDate: '2026-11-11' }], comparisons: { PRIMARY: null }, missedExampleTotal: 2,
       missedExamples: [{ signalDate: '2026-11-11', instrumentCode: '600001.SH', probability: .4, rawProbability: .4,
-        calibratedProbability: .3, trainedAt: '2026-11-10T08:00:00', trainingThrough: null, indexReturn: null }] } }],
+        calibratedProbability: .3, trainedAt: '2026-11-10T08:00:00', modelFitThrough: null, indexReturn: null }] } }],
 };
 
 test('always-down high accuracy is shown beside missed winners and no fabricated precision', async () => {
@@ -25,7 +25,7 @@ test('always-down high accuracy is shown beside missed winners and no fabricated
   expect(screen.getByText('全判不涨 88.9%')).toBeVisible();
   expect(screen.getByText(/已核验 20 \/ 21 条/)).toBeVisible();
   await userEvent.click(screen.getByText('逐日结果与漏判分析'));
-  expect(screen.getByText(/训练样本截止 旧档案未记录/)).toBeVisible();
+  expect(screen.getByText(/最终拟合截止 旧档案未明确记录/)).toBeVisible();
   await userEvent.click(screen.getByText('1 / 1 个已结束尾盘窗口未完整完成'));
   expect(screen.getByText(/调度间隔 1140 秒/)).toBeVisible();
 });
@@ -37,4 +37,17 @@ test('separates holdings and hides incompatible evidence', () => {
   expect(screen.queryByText(/未完整完成/)).not.toBeInTheDocument();
   rerender(<OvernightWeeklyPerformance audit={{ ...audit, target: 'old' }} mode="TAIL_ENTRY" />);
   expect(screen.queryByRole('region', { name: '本周看涨识别' })).not.toBeInTheDocument();
+});
+
+test('shows adaptive paired evidence even when index evidence is missing', async () => {
+  const group = audit.groups[0];
+  render(<OvernightWeeklyPerformance audit={{ ...audit, groups: [{ ...group, upDetection: { ...group.upDetection,
+    comparisonPairs: { ADAPTIVE: { pairedDays: 2, primary: score, challenger: { ...score, upPrecision: .6, upRecall: .75 } },
+      INDEX: { pairedDays: 0, primary: null, challenger: null } } } }] }} mode="TAIL_ENTRY" />);
+  await userEvent.click(screen.getByText('逐日结果与漏判分析'));
+  expect(screen.getByText('滚动择模')).toBeVisible();
+  expect(screen.getByText('2 日')).toBeVisible();
+  expect(screen.getByText('— / 60.0%')).toBeVisible();
+  expect(screen.getByText('0.0% / 75.0%')).toBeVisible();
+  expect(screen.getAllByText('— / —')).toHaveLength(2);
 });

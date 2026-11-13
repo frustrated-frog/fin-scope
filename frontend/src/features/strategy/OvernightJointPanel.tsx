@@ -8,6 +8,8 @@ const targetName = (target: string) => target === 'OPEN' ? '次日开盘' : targ
 const labels: Record<string, string> = {
   ACCUMULATING: '积累对照', QUALIFIED: '通过对照', CHECKPOINT_FAILED: '未通过对照', MONITORING_DEGRADED: '近期退化，已回退',
 };
+const componentNames: Record<string, string> = { TRADE: '收益学习', DIRECTION: '涨跌学习', CONTEXT: '环境增强',
+  CANDIDATE_INPUTS: '候选样本', CANDIDATE: '候选择模', RANKING: '候选排序', MARKET: '市场对照', FRESH: '近期方向模型' };
 
 export function OvernightJointPanel({ state, mode }: { state?: OvernightJointState; mode: OvernightMode }) {
   if (!state) {
@@ -17,7 +19,9 @@ export function OvernightJointPanel({ state, mode }: { state?: OvernightJointSta
   const groups = state.forward?.groups.filter(group => group.mode === mode) ?? [];
   const active = groups.filter(group => group.eligible && models.some(model =>
     model.profile.cutoff === group.cutoff && model.profile.costBps === group.costBps)).length;
-  const failed = state.jobs.find(job => job.mode === mode && ['FAILED', 'INSUFFICIENT_DATA'].includes(job.status));
+  const modeJobs = state.jobs.filter(job => job.mode === mode);
+  const failedJobs = modeJobs.filter((job, index) => modeJobs.findIndex(row => row.cutoff === job.cutoff) === index
+    && ['FAILED', 'INSUFFICIENT_DATA'].includes(job.status));
   const title = !models.length ? '公共样本正在积累' : active ? `${active} 个退出时点通过前瞻对照` : '联合模型正在并行验证';
   return <section className="overnight-joint" aria-label="联合预测能力">
     <header><div><span className="overnight-joint-label">预测能力</span><h5>{title}</h5></div>
@@ -43,7 +47,11 @@ export function OvernightJointPanel({ state, mode }: { state?: OvernightJointSta
       {models.map(model => <div className="overnight-joint-model" key={model.id}><b>{model.profile.cutoff} · {model.targets.length ? `${model.data.symbolCount} 只股票参与收益学习` : '收益模型仍在准备'}</b>
         <span>{model.targets.length ? `${model.data.dayCount} 个收益信号日 · ` : ''}数据至 {model.labelsThrough.slice(0, 10)}</span>
         <small>最近训练 {model.createdAt.slice(0, 16).replace('T', ' ')}。历史检验成绩仅供诊断。</small></div>)}
-      {failed && <p role="status">{failed.reason ?? '联合训练尚未完成，后台将继续积累。'}</p>}
+      {failedJobs.map(failed => <div role="status" key={failed.key}><p>{failed.cutoff && `${failed.cutoff} · `}{failed.reason ?? '联合训练尚未完成，后台将继续积累。'}</p>
+        {!!failed.failedComponents?.length && <p>待恢复：{failed.failedComponents.map(name => componentNames[name] ?? name).join('、')}。
+          {failed.attempts != null && `已尝试 ${failed.attempts} / 3 次。`}
+          {failed.attempts != null && failed.attempts >= 3 ? '本轮自动重试已用尽，新的数据版本将重新触发训练。' : '重试复用已成功的部分。'}
+          {models.some(model => model.profile.cutoff === failed.cutoff) ? '继续使用上次完整模型。' : '等待首个完整模型。'}</p>}</div>)}
       <p>{state.scope ?? '从已有日线缓存按板块均衡选取固定股票池，保留后续缺失成员。'}</p>
       <p>{state.limitation ?? '公共样本池尚不代表历史全市场，不能消除退市与覆盖偏差。'} 行业环境和公司行为尚未完整核验。</p>
       {state.coverageAt && <small>覆盖统计更新于 {state.coverageAt.slice(0, 16).replace('T', ' ')} · 训练避开 13:00—18:00</small>}

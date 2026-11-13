@@ -15,7 +15,8 @@ test('shows actual training freshness without claiming an improvement or inventi
   const { rerender } = render(<OvernightFreshProgress state={state} mode="TAIL_ENTRY" />);
   expect(screen.getByText(/新方案学习至 2026-11-05，旧方案至 2026-09-29/)).toBeVisible();
   expect(screen.getAllByText('等待真实次日结果')).toHaveLength(2);
-  expect(screen.getByText('数据积累中')).toBeVisible();
+  expect(screen.getAllByText('数据积累中')).toHaveLength(2);
+  expect(screen.getByText('近期预测重新择模')).toBeVisible();
   expect(screen.queryByText(/0.0%/)).not.toBeInTheDocument();
   rerender(<OvernightFreshProgress state={state} mode="AFTER_CLOSE_HOLDING" />);
   expect(screen.queryByRole('region', { name: '新训练方案对照' })).not.toBeInTheDocument();
@@ -31,7 +32,7 @@ test('displays paired real evidence and rejects incompatible versions', () => {
     cutoff: '14:30', group: 'FRESH', dayCount: 2, pairedCount: 6, scheduledCount: 9,
     metrics: { accuracy: .5, comparisons: { MATCHED_BASELINE: { accuracy: .6667 } } } }] };
   const { rerender } = render(<OvernightFreshProgress state={{ ...state, freshForward: result }} mode="TAIL_ENTRY" />);
-  expect(screen.getByText(/50.0% \/ 66.7%/)).toHaveTextContent('已配对 6 / 9 条 · 尚未证明有效');
+  expect(screen.getByText(/50.0% \/ 66.7%/)).toHaveTextContent('已配对 6 / 9 条 · 此处仅为对照统计');
   rerender(<OvernightFreshProgress state={{ ...state, freshForward: { ...result, protocol: 'old' } }} mode="TAIL_ENTRY" />);
   expect(screen.queryByText(/50.0%/)).not.toBeInTheDocument();
 });

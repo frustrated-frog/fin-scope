@@ -66,7 +66,7 @@ def close_outcome(grouped, signal_day, through, cutoff='15:00', reference_price=
 def build_direction_panel(store, members, cutoff, through):
     rows, quality = [], Counter()
     for code in sorted(set(members)):
-        grouped = group_bars(store.bars(code, through))
+        grouped = group_bars(getattr(store, 'research_bars', store.bars)(code, through))
         complete = {day for day, bars in grouped.items() if features(bars, '15:00') is not None}
         for day in sorted(grouped):
             actual = close_outcome(grouped, day, through, cutoff)

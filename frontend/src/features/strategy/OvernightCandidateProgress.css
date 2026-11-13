@@ -1,0 +1,21 @@
+.overnight-candidate-progress { margin: 20px 0; border-top: 1px solid var(--line); background: transparent; }
+.overnight-candidate-progress h5 { font-size: 15px; margin: 18px 0 8px; }
+.overnight-candidate-progress article { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.overnight-candidate-progress article > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; font-size: 12px; }
+.overnight-candidate-progress header span { color: var(--overnight-amber); }
+.overnight-candidate-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; list-style: none; gap: 12px; margin: 20px 0; }
+.overnight-candidate-stages li { display: grid; gap: 8px; padding-left: 12px; border-left: 1px solid var(--overnight-blue); }
+.overnight-candidate-stages span, .overnight-candidate-stages small { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.overnight-candidate-stages strong { font: 500 17px ui-monospace, "SFMono-Regular", monospace; font-variant-numeric: tabular-nums; }
+.overnight-candidate-progress details > summary { padding: 8px 0; font-size: 12px; cursor: pointer; }
+.overnight-candidate-progress summary:focus-visible { outline: 2px solid var(--overnight-blue); outline-offset: 3px; }
+.overnight-candidate-audit-table { overflow-x: auto; }
+.overnight-candidate-audit-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.overnight-candidate-audit-table caption { text-align: left; padding: 12px 0; color: var(--muted); }
+.overnight-candidate-audit-table th, .overnight-candidate-audit-table td { text-align: right; padding: 10px 4px; border-bottom: 1px solid var(--line); font-weight: 400; }
+.overnight-candidate-audit-table th:first-child { text-align: left; }
+@media (max-width: 420px) {
+  .overnight-candidate-stages { gap: 8px; }
+  .overnight-candidate-stages strong { font-size: 14px; }
+  .overnight-candidate-stages li { padding-left: 8px; }
+}

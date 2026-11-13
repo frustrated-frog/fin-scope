@@ -3,7 +3,7 @@ import type { WeeklyDirectionAudit } from './weeklyDirectionTypes';
 import './OvernightWeeklyPerformance.css';
 
 const percent = (n?: number | null) => n == null ? '—' : `${(n * 100).toFixed(1)}%`;
-const modelNames: Record<string, string> = { PRIMARY: '当时主判断', FRESH: '最新样本', CALIBRATED: '概率校准', INDEX: '指数增强' };
+const modelNames: Record<string, string> = { PRIMARY: '当时主判断', FRESH: '最新样本', CALIBRATED: '概率校准', INDEX: '指数增强', ADAPTIVE: '滚动择模' };
 
 export function OvernightWeeklyPerformance({ audit, mode }: { audit?: WeeklyDirectionAudit; mode: OvernightMode }) {
   if (!audit || audit.protocol !== 'overnight-weekly-diagnostics-v1' || audit.target !== 'NEXT_SESSION_CLOSE_VS_DECISION_PRICE') {
@@ -27,6 +27,7 @@ export function OvernightWeeklyPerformance({ audit, mode }: { audit?: WeeklyDire
       const score = detail.metrics;
       return <article key={group.key}>
         <header><h5>{group.cutoff} → 次日收盘</h5><span>{group.completeDays} 个完整日期 · 尚在验证</span></header>
+        {!!detail.baselineOnlyCount && <p className="overnight-direction-status">其中 {detail.baselineOnlyCount} 条仅为历史比例对照，缺少个股区分证据；下方保留原始结果，不视作有效选股能力。</p>}
         <dl className="overnight-weekly-metrics">
           <div><dt>看涨命中率</dt><dd>{percent(score?.upPrecision)}</dd><small>看涨后，实际上涨的比例</small></div>
           <div><dt>上涨识别率</dt><dd>{percent(score?.upRecall)}</dd><small>实际上涨中，提前识别的比例</small></div>
@@ -42,16 +43,26 @@ export function OvernightWeeklyPerformance({ audit, mode }: { audit?: WeeklyDire
             <thead><tr><th>日期</th><th>看涨</th><th>命中</th><th>漏判上涨</th><th>全判不涨</th></tr></thead>
             <tbody>{detail.daily.map(row => <tr key={row.signalDate}><th>{row.signalDate.slice(5)}</th><td>{row.predictedUpCount}</td><td>{row.trueUpCount}</td><td>{row.missedUpCount}</td><td>{percent(row.alwaysNotUpAccuracy)}</td></tr>)}</tbody>
           </table></div>
-          <p>新旧方案在同一批完整名单上比较：{detail.pairedDays} 日。缺少任一方案的日期不参与对照。</p>
-          <div className="overnight-weekly-table"><table><caption>独立对照 · 不自动切换主判断</caption>
+          {detail.comparisonPairs ? <>
+            <p>每个方案单独与当时主判断配对，只比较双方都有完整名单的日期。指数缺失不影响其他方案的对照。</p>
+            <div className="overnight-weekly-table"><table><caption>同名单对照 · 主判断 / 新方案</caption>
+              <thead><tr><th>方案</th><th>完整日期</th><th>看涨命中</th><th>上涨识别</th></tr></thead>
+              <tbody>{Object.entries(detail.comparisonPairs).map(([key, pair]) => <tr key={key}>
+                <th>{modelNames[key] ?? key}</th><td>{pair.pairedDays} 日</td>
+                <td>{percent(pair.primary?.upPrecision)} / {percent(pair.challenger?.upPrecision)}</td>
+                <td>{percent(pair.primary?.upRecall)} / {percent(pair.challenger?.upRecall)}</td></tr>)}</tbody>
+            </table></div>
+            <p>周报用于复盘；实际启用还需通过独立的前瞻验收与近期监测。</p>
+          </> : <><p>旧版共同样本对照：{detail.pairedDays} 日。缺少任一方案的日期不参与对照。</p>
+          <div className="overnight-weekly-table"><table><caption>旧版独立对照</caption>
             <thead><tr><th>方案</th><th>看涨命中</th><th>上涨识别</th><th>看涨覆盖</th></tr></thead>
-            <tbody>{Object.entries(modelNames).map(([key, label]) => <tr key={key}><th>{label}</th><td>{percent(detail.comparisons[key]?.upPrecision)}</td><td>{percent(detail.comparisons[key]?.upRecall)}</td><td>{percent(detail.comparisons[key]?.predictedUpRate)}</td></tr>)}</tbody>
-          </table></div>
+            <tbody>{Object.entries(modelNames).filter(([key]) => key !== 'ADAPTIVE').map(([key, label]) => <tr key={key}><th>{label}</th><td>{percent(detail.comparisons[key]?.upPrecision)}</td><td>{percent(detail.comparisons[key]?.upRecall)}</td><td>{percent(detail.comparisons[key]?.predictedUpRate)}</td></tr>)}</tbody>
+          </table></div></>}
           <p>漏判上涨记录 {detail.missedExampleTotal} 条，按日期展示最近 {detail.missedExamples.length} 条。以下是当时保存的输入，不证明因果。</p>
           {detail.missedExamples.map(row => <div className="overnight-weekly-example" key={`${row.signalDate}|${row.instrumentCode}`}>
             <b>{row.signalDate.slice(5)} · {row.instrumentCode}</b><span>当时上涨概率 {percent(row.probability)}</span>
             <small>原始 {percent(row.rawProbability)} / 校准 {percent(row.calibratedProbability)} · 判断前指数均涨跌 {percent(row.indexReturn)}</small>
-            <small>模型生成 {row.trainedAt?.replace('T', ' ').slice(0, 16) ?? '未记录'} · 训练样本截止 {row.trainingThrough?.slice(0, 10) ?? '旧档案未记录'}</small>
+            <small>模型生成 {row.trainedAt?.replace('T', ' ').slice(0, 16) ?? '未记录'} · 最终拟合截止 {row.modelFitThrough?.slice(0, 10) ?? '旧档案未明确记录'}</small>
           </div>)}
         </details>
       </article>;

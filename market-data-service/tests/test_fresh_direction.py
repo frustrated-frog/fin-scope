@@ -77,3 +77,31 @@ def test_rolling_calibration_rejects_in_sample_or_future_results(fresh_fit):
 
 def test_fresh_research_keeps_insufficient_history_explicit(direction_rows):
     assert fit_fresh_direction(direction_rows[:120 * 20], '2026-07-01T12:00:00', '14:30') is None
+
+
+def test_adaptive_recipe_can_leave_legacy_prior_and_uses_only_past_predictions(direction_rows, monkeypatch):
+    from finscope_market_data.overnight import fresh_direction
+    original = fresh_direction.fit_direction_before
+    def always_prior(*args, **kwargs):
+        fitted = original(*args, **kwargs)
+        if fitted:
+            fitted['model']['selected'] = 'PRIOR'
+        return fitted
+    monkeypatch.setattr(fresh_direction, 'fit_direction_before', always_prior)
+    result = fit_fresh_direction(direction_rows, '2026-07-01T12:00:00', '15:00', with_adaptive=True, include_checks=True)
+    adaptive = result['adaptive']
+    assert result['model']['selected'] == 'PRIOR'
+    assert adaptive['model']['selected'] != 'PRIOR'
+    assert adaptive['audit']['historical']['accuracy'] > .8
+    assert result['audit']['folds'][0]['adaptiveSelected'] == 'PRIOR'
+    for fold in result['audit']['folds']:
+        selection = fold['adaptiveSelection']
+        assert selection['selectionThrough'] is None or selection['selectionThrough'] < fold['predictionAt']
+    through = result['checks'][-40]['predictionAt']
+    first = fresh_direction.adaptive_recipe(result['checks'], through)
+    changed = deepcopy(result['checks'])
+    for row in changed:
+        if row['exitAt'] >= through:
+            row['actualReturn'] *= -100
+            row['probabilities'] = {key: .99 for key in row['probabilities']}
+    assert fresh_direction.adaptive_recipe(changed, through) == first

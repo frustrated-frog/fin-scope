@@ -18,6 +18,21 @@ test('separates market coverage from validated forecasting ability and folds det
   expect(screen.getByText(/同一天的多只股票合计为一天/)).toBeVisible();
 });
 
+test('keeps failures of another cutoff visible and distinguishes retry exhaustion', async () => {
+  const value: OvernightJointState = { ...state, jobs: [
+    { key: 'new', mode: 'TAIL_ENTRY', cutoff: '14:45', status: 'COMPLETED' },
+    { key: 'failed', mode: 'TAIL_ENTRY', cutoff: '14:30', status: 'FAILED', attempts: 3,
+      failedComponents: ['CANDIDATE'], reason: '部分模型失败' },
+    { key: 'old', mode: 'TAIL_ENTRY', cutoff: '14:45', status: 'FAILED', failedComponents: ['FRESH'] },
+  ] };
+  render(<OvernightJointPanel state={value} mode="TAIL_ENTRY" />);
+  await userEvent.click(screen.getByText('样本范围与新旧模型对照'));
+  expect(screen.getByText('14:30 · 部分模型失败')).toBeVisible();
+  expect(screen.getByText(/待恢复：候选择模/)).toBeVisible();
+  expect(screen.getByText(/本轮自动重试已用尽/)).toBeVisible();
+  expect(screen.queryByText(/待恢复：近期方向模型/)).not.toBeInTheDocument();
+});
+
 test('shows paired forward evidence only for the selected mode', async () => {
   const value: OvernightJointState = { ...state, readySymbols: 120,
     models: [{ id: 'one', createdAt: '2026-10-05T10:00:00', labelsThrough: '2026-09-30T15:00:00',

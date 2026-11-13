@@ -11,20 +11,34 @@ from finscope_market_data.overnight.direction_learning import direction_predicti
 from finscope_market_data.overnight.fresh_direction import PROTOCOL, MIN_RESEARCH_DAYS, TEST_DAYS, fit_fresh_direction
 from finscope_market_data.overnight.index_history import FEATURES as INDEX_FEATURES, index_features, paired_index_rows, history_fingerprint
 from finscope_market_data.overnight.selection_research import train_index_only, attach_selection
+from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
-GROUPS = ('FRESH', 'CALIBRATED', 'INDEX')
+GROUPS = ('FRESH', 'CALIBRATED', 'INDEX', 'ADAPTIVE')
 INDEX_CANDIDATE = 'SHAPE_ENSEMBLE'
 logger = logging.getLogger(__name__)
 
 
-def train_fresh_research(rows, history, through, cutoff):
-    result = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
-    fitted = fit_fresh_direction(rows, through, cutoff)
-    if fitted is None:
-        return result
-    fitted['features'] = list(FEATURES)
-    result['models']['FRESH'] = fitted
+def train_fresh_research(rows, history, through, cutoff, *, previous=None):
+    result = previous or {'protocol': PROTOCOL, 'target': TARGET, 'status': 'ACCUMULATING', 'models': {}, 'indexAudit': {}}
+    if not result['models'].get('FRESH'):
+        fitted = fit_fresh_direction(rows, through, cutoff, with_adaptive=True)
+        if fitted is None:
+            return result
+        fitted['features'] = list(FEATURES)
+        result['models']['FRESH'] = fitted
+        adaptive = fitted.pop('adaptive')
+        adaptive['features'] = list(FEATURES)
+        result['models']['ADAPTIVE'] = adaptive
     result['status'] = 'SHADOW'
+    try:
+        return train_index_research(result, rows, history, through, cutoff)
+    except Exception:
+        logger.exception('Index training failed; retaining fresh and adaptive checkpoints')
+        result.update(status='PARTIAL', indexAudit={'status': 'FAILED', 'reason': '指数训练失败，保留基础训练结果并重试'})
+        return result
+
+
+def train_index_research(result, rows, history, through, cutoff):
     base, enhanced = paired_index_rows(rows, history)
     result['indexAudit'] = {'rowCount': len(base), 'dayCount': len({r['signalDate'] for r in base}),
         'featureCount': len(INDEX_FEATURES), 'scope': 'PREVIOUS_COMPLETED_INDEX_DAYS',
@@ -61,6 +75,7 @@ def train_fresh_research(rows, history, through, cutoff):
             result['models']['INDEX_ONLY'] = index_only
     except Exception:
         logger.exception('Index-only experiment failed; preserving existing freshness models')
+        result['status'] = 'PARTIAL'
         result['stockSelection'] = {'status': 'FAILED', 'reason': '仅指数对照训练失败，保留已有模型'}
     return result
 
@@ -72,13 +87,18 @@ def attach_fresh_research(report, request, grouped, artifact, history):
     local = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
     timely = artifact.get('createdAt', '9999') < decision and artifact.get('labelsThrough', '9999') < decision
     models = research.get('models') or {}
-    index = index_features(history, request.signal_date)
+    try:
+        index = index_features(history, request.signal_date)
+    except (TypeError, ValueError):
+        logger.exception('Index inputs invalid; retaining independent base forecasts')
+        index = None
     received = max((r.get('receivedAt', '9999') for r in history.values()), default='9999')
     for name in GROUPS:
         value = {'group': name, 'protocol': PROTOCOL, 'target': TARGET, 'validated': False,
+                 'trainingPolicy': TRAINING_POLICY,
                  'status': 'WAITING_MODEL', 'reason': '等待新训练方案；原判断继续保留'}
         parent['freshModels'].append(value)
-        model = models.get('INDEX' if name == 'INDEX' else 'FRESH')
+        model = models.get(name if name in ('INDEX', 'ADAPTIVE') else 'FRESH')
         expected = FEATURES + INDEX_FEATURES if name == 'INDEX' else FEATURES
         if (not timely or research.get('protocol') != PROTOCOL or not model
                 or model.get('features') != list(expected)):
@@ -86,10 +106,11 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         if local is None or (name == 'INDEX' and (index is None or received >= decision)):
             value.update(status='MISSING_FEATURES', reason='判断前的完整输入不足，保留缺口')
             continue
-        baseline = models.get('INDEX_BASELINE') if name == 'INDEX' else artifact.get('closeDirection')
+        baseline = (models.get('INDEX_BASELINE') if name == 'INDEX' else models.get('FRESH')
+                    if name == 'ADAPTIVE' else artifact.get('closeDirection'))
         if name == 'INDEX' and (not baseline or baseline.get('features') != list(FEATURES)):
             continue
-        if name == 'FRESH' and not baseline:
+        if name in ('FRESH', 'ADAPTIVE') and not baseline:
             continue
         x = local + index if name == 'INDEX' else local
         forecast = direction_prediction(model, x, {})
@@ -100,6 +121,9 @@ def attach_fresh_research(report, request, grouped, artifact, history):
         probability = forecast['calibratedUpProbability'] if name == 'CALIBRATED' else raw
         audit = model['audit']
         value.update(status='SHADOW', upProbability=probability, rawUpProbability=raw,
+            trainingPolicy=artifact.get('trainingPolicy'), baselineProbability=forecast['baselineProbability'],
+            historical=forecast['historical'],
+            assessmentStatus=forecast['assessmentStatus'], modelFitThrough=forecast['modelFitThrough'],
             matchedBaselineProbability=matched, liveProbability=parent['upProbability'],
             selectedModel=forecast['selectedModel'], calibrationStatus=forecast['calibrationStatus'],
             artifactId=artifact['id'], trainedAt=artifact['createdAt'], referenceAt=decision,
@@ -107,6 +131,7 @@ def attach_fresh_research(report, request, grouped, artifact, history):
             featureFingerprint=hashlib.sha256(json.dumps(x, allow_nan=False).encode()).hexdigest(),
             trainingThrough=audit['trainingThrough'], legacyTrainingThrough=audit['legacyTrainingThrough'],
             calibrationThrough=audit['calibrationThrough'],
+            selection=audit.get('selection') if name == 'ADAPTIVE' else None,
             indexHistoryReceivedAt=received if name == 'INDEX' else None,
             indexHistoryFingerprint=history_fingerprint(history) if name == 'INDEX' else None,
             reason='新训练方案独立留档，尚未证明优于当前预测')

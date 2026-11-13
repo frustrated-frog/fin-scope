@@ -1,12 +1,14 @@
-"""Select an up-candidate specialist in the purged selection window only."""
+"""Rolling actual-candidate selection, with the legacy selector kept reproducible."""
 import hashlib
 import json
 import numpy as np
 
 from finscope_market_data.overnight.candidate_evaluation import evaluate_candidates
 from finscope_market_data.overnight.joint_dataset import date_weights
+from finscope_market_data.overnight.training_inputs import REVISION as TRAINING_POLICY
 
-PROTOCOL = 'overnight-up-selection-v1'
+LEGACY_PROTOCOL = 'overnight-up-selection-v1'
+PROTOCOL = 'overnight-candidate-rolling-v2'
 POLICY = 'UP_CANDIDATES_V1'
 MIN_SELECTION_DAYS = 10
 
@@ -50,48 +52,40 @@ def select_up_candidates(probabilities, rows):
     return selected, {**audit, 'reason': 'CANDIDATE_ADVANTAGE' if eligible else 'NO_CANDIDATE_ADVANTAGE'}
 
 
-def fit_up_selection(rows, through, cutoff, cohorts):
-    from finscope_market_data.overnight.candidate_cohort import mark_cohort
-    from finscope_market_data.overnight.direction_candidates import MULTISCALE_RECIPE
-    from finscope_market_data.overnight.direction_learning import fit_direction
-    from finscope_market_data.overnight.context_research import MODEL_FEATURES
-    marked = mark_cohort(rows, cohorts, cutoff)
-    fitted = fit_direction(marked, through, cutoff, selection_policy=POLICY, recipe=MULTISCALE_RECIPE)
-    if fitted:
-        fitted.update(features=list(MODEL_FEATURES), trainingScope='FIXED_RESEARCH_POOL',
-                      selectionScope='ACTUAL_CANDIDATE_OVERLAP',
-                      data={'fingerprint': hashlib.sha256(json.dumps(marked, sort_keys=True, allow_nan=False).encode()).hexdigest(),
-                            'rows': len(marked), 'candidateRows': sum(r['candidateMember'] is True for r in marked)})
-    return fitted
+def fit_up_selection(rows, through, cutoff, cohorts, *, readiness):
+    from finscope_market_data.overnight.candidate_rolling import fit_rolling_candidates
+    return fit_rolling_candidates(rows, cohorts, readiness, through, cutoff)
 
 
 def attach_up_selection(report, grouped, request, artifact, contexts):
-    from finscope_market_data.forecast.industry_features import IndustryMembership
-    from finscope_market_data.overnight.context_features import context_features, stock_context
-    from finscope_market_data.overnight.context_research import MODEL_FEATURES
-    from finscope_market_data.overnight.direction_dataset import TARGET, direction_features
+    from finscope_market_data.overnight.direction_dataset import TARGET, FEATURES, direction_features
     from finscope_market_data.overnight.direction_learning import direction_prediction
-    from finscope_market_data.overnight.multiscale_features import multiscale_features
-    from datetime import datetime
     if request.mode != 'TAIL_ENTRY':
         return
     parent = report['closeDirection']
     parent['upSelection'] = {'protocol': PROTOCOL, 'target': TARGET, 'status': 'WAITING_MODEL',
-                             'reason': '看涨候选专用方案等待后台训练和真实候选积累', 'validated': False}
+                             'reason': '看涨候选专用方案等待后台训练和真实候选积累', 'validated': False,
+                             'trainingPolicy': TRAINING_POLICY}
+    parent['rollingSelectionModels'] = [dict(parent['upSelection'], group='ROLLING')]
     fitted = artifact.get('upSelection')
-    if not fitted or fitted.get('protocol') != PROTOCOL or fitted.get('features') != list(MODEL_FEATURES):
+    decision = report['dataThrough']
+    if (not fitted or fitted.get('protocol') != PROTOCOL or fitted.get('features') != list(FEATURES)
+            or artifact.get('createdAt', '9999') >= decision or artifact.get('labelsThrough', '9999') >= decision):
         return
-    snapshot = contexts.at(request.signal_date, request.cutoff, datetime.fromisoformat(report['dataThrough']))
-    if not snapshot or snapshot.get('universeFingerprint') != artifact.get('universeFingerprint'):
-        return
-    memberships = [IndustryMembership(v['industry'], v['available_on'], tuple(v['codes'])) for v in snapshot.get('memberships', [])]
     local = direction_features(grouped, request.signal_date, request.cutoff, request.instrument_code)
-    history = multiscale_features(grouped, request.signal_date, request.cutoff)
-    context = context_features(request.instrument_code, stock_context(grouped, request.signal_date, request.cutoff), snapshot, memberships)
-    if local is None or history is None or context is None:
-        parent['upSelection'].update(status='MISSING_FEATURES', reason='候选专用方案所需历史或环境数据不足')
+    if local is None or parent.get('upProbability') is None:
+        parent['upSelection'].update(status='MISSING_FEATURES', reason='候选专用方案所需历史分钟数据不足')
+        parent['rollingSelectionModels'] = [dict(parent['upSelection'], group='ROLLING')]
         return
     # The specialist never replaces the main forecast from a historical score.
-    forecast = direction_prediction(fitted, local + context + history, {})
-    parent['upSelection'] = {**forecast, 'artifactId': artifact['id'], 'validated': False,
-        'selectionScope': fitted['selectionScope'], 'reason': '只优化少量看涨候选；独立留档对照，尚未证明有效'}
+    forecast = direction_prediction(fitted, local, {})
+    parent['upSelection'] = {**forecast, 'artifactId': artifact['id'], 'validated': False, 'group': 'ROLLING',
+        'trainingPolicy': artifact.get('trainingPolicy'),
+        'trainedAt': artifact['createdAt'], 'referenceAt': decision,
+        'referencePrice': grouped[request.signal_date][request.cutoff].close,
+        'matchedBaselineProbability': parent['upProbability'], 'liveProbability': parent['upProbability'],
+        'featureFingerprint': hashlib.sha256(json.dumps(local, allow_nan=False).encode()).hexdigest(),
+        'momentumScore': local[0], 'selection': {key: fitted['audit']['selection'].get(key) for key in
+            ('reason', 'selectionDays', 'plannedDays', 'candidateCoverage', 'selectionThrough')},
+        'selectionScope': fitted['selectionScope'], 'reason': '最近真实候选上的滚动择模；概率与排序同时核验'}
+    parent['rollingSelectionModels'] = [parent['upSelection']]

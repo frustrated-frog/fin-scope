@@ -2,6 +2,7 @@
 from dataclasses import asdict
 import hashlib
 import json
+import numpy as np
 
 from finscope_market_data.forecast.direction_calibration import fit_direction_calibration
 from finscope_market_data.forecast.direction_evaluation import evaluate_direction
@@ -12,10 +13,25 @@ from finscope_market_data.overnight.direction_learning import (
     apply_calibration, covered_matured_rows, fit_direction_before, TEST_DAYS, SELECTION_DAYS,
 )
 from finscope_market_data.overnight.joint_dataset import MAX_DAYS, TRAIN_DAYS, date_weights
+from finscope_market_data.overnight.direction_selection import select_direction
 
 PROTOCOL = 'overnight-fresh-direction-v1'
 CALIBRATION_DAYS = 20
 MIN_RESEARCH_DAYS = TRAIN_DAYS + SELECTION_DAYS + 2 * CALIBRATION_DAYS + TEST_DAYS + 4
+ADAPTIVE_REVISION = 'past-prediction-reselection-v1'
+
+
+def adaptive_recipe(checks, through):
+    matured = [r for r in checks if r['exitAt'] < through and r['predictionAt'] < r['exitAt']]
+    days = sorted({r['signalDate'] for r in matured})[-SELECTION_DAYS:]
+    selected = [r for r in matured if r['signalDate'] in days]
+    audit = {'method': ADAPTIVE_REVISION, 'selectionDays': len(days),
+             'selectionThrough': max((r['exitAt'] for r in selected), default=None)}
+    if len(days) < SELECTION_DAYS:
+        return 'PRIOR', {**audit, 'reason': 'INSUFFICIENT_PAST_PREDICTIONS'}
+    probabilities = {name: np.array([r['probabilities'][name] for r in selected]) for name in CANDIDATES}
+    name, result = select_direction(probabilities, selected)
+    return name, {**result, **audit}
 
 
 def fresh_refit(rows, through, selected, *, recipe=BASE_RECIPE):
@@ -62,7 +78,7 @@ def metrics(checks, key):
 
 
 def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_policy='BRIER', include_checks=False,
-                        selector_rows=None, fixed_candidate=None):
+                        selector_rows=None, fixed_candidate=None, with_adaptive=False):
     if fixed_candidate is not None and fixed_candidate not in CANDIDATES:
         raise ValueError('未知固定对照算法')
     selector_rows = rows if selector_rows is None else selector_rows
@@ -92,15 +108,20 @@ def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_
         calibration, calibration_audit = rolling_calibration(checks, decision)
         test = [r for r in matured if r['signalDate'] == day]
         x = [r['features'] for r in test]
-        raw = candidate_probabilities(model, x)[model['selected']]
+        probabilities = candidate_probabilities(model, x)
+        raw = probabilities[model['selected']]
+        adaptive, selection = adaptive_recipe(checks, decision) if with_adaptive else (None, None)
         adjusted = apply_calibration(raw, calibration)
         original_x = [selectors[(r['signalDate'], r['instrumentCode'])]['features'] for r in test]
         old = candidate_probabilities(legacy['model'], original_x)[legacy['model']['selected']]
         checks.extend({**r, 'predictionAt': decision, 'raw': float(p), 'calibrated': float(c),
-                       'legacy': float(b), 'baseline': legacy['model']['baselineProbability']}
-                      for r, p, c, b in zip(test, raw, adjusted, old))
+                       'legacy': float(b), 'baseline': legacy['model']['baselineProbability'],
+                       **({'probabilities': {name: float(v[i]) for name, v in probabilities.items()},
+                           'adaptive': float(probabilities[adaptive][i])} if with_adaptive else {})}
+                      for i, (r, p, c, b) in enumerate(zip(test, raw, adjusted, old)))
         folds.append({'signalDate': day, 'predictionAt': decision, **audit, **calibration_audit,
-                      'legacyTrainingThrough': legacy['audit']['selectionThrough'], 'selected': model['selected']})
+                      'legacyTrainingThrough': legacy['audit']['selectionThrough'], 'selected': model['selected'],
+                      **({'adaptiveSelected': adaptive, 'adaptiveSelection': selection} if with_adaptive else {})})
     legacy = fit_direction_before(selector_rows, through, recipe=recipe, selection_policy=selection_policy)
     model, audit = fresh_refit(rows, through, fixed_candidate or legacy['model']['selected'], recipe=recipe)
     model['calibration'], calibration_audit = rolling_calibration(checks, through)
@@ -116,6 +137,14 @@ def fit_fresh_direction(rows, through, cutoff, *, recipe=BASE_RECIPE, selection_
             'folds': folds, 'evaluation': 'DAILY_WALK_FORWARD', 'evidenceKind': 'RETROSPECTIVE',
             'dateCoverage': coverage},
         'data': {'fingerprint': hashlib.sha256(json.dumps(rows, sort_keys=True, allow_nan=False).encode()).hexdigest()}}
+    if with_adaptive:
+        adaptive, selection = adaptive_recipe(checks, through)
+        adaptive_model = {**model, 'selected': adaptive,
+                          'calibration': {'slope': 1., 'intercept': 0., 'status': 'NOT_FITTED'}}
+        result['adaptive'] = {'protocol': PROTOCOL, 'target': TARGET, 'model': adaptive_model, 'data': result['data'],
+            'audit': {**result['audit'], 'selected': adaptive, 'selection': selection,
+                      'modelFitThrough': audit['trainingThrough'], 'calibrationUsed': False,
+                      'historical': metrics(selected, 'adaptive')}}
     if include_checks:
         result['checks'] = checks
     return result
