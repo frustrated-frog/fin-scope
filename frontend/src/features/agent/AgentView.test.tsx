@@ -166,14 +166,11 @@ function installSidecar(posts: ReturnType<typeof vi.fn>) {
 
 describe('Agent execution and history', () => {
   beforeEach(() => { localStorage.clear(); });
-  it('restores prior messages and opens the actual stored evidence without rerunning a tool', async () => {
+  it('restores prior messages without showing evidence snapshots or rerunning a tool', async () => {
     localStorage.setItem('weavria.finscope.sessionId:https://agent.example', 'session-old');
     const source = { call_id: 'read-1', run_id: 'run-old', label: '澳弘电子资金复盘', href: '?agentView=marketIntel&instrument=40&replayDate=2026-11-12&replayFrom=14%3A16&replayTo=14%3A20' };
     const result = { session_id: 'session-old', run_id: 'run-old', status: 'completed', task_outcome: 'unverified', answer: '这里是旧回答。', error: null, completion_reason: null, tools: [], clarification_id: null, sources: [source] };
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith('/sources/run-old/read-1')) {
-        return jsonResponse({ data: { date: '2026-11-12', largeNet: 10000 } });
-      }
       if (url.endsWith('/history')) {
         return jsonResponse({ turns: [], requests: [{ input_id: 'old', text: '分析澳弘电子', status: 'finished', result }], before: null });
       }
@@ -183,11 +180,9 @@ describe('Agent execution and history', () => {
     render(<AgentView agentUrl="https://agent.example" />);
     expect(await screen.findByText('这里是旧回答。')).toBeInTheDocument();
     expect(screen.getByText('分析澳弘电子')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /澳弘电子资金复盘/ }));
-    expect(await screen.findByRole('dialog', { name: '证据详情' })).toBeInTheDocument();
-    expect(await screen.findByText('10000')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '在业务页面查看' })).toHaveAttribute('href', source.href);
-    await userEvent.click(screen.getByRole('button', { name: '关闭证据' }));
+    expect(screen.queryByLabelText('本次读取的证据')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '证据详情' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('/sources/'))).toBe(false);
     await userEvent.click(screen.getByRole('button', { name: '新建对话' }));
     expect(screen.queryByText('这里是旧回答。')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/requests'))).toBe(false);

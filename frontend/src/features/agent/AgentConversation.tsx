@@ -3,12 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import {
-  AgentApiError, AgentEndpoint, AgentPageContext, AgentSession, AgentSource, AgentJob,
+  AgentApiError, AgentEndpoint, AgentPageContext, AgentSession, AgentJob,
   selectedAgentSession, selectAgentSession, newAgentSession, listAgentSessions, loadAgentHistory,
-  newAgentInputId, startAgentRequest, readAgentRequest, cancelAgentRequest, readAgentSource
+  newAgentInputId, startAgentRequest, readAgentRequest, cancelAgentRequest
 } from './agentClient';
 import { agentAnswer, historyMessages, ConversationMessage } from './agentHistory';
-import { AgentEvidence } from './AgentEvidence';
 import './AgentConversation.css';
 
 type AgentConversationProps = {
@@ -59,10 +58,6 @@ export function AgentConversation({ endpoint, context }: AgentConversationProps)
   const [before, setBefore] = useState<number | null>(null);
   const [phase, setPhase] = useState('正在理解问题');
   const [job, setJob] = useState<AgentJob | null>(null);
-  const [source, setSource] = useState<AgentSource | null>(null);
-  const [sourceData, setSourceData] = useState<unknown>(null);
-  const [sourceError, setSourceError] = useState('');
-  const sourceRequest = useRef<AbortController | null>(null);
   const activeRequest = useRef<{ session: string; input: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
@@ -70,7 +65,7 @@ export function AgentConversation({ endpoint, context }: AgentConversationProps)
   const { label = 'Agent', hint } = context.navigation ?? {};
   const contextLabel = hint ? `${label} · ${hint}` : label;
 
-  useEffect(() => () => { abortRef.current?.abort(); sourceRequest.current?.abort(); }, []);
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   // 离开页面只停止轮询; 服务端继续持有请求, 再进入时从历史恢复并接着查看进度。
   useEffect(() => {
@@ -202,27 +197,6 @@ export function AgentConversation({ endpoint, context }: AgentConversationProps)
     setPhase('正在停止并保存执行状态');
     try { await cancelAgentRequest(endpoint, active.session, active.input); }
     catch { setPhase('停止请求未成功，请重试'); }
-  }
-
-  async function showSource(item: AgentSource) {
-    const id = sessionId ?? selectedAgentSession(endpoint);
-    if (!id) {
-      return;
-    }
-    sourceRequest.current?.abort();
-    const controller = new AbortController();
-    sourceRequest.current = controller;
-    setSource(item); setSourceData(null); setSourceError('');
-    try {
-      const data = await readAgentSource(endpoint, id, item, controller.signal);
-      if (!controller.signal.aborted) {
-        setSourceData(data);
-      }
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setSourceError(error instanceof Error ? error.message : '证据读取失败');
-      }
-    }
   }
 
   async function loadEarlier() {
@@ -374,11 +348,6 @@ export function AgentConversation({ endpoint, context }: AgentConversationProps)
                 ))}
               </div>
             ) : null}
-            {message.sources?.length ? <div className="agent-source-cards" aria-label="本次读取的证据">
-              {message.sources.map((item) => <button type="button" key={`${item.run_id}:${item.call_id}`} onClick={() => void showSource(item)}>
-                <small>查看证据</small><strong>{item.label}</strong>
-              </button>)}
-            </div> : null}
             {message.clarificationId ? (
               <button
                 className="agent-clarification-action"
@@ -400,7 +369,6 @@ export function AgentConversation({ endpoint, context }: AgentConversationProps)
         ) : null}
       </div>
 
-      {source && <AgentEvidence source={source} data={sourceData} error={sourceError} onClose={() => setSource(null)} />}
       <form className="agent-composer" onSubmit={submitQuestion}>
         <div className="agent-composer-heading">
           <label htmlFor="agent-question-workspace">向整个研究工作区提问</label>

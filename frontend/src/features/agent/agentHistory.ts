@@ -1,4 +1,4 @@
-import type { AgentHistory, AgentMessageResult, AgentSource, AgentToolTrace } from './agentClient';
+import type { AgentHistory, AgentMessageResult, AgentToolTrace } from './agentClient';
 
 export type ConversationMessage = {
   id: string;
@@ -6,7 +6,6 @@ export type ConversationMessage = {
   content: string;
   tone?: 'error' | 'warning';
   tools?: AgentToolTrace[];
-  sources?: AgentSource[];
   clarificationId?: string | null;
 };
 export function agentAnswer(inputId: string, result: AgentMessageResult): ConversationMessage {
@@ -16,7 +15,6 @@ export function agentAnswer(inputId: string, result: AgentMessageResult): Conver
     content: result.answer?.trim() || result.error || result.completion_reason || '本次没有返回回答。',
     tone: result.error ? 'error' : result.task_outcome === 'unverified' ? 'warning' : undefined,
     tools: result.tools,
-    sources: result.sources,
     clarificationId: result.clarification_id
   };
 }
@@ -46,14 +44,8 @@ export function historyMessages(history: AgentHistory): ConversationMessage[] {
           (turn.status === 'cancelled' || turn.status === 'interrupted'
             ? '运行已停止。'
             : '本次运行未完成。'),
-        tools: turn.calls.map((call) => ({ ...call, status: call.artifact ? 'succeeded' : 'failed' })),
-        sources: turn.calls
-          .filter((call) => call.artifact)
-          .map((call) => ({
-            run_id: turn.run_id,
-            call_id: call.call_id,
-            label: call.tool_name
-          }))
+        tools: turn.calls.map((call) => ({ ...call, status: call.artifact ? 'succeeded' : 'failed' }))
+
       });
     } else {
       messages.push({

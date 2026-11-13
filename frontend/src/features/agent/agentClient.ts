@@ -318,6 +318,3 @@ async function jobRequest(endpoint: AgentEndpoint, id: string, _inputId: string,
   }
   return value as AgentJob;
 }
-export async function readAgentSource(endpoint: AgentEndpoint, sessionId: string, source: AgentSource, signal?: AbortSignal): Promise<unknown> {
-  return requestJson(`${endpoint.href}/api/sessions/${encodeURIComponent(sessionId)}/sources/${encodeURIComponent(source.run_id)}/${encodeURIComponent(source.call_id)}`, { signal });
-}
