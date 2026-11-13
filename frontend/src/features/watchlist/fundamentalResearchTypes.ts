@@ -12,10 +12,33 @@ export interface FundamentalInsight {
 export interface FundamentalEvent {
   sampleId: number; title: string; subtype: string; dimension: FundamentalDimension; impact: string; nextCheck: string; sourceUrl?: string; publishedAt?: string;
 }
+export interface FundamentalFinancialBaseline {
+  reportId: number; periodEnd: string; reportType: string; scope: string; currency: string; sourceCode: string;
+  dimension: FundamentalDimension; metrics: FundamentalMetric[];
+}
+export interface FundamentalWatchComparison {
+  state: 'WAITING' | 'UPDATED' | 'INCOMPARABLE' | 'LEGACY'; message: string; token?: string; reviewed: boolean;
+  baseline?: FundamentalFinancialBaseline; current?: FundamentalFinancialBaseline;
+  changes: Array<{ conceptCode: string; label: string; unit: string; baseline: number | string; current: number | string; change: number | string }>;
+}
 export interface FundamentalWatch {
   id?: number; originKey: string; title: string; hypothesis: string; baseline: string; supportCondition: string; challengeCondition: string;
   nextReviewDate: string; status: FundamentalWatchStatus; revision: number;
-  reviews: Array<{ id: number; status: FundamentalWatchStatus; note: string; reviewedAt: string }>;
+  baselineSnapshot?: FundamentalFinancialBaseline; comparison?: FundamentalWatchComparison; due?: boolean;
+  reviews: Array<{ id: number; status: FundamentalWatchStatus; note: string; reviewedAt: string; nextReviewDate?: string; comparison?: FundamentalWatchComparison }>;
+}
+
+export function fundamentalChange(value: number | string, unit: string) {
+  const sign = Number(value) > 0 ? '+' : '';
+  return unit === '%' ? `${sign}${Number(value).toFixed(1)} 个百分点` : `${sign}${fundamentalValue(value, unit)}`;
+}
+
+export function comparisonReviewNote(comparison?: FundamentalWatchComparison) {
+  if (comparison?.state !== 'UPDATED') {
+    return '';
+  }
+  return `财报对照 ${comparison.baseline?.periodEnd} → ${comparison.current?.periodEnd}：\n`
+    + comparison.changes.map(metric => `${metric.label}：${fundamentalValue(metric.baseline, metric.unit)} → ${fundamentalValue(metric.current, metric.unit)}（变化 ${fundamentalChange(metric.change, metric.unit)}）`).join('\n');
 }
 export interface FundamentalWorkspace {
   code: string; name: string;

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -71,6 +72,8 @@ public class FundamentalResearchRepository {
             watch.setId(rs.getLong("id"));
             watch.setStatus(FundamentalWatchStatus.valueOf(rs.getString("status")));
             watch.setRevision(rs.getInt("revision"));
+            watch.setNextReviewDate(LocalDate.parse(rs.getString("next_review_date")));
+            watch.setReviewedComparisonToken(rs.getString("reviewed_comparison_token"));
             return watch;
         }, instrumentId);
         List<FundamentalWatchReview> reviews = jdbc.query("SELECT * FROM (SELECT r.*,ROW_NUMBER() OVER "
@@ -83,6 +86,10 @@ public class FundamentalResearchRepository {
             review.setStatus(FundamentalWatchStatus.valueOf(rs.getString("status")));
             review.setNote(rs.getString("note"));
             review.setReviewedAt(LocalDateTime.parse(rs.getString("reviewed_at")));
+            String nextDate = rs.getString("next_review_date");
+            review.setNextReviewDate(nextDate == null ? null : LocalDate.parse(nextDate));
+            String comparison = rs.getString("comparison_json");
+            review.setComparison(comparison == null ? null : read(comparison, FundamentalWatchComparison.class));
             return review;
         }, instrumentId);
         for (FundamentalWatch watch : watches) {
@@ -102,14 +109,19 @@ public class FundamentalResearchRepository {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void review(long instrumentId, long watchId, int revision, FundamentalWatchStatus status, String note, LocalDateTime now) {
-        int changed = jdbc.update("UPDATE fundamental_watch SET status=?,revision=revision+1 WHERE id=? AND instrument_id=? AND revision=?",
-                status.name(), watchId, instrumentId, revision);
+    public void review(long instrumentId, long watchId, int revision, FundamentalWatchReview review) {
+        String token = review.getComparison() == null ? null : review.getComparison().getToken();
+        int changed = jdbc.update("UPDATE fundamental_watch SET status=?,revision=revision+1,next_review_date=COALESCE(?,next_review_date),"
+                        + "reviewed_comparison_token=COALESCE(?,reviewed_comparison_token) WHERE id=? AND instrument_id=? AND revision=?",
+                review.getStatus().name(), review.getNextReviewDate() == null ? null : review.getNextReviewDate().toString(),
+                token, watchId, instrumentId, revision);
         if (changed != 1) {
             throw new BusinessConflictException("验证记录已变化，请重新读取后复核");
         }
-        int inserted = jdbc.update("INSERT INTO fundamental_watch_review(watch_id,status,note,reviewed_at) VALUES(?,?,?,?)",
-                watchId, status.name(), note, now.toString());
+        int inserted = jdbc.update("INSERT INTO fundamental_watch_review(watch_id,status,note,reviewed_at,comparison_json,next_review_date) VALUES(?,?,?,?,?,?)",
+                watchId, review.getStatus().name(), review.getNote(), review.getReviewedAt().toString(),
+                review.getComparison() == null ? null : write(review.getComparison()),
+                review.getNextReviewDate() == null ? null : review.getNextReviewDate().toString());
         if (inserted != 1) {
             throw new IllegalStateException("复核记录写入影响行数异常");
         }

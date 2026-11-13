@@ -1,27 +1,20 @@
 package com.finscope.service.fundamentals;
 
-import com.finscope.common.enums.financials.FinancialQualityStatus;
 import com.finscope.common.enums.fundamentals.FundamentalDimension;
 import com.finscope.common.enums.fundamentals.FundamentalWatchStatus;
-import com.finscope.common.enums.investmentobservation.ReactionEventType;
 import com.finscope.common.exception.BusinessConflictException;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ResourceNotFoundException;
-import com.finscope.dao.financials.FinancialReportRepository;
 import com.finscope.dao.fundamentals.FundamentalResearchRepository;
 import com.finscope.dao.instrument.InstrumentRepository;
-import com.finscope.dao.investmentobservation.ReactionSampleRepository;
-import com.finscope.domain.financials.FinancialReport;
 import com.finscope.domain.fundamentals.CompanyBusinessNotes;
-import com.finscope.domain.fundamentals.FundamentalEvent;
-import com.finscope.domain.fundamentals.FundamentalResearchAnalyzer;
 import com.finscope.domain.fundamentals.FundamentalResearchWorkspace;
 import com.finscope.domain.fundamentals.FundamentalWatch;
+import com.finscope.domain.fundamentals.FundamentalWatchReview;
+import com.finscope.domain.fundamentals.FundamentalWatchReviewCommand;
 import com.finscope.domain.instrument.Instrument;
-import com.finscope.domain.investmentobservation.ReactionSample;
 import com.finscope.rpc.research.material.CompanyBusinessProfileClient;
-import com.finscope.service.financials.FinancialQueryService;
 import com.finscope.service.instrument.StockFundamentalsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,13 +37,9 @@ public class FundamentalResearchService {
     @Resource
     private InstrumentRepository instruments;
     @Resource
-    private FinancialReportRepository reports;
-    @Resource
-    private FinancialQueryService financials;
-    @Resource
     private FundamentalResearchRepository repository;
     @Resource
-    private ReactionSampleRepository reactions;
+    private FundamentalResearchMaterialService materials;
     @Resource
     private CompanyBusinessProfileClient profiles;
     @Resource
@@ -65,9 +54,9 @@ public class FundamentalResearchService {
         result.setAssembledAt(LocalDateTime.now(clock));
         result.setProfile(repository.profile(instrument.getId()).orElse(null));
         result.setNotes(repository.notes(instrument.getId()));
-        populateFinancials(instrument, result);
-        result.setEvents(reactions.recentForStock(code, instrument.getMarket()).stream().map(this::event).toList());
+        materials.populate(instrument, result);
         result.setWatches(repository.watches(instrument.getId()));
+        materials.annotateWatches(instrument.getId(), result.getWatches());
         populateSuggestions(result);
         long attention = result.getInsights().stream().filter(value -> value.isAttention()).count();
         result.setSummary(result.getReportId() == null ? "先补齐公司经营资料与财报，建立可持续核对的基本面底稿。"
@@ -128,76 +117,37 @@ public class FundamentalResearchService {
         watch.setCreatedAt(LocalDateTime.now(clock));
         watch.setStatus(FundamentalWatchStatus.TRACKING);
         watch.setRevision(0);
+        watch.setBaselineSnapshot(materials.freeze(view(code), watch.getOriginKey()));
+        watch.setComparison(null);
         repository.addWatch(watch);
         return view(code);
     }
 
-    public FundamentalResearchWorkspace review(String code, long watchId, int revision, FundamentalWatchStatus status, String note) {
+    public FundamentalResearchWorkspace review(String code, long watchId, FundamentalWatchReviewCommand command) {
         Instrument instrument = requireStock(code);
-        repository.review(instrument.getId(), watchId, revision, status, note, LocalDateTime.now(clock));
-        return view(code);
-    }
-
-    private void populateFinancials(Instrument instrument, FundamentalResearchWorkspace result) {
-        List<FinancialReport> available = reports.findReports(instrument.getId()).stream()
-                .filter(report -> "CONSOLIDATED".equals(report.getScope())
-                        && !report.getPeriodEnd().isAfter(LocalDate.now(clock))
-                        && (report.getPublishedAt() == null || !report.getPublishedAt().isAfter(LocalDateTime.now(clock)))
-                        && report.getQualityStatus() != FinancialQualityStatus.CONFLICT
-                        && report.getQualityStatus() != FinancialQualityStatus.UNAVAILABLE
-                        && report.getQualityStatus() != FinancialQualityStatus.UNVERIFIED).toList();
-        if (available.isEmpty()) {
-            return;
+        if (command.getStatus() == null || command.getNote() == null || command.getNote().isBlank()) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID);
         }
-        FinancialReport latest = available.get(0);
-        FinancialReport previous = available.stream().filter(report -> report.getPeriodEnd().equals(latest.getPeriodEnd().minusYears(1))
-                && report.getReportType() == latest.getReportType()
-                && java.util.Objects.equals(report.getCurrency(), latest.getCurrency())
-                && java.util.Objects.equals(report.getSourceCode(), latest.getSourceCode())).findFirst().orElse(null);
-        result.setReportId(latest.getId());
-        result.setPeriodEnd(latest.getPeriodEnd());
-        result.setReportType(latest.getReportType().name());
-        result.setScope(latest.getScope());
-        result.setCurrency(latest.getCurrency());
-        result.setSourceCode(latest.getSourceCode());
-        result.setPublishedAt(latest.getPublishedAt());
-        result.setInsights(new FundamentalResearchAnalyzer().analyze(financials.view(latest.getId()),
-                previous == null ? null : financials.view(previous.getId())));
-    }
-
-    private FundamentalEvent event(ReactionSample sample) {
-        var result = new FundamentalEvent();
-        result.setSampleId(sample.getId());
-        result.setTitle(sample.getTitle());
-        result.setSubtype(sample.getEventSubtype().name());
-        result.setPublishedAt(sample.getPublishedAt());
-        result.setSourceUrl(sample.getSourceUrl());
-        if (sample.getEventType() == ReactionEventType.REPURCHASE) {
-            result.setDimension(FundamentalDimension.CAPITAL_ALLOCATION);
-            switch (sample.getEventSubtype()) {
-                case REPURCHASE_FINANCING -> {
-                    result.setImpact("已披露回购融资支持；承诺额度不等于实际借款，继续核对签约、提款与资金成本。");
-                    result.setNextCheck("核对正式贷款合同、实际提款、利率和已执行回购金额。");
-                }
-                case REPURCHASE_SHAREHOLDERS -> {
-                    result.setImpact("补充回购事项中的股东结构事实，不能据此推断资金流入或回购已经执行。");
-                    result.setNextCheck("核对实际回购进展、资金支出与后续股本安排。");
-                }
-                default -> {
-                    result.setImpact("影响资本配置与股本安排，对照经营现金、资本开支及回购的实际执行。");
-                    result.setNextCheck("核对回购用途、已执行金额、现金支出和后续股本变化。");
-                }
+        if (command.getNextReviewDate() != null && command.getNextReviewDate().isBefore(LocalDate.now(clock))) {
+            throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "下次复核日期不能早于今天");
+        }
+        var watches = repository.watches(instrument.getId());
+        var watch = watches.stream().filter(value -> value.getId().equals(watchId)).findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("验证事项不存在"));
+        var review = new FundamentalWatchReview();
+        review.setStatus(command.getStatus());
+        review.setNote(command.getNote().strip());
+        review.setNextReviewDate(command.getNextReviewDate() == null ? watch.getNextReviewDate() : command.getNextReviewDate());
+        review.setReviewedAt(LocalDateTime.now(clock));
+        if (command.getComparisonToken() != null) {
+            materials.annotateWatches(instrument.getId(), watches);
+            if (watch.getComparison() == null || !command.getComparisonToken().equals(watch.getComparison().getToken())) {
+                throw new BusinessConflictException("财务对照已更新，请重新读取后复核");
             }
-        } else if (sample.getEventType() == ReactionEventType.CONTRACT) {
-            result.setDimension(FundamentalDimension.GROWTH);
-            result.setImpact("新增订单或合同阶段，后续核对交付、收入确认与回款节奏。");
-            result.setNextCheck("核对合同最新状态、交付周期、收入确认和实际回款。");
-        } else {
-            result.setDimension(FundamentalDimension.EARNINGS_QUALITY);
-            result.setImpact("更新盈利事实或预测，后续对照正式财报及经营现金兑现。");
-            result.setNextCheck("核对预测口径、正式财报及非经常性损益和回款情况。");
+            review.setComparison(watch.getComparison());
         }
-        return result;
+        repository.review(instrument.getId(), watchId, command.getRevision(), review);
+        return view(code);
     }
 
     private void populateSuggestions(FundamentalResearchWorkspace result) {
@@ -215,7 +165,7 @@ public class FundamentalResearchService {
                 result.getSuggestions().add(watch);
             }
         }
-        for (FundamentalEvent event : result.getEvents().stream().limit(3).toList()) {
+        for (var event : result.getEvents().stream().limit(3).toList()) {
             FundamentalWatch watch = suggestion("EVENT:" + event.getSampleId(), event.getTitle(), event.getImpact(),
                     "已披露事项：" + event.getTitle() + "；公开时间 " + event.getPublishedAt(), event.getNextCheck());
             if (!saved.contains(watch.getOriginKey())) {

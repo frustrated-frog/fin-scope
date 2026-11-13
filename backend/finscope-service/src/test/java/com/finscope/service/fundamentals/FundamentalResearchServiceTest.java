@@ -14,6 +14,16 @@ import com.finscope.domain.financials.FinancialReportView;
 import com.finscope.domain.fundamentals.CompanyBusinessNotes;
 import com.finscope.domain.fundamentals.CompanyBusinessProfile;
 import com.finscope.domain.fundamentals.FundamentalWatch;
+import com.finscope.domain.fundamentals.FundamentalWatchReviewCommand;
+import com.finscope.domain.fundamentals.FundamentalFinancialBaseline;
+import com.finscope.domain.fundamentals.FundamentalMetric;
+import com.finscope.common.enums.fundamentals.FundamentalDimension;
+import com.finscope.common.enums.fundamentals.FundamentalWatchStatus;
+import com.finscope.common.exception.BusinessConflictException;
+import com.finscope.domain.financials.FinancialLineItem;
+import com.finscope.common.enums.financials.FinancialStatementType;
+import org.mockito.ArgumentCaptor;
+import java.math.BigDecimal;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.investmentobservation.ReactionSample;
 import com.finscope.rpc.research.material.CompanyBusinessProfileClient;
@@ -56,10 +66,13 @@ class FundamentalResearchServiceTest {
         profiles = mock(CompanyBusinessProfileClient.class);
         fundamentals = mock(StockFundamentalsService.class);
         ReflectionTestUtils.setField(service, "instruments", instruments);
-        ReflectionTestUtils.setField(service, "reports", reports);
-        ReflectionTestUtils.setField(service, "financials", financials);
+        var materials = new FundamentalResearchMaterialService();
+        ReflectionTestUtils.setField(materials, "reports", reports);
+        ReflectionTestUtils.setField(materials, "financials", financials);
+        ReflectionTestUtils.setField(materials, "reactions", reactions);
+        ReflectionTestUtils.setField(materials, "clock", Clock.fixed(Instant.parse("2026-11-14T00:00:00Z"), ZoneId.of("Asia/Shanghai")));
+        ReflectionTestUtils.setField(service, "materials", materials);
         ReflectionTestUtils.setField(service, "repository", repository);
-        ReflectionTestUtils.setField(service, "reactions", reactions);
         ReflectionTestUtils.setField(service, "profiles", profiles);
         ReflectionTestUtils.setField(service, "fundamentals", fundamentals);
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(Instant.parse("2026-11-14T00:00:00Z"), ZoneId.of("Asia/Shanghai")));
@@ -135,6 +148,73 @@ class FundamentalResearchServiceTest {
         assertTrue(result.getEvents().get(1).getImpact().contains("不能据此推断"));
         assertEquals(List.of("EVENT:2"), result.getSuggestions().stream().map(FundamentalWatch::getOriginKey).toList());
         assertEquals(LocalDate.parse("2026-12-14"), result.getSuggestions().get(0).getNextReviewDate());
+    }
+
+    @Test
+    void laterFinancialFactsAreComparedAndStaleProofCannotBeSaved() {
+        var watch = new FundamentalWatch();
+        watch.setId(7L);
+        watch.setOriginKey("FINANCIAL:3:EARNINGS_QUALITY");
+        watch.setNextReviewDate(LocalDate.parse("2026-11-14"));
+        var baseline = new FundamentalFinancialBaseline();
+        baseline.setReportId(3L);
+        baseline.setPeriodEnd(LocalDate.parse("2025-09-30"));
+        baseline.setReportType("Q3");
+        baseline.setScope("CONSOLIDATED");
+        baseline.setCurrency("CNY");
+        baseline.setSourceCode("SOURCE");
+        baseline.setDimension(FundamentalDimension.EARNINGS_QUALITY);
+        var metric = new FundamentalMetric();
+        metric.setConceptCode("OPERATING_CASH_FLOW");
+        metric.setUnit("CNY");
+        metric.setValue(new BigDecimal("-10"));
+        baseline.setMetrics(List.of(metric));
+        watch.setBaselineSnapshot(baseline);
+        when(repository.watches(5L)).thenReturn(List.of(watch));
+        var report = report(4, "2026-09-30");
+        when(reports.findReports(5L)).thenReturn(List.of(report));
+        var view = new FinancialReportView();
+        view.setReport(report);
+        var cash = new FinancialLineItem();
+        cash.setConceptCode("OPERATING_CASH_FLOW");
+        cash.setCurrency("CNY");
+        cash.setSourceCode("SOURCE");
+        cash.setNormalizedValue(new BigDecimal("20"));
+        cash.setStatementType(FinancialStatementType.CASH_FLOW);
+        cash.setPeriodRole("CURRENT_YTD");
+        view.getStatements().put(FinancialStatementType.CASH_FLOW, List.of(cash));
+        when(financials.view(4L)).thenReturn(view);
+        var result = service.view("603618");
+        assertTrue(result.getWatches().get(0).isDue());
+        String token = result.getWatches().get(0).getComparison().getToken();
+        assertNotNull(token);
+        var command = new FundamentalWatchReviewCommand();
+        command.setStatus(FundamentalWatchStatus.TRACKING);
+        command.setNote("对照新披露，继续核对回款");
+        command.setNextReviewDate(LocalDate.parse("2027-01-31"));
+        command.setComparisonToken(token);
+        service.review("603618", 7, command);
+        var saved = ArgumentCaptor.forClass(com.finscope.domain.fundamentals.FundamentalWatchReview.class);
+        verify(repository).review(eq(5L), eq(7L), eq(0), saved.capture());
+        assertEquals(new BigDecimal("30"), saved.getValue().getComparison().getChanges().get(0).getChange());
+        assertEquals(command.getNextReviewDate(), saved.getValue().getNextReviewDate());
+        cash.setNormalizedValue(new BigDecimal("21"));
+        assertThrows(BusinessConflictException.class, () -> service.review("603618", 7, command));
+        verify(repository, times(1)).review(anyLong(), anyLong(), anyInt(), any());
+        assertEquals(new BigDecimal("-10"), watch.getBaselineSnapshot().getMetrics().get(0).getValue());
+    }
+
+    @Test
+    void savingFinancialWatchFreezesServerFactsAndRejectsAnOutdatedReportKey() {
+        var workspace = new com.finscope.domain.fundamentals.FundamentalResearchWorkspace();
+        workspace.setReportId(4L);
+        var insight = new com.finscope.domain.fundamentals.FundamentalInsight();
+        insight.setDimension(FundamentalDimension.GROWTH);
+        workspace.getInsights().add(insight);
+        var material = new FundamentalResearchMaterialService();
+        assertEquals(4L, material.freeze(workspace, "FINANCIAL:4:GROWTH").getReportId());
+        assertThrows(BusinessConflictException.class, () -> material.freeze(workspace, "FINANCIAL:3:GROWTH"));
+        assertNull(material.freeze(workspace, "MANUAL:one"));
     }
 
     @Test

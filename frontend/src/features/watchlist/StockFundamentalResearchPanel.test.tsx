@@ -49,7 +49,7 @@ test('saves notes with their revision and records a review without changing the 
   await userEvent.selectOptions(screen.getByLabelText('复核结果'), 'CHALLENGED');
   await userEvent.type(screen.getByLabelText('本次看到的新事实'), '最新附注显示账龄继续拉长');
   await userEvent.click(screen.getByRole('button', { name: '保存复核' }));
-  expect(api).toHaveBeenLastCalledWith(`${base}/watches/7/review`, expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ id: 7, status: 'CHALLENGED', note: '最新附注显示账龄继续拉长', revision: 0 }) }));
+  expect(api).toHaveBeenLastCalledWith(`${base}/watches/7/review`, expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ id: 7, status: 'CHALLENGED', note: '最新附注显示账龄继续拉长', revision: 0, nextReviewDate: '2027-01-31' }) }));
   expect(local.watches[0].baseline).toBe('三季报经营现金为负');
 });
 
@@ -74,4 +74,27 @@ test('ignores a previous stock response arriving after the user switches stocks'
   await act(async () => finish(workspace()));
   expect(screen.queryByText('-1.66 亿元')).not.toBeInTheDocument();
   expect(screen.getByText('当前公司底稿')).toBeInTheDocument();
+});
+
+test('filters due items and submits the exact displayed comparison with a new review date', async () => {
+  const local = workspace();
+  local.watches = [{ ...watch, due: true, comparison: {
+    state: 'UPDATED', reviewed: false, token: 'a'.repeat(64), message: '已有新财报',
+    changes: [{ conceptCode: 'OPERATING_CASH_FLOW', label: '经营现金流', unit: 'CNY', baseline: '-30000000', current: '20000000', change: '50000000' }],
+  } }, { ...watch, id: 8, title: '已结束的验证', status: 'CLOSED' }];
+  vi.mocked(api).mockResolvedValue(local);
+  render(<StockFundamentalResearchPanel code="603618" />);
+  expect(await screen.findByText('+5000.00 万元')).toBeInTheDocument();
+  expect(screen.queryByText('已结束的验证')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '已结束 1' }));
+  expect(screen.getByText('已结束的验证')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '已到期 1' }));
+  await userEvent.click(screen.getByRole('button', { name: '对照新财报复核 →' }));
+  expect((screen.getByLabelText('本次看到的新事实') as HTMLTextAreaElement).value).toContain('经营现金流');
+  await userEvent.clear(screen.getByLabelText('下次复核日期'));
+  await userEvent.type(screen.getByLabelText('下次复核日期'), '2027-04-30');
+  await userEvent.click(screen.getByRole('button', { name: '保存复核' }));
+  const payload = JSON.parse(vi.mocked(api).mock.lastCall![1]!.body as string);
+  expect(payload.comparisonToken).toBe('a'.repeat(64));
+  expect(payload.nextReviewDate).toBe('2027-04-30');
 });

@@ -15,6 +15,10 @@ public class FundamentalWatch {
     private String title;
     private String hypothesis;
     private String baseline;
+    private FundamentalFinancialBaseline baselineSnapshot;
+    private FundamentalWatchComparison comparison;
+    private boolean due;
+    private String reviewedComparisonToken;
     private String supportCondition;
     private String challengeCondition;
     private LocalDate nextReviewDate;

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { StockFundamentalsPanel } from './StockFundamentalsPanel';
+import { FundamentalComparisonView } from './FundamentalComparisonView';
 import { subtypeLabels } from '../investment-observation/reactionTypes';
-import { dimensionLabels, emptyNotes, fundamentalSource, fundamentalValue, watchStatusLabels } from './fundamentalResearchTypes';
+import { comparisonReviewNote, dimensionLabels, emptyNotes, fundamentalSource, fundamentalValue, watchStatusLabels } from './fundamentalResearchTypes';
 import type { BusinessNotes, FundamentalWatch, FundamentalWatchStatus, FundamentalWorkspace } from './fundamentalResearchTypes';
 import './fundamentalResearch.css';
 
@@ -21,7 +22,8 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
   const [mode, setMode] = useState<'research' | 'financials'>('research');
   const [notes, setNotes] = useState<BusinessNotes>();
   const [draft, setDraft] = useState<FundamentalWatch>();
-  const [review, setReview] = useState<{ id: number; status: FundamentalWatchStatus; note: string; revision: number }>();
+  const [review, setReview] = useState<{ id: number; status: FundamentalWatchStatus; note: string; revision: number; nextReviewDate: string; comparisonToken?: string }>();
+  const [watchFilter, setWatchFilter] = useState<'active' | 'due' | 'updated' | 'closed'>('active');
   const version = useRef(0);
   const editorRef = useRef<HTMLDivElement>(null);
   const base = `/api/watchlist/stocks/${encodeURIComponent(code)}/fundamental-research`;
@@ -59,11 +61,13 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
     setDraft(undefined);
     setReview(undefined);
     setMode('research');
+    setWatchFilter('active');
     void request(base);
     return () => { version.current += 1; };
   }, [code]);
 
   function openWatch(watch?: FundamentalWatch) {
+    setWatchFilter('active');
     setDraft(watch ? { ...watch } : {
       originKey: `MANUAL:${crypto.randomUUID()}`, title: '', hypothesis: '', baseline: '', supportCondition: '', challengeCondition: '',
       nextReviewDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), status: 'TRACKING', revision: 0, reviews: [],
@@ -73,6 +77,9 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
 
   const watches = view?.watches ?? [];
   const active = watches.filter(watch => watch.status !== 'CLOSED');
+  const due = active.filter(watch => watch.due);
+  const updated = active.filter(watch => watch.comparison?.state === 'UPDATED' && !watch.comparison.reviewed);
+  const visibleWatches = watchFilter === 'due' ? due : watchFilter === 'updated' ? updated : watchFilter === 'closed' ? watches.filter(watch => watch.status === 'CLOSED') : active;
   const firstPriority = view?.insights?.find(insight => insight.attention)?.nextCheck
     || view?.events?.[0]?.nextCheck || '整理主营业务与财报，确定第一项需要持续核对的经营假设。';
   const reportLabel = view?.periodEnd ? `${view.periodEnd} · 合并${view.reportType === 'ANNUAL' ? '年度' : '累计'}报告 · ${view.currency}` : '尚无合并财报';
@@ -99,7 +106,7 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
         <div className="fr-orientation">
           <div><span>当前财务基线</span><strong>{reportLabel}</strong><small>{view.sourceCode || '点击更新底稿，补齐已有财报'}</small></div>
           <div><span>已关联经营事项</span><strong>{view.events?.length ?? 0} 件</strong><small>公告与财报一起核对</small></div>
-          <div><span>优先验证</span><p>{firstPriority}</p><small>{active.length} 项正在跟踪</small></div>
+          <div><span>优先验证</span><p>{firstPriority}</p><small>{active.length} 项跟踪 · {due.length} 项到期 · {updated.length} 项有新财报</small></div>
         </div>
 
         <section className="fr-section" aria-labelledby="fr-business-title">
@@ -159,6 +166,9 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
 
           <section className="fr-section" aria-labelledby="fr-watches-title">
             <header><div><span className="fr-kicker">持续验证</span><h4 id="fr-watches-title">下一次披露，验证什么</h4></div><button type="button" disabled={busy} onClick={() => openWatch()}>新增验证</button></header>
+            <nav className="fr-watch-filters" aria-label="验证筛选">{([
+              ['active', '进行中', active.length], ['due', '已到期', due.length], ['updated', '新财报', updated.length], ['closed', '已结束', watches.length - active.length],
+            ] as const).map(([key, label, count]) => <button type="button" key={key} aria-pressed={watchFilter === key} onClick={() => setWatchFilter(key)}>{label} {count}</button>)}</nav>
             <div ref={editorRef}>{draft && <form className="fr-editor fr-watch-editor" onSubmit={async event => {
               event.preventDefault();
               if (await request(`${base}/watches`, 'POST', draft, '已加入验证清单')) {
@@ -175,11 +185,13 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
               <div className="fr-actions"><button type="button" disabled={busy} onClick={() => setDraft(undefined)}>取消</button><button className="fr-primary" disabled={busy}>保存验证事项</button></div>
             </form>}</div>
             {watches.length === 0 && !draft && <div className="fr-watch-empty"><span aria-hidden="true">↗</span><h5>留下判断，也留下验证条件</h5><p>从财务变化或公告加入一项观察，后续记录支持它或推翻它的新事实。</p></div>}
-            <div className="fr-watches">{watches.map(watch => <article key={watch.id} className={`fr-watch is-${watch.status.toLowerCase()}`}>
-              <div className="fr-watch-meta"><span>{watchStatusLabels[watch.status]}</span><time>计划复核 {watch.nextReviewDate}</time></div>
+            {watches.length > 0 && visibleWatches.length === 0 && <p className="fr-empty">当前筛选下没有验证事项。</p>}
+            <div className="fr-watches">{visibleWatches.map(watch => <article key={watch.id} className={`fr-watch is-${watch.status.toLowerCase()}`}>
+              <div className="fr-watch-meta"><span>{watchStatusLabels[watch.status]}</span><time className={watch.due ? 'fr-due' : ''}>{watch.due ? '已到复核日期' : '计划复核'} {watch.nextReviewDate}</time></div>
               <h5>{watch.title}</h5><p>{watch.hypothesis}</p>
+              <FundamentalComparisonView comparison={watch.comparison} />
               <details><summary>基线与验证条件</summary><p><strong>事前基线：</strong>{watch.baseline}</p><p><strong>支持条件：</strong>{watch.supportCondition}</p><p><strong>反证条件：</strong>{watch.challengeCondition}</p></details>
-              {watch.reviews?.length > 0 && <details><summary>最近复核 · {watch.reviews.length} 条</summary>{watch.reviews.map(item => <p key={item.id}><small>{item.reviewedAt.replace('T', ' ').slice(0, 16)} · {watchStatusLabels[item.status]}</small><br />{item.note}</p>)}</details>}
+              {watch.reviews?.length > 0 && <details><summary>最近复核 · {watch.reviews.length} 条</summary>{watch.reviews.map(item => <div key={item.id}><p><small>{item.reviewedAt.replace('T', ' ').slice(0, 16)} · {watchStatusLabels[item.status]}</small><br />{item.note}{item.nextReviewDate && <small className="fr-review-next">下次复核 {item.nextReviewDate}</small>}</p>{item.comparison && <details><summary>本次复核时的财报对照</summary><FundamentalComparisonView comparison={item.comparison} /></details>}</div>)}</details>}
               {review && review.id === watch.id ? <form className="fr-review-form" onSubmit={async event => {
                 event.preventDefault();
                 if (await request(`${base}/watches/${watch.id}/review`, 'PATCH', review, '本次复核已记录')) {
@@ -188,8 +200,13 @@ export function StockFundamentalResearchPanel({ code }: { code: string }) {
               }}>
                 <label>复核结果<select value={review.status} onChange={event => setReview({ ...review, status: event.target.value as FundamentalWatchStatus })}>{Object.entries(watchStatusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
                 <label>本次看到的新事实<textarea required maxLength={2000} placeholder="记录新披露、实际值及判断为何发生变化" value={review.note} onChange={event => setReview({ ...review, note: event.target.value })} /></label>
+                {review.status !== 'CLOSED' && <label>下次复核日期<input required type="date" value={review.nextReviewDate} onChange={event => setReview({ ...review, nextReviewDate: event.target.value })} /></label>}
                 <div className="fr-actions"><button type="button" disabled={busy} onClick={() => setReview(undefined)}>取消</button><button className="fr-primary" disabled={busy}>保存复核</button></div>
-              </form> : <button type="button" className="fr-text-action" disabled={busy} onClick={() => setReview({ id: watch.id!, status: watch.status, note: '', revision: watch.revision })}>记录本次复核 →</button>}
+              </form> : <button type="button" className="fr-text-action" disabled={busy} onClick={() => setReview({
+                id: watch.id!, status: watch.status, note: comparisonReviewNote(watch.comparison), revision: watch.revision,
+                nextReviewDate: watch.nextReviewDate > new Date().toISOString().slice(0, 10) ? watch.nextReviewDate : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+                comparisonToken: watch.comparison?.state === 'UPDATED' ? watch.comparison.token : undefined,
+              })}>{watch.comparison?.state === 'UPDATED' && !watch.comparison.reviewed ? '对照新财报复核 →' : '记录本次复核 →'}</button>}
             </article>)}</div>
           </section>
         </div>

@@ -67,7 +67,7 @@ class FundamentalResearchRepositoryTest {
         var watch = watch();
         repository.addWatch(watch);
         var stored = repository.watches(5).get(0);
-        repository.review(5, stored.getId(), 0, FundamentalWatchStatus.CHALLENGED, "新一期回款低于原假设", LocalDateTime.now());
+        repository.review(5, stored.getId(), 0, review(FundamentalWatchStatus.CHALLENGED, "新一期回款低于原假设"));
         watch.setBaseline("新值不得覆盖事前基线");
         repository.addWatch(watch);
         var updated = repository.watches(5).get(0);
@@ -87,7 +87,7 @@ class FundamentalResearchRepositoryTest {
                 new AnnotationTransactionAttributeSource()));
         var transactional = (FundamentalResearchRepository) proxy.getProxy();
         assertThrows(DataAccessException.class, () -> transactional.review(5, id, 0,
-                FundamentalWatchStatus.CLOSED, "保存失败", LocalDateTime.now()));
+                review(FundamentalWatchStatus.CLOSED, "保存失败")));
         var stored = repository.watches(5).get(0);
         assertEquals(FundamentalWatchStatus.TRACKING, stored.getStatus());
         assertEquals(0, stored.getRevision());
@@ -95,13 +95,40 @@ class FundamentalResearchRepositoryTest {
     }
 
     @Test
+    void persistsComparisonAndNextReviewDateWithoutOverwritingTheOriginalBaseline() {
+        repository.addWatch(watch());
+        long id = repository.watches(5).get(0).getId();
+        var review = review(FundamentalWatchStatus.TRACKING, "等待下一期回款披露");
+        review.setNextReviewDate(LocalDate.of(2027, 4, 30));
+        var comparison = new FundamentalWatchComparison();
+        comparison.setToken("a".repeat(64));
+        comparison.setMessage("本次复核时的财报事实");
+        review.setComparison(comparison);
+        repository.review(5, id, 0, review);
+        var updated = repository.watches(5).get(0);
+        assertEquals(LocalDate.of(2027, 4, 30), updated.getNextReviewDate());
+        assertEquals("事前基线", updated.getBaseline());
+        assertEquals(comparison.getToken(), updated.getReviewedComparisonToken());
+        assertEquals("本次复核时的财报事实", updated.getReviews().get(0).getComparison().getMessage());
+        assertEquals(review.getNextReviewDate(), updated.getReviews().get(0).getNextReviewDate());
+    }
+
+    @Test
     void anotherCompanyOrStaleRevisionCannotReviewWatch() {
         repository.addWatch(watch());
         long id = repository.watches(5).get(0).getId();
-        assertThrows(BusinessConflictException.class, () -> repository.review(6, id, 0, FundamentalWatchStatus.SUPPORTED, "错误公司", LocalDateTime.now()));
-        repository.review(5, id, 0, FundamentalWatchStatus.SUPPORTED, "新披露支持假设", LocalDateTime.now());
-        assertThrows(BusinessConflictException.class, () -> repository.review(5, id, 0, FundamentalWatchStatus.CLOSED, "旧版本", LocalDateTime.now()));
+        assertThrows(BusinessConflictException.class, () -> repository.review(6, id, 0, review(FundamentalWatchStatus.SUPPORTED, "错误公司")));
+        repository.review(5, id, 0, review(FundamentalWatchStatus.SUPPORTED, "新披露支持假设"));
+        assertThrows(BusinessConflictException.class, () -> repository.review(5, id, 0, review(FundamentalWatchStatus.CLOSED, "旧版本")));
         assertEquals(1, repository.watches(5).get(0).getReviews().size());
+    }
+
+    private FundamentalWatchReview review(FundamentalWatchStatus status, String note) {
+        var review = new FundamentalWatchReview();
+        review.setStatus(status);
+        review.setNote(note);
+        review.setReviewedAt(LocalDateTime.now());
+        return review;
     }
 
     private FundamentalWatch watch() {

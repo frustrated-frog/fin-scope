@@ -11,4 +11,6 @@ public class FundamentalWatchReview {
     private FundamentalWatchStatus status;
     private String note;
     private LocalDateTime reviewedAt;
+    private java.time.LocalDate nextReviewDate;
+    private FundamentalWatchComparison comparison;
 }

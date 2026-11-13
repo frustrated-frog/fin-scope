@@ -43,7 +43,6 @@ public class FundamentalResearchController {
     @PatchMapping("/watches/{watchId}/review")
     public ApiResponse<FundamentalResearchResponse> review(@PathVariable String code, @PathVariable long watchId,
             @Valid @RequestBody ReviewFundamentalWatchRequest request) {
-        return ApiResponses.success(FundamentalResearchResponse.of(service.review(code, watchId,
-                request.getRevision(), request.getStatus(), request.getNote().strip())));
+        return ApiResponses.success(FundamentalResearchResponse.of(service.review(code, watchId, request.toCommand())));
     }
 }

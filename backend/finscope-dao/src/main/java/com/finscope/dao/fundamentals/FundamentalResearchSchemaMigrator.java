@@ -28,5 +28,16 @@ public class FundamentalResearchSchemaMigrator implements InitializingBean {
         jdbc.execute("CREATE TABLE IF NOT EXISTS fundamental_watch_review (id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "watch_id INTEGER NOT NULL,status TEXT NOT NULL,note TEXT NOT NULL,reviewed_at TEXT NOT NULL,"
                 + "FOREIGN KEY(watch_id) REFERENCES fundamental_watch(id))");
+        ensureColumn("fundamental_watch", "reviewed_comparison_token", "TEXT");
+        ensureColumn("fundamental_watch_review", "comparison_json", "TEXT");
+        ensureColumn("fundamental_watch_review", "next_review_date", "TEXT");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_fundamental_review_watch ON fundamental_watch_review(watch_id,id)");
+    }
+
+    private void ensureColumn(String table, String column, String definition) {
+        boolean exists = jdbc.query("PRAGMA table_info(" + table + ")", (rs, row) -> rs.getString("name")).contains(column);
+        if (!exists) {
+            jdbc.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+        }
     }
 }
