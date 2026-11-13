@@ -113,7 +113,7 @@ export function InvestmentObservationView({
                     method: 'POST',
                   }),
                 );
-                addToast('正在核对近期业绩与合同事件', 'info');
+                addToast('正在同步公司公告，核对业绩、合同与回购事件', 'info');
               })
             }
           >
@@ -392,7 +392,7 @@ export function InvestmentObservationView({
                   >
                     <div className="reaction-browser-subject">
                       <span className="reaction-browser-meta">
-                        <span className="reaction-browser-event-type" data-tone={caseType.startsWith('EARNINGS') ? 'earnings' : caseType.startsWith('CONTRACT') ? 'contract' : 'operating'}>
+                        <span className="reaction-browser-event-type" data-tone={caseType.startsWith('EARNINGS') ? 'earnings' : caseType.startsWith('CONTRACT') ? 'contract' : caseType.startsWith('REPURCHASE') ? 'repurchase' : 'operating'}>
                           {subtypeLabels[caseType] || '事件观察'}
                         </span>
                         <time dateTime={sample.publishedAt}>{dateTime(sample.publishedAt)}</time>

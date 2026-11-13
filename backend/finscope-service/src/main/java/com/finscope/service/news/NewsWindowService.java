@@ -35,6 +35,14 @@ public class NewsWindowService {
     private Clock clock = Clock.systemDefaultZone();
 
     public void ingest(List<ResearchMaterial> materials) {
+        ingest(materials, 36);
+    }
+
+    public void ingestAnnouncements(List<ResearchMaterial> materials) {
+        ingest(materials, 7 * 24);
+    }
+
+    private void ingest(List<ResearchMaterial> materials, int hours) {
         LocalDateTime now = LocalDateTime.now(clock);
         List<NewsCategory> enabled = categories.findEnabled();
         List<NewsReport> batch = new ArrayList<>();
@@ -42,7 +50,7 @@ public class NewsWindowService {
             if (material == null || blank(material.getProviderCode()) || blank(material.getTitle()) || blank(material.getContent())) {
                 continue;
             }
-            if (material.getPublishedAt() != null && (material.getPublishedAt().isBefore(now.minusHours(36))
+            if (material.getPublishedAt() != null && (material.getPublishedAt().isBefore(now.minusHours(hours))
                     || material.getPublishedAt().isAfter(now.plusMinutes(5)))) {
                 continue;
             }
@@ -56,7 +64,9 @@ public class NewsWindowService {
             reports.ingest(batch);
         }
         // 七天缓冲供停机恢复；已进入观察或大事记的新闻依据不清理。
-        reports.prune(now.minusDays(7));
+        if (hours == 36) {
+            reports.prune(now.minusDays(7));
+        }
     }
 
     public NewsWindowPage query(NewsWindowQuery query) {
@@ -89,10 +99,20 @@ public class NewsWindowService {
     }
 
     public void scan(Consumer<List<NewsReport>> consumer) {
+        scan(consumer, false);
+    }
+
+    public void scanAnnouncements(Consumer<List<NewsReport>> consumer) {
+        scan(consumer, true);
+    }
+
+    private void scan(Consumer<List<NewsReport>> consumer, boolean announcements) {
         LocalDateTime now = LocalDateTime.now(clock);
         long after = 0;
         while (true) {
-            List<NewsReport> batch = reports.scan(now.minusHours(36), now, after, 250);
+            List<NewsReport> batch = announcements
+                    ? reports.scanAnnouncements(now.minusDays(7), now, after, 250)
+                    : reports.scan(now.minusHours(36), now, after, 250);
             if (batch.isEmpty()) {
                 return;
             }
@@ -184,7 +204,8 @@ public class NewsWindowService {
         report.setProviderCode(material.getProviderCode());
         report.setSourceName(sourceName(material.getProviderFamily()));
         report.setSourceTier(material.getSourceTier());
-        report.setKind(material.getProviderCode().endsWith("_DIGEST") ? "ARTICLE" : "FLASH");
+        report.setKind(material.getProviderCode().endsWith("_DIGEST")
+                || material.getMaterialType() == com.finscope.common.enums.research.ResearchMaterialType.ANNOUNCEMENT ? "ARTICLE" : "FLASH");
         report.setTitle(material.getTitle().trim());
         report.setContent(material.getContent().trim());
         report.setUrl(material.getUrl());

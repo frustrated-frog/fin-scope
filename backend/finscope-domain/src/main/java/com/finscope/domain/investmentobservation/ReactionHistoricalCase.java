@@ -56,6 +56,14 @@ public record ReactionHistoricalCase(ReactionEventSubtype subtype, String key, S
             return new ReactionHistoricalCase(subtype, null);
         }
         String prefix = code + "|" + subtype + "|";
+        if (decision.getEventType() == com.finscope.common.enums.investmentobservation.ReactionEventType.REPURCHASE) {
+            String plan = new ReactionRepurchaseRules().planKey(summary);
+            String topic = plan == null ? null : code + "|REPURCHASE|" + plan;
+            // 不合并不同日期的进展，也不把多次回购都挂到同一个年度事项。
+            String notice = decision.getMergeAnchor();
+            return new ReactionHistoricalCase(subtype, notice == null ? null : prefix + publishedAt.toLocalDate()
+                    + "|NOTICE|" + notice.substring(notice.lastIndexOf('|') + 1), topic);
+        }
         boolean earnings = decision.getEventType() == com.finscope.common.enums.investmentobservation.ReactionEventType.EARNINGS;
         String period = earnings ? earningsPeriod(title, publishedAt.toLocalDate()) : null;
         String project = earnings ? null : namedProject(title);

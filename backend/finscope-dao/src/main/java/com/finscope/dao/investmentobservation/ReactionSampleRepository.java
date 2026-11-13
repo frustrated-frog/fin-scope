@@ -226,6 +226,17 @@ public class ReactionSampleRepository {
             }
             return resolved.size();
         }
+        // 原文迟到时补上可证明的回购事项关联；不重写原始快照、公开时间或行情基线。
+        for (ReactionSample proposed : resolved) {
+            ReactionHistoricalCase value = ReactionHistoricalCase.from(proposed);
+            if (proposed.isAutomatic() && proposed.getEventType()
+                    == com.finscope.common.enums.investmentobservation.ReactionEventType.REPURCHASE && value.topicKey() != null) {
+                jdbcTemplate.update("UPDATE investment_reaction_sample SET case_topic=?,revision=revision+1 WHERE source_identity=? "
+                                + "AND instrument_code=? AND case_topic IS NULL AND case_subtype GLOB 'REPURCHASE_*' "
+                                + "AND json_extract(snapshot_json,'$.automatic')=1",
+                        value.topicKey(), first.getSourceIdentity(), proposed.getInstrumentCode());
+            }
+        }
         // 已经确认或排除的事件保持原状态。仅允许当前原文对应的旧自动草稿升级。
         List<ReactionSample> existing = findByIdentity(first.getSourceIdentity());
         if (existing.size() != 1) {
@@ -307,17 +318,23 @@ public class ReactionSampleRepository {
     }
 
     public List<ReactionRelatedStage> relatedStages(ReactionHistoricalCase current) {
+        return relatedStages(current, -1L);
+    }
+
+    public List<ReactionRelatedStage> relatedStages(ReactionHistoricalCase current, long sampleId) {
         if (current.topicKey() == null) {
             return List.of();
         }
+        boolean repurchase = current.subtype().name().startsWith("REPURCHASE_");
         return jdbcTemplate.query("WITH stage_sources AS (SELECT id,case_subtype,json_extract(snapshot_json,'$.title') AS title,"
                         + "json_extract(snapshot_json,'$.publishedAt') AS published_at,ROW_NUMBER() OVER("
                         + "PARTITION BY COALESCE(case_key,source_identity) ORDER BY json_extract(snapshot_json,'$.publishedAt'),id) AS rank "
-                        + "FROM investment_reaction_sample WHERE case_topic=? AND case_subtype<>? AND state<>'DRAFT' AND excluded=0) "
+                        + "FROM investment_reaction_sample WHERE case_topic=? AND "
+                        + (repurchase ? "id<>?" : "case_subtype<>?") + " AND state<>'DRAFT' AND excluded=0) "
                         + "SELECT * FROM stage_sources WHERE rank=1 ORDER BY published_at,id LIMIT 12",
                 (rs, index) -> new ReactionRelatedStage(rs.getLong("id"), rs.getString("title"),
                         ReactionEventSubtype.valueOf(rs.getString("case_subtype")), TimeUtil.localDateTime(rs, "published_at")),
-                current.topicKey(), current.subtype().name());
+                current.topicKey(), repurchase ? sampleId : current.subtype().name());
     }
 
     public List<ReactionSample> findDue(LocalDateTime before, int limit) {

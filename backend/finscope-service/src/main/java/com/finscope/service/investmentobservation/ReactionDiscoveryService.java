@@ -12,6 +12,7 @@ import com.finscope.domain.investmentobservation.ReactionStockResolution;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.service.news.NewsWindowService;
+import com.finscope.service.news.CompanyAnnouncementSyncService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -40,6 +41,8 @@ public class ReactionDiscoveryService {
     private ReactionSampleRepository repository;
     @Resource
     private ReactionStockResolver resolver;
+    @Resource
+    private CompanyAnnouncementSyncService announcements;
     private final ReactionEventRules rules = new ReactionEventRules();
     private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
@@ -51,9 +54,15 @@ public class ReactionDiscoveryService {
         LocalDateTime now = LocalDateTime.now(clock);
         ReactionDiscoveryStatus result = new ReactionDiscoveryStatus();
         Map<List<String>, ReactionStockResolution> resolutions = new HashMap<>();
-        boolean available = true;
+        boolean available = announcements.sync();
         try (var ignored = ProviderCallDeadline.open(Duration.ofSeconds(manual ? 45 : 20))) {
             try {
+                materials.scanAnnouncements(batch -> {
+                    for (var item : batch) {
+                        admit(item.getTitle(), item.getContent(), item.getUrl(), item.getPublishedAt(),
+                                item.getFirstSeenAt(), "NEWS_ITEM", item.getId(), now, resolutions, result);
+                    }
+                });
                 materials.scan(batch -> {
                     for (var item : batch) {
                         admit(item.getTitle(), item.getContent(), item.getUrl(), item.getPublishedAt(),
@@ -77,7 +86,7 @@ public class ReactionDiscoveryService {
                     && resolutions.values().stream().noneMatch(value -> value.getStatus() == ReactionResolutionStatus.LOOKUP_UNAVAILABLE);
         }
         result.setLastCompletedAt(now);
-        result.setMessage(available ? "已核对近期公司业绩与合同事件"
+        result.setMessage(available ? "已核对近期公司公告、业绩、合同与回购事件"
                 : "部分来源或公司身份暂未核对，后续会重读近期资讯");
         return result;
     }
@@ -85,7 +94,10 @@ public class ReactionDiscoveryService {
     private void admit(String title, String summary, String url, LocalDateTime publishedAt,
                        LocalDateTime firstSeen, String origin, String key, LocalDateTime now,
                        Map<List<String>, ReactionStockResolution> resolutions, ReactionDiscoveryStatus result) {
-        if (publishedAt == null || publishedAt.isAfter(now) || publishedAt.isBefore(now.minusHours(LOOKBACK_HOURS))) {
+        boolean announcement = "NEWS_ITEM".equals(origin) && key != null
+                && key.startsWith(com.finscope.common.constant.ContentConstants.PROVIDER_EASTMONEY_ANNOUNCEMENT + ":");
+        if (publishedAt == null || publishedAt.isAfter(now)
+                || publishedAt.isBefore(announcement ? now.minusDays(7) : now.minusHours(LOOKBACK_HOURS))) {
             return;
         }
         // 关联与事件分类必须来自同一条直接标题，不能用正文里提及的另一家公司补主体。

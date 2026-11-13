@@ -36,3 +36,17 @@ test('automatic history exposes full denominators and changes the comparison win
   await userEvent.selectOptions(screen.getByLabelText('比较窗口'), '1');
   await waitFor(() => expect(fetch.mock.calls.some(([path]) => String(path).endsWith('/comparables?sessions=1'))).toBe(true));
 });
+
+test('repurchase disclosure opens related progress with its own publication time', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => apiResponse(String(input).includes('/comparables')
+    ? { sessions: 5, sameCompany: group, otherCompanies: group, relatedStages: [
+      { sampleId: 2, title: '杭电股份：关于回购股份事项前十名股东持股情况的公告', subtype: 'REPURCHASE_SHAREHOLDERS', publishedAt: '2026-11-13T16:21:58' },
+    ] } : [])));
+  const onOpen = vi.fn();
+  render(<ReactionEventContext sample={{ ...reactionSample, eventType: 'REPURCHASE', eventSubtype: 'REPURCHASE_FINANCING' }} onOpen={onOpen} />);
+  const summary = await screen.findByText('同一回购事项的进展 · 1 件');
+  expect(summary.closest('details')).toHaveAttribute('open');
+  expect(screen.getByText(/回购股东披露 · 2026-11-13 16:21/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '杭电股份：关于回购股份事项前十名股东持股情况的公告' }));
+  expect(onOpen).toHaveBeenCalledWith(2);
+});

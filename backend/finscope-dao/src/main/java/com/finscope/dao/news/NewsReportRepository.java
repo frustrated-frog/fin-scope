@@ -48,6 +48,13 @@ public class NewsReportRepository {
         }
     }
 
+    public List<NewsReport> scanAnnouncements(LocalDateTime since, LocalDateTime until, long after, int size) {
+        return jdbc.query(SELECT + "WHERE n.provider_code=? AND n.published_at>=? "
+                        + "AND n.published_at<=? AND n.arrival_sequence>? ORDER BY n.arrival_sequence LIMIT ?",
+                row(), com.finscope.common.constant.ContentConstants.PROVIDER_EASTMONEY_ANNOUNCEMENT,
+                time(since), time(until), after, Math.max(1, Math.min(250, size)));
+    }
+
     public Optional<NewsReport> find(String id) {
         return jdbc.query(SELECT + "WHERE n.id=?", row(), id).stream().findFirst();
     }

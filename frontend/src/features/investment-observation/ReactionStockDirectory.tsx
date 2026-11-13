@@ -39,7 +39,7 @@ export function ReactionStockDirectory({
           <span className="reaction-stock-latest">
             <span className="reaction-browser-meta">
               <span className="reaction-browser-event-type" data-tone={stock.latestSubtype?.startsWith('EARNINGS') ? 'earnings'
-                : stock.latestSubtype?.startsWith('CONTRACT') ? 'contract' : 'operating'}>
+                : stock.latestSubtype?.startsWith('CONTRACT') ? 'contract' : stock.latestSubtype?.startsWith('REPURCHASE') ? 'repurchase' : 'operating'}>
                 {subtypeLabels[stock.latestSubtype || ''] || '事件观察'}
               </span>
               {stock.latestPublishedAt && <time dateTime={stock.latestPublishedAt}>{dateTime(stock.latestPublishedAt)}</time>}

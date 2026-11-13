@@ -56,8 +56,8 @@ export function ReactionEventContext({ sample, onOpen }: { sample: ReactionSampl
       {sources.map(source => <p key={`${source.originType}:${source.originKey}`}>{sourceHref(source.url) ? <a href={sourceHref(source.url)} target="_blank" rel="noreferrer">{source.title}</a> : source.title}<small> · 公开 {dateTime(source.publishedAt)} · 捕获 {dateTime(source.capturedAt)}</small></p>)}
     </details>
     {!!history?.relatedStages?.length && (
-      <details>
-        <summary>同一事项的其他阶段 · {history.relatedStages.length} 件</summary>
+      <details open={sample.eventType === 'REPURCHASE' ? true : undefined}>
+        <summary>{sample.eventType === 'REPURCHASE' ? '同一回购事项的进展' : '同一事项的其他阶段'} · {history.relatedStages.length} 件</summary>
         <ul>{history.relatedStages.map(stage => (
           <li key={stage.sampleId}>
             <small>{subtypeLabels[stage.subtype]} · {dateTime(stage.publishedAt)} </small>

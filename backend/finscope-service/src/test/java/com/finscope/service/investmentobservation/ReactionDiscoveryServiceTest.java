@@ -48,7 +48,8 @@ class ReactionDiscoveryServiceTest {
         migrator.afterPropertiesSet();
         repository = new ReactionSampleRepository();
         ReflectionTestUtils.setField(repository, "jdbcTemplate", jdbc);
-        ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().registerModule(new JavaTimeModule()));
+        ReflectionTestUtils.setField(repository, "objectMapper", new ObjectMapper().registerModule(new JavaTimeModule())
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));
         service = new ReactionDiscoveryService();
         materials = mock(NewsWindowService.class);
         resolver = mock(ReactionStockResolver.class);
@@ -57,9 +58,50 @@ class ReactionDiscoveryServiceTest {
         ReflectionTestUtils.setField(service, "materials", materials);
         ReflectionTestUtils.setField(service, "resolver", resolver);
         ReflectionTestUtils.setField(service, "radar", radar);
+        var announcements = mock(com.finscope.service.news.CompanyAnnouncementSyncService.class);
+        when(announcements.sync()).thenReturn(true);
+        ReflectionTestUtils.setField(service, "announcements", announcements);
         ReflectionTestUtils.setField(service, "clock", Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")));
         when(radar.findActiveSignals(any(), anyInt())).thenReturn(List.of());
         when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class))).thenReturn(resolution(List.of(match("600519.SH", "示例公司"))));
+    }
+
+    @Test
+    void capturesBothHangdianDisclosuresAndOlderPlanAndLinksOneMatterWithoutDuplicateSamples() {
+        LocalDateTime observed = LocalDateTime.parse("2026-11-13T20:00:00");
+        ReflectionTestUtils.setField(service, "clock", Clock.fixed(observed.atZone(ZoneId.of("Asia/Shanghai")).toInstant(),
+                ZoneId.of("Asia/Shanghai")));
+        when(resolver.resolveDirect(any(com.finscope.domain.investmentobservation.ReactionEventDecision.class)))
+                .thenReturn(resolution(List.of(match("603618.SH", "杭电股份"))));
+        var rows = new java.util.ArrayList<com.finscope.domain.news.NewsReport>();
+        String[] titles = {"杭电股份:关于以集中竞价交易方式回购股份的预案",
+                "杭电股份:关于取得股票回购专项贷款承诺函的公告",
+                "杭电股份:关于回购股份事项前十名股东和前十名无限售条件股东持股情况的公告"};
+        String[] dates = {"2026-11-11T16:59:43", "2026-11-12T17:33:44", "2026-11-13T16:21:58"};
+        for (int index = 0; index < titles.length; index++) {
+            var value = new com.finscope.domain.news.NewsReport();
+            value.setId("EASTMONEY_ANNOUNCEMENT:AN" + index);
+            value.setTitle(titles[index]);
+            value.setContent(index == 0 ? titles[index]
+                    : "公司于2026年11月11日召开第六届董事会第六次会议，审议通过回购股份预案。");
+            value.setPublishedAt(LocalDateTime.parse(dates[index]));
+            rows.add(value);
+        }
+        doAnswer(invocation -> {
+            java.util.function.Consumer<List<com.finscope.domain.news.NewsReport>> consumer = invocation.getArgument(0);
+            consumer.accept(rows);
+            return null;
+        }).when(materials).scanAnnouncements(any());
+        assertEquals(3, service.discover().getResolved());
+        var samples = repository.recent(Long.MAX_VALUE, 20);
+        assertEquals(3, samples.size());
+        // 原文迟到可补齐关联，原始公开时间与样本身份保持稳定。
+        rows.get(0).setContent("公司于2026年11月11日召开第六届董事会第六次会议，审议通过回购股份预案。");
+        assertEquals(0, service.discover().getResolved());
+        var refreshed = repository.recent(Long.MAX_VALUE, 20);
+        assertEquals(samples.stream().map(ReactionSample::getId).toList(), refreshed.stream().map(ReactionSample::getId).toList());
+        assertEquals(1, refreshed.stream().map(sample -> sample.getHistoricalCase().topicKey()).distinct().count());
+        assertEquals(2, repository.relatedStages(refreshed.get(0).getHistoricalCase(), refreshed.get(0).getId()).size());
     }
 
     @Test

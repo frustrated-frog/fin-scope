@@ -396,6 +396,7 @@
 }
 .reaction-browser-event-type[data-tone='earnings'] { color: var(--rw-earnings); background: color-mix(in srgb, var(--rw-earnings) 9%, transparent); }
 .reaction-browser-event-type[data-tone='operating'] { color: var(--rw-operating); background: color-mix(in srgb, var(--rw-operating) 9%, transparent); }
+.reaction-browser-event-type[data-tone='repurchase'] { color: var(--rw-accent); background: color-mix(in srgb, var(--rw-accent) 9%, transparent); }
 .reaction-browser-meta time { font-variant-numeric: tabular-nums; }
 .reaction-browser-followed { color: var(--rw-accent); font-size: 9px; }
 .reaction-browser-reports {

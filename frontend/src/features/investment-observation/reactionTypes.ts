@@ -1,4 +1,4 @@
-export type EventType = 'EARNINGS' | 'CONTRACT';
+export type EventType = 'EARNINGS' | 'CONTRACT' | 'REPURCHASE';
 export type SampleState = 'DRAFT' | 'OBSERVING' | 'ARCHIVED';
 export type WindowStatus = 'READY' | 'NOT_DUE' | 'MISSING_DATA' | 'SUSPENDED';
 export type PathType = 'RECOVERED' | 'PEAK_GIVEBACK' | 'OBSERVING' | 'PERSISTENT_STRENGTH' | 'GIVEBACK' | 'DELAYED_STRENGTH' | 'RELATIVE_WEAKNESS' | 'NO_CLEAR_PATTERN';
@@ -80,7 +80,7 @@ export interface ReactionCandidate {
   occurredDate?: string;
   suggestedType: EventType;
 }
-export const eventLabels: Record<EventType, string> = { EARNINGS: '业绩披露', CONTRACT: '合同与订单' };
+export const eventLabels: Record<EventType, string> = { EARNINGS: '业绩披露', CONTRACT: '合同与订单', REPURCHASE: '股份回购' };
 export const statusLabels: Record<WindowStatus, string> = {
   READY: '已完成', NOT_DUE: '尚未到期', MISSING_DATA: '行情缺失', SUSPENDED: '无成交／可能停牌'
 };
@@ -182,6 +182,8 @@ export const subtypeLabels: Record<string, string> = {
   EARNINGS_FORECAST: '业绩预告', EARNINGS_REVISION: '业绩修正', EARNINGS_REPORT: '业绩报告',
   CONTRACT_PROPOSED: '拟议合同', CONTRACT_DENIED: '合同否认／澄清',
   CONTRACT_SIGNED: '合同签署', CONTRACT_AWARDED: '正式中标', CONTRACT_AMENDED: '合同变更', CONTRACT_TERMINATED: '合同终止',
+  REPURCHASE_PLAN: '回购预案', REPURCHASE_FINANCING: '回购融资支持', REPURCHASE_SHAREHOLDERS: '回购股东披露',
+  REPURCHASE_PROGRESS: '回购进展', REPURCHASE_COMPLETED: '回购结束', REPURCHASE_TERMINATED: '回购终止',
   OPERATING_UPDATE: '经营进展', UNCLASSIFIED: '未分类'
 };
 

@@ -158,7 +158,7 @@ public class ReactionWorkspaceService {
         ReactionHistoryComparison result = new ReactionHistoryComparison();
         result.setSessions(sessions);
         if (!target.isExcluded() && target.getHistoricalCase() != null && target.getHistoricalCase().topicKey() != null) {
-            result.setRelatedStages(repository.relatedStages(target.getHistoricalCase()));
+            result.setRelatedStages(repository.relatedStages(target.getHistoricalCase(), target.getId()));
         }
         result.setSameCompany(group(target, eligible.stream().filter(value -> value.getInstrumentCode().equals(target.getInstrumentCode())).toList(), sessions));
         result.setOtherCompanies(group(target, eligible.stream().filter(value -> !value.getInstrumentCode().equals(target.getInstrumentCode())).toList(), sessions));
@@ -167,11 +167,19 @@ public class ReactionWorkspaceService {
 
     private boolean eligible(ReactionSample target, ReactionSample candidate) {
         return !candidate.isExcluded() && candidate.getState() != ReactionSampleState.DRAFT && !target.getSourceIdentity().equals(candidate.getSourceIdentity())
+                && !sameRepurchasePlan(target, candidate)
                 && !caseIdentity(target).equals(caseIdentity(candidate))
                 && candidate.getPublishedAt() != null && candidate.getPublishedAt().isBefore(target.getPublishedAt())
                 && subtype(candidate) == subtype(target)
                 && (candidate.getCalculation() == null || target.getCalculation().getBenchmarkCode().equals(candidate.getCalculation().getBenchmarkCode())
                 && target.getCalculation().getMethodVersion().equals(candidate.getCalculation().getMethodVersion()));
+    }
+
+    private boolean sameRepurchasePlan(ReactionSample target, ReactionSample candidate) {
+        return target.getEventType() == com.finscope.common.enums.investmentobservation.ReactionEventType.REPURCHASE
+                && target.getHistoricalCase() != null && target.getHistoricalCase().topicKey() != null
+                && candidate.getHistoricalCase() != null
+                && target.getHistoricalCase().topicKey().equals(candidate.getHistoricalCase().topicKey());
     }
 
     private ReactionEventSubtype subtype(ReactionSample sample) {

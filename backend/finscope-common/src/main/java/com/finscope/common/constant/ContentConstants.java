@@ -9,6 +9,7 @@ public final class ContentConstants {
     public static final String DEFAULT_ARTICLE_TITLE = "未命名文章";
     public static final String DEFAULT_CATEGORY = "市场";
     public static final String DEFAULT_SOURCE_NAME = "手动研究";
+    public static final String PROVIDER_EASTMONEY_ANNOUNCEMENT = "EASTMONEY_ANNOUNCEMENT";
 
     // 分类
     public static final String CATEGORY_MACRO = "宏观";

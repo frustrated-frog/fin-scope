@@ -14,6 +14,28 @@ import static org.mockito.Mockito.*;
 
 class ReactionWorkspaceServiceTest {
     @Test
+    void excludesSameRepurchasePlanFromIndependentHistoricalComparisons() {
+        var repo = mock(ReactionSampleRepository.class);
+        var registration = mock(ReactionRegistrationService.class);
+        var service = new ReactionWorkspaceService();
+        ReflectionTestUtils.setField(service, "repository", repo);
+        ReflectionTestUtils.setField(service, "registration", registration);
+        var target = sample(999);
+        var samePlan = sample(1);
+        var previousPlan = sample(2);
+        for (var value : List.of(target, samePlan, previousPlan)) {
+            value.setEventType(ReactionEventType.REPURCHASE);
+            value.setEventSubtype(ReactionEventSubtype.REPURCHASE_PROGRESS);
+            value.setHistoricalCase(new ReactionHistoricalCase(ReactionEventSubtype.REPURCHASE_PROGRESS,
+                    "NOTICE:" + value.getId(), value == previousPlan ? "BOARD:PREVIOUS" : "BOARD:CURRENT"));
+        }
+        when(registration.require(999)).thenReturn(target);
+        when(repo.comparableCandidates(ReactionEventSubtype.REPURCHASE_PROGRESS, 0)).thenReturn(List.of(samePlan, previousPlan));
+        assertEquals(1, service.compare(999, 5).getSameCompany().getSampleCount());
+        verify(repo).relatedStages(target.getHistoricalCase(), target.getId());
+    }
+
+    @Test
     void searchesBeyondFirstPageCountsAllOutcomesAndNeverSelectsByReturn() {
         var repo = mock(ReactionSampleRepository.class);
         var registration = mock(ReactionRegistrationService.class);

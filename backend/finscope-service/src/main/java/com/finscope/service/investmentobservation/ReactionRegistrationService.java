@@ -135,6 +135,10 @@ public class ReactionRegistrationService {
     }
 
     private ReactionEventType suggestType(String title) {
+        var decision = new com.finscope.domain.investmentobservation.ReactionEventRules().evaluate(title);
+        if (decision.getEventType() == ReactionEventType.REPURCHASE) {
+            return ReactionEventType.REPURCHASE;
+        }
         String value = title == null ? "" : title;
         if (value.matches(".*(业绩|季报|年报|半年报|财报).*")) {
             return ReactionEventType.EARNINGS;
