@@ -86,8 +86,10 @@ class OvernightJointWorker:
     def train(self, job, profile, codes, universe, index_history, now):
         meta, models = self.automation.store, self.research.models
         saved = models.checkpoint(models.for_job(job['key']))
-        checkpoint = TrainingCheckpoint(saved[1].get('trainingCheckpoint') if saved else None)
+        checkpoint = TrainingCheckpoint(saved[1].get('trainingCheckpoint') if saved else None,
+            progress=lambda stage, components: meta.training_progress(job, self.clock(), stage, components))
         if not checkpoint.data:
+            checkpoint.notify('PREPARE')
             checkpoint.data = self.prepare(codes, profile, now)
         data = checkpoint.data
         through = datetime.fromisoformat(data['through'])
@@ -121,6 +123,7 @@ class OvernightJointWorker:
         fresh = checkpoint.run('FRESH', lambda: train_fresh_research(direction_rows, index_history,
             through.isoformat(), profile.cutoff, previous=previous_fresh))
         partial = bool(checkpoint.failed)
+        checkpoint.notify('PUBLISH')
         artifact = models.publish({'protocol': PROTOCOL, 'profile': profile.dump(),
             'createdAt': self.clock().isoformat(), 'labelsThrough': max(row['exitAt'] for row in panel + direction_rows + context_rows + selection_rows),
             'universeFingerprint': universe['fingerprint'], 'universeCreatedAt': universe['createdAt'],
@@ -135,6 +138,7 @@ class OvernightJointWorker:
         if market_audit is not None:
             meta.put(f'marketAblation:{profile.cutoff}', market_audit)
         meta.finish(job, self.clock(), status='FAILED' if partial else 'COMPLETED', artifactId=artifact['id'],
+                    trainingStage='FAILED' if partial else 'COMPLETED',
                     componentStatus=checkpoint.summary(), failedComponents=checkpoint.failed, **data['data'],
                     reason='部分模型失败，继续使用上次完整版本；最多重试三次' if partial else None)
 

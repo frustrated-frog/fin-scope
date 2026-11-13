@@ -1,4 +1,4 @@
-.overnight-candidate-progress { margin: 20px 0; border-top: 1px solid var(--line); background: transparent; }
+.overnight-candidate-progress { min-width: 0; margin: 20px 0; border-top: 1px solid var(--line); background: transparent; }
 .overnight-candidate-progress h5 { font-size: 15px; margin: 18px 0 8px; }
 .overnight-candidate-progress article { padding: 16px 0; border-bottom: 1px solid var(--line); }
 .overnight-candidate-progress article > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; font-size: 12px; }
@@ -14,6 +14,9 @@
 .overnight-candidate-audit-table caption { text-align: left; padding: 12px 0; color: var(--muted); }
 .overnight-candidate-audit-table th, .overnight-candidate-audit-table td { text-align: right; padding: 10px 4px; border-bottom: 1px solid var(--line); font-weight: 400; }
 .overnight-candidate-audit-table th:first-child { text-align: left; }
+.overnight-candidate-support-table table { min-width: 460px; }
+.overnight-candidate-support-table td { white-space: nowrap; }
+.overnight-candidate-support-table:focus-visible { outline: 2px solid var(--overnight-blue); outline-offset: 3px; }
 @media (max-width: 420px) {
   .overnight-candidate-stages { gap: 8px; }
   .overnight-candidate-stages strong { font-size: 14px; }

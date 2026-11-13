@@ -4,6 +4,9 @@ export interface CandidateReadiness {
   computedAt: string; status?: string; reason?: string;
   completeDays?: number; cohortDays?: number;
   reasonCounts?: Record<string, number>;
+  support?: { protocol: string; status: string; dayCount: number; poolRows: number; candidateRows: number;
+    outsidePoolRows: number; unpairedDays: number;
+    features: Array<{ code: string; poolMedian: number; candidateMedian: number; outsideCentralRangeRate: number }> };
   days?: Array<{ signalDate: string; expectedCount: number; availableCount: number;
     complete: boolean; missing: Record<string, number> }>;
 }

@@ -22,9 +22,10 @@ export interface OvernightJointGroup {
 }
 
 export interface OvernightJointState {
+  trainingPolicy?: string;
   protocol: string; poolSize: number; targetSize: number; readySymbols: number; minimumSymbols: number;
   coverageAt?: string; scope?: string; limitation?: string;
-  models: Array<{ id: string; createdAt: string; labelsThrough: string;
+  models: Array<{ id: string; createdAt: string; labelsThrough: string; trainingPolicy?: string; trainingStatus?: string;
     profile: { key: string; mode: OvernightMode; cutoff: string; costBps: number };
     data: { symbolCount: number; dayCount: number; rows: number };
     targets: Array<{ target: string; trainingDays: number; calibrationDays: number;
@@ -60,5 +61,6 @@ export interface OvernightJointState {
     relativeStrength?: { protocol: string; expectedIndices: number; capturedIndices: number; pairedSymbols: number };
     market?: { quality: string; capturedSymbols?: number; expectedSymbols?: number; reason?: string } }>;
   jobs: Array<{ key: string; mode: OvernightMode; status: string; reason?: string; attempts?: number;
-    cutoff?: string; failedComponents?: string[]; componentStatus?: Record<string, { status: string }> }>;
+    cutoff?: string; startedAt?: string; trainingStage?: string; progressAt?: string;
+    failedComponents?: string[]; componentStatus?: Record<string, { status: string }> }>;
 }

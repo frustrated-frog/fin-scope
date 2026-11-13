@@ -2,6 +2,7 @@ import type { OvernightJointState } from './overnightJointTypes';
 import type { OvernightAutomationJob, OvernightMode, OvernightTarget } from './overnightTypes';
 import './OvernightJointPanel.css';
 import { OvernightDirectionSummary } from './OvernightDirectionPanel';
+import { OvernightTrainingStatus } from './OvernightTrainingStatus';
 
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const targetName = (target: string) => target === 'OPEN' ? '次日开盘' : target === 'CLOSE' ? '次日收盘' : `次日 ${target}`;
@@ -19,7 +20,8 @@ export function OvernightJointPanel({ state, mode }: { state?: OvernightJointSta
   const groups = state.forward?.groups.filter(group => group.mode === mode) ?? [];
   const active = groups.filter(group => group.eligible && models.some(model =>
     model.profile.cutoff === group.cutoff && model.profile.costBps === group.costBps)).length;
-  const modeJobs = state.jobs.filter(job => job.mode === mode);
+  const modeJobs = state.jobs.filter(job => job.mode === mode)
+    .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
   const failedJobs = modeJobs.filter((job, index) => modeJobs.findIndex(row => row.cutoff === job.cutoff) === index
     && ['FAILED', 'INSUFFICIENT_DATA'].includes(job.status));
   const title = !models.length ? '公共样本正在积累' : active ? `${active} 个退出时点通过前瞻对照` : '联合模型正在并行验证';
@@ -32,6 +34,7 @@ export function OvernightJointPanel({ state, mode }: { state?: OvernightJointSta
       <div><dt>已有 140 日完整行情</dt><dd>{state.readySymbols}<small> 只</small></dd></div>
       <div><dt>当前模式的联合模型</dt><dd>{models.length}<small> 个决策时点</small></dd></div></dl>
     {!models.length && <p className="overnight-joint-hint">至少 {state.minimumSymbols} 只具备足够历史后尝试训练；行情覆盖达标不等于预测已有效。</p>}
+    <OvernightTrainingStatus state={state} mode={mode} />
     <OvernightDirectionSummary state={state} mode={mode} />
     <details><summary>样本范围与新旧模型对照 <span>{groups.length ? `${groups.length} 组记录` : '等待前瞻结果'}</span></summary>
       <p>验收需要首批 {state.forward?.requiredDays ?? 60} 个结果完整的前瞻交易日。同一天的多只股票合计为一天；历史补数不增加这项进度。</p>

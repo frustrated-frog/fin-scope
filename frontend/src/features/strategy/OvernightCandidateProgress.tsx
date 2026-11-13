@@ -8,6 +8,8 @@ const reasons: Record<string, string> = {
 };
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const arms = { ROLLING: '滚动选涨', INCUMBENT: '当时主判断', MOMENTUM: '当日涨幅排序', UNIFORM: '同池平均' };
+const featureName = (code: string) => code === 'RELATIVE_AMOUNT_5' ? '相对过去五日成交额' : '开盘至判断时涨幅';
+const featureValue = (code: string, value: number) => code === 'RELATIVE_AMOUNT_5' ? `${Math.exp(value).toFixed(2)} 倍` : percent(value);
 
 export function OvernightCandidateProgress({ state }: { state: OvernightJointState }) {
   const models = state.models.filter(model => model.profile.mode === 'TAIL_ENTRY'
@@ -43,6 +45,19 @@ export function OvernightCandidateProgress({ state }: { state: OvernightJointSta
         {waiting && <p>至少需要 10 个完整候选日且覆盖达到 75%。缺失项保留在计划内，后台继续准备。</p>}
         {!waiting && !advantage && <p>样本已进入择模，但现有方案尚未同时满足命中、覆盖和简单基准对照要求。历史比例继续标记为证据不足。</p>}
         <details><summary>查看样本缺口与同名单对照</summary>
+          {readiness?.support?.protocol === 'overnight-candidate-support-v1' && <section aria-label="候选与训练样本差异">
+            <p><b>{readiness.support.status === 'SHIFT_DETECTED' ? '候选特征与训练池存在明显差异' : '候选与训练池对照'}</b></p>
+            {readiness.support.features.length ? <>
+              <p>{readiness.support.dayCount} 个完整日期中，{readiness.support.outsidePoolRows} / {readiness.support.candidateRows} 条候选来自原训练池之外。按日期等权比较：</p>
+              <div className="overnight-candidate-audit-table overnight-candidate-support-table" tabIndex={0} role="region" aria-label="候选特征差异，可横向滚动"><table><caption>特征中位数 · 同日期间</caption>
+                <thead><tr><th>特征</th><th>训练池</th><th>实际候选</th><th>常见区间外占比</th></tr></thead>
+                <tbody>{readiness.support.features.map(row => <tr key={row.code}><th>{featureName(row.code)}</th>
+                  <td>{featureValue(row.code, row.poolMedian)}</td><td>{featureValue(row.code, row.candidateMedian)}</td>
+                  <td>{percent(row.outsideCentralRangeRate)}</td></tr>)}</tbody>
+              </table></div>
+              <p>常见区间取训练池第 5—95 百分位。这项诊断描述样本差异，不证明漏判原因，也不会据此调高上涨概率。</p>
+            </> : <p>同日可训练样本不足，暂无法对照；不把未知差异显示为 0。</p>}
+          </section>}
           <div className="overnight-candidate-audit-table"><table><caption>逐日样本可用性</caption>
             <thead><tr><th>日期</th><th>可用 / 计划</th><th>缺口</th></tr></thead>
             <tbody>{readiness?.days?.map(day => <tr key={day.signalDate}><th>{day.signalDate.slice(5)}</th>
