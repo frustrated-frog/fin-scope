@@ -87,3 +87,17 @@ def test_scaling_comes_from_candidates_and_probability_uses_raw_features():
     predicted = candidate_probabilities(public, [r['features'] for r in rows[:6]])
     assert all(np.all(predicted[key] == .4) for key in CANDIDATES)
     assert predicted[RECIPE][0] < .5 < predicted[RECIPE][-1]
+
+
+def test_development_metrics_pair_ready_dates_and_do_not_fake_small_sample_intervals():
+    from finscope_market_data.overnight.candidate_training_evaluation import evaluate_candidate_training
+    checks = [{'signalDate': f'2026-10-{i:02}', 'instrumentCode': str(j), 'actualUp': j == 0,
+               'candidateReady': i > 1, 'probability': .7 if j == 0 else .3,
+               'poolProbability': .4, 'poolShapeProbability': .4, 'poolPrior': .4,
+               'candidatePrior': .5, 'momentum': j} for i in range(1, 7) for j in range(3)]
+    readiness = {'days': [{'targetAt': f'2026-10-{i+1:02}T15:00:00'} for i in range(1, 8)]}
+    audit = evaluate_candidate_training(checks, readiness, '2026-11-01')
+    assert audit['dayCount'] == 5 and audit['sampleCount'] == 15 and audit['warmupDays'] == 1
+    assert audit['plannedDays'] == 7 and audit['arms']['CANDIDATE']['accuracy'] == pytest.approx(1.)
+    assert not audit['eligible'] and audit['uncertaintyStatus'] == 'INSUFFICIENT_DAYS'
+    assert audit['comparisons']['POOL_ROLLING']['accuracyDifferenceLower'] is None

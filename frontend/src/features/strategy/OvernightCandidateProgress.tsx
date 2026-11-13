@@ -1,13 +1,14 @@
 import type { OvernightJointState } from './overnightJointTypes';
 import { candidateProtocol } from './overnightCandidateTypes';
 import './OvernightCandidateProgress.css';
+import { OvernightCandidateTraining } from './OvernightCandidateTraining';
 
 const reasons: Record<string, string> = {
   NOT_DUE: '次日尚未到期', MISSING_OUTCOME: '缺少次日收盘', MISSING_DECISION_BARS: '缺少判断时行情',
   MISSING_PAST_FEATURES: '历史分钟不完整', CALENDAR_UNAVAILABLE: '交易日历未覆盖',
 };
 const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
-const arms = { ROLLING: '滚动选涨', INCUMBENT: '当时主判断', MOMENTUM: '当日涨幅排序', UNIFORM: '同池平均' };
+const arms = { ROLLING: '候选专训', INCUMBENT: '当时主判断', MOMENTUM: '当日涨幅排序', UNIFORM: '同池平均' };
 const featureName = (code: string) => code === 'RELATIVE_AMOUNT_5' ? '相对过去五日成交额' : '开盘至判断时涨幅';
 const featureValue = (code: string, value: number) => code === 'RELATIVE_AMOUNT_5' ? `${Math.exp(value).toFixed(2)} 倍` : percent(value);
 
@@ -30,23 +31,29 @@ export function OvernightCandidateProgress({ state }: { state: OvernightJointSta
         </article>;
       }
       const selection = model.upSelection.audit.selection;
+      const training = model.upSelection.audit.candidateTraining;
       const forward = state.candidateForward?.protocol === candidateProtocol
         ? state.candidateForward.groups.find(group => group.cutoff === model.profile.cutoff && group.mode === 'TAIL_ENTRY') : undefined;
       const waiting = selection.reason === 'INSUFFICIENT_COMPLETE_CANDIDATES';
       const advantage = selection.reason === 'CANDIDATE_ADVANTAGE';
       return <article key={model.id}>
-        <header><b>{model.profile.cutoff} 尾盘</b><span>{waiting ? '完整样本仍不足' : advantage ? '候选方案进入真实对照' : '尚未找到稳定选涨优势'}</span></header>
+        <header><b>{model.profile.cutoff} 尾盘</b><span>{training ? training.status === 'READY' ? '候选专训 · 等待前瞻验收' : '候选训练样本积累中'
+          : waiting ? '完整样本仍不足' : advantage ? '候选方案进入真实对照' : '尚未找到稳定选涨优势'}</span></header>
         <ol className="overnight-candidate-stages">
           <li><span>样本对齐</span><strong>{readiness?.cohortDays != null ? `${readiness.completeDays} / ${readiness.cohortDays} 日` : '未记录'}</strong><small>原始名单完整可核验</small></li>
-          <li><span>近期择模</span><strong>{selection.selectionDays} / {selection.plannedDays} 日</strong><small>覆盖 {percent(selection.candidateCoverage)}</small></li>
+          <li><span>{training ? '候选专训' : '近期择模'}</span><strong>{training ? `${training.trainingDays} 日` : `${selection.selectionDays} / ${selection.plannedDays} 日`}</strong>
+            <small>{training ? `${training.trainingRows} 条真实候选` : `覆盖 ${percent(selection.candidateCoverage)}`}</small></li>
           <li><span>真实验证</span><strong>{forward?.dayCount ?? 0} 日</strong><small>新版上线后单独留档</small></li>
         </ol>
-        <p>最终拟合至 {model.upSelection.audit.modelFitThrough?.slice(0, 10) ?? '未记录'} · 择模结果截止 {selection.selectionThrough?.slice(0, 10) ?? '等待到期结果'}。</p>
-        {waiting && <p>至少需要 10 个完整候选日且覆盖达到 75%。缺失项保留在计划内，后台继续准备。</p>}
-        {!waiting && !advantage && <p>样本已进入择模，但现有方案尚未同时满足命中、覆盖和简单基准对照要求。历史比例继续标记为证据不足。</p>}
+        <p>{training ? `候选训练结果截至 ${training.trainingThrough?.slice(0, 10) ?? '等待积累'}`
+          : `最终拟合至 ${model.upSelection.audit.modelFitThrough?.slice(0, 10) ?? '未记录'} · 择模结果截止 ${selection.selectionThrough?.slice(0, 10) ?? '等待到期结果'}`}。</p>
+        {training && <p>自动学习过去真实入选股票的次日表现。训练完成不等于已有预测优势，原判断继续保留。</p>}
+        {!training && waiting && <p>至少需要 10 个完整候选日且覆盖达到 75%。缺失项保留在计划内，后台继续准备。</p>}
+        {!training && !waiting && !advantage && <p>样本已进入择模，但现有方案尚未同时满足命中、覆盖和简单基准对照要求。历史比例继续标记为证据不足。</p>}
         <details><summary>查看样本缺口与同名单对照</summary>
+          {training && <OvernightCandidateTraining training={training} comparison={model.upSelection.audit.candidateComparison} />}
           {readiness?.support?.protocol === 'overnight-candidate-support-v1' && <section aria-label="候选与训练样本差异">
-            <p><b>{readiness.support.status === 'SHIFT_DETECTED' ? '候选特征与训练池存在明显差异' : '候选与训练池对照'}</b></p>
+            <p><b>{training ? '原公共池与真实候选的样本差异' : readiness.support.status === 'SHIFT_DETECTED' ? '候选特征与训练池存在明显差异' : '候选与训练池对照'}</b></p>
             {readiness.support.features.length ? <>
               <p>{readiness.support.dayCount} 个完整日期中，{readiness.support.outsidePoolRows} / {readiness.support.candidateRows} 条候选来自原训练池之外。按日期等权比较：</p>
               <div className="overnight-candidate-audit-table overnight-candidate-support-table" tabIndex={0} role="region" aria-label="候选特征差异，可横向滚动"><table><caption>特征中位数 · 同日期间</caption>

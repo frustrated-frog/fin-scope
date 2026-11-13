@@ -1,4 +1,21 @@
-export const candidateProtocol = 'overnight-candidate-rolling-v2';
+export const candidateProtocol = 'overnight-candidate-rolling-v3';
+
+export interface CandidateTraining {
+  status: string; reason: string; trainingDays: number; trainingRows: number; outsidePoolRows: number;
+  trainingThrough: string | null; excludedRows: number; unverifiedActionRows: number; minimumDays: number; minimumRows: number;
+}
+
+interface CandidateTrainingMetrics {
+  dayCount: number; sampleCount: number;
+  arms: Record<string, { accuracy: number; brierScore: number;
+    topK: { precision: number | null }; calls: { precision: number | null; dayCoverage: number; selectedDays: number; selectionCount: number } }>;
+  momentum: { precision: number | null } | null;
+}
+
+export interface CandidateTrainingComparison extends CandidateTrainingMetrics {
+  plannedDays: number; warmupDays: number; firstDate: string | null; lastDate: string | null;
+  lastFiveDates: CandidateTrainingMetrics; evidenceKind: string; eligible: boolean;
+}
 
 export interface CandidateReadiness {
   computedAt: string; status?: string; reason?: string;

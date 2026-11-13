@@ -14,6 +14,13 @@ def paired_metrics(rows):
     labels = [r['actualUp'] for r in rows]
     result = evaluate_direction([r['probability'] for r in rows], labels, dates,
         {name: [r[key] for r in rows] for name, key in ARMS.items() if name != 'CANDIDATE'})
+    # A five-date sample with five-date circular blocks produces a degenerate
+    # interval. Fewer than two blocks cannot support an uncertainty statement.
+    enough_blocks = len(set(dates)) >= 10
+    if not enough_blocks:
+        for comparison in result['comparisons'].values():
+            for key in ('accuracyDifferenceLower', 'accuracyDifferenceUpper', 'brierDifferenceLower', 'brierDifferenceUpper'):
+                comparison[key] = None
     arms = {}
     for name, key in ARMS.items():
         values = [{**r, 'probability': r[key], 'score': r[key]} for r in rows]
@@ -23,7 +30,7 @@ def paired_metrics(rows):
             'brierScore': direction['brierScore'], 'detection': detection(values),
             'topK': evaluate_ranking(values), 'calls': evaluate_candidates(values)}
     return {'dayCount': len(set(dates)), 'sampleCount': len(rows), 'arms': arms,
-        'comparisons': result['comparisons'],
+        'comparisons': result['comparisons'], 'uncertaintyStatus': 'DATE_BLOCK_ESTIMATE' if enough_blocks else 'INSUFFICIENT_DAYS',
         'momentum': evaluate_ranking([{**r, 'score': r['momentum']} for r in rows])}
 
 
