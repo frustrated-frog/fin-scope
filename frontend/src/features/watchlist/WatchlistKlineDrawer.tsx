@@ -5,7 +5,7 @@ import { StockSupplyChainPanel } from './StockSupplyChainPanel';
 import { loadWatchlistMarketHistory, StockMarketHistory } from './watchlistDailyBarCache';
 import { compareStockBenchmark, summarizeStockHistory } from './stockMarketAnalysis';
 import { StockMarketInsights } from './StockMarketInsights';
-import { StockFundamentalsPanel } from './StockFundamentalsPanel';
+import { StockFundamentalResearchPanel } from './StockFundamentalResearchPanel';
 import { acquireWatchlistOverlayScrollLock } from './watchlistOverlayScrollLock';
 
 /** 自选标的日线行情工作台：在原页面之上展示，不卸载自选列表。 */
@@ -124,16 +124,16 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
       });
   }
 
-  const tabTitle = activeTab === 'chart' ? '行情图表' : activeTab === 'supply-chain' ? '产业链结论' : '财务与估值';
+  const tabTitle = activeTab === 'chart' ? '行情图表' : activeTab === 'supply-chain' ? '产业链结论' : '基本面研究';
 
   return (
     <div ref={backdrop} className="watchlist-kline-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="watchlist-kline-modal" role="dialog" aria-modal="true" aria-labelledby="watchlist-kline-title">
         <header className="watchlist-kline-header">
           <div className="watchlist-kline-identity">
-            <span>{activeTab === 'chart' ? 'MARKET VIEW · DAILY' : activeTab === 'supply-chain' ? 'SUPPLY CHAIN · OVERVIEW' : 'FINANCIALS · VALUATION'}</span>
+            <span>{activeTab === 'chart' ? 'MARKET VIEW · DAILY' : activeTab === 'supply-chain' ? 'SUPPLY CHAIN · OVERVIEW' : 'COMPANY · FUNDAMENTALS'}</span>
             <h2 id="watchlist-kline-title">{name} <small>{tabTitle}</small></h2>
-            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '完整日线 · 自动量价观察' : activeTab === 'supply-chain' ? '上下游关系与核心结论' : '季度趋势与真实估值档案'}</p>
+            <p>{item.code}{item.market ? ` · ${item.market}` : ''} · {activeTab === 'chart' ? '完整日线 · 自动量价观察' : activeTab === 'supply-chain' ? '上下游关系与核心结论' : '经营底稿 · 财务变化 · 持续验证'}</p>
           </div>
           <div className="watchlist-kline-head-actions">
             {returnLabel && (
@@ -158,11 +158,11 @@ export function WatchlistKlineDrawer({ item, onClose, returnLabel, onOpenIndustr
         <nav className="watchlist-stock-tabs" role="tablist" aria-label="股票详情">
           <button type="button" role="tab" aria-selected={activeTab === 'chart'} onClick={() => setActiveTab('chart')}>行情走势</button>
           <button type="button" role="tab" aria-selected={activeTab === 'supply-chain'} onClick={() => setActiveTab('supply-chain')}>产业链</button>
-          <button type="button" role="tab" aria-selected={activeTab === 'fundamentals'} onClick={() => setActiveTab('fundamentals')}>财务与估值</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'fundamentals'} onClick={() => setActiveTab('fundamentals')}>基本面研究</button>
         </nav>
 
         <div className={`watchlist-kline-content${activeTab === 'supply-chain' ? ' is-supply-chain' : ''}`}>
-          {activeTab === 'fundamentals' ? <StockFundamentalsPanel code={item.code} /> : activeTab === 'supply-chain' ? (
+          {activeTab === 'fundamentals' ? <StockFundamentalResearchPanel code={item.code} /> : activeTab === 'supply-chain' ? (
             <StockSupplyChainPanel code={item.code} name={name} onOpenIndustryChain={onOpenIndustryChain} />
           ) : loading ? (
             <div className="watchlist-kline-pending" aria-live="polite"><span aria-hidden="true" /><strong>正在加载日线…</strong></div>
