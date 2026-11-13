@@ -5,6 +5,7 @@ from datetime import datetime
 from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.overnight.direction_dataset import close_outcome, direction_features
 from finscope_market_data.overnight.engine import group_bars
+from finscope_market_data.overnight.candidate_support import candidate_support
 
 PROTOCOL = 'overnight-candidate-readiness-v1'
 MAX_COHORT_DAYS = 60
@@ -59,4 +60,5 @@ def build_actual_candidate_panel(base, store, cohorts, cutoff, through):
         'featureScope': 'DECISION_TIME_STOCK_FEATURES', 'days': days, 'records': records,
         'reasonCounts': dict(Counter(r['reason'] for r in records)),
         'completeDays': sum(day['complete'] for day in days), 'cohortDays': len(days),
+        'support': candidate_support(base + extra, cohorts, days, cutoff, through.isoformat()),
         'scope': '真实候选名单；历史输入仅用于按时间回放，不改写原始前瞻预测'}

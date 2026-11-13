@@ -49,3 +49,19 @@ test('exposes a failed preparation without fabricating zero accuracy or hiding t
   expect(screen.getByText('候选滚动择模失败，等待下次训练')).toBeVisible();
   expect(screen.queryByText('0 日')).not.toBeInTheDocument();
 });
+
+test('exposes training population mismatch without treating it as prediction accuracy', async () => {
+  render(<OvernightCandidateProgress state={{ ...state, models: [{ ...state.models[0],
+    candidateReadiness: { ...state.models[0].candidateReadiness!, support: {
+      protocol: 'overnight-candidate-support-v1', status: 'SHIFT_DETECTED', dayCount: 14, poolRows: 1600,
+      candidateRows: 108, outsidePoolRows: 106, unpairedDays: 0, features: [
+        { code: 'INTRADAY_RETURN', poolMedian: -.0016, candidateMedian: .0634, outsideCentralRangeRate: .65 },
+        { code: 'RELATIVE_AMOUNT_5', poolMedian: 0, candidateMedian: Math.log(3.5), outsideCentralRangeRate: .72 },
+      ] } } }] }} />);
+  expect(screen.getByText('候选特征与训练池存在明显差异')).not.toBeVisible();
+  await userEvent.click(screen.getByText('查看样本缺口与同名单对照'));
+  expect(screen.getByText(/106 \/ 108 条候选来自原训练池之外/)).toBeVisible();
+  expect(screen.getByText('3.50 倍')).toBeVisible();
+  expect(screen.getByText('6.3%')).toBeVisible();
+  expect(screen.getByText(/不会据此调高上涨概率/)).toBeVisible();
+});
