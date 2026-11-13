@@ -11,6 +11,7 @@ import com.finscope.rpc.marketintel.CapitalFlowProvider;
 import com.finscope.rpc.marketintel.DragonTigerData;
 import com.finscope.rpc.marketintel.DragonTigerProvider;
 import com.finscope.rpc.marketintel.ProviderContractException;
+import com.finscope.service.marketintel.CapitalMarketEnrichmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,6 +33,7 @@ import java.time.Duration;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -52,10 +54,13 @@ class MarketIntelApiIntegrationTest {
     @MockBean(name="eastmoneyCapitalFlowProvider") CapitalFlowProvider fallbackProvider;
     @MockBean(name="eastmoneyDragonTigerProvider") DragonTigerProvider dragonTigerProvider;
     @MockBean LlmChatClient llm;
+    @MockBean CapitalMarketEnrichmentService enrichment;
     @MockBean(name="marketIntelRefreshExecutor") Executor refreshExecutor;
     @MockBean(name="marketIntelAgentExecutor") Executor agentExecutor;
 
     @BeforeEach void setUp(){
+        // API 集成测试使用固定资金事实，独立行情补齐在服务层测试，不访问真实报价。
+        when(enrichment.enrich(any(Instrument.class), anyList())).thenAnswer(call -> call.getArgument(1));
         jdbc.update("DELETE FROM market_capital_interpretation");jdbc.update("DELETE FROM market_capital_behavior_evaluation");jdbc.update("DELETE FROM market_capital_behavior_snapshot");jdbc.update("DELETE FROM market_capital_flow_snapshot");
         jdbc.update("DELETE FROM market_dragon_tiger_seat");jdbc.update("DELETE FROM market_dragon_tiger_record");
         jdbc.update("DELETE FROM market_intel_refresh_step");jdbc.update("DELETE FROM market_intel_refresh_run");jdbc.update("DELETE FROM agent_run");jdbc.update("DELETE FROM watchlist_item");jdbc.update("DELETE FROM instrument");
