@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.finscope.domain.agent.AgentRun;
 import com.finscope.domain.industrychain.IndustryChainEventImpact;
 import com.finscope.domain.radar.RadarEventSignal;
+import com.finscope.domain.radar.RadarEventSnapshot;
 import com.finscope.domain.radar.RadarEventWorkspace;
 
 import java.time.LocalDateTime;
@@ -105,13 +106,20 @@ final class RedisRadarCacheSession extends RadarCacheState {
     }
 
     void prefetchDependencies(RadarCacheLayout.Section section, Collection<?> keys, List<String> payloads) {
+        List<Object> presentKeys = new ArrayList<>();
+        int position = 0;
+        for (Object key : keys) {
+            if (payloads.get(position++) != null) {
+                presentKeys.add(key);
+            }
+        }
         switch (section.name()) {
             case "signalIdsByItemId" -> prefetch(getSignals(), referencedIds(payloads));
             case "eventIdsByKey" -> prefetch(getEvents(), referencedIds(payloads));
             case "eventSignals", "snapshots", "evidence", "interpretations", "userStates",
                     "timelines", "timelineFingerprints", "researchLinks" ->
-                    prefetch(getEvents(), keys.stream().map(Long.class::cast).toList());
-            case "runSteps" -> prefetch(getRuns(), keys.stream().map(Long.class::cast).toList());
+                    prefetch(getEvents(), presentKeys.stream().map(Long.class::cast).toList());
+            case "runSteps" -> prefetch(getRuns(), presentKeys.stream().map(Long.class::cast).toList());
             default -> {
                 // 独立对象无需预取父记录。
             }
@@ -159,6 +167,9 @@ final class RedisRadarCacheSession extends RadarCacheState {
         } else if ("timelines".equals(name)) {
             ((List<RadarEventWorkspace.TimelineEntry>) values).removeIf(value ->
                     value.getOccurredAt() == null || value.getOccurredAt().isBefore(cutoff));
+        } else if ("snapshots".equals(name)) {
+            ((List<RadarEventSnapshot>) values).removeIf(value -> value.getSnapshotAt() == null
+                    || value.getSnapshotAt().isBefore(now.minusDays(RadarCacheLayout.SNAPSHOT_KEEP_DAYS)));
         }
     }
 

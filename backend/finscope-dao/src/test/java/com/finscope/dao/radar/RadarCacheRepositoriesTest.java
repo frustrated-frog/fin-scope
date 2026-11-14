@@ -169,6 +169,34 @@ class RadarCacheRepositoriesTest {
         assertEquals(1, inject(new RadarRepository()).findAgentRunsBySubject("RADAR_EVENT", 7L).size());
     }
 
+    @Test
+    void savesEventRelationsTogetherAndDeduplicatesTitlesAcrossBatchBoundary() {
+        RadarRepository repository = inject(new RadarRepository());
+        LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
+        java.util.List<RadarEvent> events = new java.util.ArrayList<>();
+        for (int index = 0; index < 101; index++) {
+            RadarEvent value = event("batch-" + index, now);
+            value.setCanonicalTitle(index == 0 || index == 100 ? "相同标题" : "标题 " + index);
+            events.add(value);
+        }
+        repository.saveEventsWithSignals(events, Collections.emptyMap());
+
+        assertEquals(2, store.updates);
+        assertEquals(101, store.state.getEventSignals().size());
+        assertEquals("EXPIRED", store.state.getEvents().get(events.get(0).getId()).getStatus());
+        assertEquals("ACTIVE", store.state.getEvents().get(events.get(100).getId()).getStatus());
+    }
+
+    @Test
+    void rejectsDuplicateEventIdentityBeforeAnyBatchIsWritten() {
+        RadarRepository repository = inject(new RadarRepository());
+        LocalDateTime now = LocalDateTime.of(2026, 9, 4, 10, 0);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> repository.saveEventsWithSignals(java.util.List.of(event("same", now), event("same", now)), Collections.emptyMap()));
+        assertEquals(0, store.updates);
+        assertTrue(store.state.getEvents().isEmpty());
+    }
+
     private RadarEvent event(String key, LocalDateTime now) {
         RadarEvent value = new RadarEvent();
         value.setEventKey(key);

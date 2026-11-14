@@ -12,9 +12,13 @@ import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,17 +37,22 @@ public class RadarRepository {
         if (signals == null || signals.isEmpty()) {
             return Collections.emptyList();
         }
-        return store.update(state -> {
-            RedisRadarCacheStore.prefetch(state.getSignalIdsByItemId(), signals.stream().map(RadarSignal::getItemId).toList());
-            List<Long> existingIds = signals.stream().map(signal -> state.getSignalIdsByItemId().get(signal.getItemId()))
-                    .filter(java.util.Objects::nonNull).toList();
-            RedisRadarCacheStore.prefetch(state.getSignals(), existingIds);
-            List<RadarSignal> captured = new ArrayList<>();
-            for (RadarSignal signal : signals) {
-                captured.add(capture(state, signal, now));
-            }
-            return captured;
-        });
+        List<RadarSignal> result = new ArrayList<>();
+        for (int start = 0; start < signals.size(); start += RadarCacheLayout.BATCH_SIZE) {
+            List<RadarSignal> batch = signals.subList(start, Math.min(start + RadarCacheLayout.BATCH_SIZE, signals.size()));
+            result.addAll(store.update(state -> {
+                RedisRadarCacheStore.prefetch(state.getSignalIdsByItemId(), batch.stream().map(RadarSignal::getItemId).toList());
+                List<Long> existingIds = batch.stream().map(signal -> state.getSignalIdsByItemId().get(signal.getItemId()))
+                        .filter(java.util.Objects::nonNull).toList();
+                RedisRadarCacheStore.prefetch(state.getSignals(), existingIds);
+                List<RadarSignal> captured = new ArrayList<>();
+                for (RadarSignal signal : batch) {
+                    captured.add(capture(state, signal, now));
+                }
+                return captured;
+            }));
+        }
+        return result;
     }
 
     private RadarSignal capture(RadarCacheState state, RadarSignal signal, LocalDateTime now) {
@@ -81,22 +90,107 @@ public class RadarRepository {
     }
 
     public RadarEvent saveEvent(RadarEvent event) {
-        return store.update(state -> {
-            Long id = state.getEventIdsByKey().get(event.getEventKey());
-            RadarEvent existing = id == null ? null : state.getEvents().get(id);
-            if (id == null) {
-                id = store.stableId("event", event.getEventKey());
-            }
-            event.setId(id);
-            if (existing != null && existing.getFirstSeenAt() != null
-                    && (event.getFirstSeenAt() == null || existing.getFirstSeenAt().isBefore(event.getFirstSeenAt()))) {
-                event.setFirstSeenAt(existing.getFirstSeenAt());
-            }
+        boolean preserveEvidence = event.getEvidenceStatus() == null;
+        return store.update(state -> saveEvent(state, event, preserveEvidence));
+    }
+
+    private RadarEvent saveEvent(RadarCacheState state, RadarEvent event, boolean preserveEvidence) {
+        Long id = state.getEventIdsByKey().get(event.getEventKey());
+        RadarEvent existing = id == null ? null : state.getEvents().get(id);
+        if (id == null) {
+            id = store.stableId("event", event.getEventKey());
+        }
+        event.setId(id);
+        if (existing != null && existing.getFirstSeenAt() != null
+                && (event.getFirstSeenAt() == null || existing.getFirstSeenAt().isBefore(event.getFirstSeenAt()))) {
+            event.setFirstSeenAt(existing.getFirstSeenAt());
+        }
+        if (preserveEvidence) {
             preserveEnhancement(event, existing);
-            state.getEvents().put(id, event);
-            state.getEventIdsByKey().put(event.getEventKey(), id);
-            return event;
+        }
+        state.getEvents().put(id, event);
+        state.getEventIdsByKey().put(event.getEventKey(), id);
+        return event;
+    }
+
+    /** 每批最多 100 个事件，事件与信号关系在同一次原子提交中完成。 */
+    public List<RadarEvent> saveEventsWithSignals(List<RadarEvent> events,
+                                                  Map<String, List<RadarEventSignal>> linksByEventKey) {
+        if (events == null || events.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> unique = new java.util.HashSet<>();
+        for (RadarEvent event : events) {
+            if (event == null || blank(event.getEventKey()) || !unique.add(event.getEventKey())) {
+                throw new IllegalArgumentException("事件批次包含空身份或重复身份");
+            }
+        }
+        Set<String> preserveEvidence = events.stream().filter(event -> event.getEvidenceStatus() == null)
+                .map(RadarEvent::getEventKey).collect(Collectors.toSet());
+        Map<String, List<Long>> duplicates = duplicateCandidates(events);
+        List<RadarEvent> result = new ArrayList<>();
+        for (int start = 0; start < events.size(); start += RadarCacheLayout.BATCH_SIZE) {
+            List<RadarEvent> batch = events.subList(start, Math.min(start + RadarCacheLayout.BATCH_SIZE, events.size()));
+            result.addAll(store.update(state -> saveEventBatch(state, batch, linksByEventKey, duplicates, preserveEvidence)));
+        }
+        return result;
+    }
+
+    private Map<String, List<Long>> duplicateCandidates(List<RadarEvent> events) {
+        Set<String> titles = events.stream().map(RadarEvent::getCanonicalTitle).filter(value -> !blank(value))
+                .map(this::normalizedTitle).collect(Collectors.toSet());
+        return store.query(state -> {
+            RedisRadarCacheStore.prefetch(state.getEventIdsByKey(), events.stream().map(RadarEvent::getEventKey).toList());
+            Map<String, List<Long>> result = state.getEvents().values().stream().filter(this::active)
+                    .filter(event -> !blank(event.getCanonicalTitle()) && titles.contains(normalizedTitle(event.getCanonicalTitle())))
+                    .collect(Collectors.groupingBy(event -> normalizedTitle(event.getCanonicalTitle()),
+                            LinkedHashMap::new, Collectors.mapping(RadarEvent::getId, Collectors.toList())));
+            for (RadarEvent event : events) {
+                if (!blank(event.getCanonicalTitle())) {
+                    Long id = state.getEventIdsByKey().getOrDefault(event.getEventKey(), store.stableId("event", event.getEventKey()));
+                    result.computeIfAbsent(normalizedTitle(event.getCanonicalTitle()), ignored -> new ArrayList<>()).add(id);
+                }
+            }
+            return result;
         });
+    }
+
+    private List<RadarEvent> saveEventBatch(RadarCacheState state, List<RadarEvent> events,
+                                            Map<String, List<RadarEventSignal>> linksByEventKey,
+                                            Map<String, List<Long>> duplicates, Set<String> preserveEvidence) {
+        RedisRadarCacheStore.prefetch(state.getEventIdsByKey(), events.stream().map(RadarEvent::getEventKey).toList());
+        List<Long> ids = events.stream().map(event -> state.getEventIdsByKey().getOrDefault(event.getEventKey(),
+                store.stableId("event", event.getEventKey()))).toList();
+        RedisRadarCacheStore.prefetch(state.getEvents(), ids);
+        RedisRadarCacheStore.prefetch(state.getEventSignals(), ids);
+        List<Long> duplicateIds = events.stream().map(RadarEvent::getCanonicalTitle).filter(value -> !blank(value))
+                .flatMap(title -> duplicates.getOrDefault(normalizedTitle(title), Collections.emptyList()).stream()).distinct().toList();
+        RedisRadarCacheStore.prefetch(state.getEvents(), duplicateIds);
+        List<RadarEvent> result = new ArrayList<>();
+        for (RadarEvent event : events) {
+            RadarEvent saved = saveEvent(state, event, preserveEvidence.contains(event.getEventKey()));
+            List<RadarEventSignal> links = linksByEventKey == null ? Collections.emptyList()
+                    : linksByEventKey.getOrDefault(event.getEventKey(), Collections.emptyList());
+            replaceEventSignals(state, saved.getId(), links);
+            if (!blank(saved.getCanonicalTitle())) {
+                String title = normalizedTitle(saved.getCanonicalTitle());
+                List<Long> candidates = new ArrayList<>(duplicates.getOrDefault(title, Collections.emptyList()));
+                for (Long duplicateId : candidates) {
+                    RadarEvent previous = state.getEvents().get(duplicateId);
+                    if (previous != null && !duplicateId.equals(saved.getId()) && active(previous)
+                            && !blank(previous.getCanonicalTitle()) && title.equals(normalizedTitle(previous.getCanonicalTitle()))) {
+                        previous.setStatus("EXPIRED");
+                        previous.setUpdatedAt(saved.getUpdatedAt());
+                    }
+                }
+            }
+            result.add(saved);
+        }
+        return result;
+    }
+
+    private String normalizedTitle(String title) {
+        return title.trim().toLowerCase(Locale.ROOT);
     }
 
     public void updateEvidenceEnhancement(RadarEvent event) {
@@ -116,8 +210,11 @@ public class RadarRepository {
                     continue;
                 }
                 LocalDateTime seenAt = event.getLastSeenAt() == null ? event.getUpdatedAt() : event.getLastSeenAt();
-                event.setStatus(seenAt != null && !seenAt.isBefore(windowStart) ? "QUIET" : "EXPIRED");
-                event.setUpdatedAt(now);
+                String status = seenAt != null && !seenAt.isBefore(windowStart) ? "QUIET" : "EXPIRED";
+                if (!status.equals(event.getStatus())) {
+                    event.setStatus(status);
+                    event.setUpdatedAt(now);
+                }
             }
             return null;
         });
@@ -125,16 +222,23 @@ public class RadarRepository {
 
     public void replaceEventSignals(Long eventId, List<RadarEventSignal> links) {
         store.update(state -> {
-            List<RadarEventSignal> values = new ArrayList<RadarEventSignal>();
-            if (links != null) {
-                for (RadarEventSignal link : links) {
+            replaceEventSignals(state, eventId, links);
+            return null;
+        });
+    }
+
+    private void replaceEventSignals(RadarCacheState state, Long eventId, List<RadarEventSignal> links) {
+        List<RadarEventSignal> values = new ArrayList<>();
+        if (links != null) {
+            RedisRadarCacheStore.prefetch(state.getSignals(), links.stream().map(RadarEventSignal::getSignalId).toList());
+            for (RadarEventSignal link : links) {
+                if (state.getSignals().containsKey(link.getSignalId())) {
                     link.setEventId(eventId);
                     values.add(link);
                 }
             }
-            state.getEventSignals().put(eventId, values);
-            return null;
-        });
+        }
+        state.getEventSignals().put(eventId, values);
     }
 
     public Optional<RadarEvent> findEvent(Long id) {
@@ -166,9 +270,25 @@ public class RadarRepository {
     }
 
     public Optional<RadarEvent> findEventByKey(String eventKey) {
-        RadarCacheState state = store.read();
-        Long id = state.getEventIdsByKey().get(eventKey);
-        return id == null ? Optional.empty() : Optional.ofNullable(state.getEvents().get(id));
+        return Optional.ofNullable(findEventsByKeys(Collections.singletonList(eventKey)).get(eventKey));
+    }
+
+    public Map<String, RadarEvent> findEventsByKeys(Collection<String> eventKeys) {
+        if (eventKeys == null || eventKeys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return store.query(state -> {
+            RedisRadarCacheStore.prefetch(state.getEventIdsByKey(), eventKeys);
+            Map<String, RadarEvent> result = new LinkedHashMap<>();
+            for (String eventKey : eventKeys) {
+                Long id = state.getEventIdsByKey().get(eventKey);
+                RadarEvent event = id == null ? null : state.getEvents().get(id);
+                if (event != null) {
+                    result.put(eventKey, event);
+                }
+            }
+            return result;
+        });
     }
 
     public List<RadarEvent> findEventsSince(LocalDateTime since, int limit) {
@@ -224,7 +344,7 @@ public class RadarRepository {
                 .limit(normalizeLimit(limit)).collect(Collectors.toList());
     }
 
-    /** 当前 TTL 窗口已经完整加载在缓存状态中；由上层先筛选用户状态再截断。 */
+    /** 只读取当前 TTL 窗口的事件集合；由上层先筛选用户状态再截断。 */
     public List<RadarEvent> findWorkspaceEvents(String category, boolean watchlistOnly) {
         return activeEvents().stream()
                 .filter(value -> blank(category) || "ALL".equalsIgnoreCase(category)
@@ -296,6 +416,26 @@ public class RadarRepository {
         });
     }
 
+    public void updateDashboardCategories(Map<Long, String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return;
+        }
+        List<Long> ids = new ArrayList<>(categories.keySet());
+        for (int start = 0; start < ids.size(); start += RadarCacheLayout.BATCH_SIZE) {
+            List<Long> batch = ids.subList(start, Math.min(start + RadarCacheLayout.BATCH_SIZE, ids.size()));
+            store.update(state -> {
+                RedisRadarCacheStore.prefetch(state.getEvents(), batch);
+                for (Long id : batch) {
+                    RadarEvent event = state.getEvents().get(id);
+                    if (event != null) {
+                        event.setDashboardCategory(categories.get(id));
+                    }
+                }
+                return null;
+            });
+        }
+    }
+
     public void expireSignals(LocalDateTime before, LocalDateTime now) {
         store.update(state -> {
             for (RadarSignal signal : state.getSignals().values()) {
@@ -332,7 +472,7 @@ public class RadarRepository {
     }
 
     private void preserveEnhancement(RadarEvent event, RadarEvent existing) {
-        if (existing == null || event.getEvidenceStatus() != null) {
+        if (existing == null) {
             return;
         }
         event.setEvidenceStatus(existing.getEvidenceStatus());

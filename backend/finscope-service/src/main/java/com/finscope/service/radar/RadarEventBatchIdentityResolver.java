@@ -26,7 +26,7 @@ public class RadarEventBatchIdentityResolver {
         candidates.sort(candidatePriority());
         Set<String> assignedFinalKeys = new HashSet<String>();
         Set<String> reservedNativeKeys = nativeKeys(candidates);
-        Map<String, Optional<RadarEvent>> existingEvents = new HashMap<String, Optional<RadarEvent>>();
+        Map<String, Optional<RadarEvent>> existingEvents = preloadExisting(candidates);
         int legacyReusedCount = 0;
         int legacyConflictCount = 0;
         int fallbackKeptCount = 0;
@@ -55,6 +55,26 @@ public class RadarEventBatchIdentityResolver {
                 .legacyConflictCount(legacyConflictCount)
                 .fallbackKeptCount(fallbackKeptCount)
                 .build();
+    }
+
+    private Map<String, Optional<RadarEvent>> preloadExisting(List<IdentityCandidate> candidates) {
+        Set<String> keys = new HashSet<>();
+        for (IdentityCandidate candidate : candidates) {
+            keys.add(candidate.nativeKey);
+            String[] parts = candidate.nativeKey.split(":");
+            if (parts.length >= 4) {
+                keys.add(parts[0] + ":" + parts[1] + ":" + parts[2] + ":" + parts[3]);
+                String legacy = parts[0] + ":" + parts[1] + ":" + parts[2];
+                keys.add(legacy);
+                keys.add(legacyCategoryKey(candidate.event(), legacy));
+            }
+        }
+        Map<String, RadarEvent> loaded = repository.findEventsByKeys(keys);
+        Map<String, Optional<RadarEvent>> result = new HashMap<>();
+        for (String key : keys) {
+            result.put(key, Optional.ofNullable(loaded.get(key)));
+        }
+        return result;
     }
 
     private List<IdentityCandidate> reserveNativeIdentities(

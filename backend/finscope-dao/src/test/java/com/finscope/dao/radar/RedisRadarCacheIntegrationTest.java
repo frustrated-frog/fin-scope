@@ -8,7 +8,10 @@ import com.finscope.domain.radar.RadarEventSnapshot;
 import com.finscope.domain.radar.RadarEventWorkspace;
 import com.finscope.domain.radar.RadarRefreshRun;
 import com.finscope.domain.radar.RadarSignal;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -20,7 +23,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -245,6 +247,55 @@ class RedisRadarCacheIntegrationTest {
     }
 
     @Test
+    void noChangeMutationAlsoRetriesAConcurrentVersionChange() {
+        Long id = repository(new RadarRepository(), store).saveEvent(event(null, "read-in-update")).getId();
+        CountingStore other = newStore();
+        AtomicInteger attempts = new AtomicInteger();
+        String title = store.update(state -> {
+            String read = state.getEvents().get(id).getCanonicalTitle();
+            if (attempts.getAndIncrement() == 0) {
+                other.update(next -> {
+                    next.getEvents().get(id).setCanonicalTitle("新版本");
+                    return null;
+                });
+            }
+            return read;
+        });
+        assertEquals("新版本", title);
+        assertEquals(2, attempts.get());
+    }
+
+    @Test
+    void retryingEventSavePreservesEvidenceFromTheConcurrentWriter() {
+        RadarRepository radar = repository(new RadarRepository(), store);
+        RadarEvent initial = event(null, "retry-evidence");
+        initial.setEvidenceStatus("OLD");
+        RadarEvent saved = radar.saveEvent(initial);
+        CountingStore other = newStore();
+        StringRedisTemplate observed = org.mockito.Mockito.spy(redis);
+        java.util.concurrent.atomic.AtomicBoolean first = new java.util.concurrent.atomic.AtomicBoolean(true);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            if (first.compareAndSet(true, false)) {
+                other.update(state -> {
+                    state.getEvents().get(saved.getId()).setEvidenceStatus("LATEST");
+                    return null;
+                });
+            }
+            return invocation.callRealMethod();
+        }).when(observed).execute(org.mockito.ArgumentMatchers.any(org.springframework.data.redis.core.script.RedisScript.class),
+                org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+        ReflectionTestUtils.setField(store, "redisTemplate", observed);
+        RadarEvent incoming = event(null, "retry-evidence");
+        incoming.setSummary("新的生产摘要");
+
+        radar.saveEvent(incoming);
+
+        RadarEvent result = radar.findEvent(saved.getId()).orElseThrow();
+        assertEquals("LATEST", result.getEvidenceStatus());
+        assertEquals("新的生产摘要", result.getSummary());
+    }
+
+    @Test
     void validatesAllRedisTypesBeforeApplyingAnyRecordChanges() {
         RadarEvent initial = repository(new RadarRepository(), store).saveEvent(event(null, "atomic"));
         assertNotNull(initial);
@@ -275,6 +326,36 @@ class RedisRadarCacheIntegrationTest {
         repository(new RadarEventInterpretationRepository(), store).findLatestByEventIds(ids);
         assertTrue(store.batchSizes.stream().allMatch(size -> size <= 100));
         assertTrue(store.readSections.size() <= 4);
+    }
+
+    @Test
+    void batchEventWriteHasSignalRelationsAndSnapshotBatchRemainsBounded() {
+        RadarRepository radar = repository(new RadarRepository(), store);
+        RadarSignal signal = radar.capture(RadarSignal.builder().itemId("batch-signal").publishedAt(now).build(), now);
+        List<RadarEvent> events = new ArrayList<>();
+        Map<String, List<RadarEventSignal>> links = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 101; index++) {
+            RadarEvent value = event(null, "batch-" + index);
+            events.add(value);
+            links.put(value.getEventKey(), List.of(link(null, signal.getId())));
+        }
+        List<RadarEvent> saved = radar.saveEventsWithSignals(events, links);
+        assertEquals(101, saved.size());
+        assertEquals(signal.getId(), radar.findDetailSnapshot(saved.get(100).getId()).orElseThrow().getSignals().get(0).getId());
+        List<RadarEventSnapshot> snapshots = new ArrayList<>();
+        for (RadarEvent value : saved) {
+            RadarEventSnapshot snapshot = new RadarEventSnapshot();
+            snapshot.setEventId(value.getId());
+            snapshot.setSnapshotAt(now);
+            snapshots.add(snapshot);
+        }
+        RadarEventSnapshotRepository history = repository(new RadarEventSnapshotRepository(), store);
+        history.saveBatch(snapshots);
+        store.readSections.clear();
+        Map<String, RadarEventSnapshot> latest = history.findLatestBeforeByEventKeys(
+                events.stream().map(RadarEvent::getEventKey).toList(), now.plusSeconds(1));
+        assertEquals(101, latest.size());
+        assertTrue(store.readSections.stream().allMatch(name -> List.of("events", "eventIdsByKey", "snapshots").contains(name)));
     }
 
     private void concurrentUpdate(CountingStore target, Long id, boolean markRead,

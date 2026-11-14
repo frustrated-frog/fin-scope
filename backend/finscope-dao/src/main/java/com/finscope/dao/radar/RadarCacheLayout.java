@@ -26,6 +26,7 @@ final class RadarCacheLayout {
     static final String ACTIVE_KEY = "finscope:radar:v2:active";
     static final String LEGACY_KEY = "finscope:radar:state";
     static final int BATCH_SIZE = 100;
+    static final int SNAPSHOT_KEEP_DAYS = 7;
     static final String KEEP_TTL = "__RADAR_KEEP_TTL__";
     static final Set<String> EVENT_OWNED = Set.of("eventSignals", "snapshots", "evidence", "interpretations",
             "userStates", "timelines", "timelineFingerprints", "researchLinks");

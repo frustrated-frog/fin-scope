@@ -22,7 +22,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -77,7 +76,7 @@ class RadarHotspotProductionPipelineTest {
         RadarEventEnhancementScheduler enhancement = mock(RadarEventEnhancementScheduler.class);
         RadarHotspotScoreService scores = new RadarHotspotScoreService();
         RadarDashboardCategoryService dashboardCategories = new RadarDashboardCategoryService();
-        RadarHotspotPersistenceService persistence = new RadarHotspotPersistenceService(repository);
+        RadarHotspotPersistenceService persistence = persistence(repository);
         RadarEventSnapshotRepository snapshots = mock(RadarEventSnapshotRepository.class);
         RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
         ReflectionTestUtils.setField(pipeline, "rankHistory", mock(RadarRankHistoryService.class));
@@ -113,14 +112,18 @@ class RadarHotspotProductionPipelineTest {
         RadarEvent legacy = new RadarEvent();
         legacy.setId(10L); legacy.setEventKey("宁德时代:发布:电池");
         legacy.setLastSeenAt(now.minusMinutes(20));
-        when(repository.findEventByKey("宁德时代:发布:电池")).thenReturn(Optional.of(legacy));
+        when(repository.findEventsByKeys(any())).thenReturn(java.util.Map.of("宁德时代:发布:电池", legacy));
 
         RadarEvent event = new RadarEvent();
         event.setEventKey("COMPANY:宁德时代:发布:电池"); event.setCanonicalTitle(first.getTitle());
         event.setSummary(first.getContent()); event.setCategoryCode("COMPANY"); event.setStatus("ACTIVE");
         event.setFirstSeenAt(first.getPublishedAt()); event.setLastSeenAt(second.getPublishedAt());
-        when(repository.saveEvent(any(RadarEvent.class))).thenAnswer(invocation -> {
-            RadarEvent value = invocation.getArgument(0); value.setId(11L); return value;
+        when(repository.saveEventsWithSignals(any(), any())).thenAnswer(invocation -> {
+            List<RadarEvent> values = invocation.getArgument(0);
+            for (RadarEvent value : values) {
+                value.setId(11L);
+            }
+            return values;
         });
         when(runs.completeRun(7L, 2, 2, 1, "", now)).thenReturn(run);
 
@@ -142,11 +145,11 @@ class RadarHotspotProductionPipelineTest {
             providers.add(captured.getProviderCode());
         }
         assertEquals(new HashSet<String>(Arrays.asList("CLS_NEWS_FLASH", "EASTMONEY_NEWS_FLASH")), providers);
-        verify(repository).replaceEventSignals(eq(11L), any());
-        ArgumentCaptor<com.finscope.domain.radar.RadarEventSnapshot> snapshotCaptor =
-                ArgumentCaptor.forClass(com.finscope.domain.radar.RadarEventSnapshot.class);
-        verify(snapshots).save(snapshotCaptor.capture());
-        assertEquals("HOTSPOT_V3", snapshotCaptor.getValue().getScoreVersion());
+        verify(repository).saveEventsWithSignals(any(), any());
+        ArgumentCaptor<List<com.finscope.domain.radar.RadarEventSnapshot>> snapshotCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(snapshots).saveBatch(snapshotCaptor.capture());
+        assertEquals("HOTSPOT_V3", snapshotCaptor.getValue().get(0).getScoreVersion());
         verify(repository).expireEventsExcept(any(), eq(now.minusHours(48)), eq(now));
         org.mockito.InOrder order = inOrder(runs);
         order.verify(runs).startStep(7L, "FETCH", now);
@@ -168,7 +171,7 @@ class RadarHotspotProductionPipelineTest {
         ReflectionTestUtils.setField(pipeline, "rankHistory", mock(RadarRankHistoryService.class));
         wire(pipeline, news, repository, clustering, priority, watchlist, runs,
                 mock(RadarEventEnhancementScheduler.class), new RadarHotspotScoreService(),
-                new RadarDashboardCategoryService(), new RadarHotspotPersistenceService(repository),
+                new RadarDashboardCategoryService(), persistence(repository),
                 mock(RadarEventSnapshotRepository.class));
         NewsFeedSnapshot feed = new NewsFeedSnapshot(Collections.emptyList(), Collections.emptyList(), now, 0);
         when(news.productionSnapshot()).thenReturn(feed);
@@ -188,9 +191,13 @@ class RadarHotspotProductionPipelineTest {
         when(clustering.cluster(any())).thenReturn(Arrays.asList(nativeCluster, detailedCluster));
         RadarEvent legacy = new RadarEvent(); legacy.setId(10L); legacy.setEventKey("英伟达:事件:信息:20260805");
         legacy.setLastSeenAt(now.minusMinutes(20));
-        when(repository.findEventByKey("英伟达:事件:信息:20260805")).thenReturn(Optional.of(legacy));
-        when(repository.saveEvent(any(RadarEvent.class))).thenAnswer(invocation -> {
-            RadarEvent value = invocation.getArgument(0); value.setId(value.getEventKey().equals(legacy.getEventKey()) ? 10L : 11L); return value;
+        when(repository.findEventsByKeys(any())).thenReturn(java.util.Map.of("英伟达:事件:信息:20260805", legacy));
+        when(repository.saveEventsWithSignals(any(), any())).thenAnswer(invocation -> {
+            List<RadarEvent> values = invocation.getArgument(0);
+            for (RadarEvent value : values) {
+                value.setId(value.getEventKey().equals(legacy.getEventKey()) ? 10L : 11L);
+            }
+            return values;
         });
         when(runs.completeRun(eq(8L), anyInt(), eq(2), eq(2), anyString(), eq(now))).thenReturn(run);
 
@@ -230,6 +237,12 @@ class RadarHotspotProductionPipelineTest {
         link.setMatchReason("代表信号");
         cluster.getLinks().add(link);
         return cluster;
+    }
+
+    private RadarHotspotPersistenceService persistence(RadarRepository repository) {
+        RadarHotspotPersistenceService service = new RadarHotspotPersistenceService();
+        ReflectionTestUtils.setField(service, "repository", repository);
+        return service;
     }
 
     private void wire(RadarHotspotProductionPipeline pipeline,

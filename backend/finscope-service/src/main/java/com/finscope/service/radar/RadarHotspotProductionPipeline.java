@@ -28,14 +28,12 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class RadarHotspotProductionPipeline {
     private static final int SIGNAL_WINDOW_HOURS = 48;
-    private static final int SNAPSHOT_KEEP_DAYS = 7;
 
     @Resource
     private com.finscope.service.news.NewsWindowService news;
@@ -99,9 +97,6 @@ public class RadarHotspotProductionPipeline {
                 activeEventKeys.add(event.getEventKey());
             }
             repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
-            if (snapshots != null) {
-                snapshots.deleteExpired(now.minusDays(SNAPSHOT_KEEP_DAYS));
-            }
             runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(), "snapshot=latest-completed", now);
             String warning = joinWarnings(snapshot.getWarnings());
             RadarRefreshRun completed = runs.completeRun(run.getId(), providerCount(captured), active.size(), savedEvents.size(), warning, now);
@@ -129,11 +124,13 @@ public class RadarHotspotProductionPipeline {
     private List<RankedCluster> rank(List<RadarClusteringService.ClusterResult> clusters,
                                      List<WatchlistItem> followed, LocalDateTime now) {
         List<RankedCluster> values = new ArrayList<>();
+        Map<String, RadarEventSnapshot> previous = snapshots == null ? Collections.emptyMap()
+                : snapshots.findLatestBeforeByEventKeys(clusters.stream().map(cluster -> cluster.getEvent().getEventKey()).toList(), now);
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
             event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
-                    previousSnapshot(event, now));
+                    previous.get(event.getEventKey()));
             event.setHotspotScore(hotspot.getTotalScore());
             event.setHotspotExplanation(hotspot.getExplanation());
             event.setHotspotLifecycleState(hotspot.getLifecycleState());
@@ -224,7 +221,9 @@ public class RadarHotspotProductionPipeline {
     }
 
     private List<RadarEvent> persist(List<RankedCluster> ranked, LocalDateTime now) {
-        if (ranked.isEmpty()) return new ArrayList<RadarEvent>();
+        if (ranked.isEmpty()) {
+            return new ArrayList<>();
+        }
         List<RadarEvent> events = new ArrayList<RadarEvent>();
         Map<String, List<RadarEventSignal>> linksByEventKey = new LinkedHashMap<String, List<RadarEventSignal>>();
         for (RankedCluster rankedCluster : ranked) {
@@ -237,19 +236,25 @@ public class RadarHotspotProductionPipeline {
         }
         // 事件与信号关系在单个事务内写入，避免出现事件已写、关系未写的半状态。
         List<RadarEvent> saved = persistence.persistEvents(events, linksByEventKey);
+        List<RadarEventSnapshot> snapshotBatch = new ArrayList<>();
         int evidenceSchedules = 0;
         for (int index = 0; index < saved.size(); index++) {
             RadarEvent value = saved.get(index);
             RadarClusteringService.ClusterResult cluster = ranked.get(index).cluster;
             RadarHotspotScoreService.Score hotspot = ranked.get(index).hotspot;
             if (snapshots != null) {
-                snapshots.save(hotspot.toSnapshot(value.getId(), value.getSignalCount(), value.getSourceCount(), now));
+                snapshotBatch.add(hotspot.toSnapshot(value.getId(), value.getSignalCount(), value.getSourceCount(), now));
             }
             boolean includeEvidence = evidenceSchedules < 2 && value.getPriorityScore() >= 75;
             if (enhancement != null && (cluster.getSignals().size() > 1 || includeEvidence)) {
                 enhancement.schedule(value, cluster.getSignals(), now, includeEvidence);
-                if (includeEvidence) evidenceSchedules++;
+                if (includeEvidence) {
+                    evidenceSchedules++;
+                }
             }
+        }
+        if (snapshots != null && !snapshotBatch.isEmpty()) {
+            snapshots.saveBatch(snapshotBatch);
         }
         return saved;
     }
@@ -258,19 +263,14 @@ public class RadarHotspotProductionPipeline {
      * 分类在生产事务之后收敛，首页读取阶段始终只读，避免 Dashboard 请求产生写入。
      */
     private void classifyDashboardEvents() {
+        Map<Long, String> changed = new LinkedHashMap<>();
         for (RadarEvent event : repository.findEventsForDashboardClassification(500)) {
             String classified = dashboardCategories.classify(event);
             if (!classified.equals(event.getDashboardCategory())) {
-                repository.updateDashboardCategory(event.getId(), classified);
+                changed.put(event.getId(), classified);
             }
         }
-    }
-
-    private RadarEventSnapshot previousSnapshot(RadarEvent event, LocalDateTime now) {
-        if (event == null || event.getEventKey() == null || snapshots == null) return null;
-        Optional<RadarEvent> stored = repository.findEventByKey(event.getEventKey());
-        if (!stored.isPresent() || stored.get().getId() == null) return null;
-        return snapshots.findLatestBefore(stored.get().getId(), now).orElse(null);
+        repository.updateDashboardCategories(changed);
     }
 
     private RadarSignal toSignal(NewsFeedItem item) {

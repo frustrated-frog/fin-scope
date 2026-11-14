@@ -66,7 +66,7 @@ public class RedisRadarCacheStore {
             RedisRadarCacheSession session = (RedisRadarCacheSession) read();
             T result = mutation.apply(session);
             List<RedisRadarCacheSession.Change> changes = session.changes();
-            if (changes.isEmpty() || commit(session, changes)) {
+            if (changes.isEmpty() ? session.revision().equals(revision(session.generation())) : commit(session, changes)) {
                 return result;
             }
         }

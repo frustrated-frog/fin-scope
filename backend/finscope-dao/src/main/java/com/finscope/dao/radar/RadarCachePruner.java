@@ -29,7 +29,7 @@ final class RadarCachePruner {
                 link == null || !state.getSignals().containsKey(link.getSignalId())));
         state.getEventSignals().values().removeIf(List::isEmpty);
         state.getSnapshots().values().forEach(values -> values.removeIf(value ->
-                value.getSnapshotAt() == null || value.getSnapshotAt().isBefore(cutoff)));
+                value.getSnapshotAt() == null || value.getSnapshotAt().isBefore(now.minusDays(RadarCacheLayout.SNAPSHOT_KEEP_DAYS))));
         state.getSnapshots().values().removeIf(List::isEmpty);
         state.getNotifications().removeIf(value -> !state.getEvents().containsKey(value.getEventId())
                 || value.getCreatedAt() == null || value.getCreatedAt().isBefore(cutoff));

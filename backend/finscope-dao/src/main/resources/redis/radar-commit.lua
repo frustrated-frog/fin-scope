@@ -1,6 +1,10 @@
 -- KEYS: revision, then (record, expiration index, parent) for each change.
 -- ARGV: expected revision, now, then (member, payload, deadline, requires parent).
-if (redis.call('GET', KEYS[1]) or '0') ~= ARGV[1] then
+local revision = redis.call('GET', KEYS[1]) or '0'
+if not string.match(revision, '^%d+$') or string.len(revision) > 15 then
+    return redis.error_reply('RADAR_CACHE_BAD_REVISION')
+end
+if revision ~= ARGV[1] then
     return 0
 end
 local now = tonumber(ARGV[2])

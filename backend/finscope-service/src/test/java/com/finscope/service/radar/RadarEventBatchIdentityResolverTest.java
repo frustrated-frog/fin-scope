@@ -9,7 +9,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -65,7 +64,8 @@ class RadarEventBatchIdentityResolverTest {
         RadarEvent legacy = new RadarEvent();
         legacy.setEventKey(LEGACY_KEY);
         legacy.setLastSeenAt(now.minusMinutes(30));
-        when(repository.findEventByKey(LEGACY_KEY)).thenReturn(Optional.of(legacy));
+        when(repository.findEventsByKeys(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(java.util.Map.of(LEGACY_KEY, legacy));
         return repository;
     }
 
