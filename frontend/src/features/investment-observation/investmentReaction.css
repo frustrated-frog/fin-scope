@@ -196,16 +196,10 @@
 .reaction-workspace .reaction-feed p { font-size: 13px; margin: 8px 0 0; }
 .reaction-workspace .reaction-followed { width: 100%; text-align: left; display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid var(--reaction-line); }
 .reaction-workspace .reaction-followed span { font-size: 12px; color: var(--reaction-muted); }
-.reaction-workspace .reaction-context { margin-top: 24px; border-top: 1px solid var(--reaction-line); padding-top: 20px; }
-.reaction-workspace .reaction-context details { margin: 20px 0; }
 .reaction-workspace .reaction-context h5 { font-size: 15px; margin: 12px 0; }
-.reaction-workspace .reaction-history-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.reaction-workspace .reaction-history-groups article { padding: 20px; border: 1px solid var(--reaction-line); border-radius: 10px; background: var(--reaction-subtle); min-width: 0; }
-.reaction-workspace .reaction-history-groups p, .reaction-workspace .reaction-history-groups li { font-size: 13px; }
-.reaction-workspace .reaction-history-groups ul { padding-left: 16px; }
 .reaction-workspace .reaction-context small { color: var(--reaction-muted); }
 @container (max-width: 700px) {
-  .reaction-workspace .reaction-activity, .reaction-workspace .reaction-phases, .reaction-workspace .reaction-history-groups { grid-template-columns: 1fr; }
+  .reaction-workspace .reaction-activity, .reaction-workspace .reaction-phases { grid-template-columns: 1fr; }
   .reaction-workspace .reaction-activity aside { border-left: 0; border-top: 1px solid var(--reaction-line); padding: 16px 0 0; }
 }
 
@@ -228,10 +222,7 @@
 .reaction-workspace .reaction-feed button:hover, .reaction-workspace .reaction-context li button:hover { color: var(--reaction-teal); background: transparent; }
 .reaction-workspace .reaction-followed { border: 0; border-radius: 8px; background: var(--reaction-subtle); padding: 12px; margin-top: 8px; }
 .reaction-workspace .reaction-detail > p { margin-block: 12px; }
-.reaction-workspace .reaction-context details { border-block: 1px solid var(--reaction-line); padding-block: 14px; }
 .reaction-workspace summary { cursor: pointer; font-size: 12px; line-height: 1.7; }
-.reaction-workspace .reaction-history-groups { margin-top: 16px; }
-.reaction-workspace .reaction-history-groups article > p + p { margin-top: 12px; }
 .reaction-workspace .reaction-registration :is(input, textarea, select) { width: 100%; }
 .reaction-workspace :is(input, select, textarea):focus { outline: 2px solid var(--reaction-teal); outline-offset: 2px; transform: none; box-shadow: none; }
 .reaction-workspace button:active:not(:disabled) { filter: brightness(.94); }
