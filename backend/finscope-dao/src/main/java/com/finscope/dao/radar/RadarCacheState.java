@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 @Data
+// 兼容旧布局的迁移 DTO，同时作为单次 DAO 操作的视图；运行时不再整包持久化。
 public class RadarCacheState {
     private Map<Long, RadarSignal> signals = new LinkedHashMap<Long, RadarSignal>();
     private Map<String, Long> signalIdsByItemId = new LinkedHashMap<String, Long>();

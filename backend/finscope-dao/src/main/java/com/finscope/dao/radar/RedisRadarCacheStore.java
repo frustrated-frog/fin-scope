@@ -1,13 +1,11 @@
 package com.finscope.dao.radar;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.EphemeralContentCacheProperties;
-import com.finscope.domain.radar.RadarEvent;
-import com.finscope.domain.radar.RadarSignal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -17,17 +15,25 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.concurrent.TimeUnit;
 
+/** 按对象读取、按变更提交的雷达临时存储。旧整包状态只在首次迁移时读取。 */
 @Component
 @Slf4j
 public class RedisRadarCacheStore {
-    static final String STATE_KEY = "finscope:radar:state";
+    private static final int MAX_ATTEMPTS = 4;
+    private static final DefaultRedisScript<Long> COMMIT_SCRIPT = new DefaultRedisScript<>();
+
+    static {
+        COMMIT_SCRIPT.setLocation(new ClassPathResource("redis/radar-commit.lua"));
+        COMMIT_SCRIPT.setResultType(Long.class);
+    }
 
     @Resource(name = "stringRedisTemplate")
     private StringRedisTemplate redisTemplate;
@@ -37,19 +43,127 @@ public class RedisRadarCacheStore {
     private EphemeralContentCacheProperties properties;
     private Clock clock = Clock.systemDefaultZone();
 
-    // Redis GET 返回最近一次完整 SET 的快照，反序列化后的对象仅由当前读者持有。
-    // 写入仍串行，读取不等待后台生产任务持有的更新锁。
     public RadarCacheState read() {
-        return readAt(LocalDateTime.now(clock));
+        String generation = ensureReady();
+        return new RedisRadarCacheSession(this, generation, revision(generation), LocalDateTime.now(clock));
+    }
+
+    /** 多记录详情在版本稳定后返回；遇到并发提交时重新读取，不持有生产任务的锁。 */
+    public <T> T query(Function<RadarCacheState, T> query) {
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            RadarCacheState state = read();
+            T result = query.apply(state);
+            if (!(state instanceof RedisRadarCacheSession session)
+                    || session.revision().equals(revision(session.generation()))) {
+                return result;
+            }
+        }
+        throw new IllegalStateException("雷达缓存正在并发更新，请重试读取");
     }
 
     public synchronized <T> T update(Function<RadarCacheState, T> mutation) {
-        LocalDateTime now = LocalDateTime.now(clock);
-        RadarCacheState state = readAt(now);
-        T result = mutation.apply(state);
-        prune(state, now);
-        write(state);
-        return result;
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            RedisRadarCacheSession session = (RedisRadarCacheSession) read();
+            T result = mutation.apply(session);
+            List<RedisRadarCacheSession.Change> changes = session.changes();
+            if (changes.isEmpty() || commit(session, changes)) {
+                return result;
+            }
+        }
+        throw new IllegalStateException("雷达缓存并发更新冲突，请重试写入");
+    }
+
+    private boolean commit(RedisRadarCacheSession session, List<RedisRadarCacheSession.Change> changes) {
+        String prefix = RadarCacheLayout.prefix(session.generation());
+        String revisionKey = prefix + "revision";
+        List<String> keys = new ArrayList<>(List.of(revisionKey));
+        List<String> args = new ArrayList<>(List.of(session.revision(), String.valueOf(clock.millis())));
+        long bytes = 0L;
+        for (RedisRadarCacheSession.Change change : changes) {
+            keys.add(change.section().key(prefix, change.id()));
+            keys.add(change.section().index(prefix));
+            keys.add(change.parentKey().isEmpty() ? revisionKey : change.parentKey());
+            args.add(change.section().member(change.id()));
+            args.add(change.payload() == null ? "" : change.payload());
+            args.add(String.valueOf(change.deadline()));
+            args.add(change.parentKey().isEmpty() ? "0" : "1");
+            bytes += change.payload() == null ? 0L : change.payload().getBytes(StandardCharsets.UTF_8).length;
+        }
+        long started = System.nanoTime();
+        Long committed = redisTemplate.execute(COMMIT_SCRIPT, keys, args.toArray());
+        if (Long.valueOf(-1L).equals(committed)) {
+            throw new IllegalStateException("雷达父记录不存在或已过期，拒绝写入悬空关联");
+        }
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+        if (elapsedMs >= 250L || bytes >= 1_048_576L) {
+            log.info("雷达缓存增量提交 records={} bytes={} durationMs={} committed={}",
+                    changes.size(), bytes, elapsedMs, committed);
+        }
+        return Long.valueOf(1L).equals(committed);
+    }
+
+    private String ensureReady() {
+        String active = redisTemplate.opsForValue().get(RadarCacheLayout.ACTIVE_KEY);
+        if (active != null) {
+            return active;
+        }
+        return migrate();
+    }
+
+    private synchronized String migrate() {
+        String active = redisTemplate.opsForValue().get(RadarCacheLayout.ACTIVE_KEY);
+        if (active != null) {
+            return active;
+        }
+        // 协议迁移辅助器不是 Spring Bean，不承载业务编排。
+        return new RedisRadarCacheMigration(redisTemplate, objectMapper, properties, clock).migrate();
+    }
+
+    private String revision(String generation) {
+        String value = redisTemplate.opsForValue().get(RadarCacheLayout.prefix(generation) + "revision");
+        return value == null ? "0" : value;
+    }
+
+    List<String> readRecords(String generation, RadarCacheLayout.Section section, Collection<?> ids) {
+        if (ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> keys = ids.stream().map(id -> section.key(RadarCacheLayout.prefix(generation), id)).toList();
+        List<String> values = redisTemplate.opsForValue().multiGet(keys);
+        if (values == null || values.size() != keys.size()) {
+            throw new IllegalStateException("Redis 雷达记录批量读取未完成: " + section.name());
+        }
+        return values;
+    }
+
+    Set<String> members(String generation, RadarCacheLayout.Section section, LocalDateTime now) {
+        Set<String> members = redisTemplate.opsForZSet().rangeByScore(section.index(RadarCacheLayout.prefix(generation)),
+                epochMillis(now) + 1D, Double.POSITIVE_INFINITY);
+        return members == null ? Collections.emptySet() : members;
+    }
+
+    long nextSequence(String generation) {
+        Long value = redisTemplate.opsForValue().increment(RadarCacheLayout.prefix(generation) + "sequence");
+        if (value == null) {
+            throw new IllegalStateException("Redis 雷达序号分配失败");
+        }
+        return value;
+    }
+
+    ObjectMapper mapper() {
+        return objectMapper;
+    }
+
+    int ttlHours() {
+        return Math.max(1, properties.getTtlHours());
+    }
+
+    java.time.ZoneId zone() {
+        return clock.getZone();
+    }
+
+    long epochMillis(LocalDateTime time) {
+        return time.atZone(clock.getZone()).toInstant().toEpochMilli();
     }
 
     public long stableId(String namespace, String businessKey) {
@@ -74,115 +188,11 @@ public class RedisRadarCacheStore {
         if (baseTime == null || now == null) {
             return Duration.ZERO;
         }
-        Duration remaining = Duration.between(now, baseTime.plusHours(normalizedTtlHours()));
+        Duration remaining = Duration.between(now, baseTime.plusHours(ttlHours()));
         return remaining.isNegative() || remaining.isZero() ? Duration.ZERO : remaining;
     }
 
-    private RadarCacheState readAt(LocalDateTime now) {
-        try {
-            String payload = redisTemplate.opsForValue().get(STATE_KEY);
-            RadarCacheState state = payload == null || payload.trim().isEmpty()
-                    ? new RadarCacheState() : objectMapper.readerFor(RadarCacheState.class)
-                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                    .readValue(payload);
-            normalize(state);
-            prune(state, now);
-            return state;
-        } catch (RuntimeException | JsonProcessingException error) {
-            throw new IllegalStateException("Redis 雷达临时缓存读取失败", error);
-        }
-    }
-
-    private void write(RadarCacheState state) {
-        try {
-            String payload = objectMapper.writeValueAsString(state);
-            redisTemplate.opsForValue().set(STATE_KEY, payload,
-                    TimeUnit.HOURS.toMillis(normalizedTtlHours()), TimeUnit.MILLISECONDS);
-        } catch (RuntimeException | JsonProcessingException error) {
-            throw new IllegalStateException("Redis 雷达临时缓存写入失败", error);
-        }
-    }
-
-    private void prune(RadarCacheState state, LocalDateTime now) {
-        LocalDateTime cutoff = now.minusHours(normalizedTtlHours());
-        Set<Long> expiredSignalIds = new HashSet<Long>();
-        Iterator<Map.Entry<Long, RadarSignal>> signals = state.getSignals().entrySet().iterator();
-        while (signals.hasNext()) {
-            Map.Entry<Long, RadarSignal> entry = signals.next();
-            RadarSignal signal = entry.getValue();
-            LocalDateTime baseTime = signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
-            if (baseTime == null || baseTime.isBefore(cutoff)) {
-                expiredSignalIds.add(entry.getKey());
-                signals.remove();
-            }
-        }
-        state.getSignalIdsByItemId().entrySet().removeIf(entry -> expiredSignalIds.contains(entry.getValue()));
-
-        Set<Long> expiredEventIds = new HashSet<Long>();
-        Iterator<Map.Entry<Long, RadarEvent>> events = state.getEvents().entrySet().iterator();
-        while (events.hasNext()) {
-            Map.Entry<Long, RadarEvent> entry = events.next();
-            RadarEvent event = entry.getValue();
-            LocalDateTime baseTime = event.getLastSeenAt() == null ? event.getFirstSeenAt() : event.getLastSeenAt();
-            if (baseTime == null || baseTime.isBefore(cutoff)) {
-                expiredEventIds.add(entry.getKey());
-                events.remove();
-            }
-        }
-        state.getEventIdsByKey().entrySet().removeIf(entry -> expiredEventIds.contains(entry.getValue()));
-        for (Long eventId : expiredEventIds) {
-            state.getEventSignals().remove(eventId);
-            state.getSnapshots().remove(eventId);
-            state.getEvidence().remove(eventId);
-            state.getInterpretations().remove(eventId);
-            state.getUserStates().remove(eventId);
-            state.getTimelines().remove(eventId);
-            state.getTimelineFingerprints().remove(eventId);
-            state.getResearchLinks().remove(eventId);
-        }
-        state.getNotifications().removeIf(value -> value.getEventId() != null && expiredEventIds.contains(value.getEventId()));
-        for (Long eventId : expiredEventIds) {
-            state.getAgentRunsBySubject().remove("RADAR_EVENT:" + eventId);
-        }
-        state.getIndustryChainImpacts().values().forEach(values -> {
-            for (Long eventId : expiredEventIds) {
-                values.remove(eventId);
-            }
-        });
-        state.getIndustryChainImpacts().entrySet().removeIf(entry -> entry.getValue().isEmpty());
-        state.getAgentRunsBySubject().values().forEach(values -> values.removeIf(value ->
-                value.getCreatedAt() == null || value.getCreatedAt().isBefore(cutoff)));
-        state.getAgentRunsBySubject().entrySet().removeIf(entry -> entry.getValue().isEmpty());
-        state.getPairDecisions().entrySet().removeIf(entry -> entry.getValue().getUpdatedAt() != null
-                && entry.getValue().getUpdatedAt().isBefore(cutoff));
-        Set<Long> expiredRunIds = new HashSet<Long>();
-        state.getRuns().entrySet().removeIf(entry -> {
-            LocalDateTime startedAt = entry.getValue().getStartedAt();
-            boolean expired = startedAt == null || startedAt.isBefore(cutoff);
-            if (expired) {
-                expiredRunIds.add(entry.getKey());
-            }
-            return expired;
-        });
-        for (Long runId : expiredRunIds) {
-            state.getRunSteps().remove(runId);
-        }
-    }
-
-    private void normalize(RadarCacheState state) {
-        if (state.getSignals() == null || state.getSignalIdsByItemId() == null || state.getEvents() == null
-                || state.getEventIdsByKey() == null || state.getEventSignals() == null || state.getSnapshots() == null
-                || state.getEvidence() == null || state.getInterpretations() == null || state.getPairDecisions() == null
-                || state.getRuns() == null || state.getRunSteps() == null || state.getUserStates() == null
-                || state.getTimelines() == null || state.getTimelineFingerprints() == null
-                || state.getResearchLinks() == null || state.getNotifications() == null
-                || state.getNotificationFingerprints() == null || state.getAgentRunsBySubject() == null
-                || state.getIndustryChainImpacts() == null) {
-            throw new IllegalStateException("Redis 雷达临时缓存结构不完整");
-        }
-    }
-
-    private int normalizedTtlHours() {
-        return Math.max(1, properties.getTtlHours());
+    public static <K, V> void prefetch(Map<K, V> records, Collection<K> ids) {
+        RedisRadarCacheSession.prefetch(records, ids);
     }
 }

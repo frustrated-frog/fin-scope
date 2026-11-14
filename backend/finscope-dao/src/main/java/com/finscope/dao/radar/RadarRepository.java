@@ -28,12 +28,16 @@ public class RadarRepository {
         return store.update(state -> capture(state, signal, now));
     }
 
-    /** 一次抓取只读写一次完整缓存，避免逐条网络传输及全量 JSON 编解码。 */
+    /** 批量预取身份与信号，只提交实际发生变化的记录。 */
     public List<RadarSignal> captureBatch(List<RadarSignal> signals, LocalDateTime now) {
         if (signals == null || signals.isEmpty()) {
             return Collections.emptyList();
         }
         return store.update(state -> {
+            RedisRadarCacheStore.prefetch(state.getSignalIdsByItemId(), signals.stream().map(RadarSignal::getItemId).toList());
+            List<Long> existingIds = signals.stream().map(signal -> state.getSignalIdsByItemId().get(signal.getItemId()))
+                    .filter(java.util.Objects::nonNull).toList();
+            RedisRadarCacheStore.prefetch(state.getSignals(), existingIds);
             List<RadarSignal> captured = new ArrayList<>();
             for (RadarSignal signal : signals) {
                 captured.add(capture(state, signal, now));
@@ -138,7 +142,10 @@ public class RadarRepository {
     }
 
     public Optional<RadarEventDetailSnapshot> findDetailSnapshot(Long eventId) {
-        RadarCacheState state = store.read();
+        return store.query(state -> detailSnapshot(state, eventId));
+    }
+
+    private Optional<RadarEventDetailSnapshot> detailSnapshot(RadarCacheState state, Long eventId) {
         RadarEvent event = state.getEvents().get(eventId);
         if (event == null) {
             return Optional.empty();
@@ -187,7 +194,9 @@ public class RadarRepository {
 
     private List<RadarSignal> signalsForEvent(RadarCacheState state, Long eventId) {
         List<RadarSignal> values = new ArrayList<RadarSignal>();
-        for (RadarEventSignal link : state.getEventSignals().getOrDefault(eventId, Collections.emptyList())) {
+        List<RadarEventSignal> links = state.getEventSignals().getOrDefault(eventId, Collections.emptyList());
+        RedisRadarCacheStore.prefetch(state.getSignals(), links.stream().map(RadarEventSignal::getSignalId).toList());
+        for (RadarEventSignal link : links) {
             RadarSignal signal = state.getSignals().get(link.getSignalId());
             if (signal != null) {
                 values.add(signal);

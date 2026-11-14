@@ -71,6 +71,8 @@ public class RadarEventWorkspaceRepository {
             return result;
         }
         RadarCacheState state = store.read();
+        RedisRadarCacheStore.prefetch(state.getUserStates(), eventIds);
+        RedisRadarCacheStore.prefetch(state.getResearchLinks(), eventIds);
         for (Long eventId : eventIds) {
             RadarEventWorkspace.Summary summary = summary(state.getUserStates().get(eventId), eventId);
             summary.setResearchRunCount(state.getResearchLinks().getOrDefault(eventId, Collections.emptyList()).size());

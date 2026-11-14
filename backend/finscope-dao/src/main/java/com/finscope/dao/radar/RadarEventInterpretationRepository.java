@@ -97,6 +97,7 @@ public class RadarEventInterpretationRepository {
             return result;
         }
         RadarCacheState state = store.read();
+        RedisRadarCacheStore.prefetch(state.getInterpretations(), eventIds);
         for (Long eventId : eventIds) {
             latest(state.getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()))
                     .ifPresent(value -> result.put(eventId, value));
