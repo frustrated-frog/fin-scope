@@ -48,6 +48,9 @@ management:
       enabled: false
 
 finscope:
+  stock-learning-card:
+    synthesis-timeout-ms: 120000
+    max-output-tokens: 6000
   data-root: ../data
   cors-origin: http://localhost:*
   redis:

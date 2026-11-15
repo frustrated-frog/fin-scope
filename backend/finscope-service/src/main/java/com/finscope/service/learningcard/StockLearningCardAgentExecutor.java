@@ -14,12 +14,13 @@ import com.finscope.service.search.evidence.SearchEvidenceBatch;
 import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import com.finscope.service.search.evidence.SearchEvidenceRequest;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Resource;
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -29,24 +30,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class StockLearningCardAgentExecutor {
     private static final Logger log = LoggerFactory.getLogger(StockLearningCardAgentExecutor.class);
-    private final StockLearningCardRepository cards;
-    private final SearchEvidenceGateway search;
-    private final SearchEvidenceContentService content;
-    private final StockLearningCardSynthesisAgent synthesis;
-    private final Executor executor;
-
-    @Autowired
-    public StockLearningCardAgentExecutor(StockLearningCardRepository cards, SearchEvidenceGateway search,
-                                          SearchEvidenceContentService content,
-                                          StockLearningCardSynthesisAgent synthesis,
-                                          @Qualifier("stockLearningCardExecutor") Executor executor) {
-        this.cards = cards; this.search = search; this.content = content;
-        this.synthesis = synthesis; this.executor = executor;
-    }
+    @Resource
+    private StockLearningCardRepository cards;
+    @Resource
+    private SearchEvidenceGateway search;
+    @Resource
+    private SearchEvidenceContentService content;
+    @Resource
+    private StockLearningCardSynthesisAgent synthesis;
+    @Resource(name = "stockLearningCardExecutor")
+    private Executor executor;
 
     public void schedule(Instrument instrument, StockLearningCardRun run) {
         executor.execute(() -> execute(instrument, run));
@@ -113,9 +111,9 @@ public class StockLearningCardAgentExecutor {
             }
             return synthesis.synthesize(instrument.getName(), instrument.getCode(), dimension, evidence);
         } catch (Exception error) {
-            log.warn("Stock learning synthesis failed: runId={}, dimension={}, errorType={}",
-                    run.getId(), dimension, error.getClass().getSimpleName());
-            return failed(dimension);
+            log.warn("Stock learning synthesis failed: runId={}, dimension={}, errorType={}, reason={}",
+                    run.getId(), dimension, error.getClass().getSimpleName(), failureMessage(error));
+            return failed(dimension, failureMessage(error));
         }
     }
 
@@ -129,9 +127,9 @@ public class StockLearningCardAgentExecutor {
             return synthesis.synthesize(instrument.getName(), instrument.getCode(), "COUNTER_CASE", evidence,
                     Collections.unmodifiableList(new ArrayList<StockLearningCardClaim>(primaryClaims)));
         } catch (Exception error) {
-            log.warn("Stock learning synthesis failed: runId={}, dimension=COUNTER_CASE, errorType={}",
-                    run.getId(), error.getClass().getSimpleName());
-            return failed("COUNTER_CASE");
+            log.warn("Stock learning synthesis failed: runId={}, dimension=COUNTER_CASE, errorType={}, reason={}",
+                    run.getId(), error.getClass().getSimpleName(), failureMessage(error));
+            return failed("COUNTER_CASE", failureMessage(error));
         }
     }
 
@@ -175,7 +173,12 @@ public class StockLearningCardAgentExecutor {
             run.setSummary("已生成" + ready + "个维度，" + (claims.size() - ready) + "个维度需要重试");
         } else if (failed > 0) {
             run.setStatus("FAILED"); run.setFailedStage(collectionFailures == claims.size() ? "COLLECTING_EVIDENCE" : "SYNTHESIZING_CARDS");
-            run.setErrorCode("NO_DIMENSION_COMPLETED"); run.setUserMessage("暂未生成可用学习卡，请稍后重新生成"); run.setRetryable(true);
+            run.setErrorCode("NO_DIMENSION_COMPLETED");
+            String reason = claims.stream().filter(claim -> "FAILED".equals(claim.getStatus()))
+                    .map(StockLearningCardClaim::getFailureMessage).filter(java.util.Objects::nonNull)
+                    .distinct().limit(2).collect(java.util.stream.Collectors.joining("；"));
+            run.setUserMessage(reason.isBlank() ? "暂未生成可用学习卡，请稍后重新生成" : reason);
+            run.setRetryable(true);
             run.setSummary("六个学习维度均未形成可用判断");
         } else {
             run.setStatus("DEGRADED"); run.setFailedStage(null); run.setErrorCode("INSUFFICIENT_EVIDENCE");
@@ -185,12 +188,24 @@ public class StockLearningCardAgentExecutor {
         cards.updateRun(run, claims, Collections.singletonList(watch()));
     }
 
-    private StockLearningCardClaim failed(String dimension) {
+    private String failureMessage(Exception error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SocketTimeoutException || cause instanceof HttpTimeoutException || cause instanceof TimeoutException) {
+                return "模型整理超时，已保留采集资料，可重新整理";
+            }
+        }
+        if (error instanceof com.fasterxml.jackson.core.JsonProcessingException || error instanceof IllegalArgumentException) {
+            return "模型输出未通过栏目或证据引用校验，可重新整理";
+        }
+        return "模型或资料处理暂不可用，已保留采集资料，可稍后重试";
+    }
+
+    private StockLearningCardClaim failed(String dimension, String message) {
         StockLearningDimensionSchema schema = StockLearningFramework.schemaFor(dimension);
         StockLearningCardClaim claim = new StockLearningCardClaim();
         claim.setDimensionCode(dimension);
         claim.setStatus("FAILED");
-        claim.setFailureMessage("该维度生成失败，可以重新生成学习卡");
+        claim.setFailureMessage(message);
         claim.setHeadline("暂未形成判断");
         claim.setRatingLabel(schema.getRatingLabel());
         claim.setRatingValue("UNKNOWN");

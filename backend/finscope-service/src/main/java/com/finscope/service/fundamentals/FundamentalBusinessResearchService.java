@@ -102,6 +102,8 @@ public class FundamentalBusinessResearchService {
         } else if ("FAILED".equals(run.getStatus()) || stale) {
             result.setStatus(FundamentalBusinessResearchStatus.FAILED);
             result.setMessage(stale ? "上次研究未完成，可重新整理；已有经营认识继续保留。"
+                    : run.getUserMessage() != null && !run.getUserMessage().isBlank()
+                    ? run.getUserMessage() + "；已有经营认识与手工笔记继续保留。"
                     : "本次研究未完成，可重试；已有经营认识与手工笔记继续保留。");
         } else {
             boolean complete = result.getFindings().size() == FundamentalBusinessAspect.values().length;

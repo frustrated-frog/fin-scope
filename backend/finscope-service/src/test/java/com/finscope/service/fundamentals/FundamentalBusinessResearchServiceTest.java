@@ -95,6 +95,20 @@ class FundamentalBusinessResearchServiceTest {
         verify(learning).start("603618");
     }
 
+    @Test
+    void exposesTheStoredFailureReasonAndKeepsPreviousFindings() {
+        var failed = run(11, "FAILED");
+        failed.setUserMessage("模型整理超时，已保留采集资料，可重新整理");
+        when(cards.latest(1L)).thenReturn(Optional.of(failed));
+        when(cards.recentCompletedBusinessRuns(1L)).thenReturn(List.of(run(10, "READY")));
+
+        var result = service.view("603618");
+
+        assertTrue(result.getMessage().contains("模型整理超时"));
+        assertFalse(result.getFindings().isEmpty());
+        assertTrue(result.isShowingPrevious());
+    }
+
     private StockLearningCardRun run(long id, String status) {
         var run = new StockLearningCardRun();
         run.setId(id);

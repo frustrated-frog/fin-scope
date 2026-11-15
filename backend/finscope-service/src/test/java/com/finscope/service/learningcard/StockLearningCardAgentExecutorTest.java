@@ -11,6 +11,7 @@ import com.finscope.service.search.evidence.SearchEvidenceBatch;
 import com.finscope.service.search.evidence.SearchEvidenceContentService;
 import com.finscope.service.search.evidence.SearchEvidenceGateway;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
 
 import java.util.Collections;
@@ -35,8 +36,7 @@ class StockLearningCardAgentExecutorTest {
         SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
         SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
         StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
-        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor(cards, search, content,
-                synthesis, Runnable::run);
+        StockLearningCardAgentExecutor executor = executor(cards, search, content, synthesis);
         SearchEvidence hit = new SearchEvidence();
         hit.setTitle("公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
         when(search.search(any())).thenReturn(new SearchEvidenceBatch(
@@ -90,8 +90,7 @@ class StockLearningCardAgentExecutorTest {
         SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
         SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
         StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
-        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor(cards, search, content,
-                synthesis, Runnable::run);
+        StockLearningCardAgentExecutor executor = executor(cards, search, content, synthesis);
         when(search.search(any())).thenReturn(new SearchEvidenceBatch(Collections.emptyList(), Collections.emptyList(), false));
         when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList())).thenAnswer(invocation -> {
             StockLearningCardClaim claim = new StockLearningCardClaim();
@@ -124,8 +123,7 @@ class StockLearningCardAgentExecutorTest {
         SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
         SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
         StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
-        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor(cards, search, content,
-                synthesis, Runnable::run);
+        StockLearningCardAgentExecutor executor = executor(cards, search, content, synthesis);
         SearchEvidence hit = new SearchEvidence();
         hit.setTitle("公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
         when(search.search(any())).thenReturn(new SearchEvidenceBatch(
@@ -151,6 +149,44 @@ class StockLearningCardAgentExecutorTest {
         assertEquals(5, priorClaims.getValue().size());
         assertEquals("SPACE", priorClaims.getValue().get(0).getDimensionCode());
         assertEquals("VALUATION", priorClaims.getValue().get(4).getDimensionCode());
+    }
+
+    @Test
+    void recordsTimeoutAsTheReasonInsteadOfReportingMissingPublicEvidence() throws Exception {
+        StockLearningCardRepository cards = mock(StockLearningCardRepository.class);
+        SearchEvidenceGateway search = mock(SearchEvidenceGateway.class);
+        SearchEvidenceContentService content = mock(SearchEvidenceContentService.class);
+        StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
+        when(search.search(any())).thenReturn(new SearchEvidenceBatch(Collections.emptyList(), Collections.emptyList(), false));
+        when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList()))
+                .thenThrow(new java.net.SocketTimeoutException("request deadline"));
+        when(synthesis.synthesize(anyString(), anyString(), eq("COUNTER_CASE"), anyList(), anyList()))
+                .thenThrow(new java.net.SocketTimeoutException("request deadline"));
+        when(cards.updateRun(any(), anyList(), anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        Instrument instrument = new Instrument();
+        instrument.setName("华天科技");
+        instrument.setCode("002185");
+        StockLearningCardRun run = new StockLearningCardRun();
+        run.setId(99L);
+        executor(cards, search, content, synthesis).execute(instrument, run);
+
+        assertEquals("FAILED", run.getStatus());
+        assertTrue(run.getUserMessage().contains("模型整理超时"));
+        assertEquals("SYNTHESIZING_CARDS", run.getFailedStage());
+    }
+
+    private StockLearningCardAgentExecutor executor(StockLearningCardRepository cards,
+                                                    SearchEvidenceGateway search,
+                                                    SearchEvidenceContentService content,
+                                                    StockLearningCardSynthesisAgent synthesis) {
+        StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor();
+        ReflectionTestUtils.setField(executor, "cards", cards);
+        ReflectionTestUtils.setField(executor, "search", search);
+        ReflectionTestUtils.setField(executor, "content", content);
+        ReflectionTestUtils.setField(executor, "synthesis", synthesis);
+        java.util.concurrent.Executor worker = Runnable::run;
+        ReflectionTestUtils.setField(executor, "executor", worker);
+        return executor;
     }
 
     private static StockLearningCardClaim ready(String dimension) {

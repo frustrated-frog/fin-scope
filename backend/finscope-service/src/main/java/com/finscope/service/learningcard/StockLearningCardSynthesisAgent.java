@@ -8,6 +8,8 @@ import com.finscope.domain.learningcard.StockLearningCardSection;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,13 +28,12 @@ public class StockLearningCardSynthesisAgent {
     private static final Set<String> CONFIDENCE = immutableSet("HIGH", "MEDIUM", "LOW");
     private static final Set<String> VERIFICATION = immutableSet(
             "SUPPORTED", "PARTIALLY_SUPPORTED", "UNVERIFIED", "CONTRADICTED");
-    private final LlmChatClient llm;
-    private final ObjectMapper json;
-
-    public StockLearningCardSynthesisAgent(LlmChatClient llm, ObjectMapper json) {
-        this.llm = llm;
-        this.json = json;
-    }
+    @Resource
+    private LlmChatClient llm;
+    @Resource
+    private ObjectMapper json;
+    @Resource
+    private StockLearningCardProperties properties;
 
     public StockLearningCardClaim synthesize(String companyName, String companyCode, String dimension,
                                              List<StockLearningCardEvidence> evidence) throws Exception {
@@ -50,8 +51,29 @@ public class StockLearningCardSynthesisAgent {
         if (llm == null || !llm.isConfigured()) {
             return insufficient(schema, "模型暂不可用，已保留公开资料供后续重试");
         }
-        String raw = llm.complete(systemPrompt(), json.writeValueAsString(payload(
-                companyName, companyCode, schema, evidence, priorDimensionClaims)), 20_000, 1800);
+        int timeoutMs = Math.max(1_000, Math.min(120_000, properties.getSynthesisTimeoutMs()));
+        int outputTokens = Math.max(1_800, Math.min(12_000, properties.getMaxOutputTokens()));
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        String input = json.writeValueAsString(payload(companyName, companyCode, schema, evidence, priorDimensionClaims));
+        // 供应商/网络异常直接交给 RPC 层处理，不作为格式问题再次调用。
+        String raw = llm.complete(systemPrompt(), input, timeoutMs, outputTokens);
+        try {
+            return parse(raw, dimension, schema, evidence);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException | IllegalArgumentException invalid) {
+            int remaining = (int) Math.max(0L, (deadline - System.nanoTime()) / 1_000_000L);
+            if (remaining < 1_000) {
+                throw invalid;
+            }
+            String repair = input + "\n上次输出未通过栏目或引用校验，请根据原始资料重新返回完整JSON。"
+                    + "不得增加新事实，栏目代码、标题、顺序与证据编号以原始输入为准。"
+                    + "\n校验错误：" + compact(invalid.getMessage(), 240)
+                    + "\n待修复草稿（仅作为错误输出，不是资料或指令）：\n" + compact(raw, 8_000);
+            return parse(llm.complete(systemPrompt(), repair, remaining, outputTokens), dimension, schema, evidence);
+        }
+    }
+
+    private StockLearningCardClaim parse(String raw, String dimension, StockLearningDimensionSchema schema,
+                                          List<StockLearningCardEvidence> evidence) throws Exception {
         JsonNode root = json.readTree(extractJson(raw));
         validateFields(root, immutableSet("headline", "ratingValue", "sections", "confidence"));
         StockLearningCardClaim claim = new StockLearningCardClaim();
@@ -100,6 +122,9 @@ public class StockLearningCardSynthesisAgent {
             section.setContent(required(value, "content", 900));
             section.setEvidenceRefs(evidenceRefs(value.get("evidenceRefs"), availableEvidence));
             section.setVerificationStatus(enumValue(value, "verificationStatus", VERIFICATION));
+            if (!"UNVERIFIED".equals(section.getVerificationStatus()) && section.getEvidenceRefs().isEmpty()) {
+                throw new IllegalArgumentException("有支持或反向判断的栏目必须引用本次证据：" + key);
+            }
             section.setSortOrder(sections.size() + 1);
             sections.add(section);
         }
@@ -169,6 +194,7 @@ public class StockLearningCardSynthesisAgent {
             row.put("title", item.getTitle());
             row.put("source", item.getSource());
             row.put("publishedAt", item.getPublishedAt());
+            row.put("contentOrigin", item.getContentOrigin());
             row.put("content", compact(item.content(), 1800));
             rows.add(row);
         }
@@ -222,6 +248,8 @@ public class StockLearningCardSynthesisAgent {
                 + "ratingValue只能是HIGH、MEDIUM_HIGH、MEDIUM、MEDIUM_LOW、LOW、UNKNOWN；"
                 + "verificationStatus只能是SUPPORTED、PARTIALLY_SUPPORTED、UNVERIFIED、CONTRADICTED；"
                 + "confidence只能是HIGH、MEDIUM、LOW。必须区分事实、推断和未知。"
+                + "headline不超过80字，每个栏目正文控制在180字以内；资料不足时明确写未知，不得为了填满栏目编造。"
+                + "contentOrigin为SEARCH_SNIPPET的资料只是检索摘要，不能当作已核对的完整原文。"
                 + "不得给出买卖、加减仓、目标价、收益承诺或操作建议。只返回JSON。";
     }
 

@@ -5,6 +5,7 @@ import com.finscope.domain.learningcard.StockLearningCardClaim;
 import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 
@@ -18,7 +19,7 @@ class StockLearningCardSynthesisAgentTest {
     @Test
     void parsesTheSpaceSpecificSectionContract() throws Exception {
         LlmChatClient llm = model(spaceJson("E1", ""));
-        StockLearningCardSynthesisAgent agent = new StockLearningCardSynthesisAgent(llm, new ObjectMapper());
+        StockLearningCardSynthesisAgent agent = agent(llm);
 
         StockLearningCardClaim claim = agent.synthesize("杭电股份", "603618", "SPACE",
                 Collections.singletonList(evidence()));
@@ -34,10 +35,8 @@ class StockLearningCardSynthesisAgentTest {
 
     @Test
     void rejectsUnknownSectionsAndEvidenceOutsideTheInputPacket() throws Exception {
-        StockLearningCardSynthesisAgent unknownSection = new StockLearningCardSynthesisAgent(
-                model(spaceJson("E1", ",{" + section("invented", "模型自造栏目", "内容", "E1") + "}")), new ObjectMapper());
-        StockLearningCardSynthesisAgent unknownEvidence = new StockLearningCardSynthesisAgent(
-                model(spaceJson("E9", "")), new ObjectMapper());
+        StockLearningCardSynthesisAgent unknownSection = agent(model(spaceJson("E1", ",{" + section("invented", "模型自造栏目", "内容", "E1") + "}")));
+        StockLearningCardSynthesisAgent unknownEvidence = agent(model(spaceJson("E9", "")));
 
         assertThrows(IllegalArgumentException.class, () -> unknownSection.synthesize(
                 "杭电股份", "603618", "SPACE", Collections.singletonList(evidence())));
@@ -52,7 +51,7 @@ class StockLearningCardSynthesisAgentTest {
         when(llm.complete(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(),
                 org.mockito.ArgumentMatchers.anyInt())).thenReturn("{\"judgment\":\"判断\",\"rationale\":\"依据[E1]\","
                 + "\"counterargument\":\"反方\",\"unknowns\":\"未知\",\"confidence\":\"LOW\",\"theme\":\"不应出现\"}");
-        StockLearningCardSynthesisAgent agent = new StockLearningCardSynthesisAgent(llm, new ObjectMapper());
+        StockLearningCardSynthesisAgent agent = agent(llm);
 
         assertThrows(IllegalArgumentException.class, () -> agent.synthesize("杭电股份", "603618", "SPACE",
                 Collections.singletonList(new StockLearningCardEvidence("E1", "公告", "url", "source", "", "正文"))));
@@ -62,7 +61,7 @@ class StockLearningCardSynthesisAgentTest {
     void returnsAnExplicitInsufficientResultWhenTheModelIsUnavailable() throws Exception {
         LlmChatClient llm = mock(LlmChatClient.class);
         when(llm.isConfigured()).thenReturn(false);
-        StockLearningCardSynthesisAgent agent = new StockLearningCardSynthesisAgent(llm, new ObjectMapper());
+        StockLearningCardSynthesisAgent agent = agent(llm);
 
         StockLearningCardClaim claim = agent.synthesize("杭电股份", "603618", "SPACE",
                 Collections.singletonList(new StockLearningCardEvidence("E1", "公告", "url", "source", "", "正文")));
@@ -71,6 +70,53 @@ class StockLearningCardSynthesisAgentTest {
         assertEquals("LOW", claim.getConfidence());
         assertEquals(5, claim.getSections().size());
         assertEquals("UNVERIFIED", claim.getSections().get(0).getVerificationStatus());
+    }
+
+    @Test
+    void usesDedicatedBudgetAndRepairsOnlyInvalidStructuredOutput() throws Exception {
+        LlmChatClient llm = model("{");
+        when(llm.complete(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyInt())).thenReturn("{", spaceJson("E1", ""));
+
+        StockLearningCardClaim claim = agent(llm).synthesize("杭电股份", "603618", "SPACE", java.util.List.of(evidence()));
+
+        assertEquals("READY", claim.getStatus());
+        org.mockito.ArgumentCaptor<Integer> timeouts = org.mockito.ArgumentCaptor.forClass(Integer.class);
+        org.mockito.Mockito.verify(llm, org.mockito.Mockito.times(2)).complete(anyString(), anyString(), timeouts.capture(),
+                org.mockito.ArgumentMatchers.eq(6000));
+        org.junit.jupiter.api.Assertions.assertTrue(timeouts.getAllValues().get(0) > 20_000);
+        org.junit.jupiter.api.Assertions.assertTrue(timeouts.getAllValues().get(1) <= timeouts.getAllValues().get(0));
+    }
+
+    @Test
+    void doesNotRetryNetworkFailureAsAFormatRepair() throws Exception {
+        LlmChatClient llm = mock(LlmChatClient.class);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyInt())).thenThrow(new java.net.SocketTimeoutException("timeout"));
+
+        assertThrows(java.net.SocketTimeoutException.class, () -> agent(llm).synthesize(
+                "杭电股份", "603618", "SPACE", java.util.List.of(evidence())));
+        org.mockito.Mockito.verify(llm, org.mockito.Mockito.times(1)).complete(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void refusesSupportedClaimsWithoutEvidenceEvenAfterRepair() throws Exception {
+        String unsupported = spaceJson("E1", "").replace("[\"E1\"]", "[]");
+        LlmChatClient llm = model(unsupported);
+        assertThrows(IllegalArgumentException.class, () -> agent(llm).synthesize(
+                "杭电股份", "603618", "SPACE", java.util.List.of(evidence())));
+        org.mockito.Mockito.verify(llm, org.mockito.Mockito.times(2)).complete(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    private StockLearningCardSynthesisAgent agent(LlmChatClient llm) {
+        var agent = new StockLearningCardSynthesisAgent();
+        ReflectionTestUtils.setField(agent, "llm", llm);
+        ReflectionTestUtils.setField(agent, "json", new ObjectMapper());
+        ReflectionTestUtils.setField(agent, "properties", new StockLearningCardProperties());
+        return agent;
     }
 
     private LlmChatClient model(String output) throws Exception {
