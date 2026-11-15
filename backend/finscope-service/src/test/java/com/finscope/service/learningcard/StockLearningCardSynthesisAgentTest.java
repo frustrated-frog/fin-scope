@@ -111,6 +111,16 @@ class StockLearningCardSynthesisAgentTest {
                 org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
     }
 
+    @Test
+    void doesNotReportACompletedUnknownOnlyAnswerAsAReadyResearchDimension() throws Exception {
+        LlmChatClient llm = model(spaceJson("E1", "").replace("SUPPORTED", "UNVERIFIED"));
+        var claim = agent(llm).synthesize("澳弘电子", "605058", "SPACE", java.util.List.of(evidence()));
+        assertEquals("INSUFFICIENT_EVIDENCE", claim.getStatus());
+        assertEquals("UNKNOWN", claim.getRatingValue());
+        assertEquals("LOW", claim.getConfidence());
+        assertEquals(5, claim.getSections().size());
+    }
+
     private StockLearningCardSynthesisAgent agent(LlmChatClient llm) {
         var agent = new StockLearningCardSynthesisAgent();
         ReflectionTestUtils.setField(agent, "llm", llm);

@@ -38,11 +38,11 @@ class StockLearningCardAgentExecutorTest {
         StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
         StockLearningCardAgentExecutor executor = executor(cards, search, content, synthesis);
         SearchEvidence hit = new SearchEvidence();
-        hit.setTitle("公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
+        hit.setTitle("杭电股份公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
         when(search.search(any())).thenReturn(new SearchEvidenceBatch(
                 Collections.singletonList(hit), Collections.emptyList(), false));
         when(content.acquire(any(), anyString(), anyString(), anyBoolean()))
-                .thenReturn(new ResearchEvidenceAcquisitionResult("公开资料正文", "公开资料摘要",
+                .thenReturn(new ResearchEvidenceAcquisitionResult("杭电股份公开资料正文", "公开资料摘要",
                         "FULL_TEXT", "test", "SUCCESS", 6));
         when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList()))
                 .thenAnswer(invocation -> {
@@ -125,11 +125,11 @@ class StockLearningCardAgentExecutorTest {
         StockLearningCardSynthesisAgent synthesis = mock(StockLearningCardSynthesisAgent.class);
         StockLearningCardAgentExecutor executor = executor(cards, search, content, synthesis);
         SearchEvidence hit = new SearchEvidence();
-        hit.setTitle("公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
+        hit.setTitle("杭电股份公司公告"); hit.setUrl("https://example.com/report"); hit.setContent("公开资料摘要");
         when(search.search(any())).thenReturn(new SearchEvidenceBatch(
                 Collections.singletonList(hit), Collections.emptyList(), false));
         when(content.acquire(any(), anyString(), anyString(), anyBoolean()))
-                .thenReturn(new ResearchEvidenceAcquisitionResult("公开资料正文", "公开资料摘要",
+                .thenReturn(new ResearchEvidenceAcquisitionResult("杭电股份公开资料正文", "公开资料摘要",
                         "FULL_TEXT", "test", "SUCCESS", 6));
         when(synthesis.synthesize(anyString(), anyString(), anyString(), anyList()))
                 .thenAnswer(invocation -> ready(invocation.getArgument(2)));
@@ -181,8 +181,13 @@ class StockLearningCardAgentExecutorTest {
                                                     StockLearningCardSynthesisAgent synthesis) {
         StockLearningCardAgentExecutor executor = new StockLearningCardAgentExecutor();
         ReflectionTestUtils.setField(executor, "cards", cards);
-        ReflectionTestUtils.setField(executor, "search", search);
-        ReflectionTestUtils.setField(executor, "content", content);
+        StockLearningBaselineService baseline = mock(StockLearningBaselineService.class);
+        when(baseline.build(any())).thenReturn(Collections.emptyList());
+        StockLearningEvidenceCollector collector = new StockLearningEvidenceCollector();
+        ReflectionTestUtils.setField(collector, "search", search);
+        ReflectionTestUtils.setField(collector, "content", content);
+        ReflectionTestUtils.setField(executor, "baseline", baseline);
+        ReflectionTestUtils.setField(executor, "collector", collector);
         ReflectionTestUtils.setField(executor, "synthesis", synthesis);
         java.util.concurrent.Executor worker = Runnable::run;
         ReflectionTestUtils.setField(executor, "executor", worker);

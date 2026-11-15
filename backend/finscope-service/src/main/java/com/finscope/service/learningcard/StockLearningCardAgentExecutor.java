@@ -7,13 +7,6 @@ import com.finscope.domain.learningcard.StockLearningCardEvidence;
 import com.finscope.domain.learningcard.StockLearningCardRun;
 import com.finscope.domain.learningcard.StockLearningCardSection;
 import com.finscope.domain.learningcard.StockLearningCardWatchItem;
-import com.finscope.service.research.evidence.ResearchEvidenceAcquisitionResult;
-import com.finscope.service.search.evidence.SearchDepth;
-import com.finscope.service.search.evidence.SearchEvidence;
-import com.finscope.service.search.evidence.SearchEvidenceBatch;
-import com.finscope.service.search.evidence.SearchEvidenceContentService;
-import com.finscope.service.search.evidence.SearchEvidenceGateway;
-import com.finscope.service.search.evidence.SearchEvidenceRequest;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,9 +31,9 @@ public class StockLearningCardAgentExecutor {
     @Resource
     private StockLearningCardRepository cards;
     @Resource
-    private SearchEvidenceGateway search;
+    private StockLearningBaselineService baseline;
     @Resource
-    private SearchEvidenceContentService content;
+    private StockLearningEvidenceCollector collector;
     @Resource
     private StockLearningCardSynthesisAgent synthesis;
     @Resource(name = "stockLearningCardExecutor")
@@ -57,11 +50,11 @@ public class StockLearningCardAgentExecutor {
             Map<String, List<StockLearningCardEvidence>> evidenceByDimension =
                     new LinkedHashMap<String, List<StockLearningCardEvidence>>();
             List<StockLearningCardEvidence> allEvidence = new ArrayList<StockLearningCardEvidence>();
+            List<StockLearningCardEvidence> seeds = baseline.build(instrument);
             int collectionFailures = 0;
             for (String dimension : StockLearningFramework.dimensions()) {
                 try {
-                    String query = StockLearningFramework.queryFor(dimension, instrument.getName(), instrument.getCode());
-                    List<StockLearningCardEvidence> dimensionEvidence = collect(query, instrument.getName());
+                    List<StockLearningCardEvidence> dimensionEvidence = collector.collect(instrument, dimension, seeds);
                     int order = 1;
                     for (StockLearningCardEvidence item : dimensionEvidence) {
                         item.setDimensionCode(dimension); item.setSortOrder(order++);
@@ -131,22 +124,6 @@ public class StockLearningCardAgentExecutor {
                     run.getId(), error.getClass().getSimpleName(), failureMessage(error));
             return failed("COUNTER_CASE", failureMessage(error));
         }
-    }
-
-    private List<StockLearningCardEvidence> collect(String query, String subject) {
-        SearchEvidenceBatch batch = search.search(new SearchEvidenceRequest(query, SearchDepth.DEEP,
-                5, 5, "cn", "zh", 25_000));
-        if (batch.isAllProvidersFailed()) throw new IllegalStateException("公开资料搜索暂不可用");
-        List<StockLearningCardEvidence> result = new ArrayList<StockLearningCardEvidence>();
-        int index = 1;
-        for (SearchEvidence item : batch.getEvidence()) {
-            ResearchEvidenceAcquisitionResult acquired = content.acquire(item, query, subject, index <= 2);
-            StockLearningCardEvidence evidence = new StockLearningCardEvidence("E" + index, text(item.getTitle()), text(item.getUrl()),
-                    text(item.getSourceDomain()), text(item.getPublishedAt()), text(acquired.getContent()));
-            evidence.setContentOrigin(text(acquired.getContentOrigin())); result.add(evidence);
-            index++;
-        }
-        return result;
     }
 
     private void progress(StockLearningCardRun run, String stage, String message) {

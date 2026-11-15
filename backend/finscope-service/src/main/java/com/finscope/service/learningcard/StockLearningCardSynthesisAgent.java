@@ -85,6 +85,12 @@ public class StockLearningCardSynthesisAgent {
         claim.setConfidence(enumValue(root, "confidence", CONFIDENCE));
         claim.setSections(parseSections(root.get("sections"), schema, evidence));
         validateTradingLanguage(claim);
+        if (claim.getSections().stream().allMatch(section -> "UNVERIFIED".equals(section.getVerificationStatus()))) {
+            claim.setStatus("INSUFFICIENT_EVIDENCE");
+            claim.setRatingValue("UNKNOWN");
+            claim.setConfidence("LOW");
+            claim.setFailureMessage("本公司资料尚不足以验证该维度，已保留未知项");
+        }
         return claim;
     }
 
