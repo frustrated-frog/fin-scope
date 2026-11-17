@@ -21,7 +21,7 @@ class NewsAiUnifiedAgentTest {
         decision.setTargetKey("invented");
         decision.setRelation(NewsAiRelation.DUPLICATE);
         assertTrue(parse(List.of(decision), input).isEmpty());
-        decision.setTargetKey("known");
+        decision.setTargetKey("e1");
         decision.setNewFacts(List.of("新的金额"));
         assertTrue(parse(List.of(decision), input).isEmpty());
         decision.setRelation(NewsAiRelation.PROGRESS);
@@ -73,6 +73,56 @@ class NewsAiUnifiedAgentTest {
         assertNotEquals(NewsAiContentIdentity.hash("公司公告", "计划增持"), NewsAiContentIdentity.hash("公司公告", "不计划增持"));
     }
 
+    @Test
+    void wireIdsStayShortAndFactsPrecedeRelationshipWhileStoredIdentitiesStayIntact() throws Exception {
+        var agent = agent();
+        var input = input();
+        String actual = "a".repeat(64) + "@2026-11-17";
+        input.setContentKey(actual);
+        var next = input();
+        next.setContentKey("b".repeat(64) + "@2026-11-17");
+        var seed = new NewsAiEvent();
+        seed.setEventKey("news-ai:" + actual);
+        next.setCandidates(List.of(input.getCandidates().getFirst(), seed));
+        var request = mapper.readTree(agent.prepare(List.of(input, next), categories).getBody());
+        var wire = mapper.readTree(request.path("input").get(1).path("content").asText());
+        assertEquals("n1", wire.path("items").get(0).path("contentKey").asText());
+        assertEquals("e1", wire.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
+        assertEquals("n1", wire.path("items").get(1).path("candidates").get(1).path("eventKey").asText());
+        assertFalse(request.toString().contains(actual));
+        assertEquals(actual, input.getContentKey());
+        assertEquals("news-ai:" + actual, seed.getEventKey());
+        var fields = request.path("text").path("format").path("schema").path("properties")
+                .path("decisions").path("items").path("properties");
+        List<String> order = new ArrayList<>();
+        fields.fieldNames().forEachRemaining(order::add);
+        assertEquals(List.of("contentKey", "analysis", "relation", "targetKey", "newFacts", "reason"), order);
+        var first = decision();
+        var second = decision();
+        second.setContentKey("n2");
+        second.setTargetKey("n1");
+        second.setRelation(NewsAiRelation.DUPLICATE);
+        var parsed = agent.parse(mapper.writeValueAsString(Map.of("decisions", List.of(first, second))), List.of(input, next), categories);
+        assertEquals(2, parsed.size());
+        assertEquals("news-ai:" + actual, parsed.get(next.getContentKey()).getTargetKey());
+        first.setTargetKey("n1");
+        first.setRelation(NewsAiRelation.DUPLICATE);
+        parsed = agent.parse(mapper.writeValueAsString(Map.of("decisions", List.of(first, second))), List.of(input, next), categories);
+        assertFalse(parsed.containsKey(actual));
+        assertTrue(parsed.containsKey(next.getContentKey()));
+    }
+
+    private NewsAiUnifiedAgent agent() {
+        var client = new com.finscope.rpc.llm.NewsAiLunaClient();
+        ReflectionTestUtils.setField(client, "mapper", mapper);
+        ReflectionTestUtils.setField(client, "config", new NewsAiProviderConfig());
+        var agent = new NewsAiUnifiedAgent();
+        ReflectionTestUtils.setField(agent, "mapper", mapper);
+        ReflectionTestUtils.setField(agent, "client", client);
+        ReflectionTestUtils.setField(agent, "properties", new NewsAiProperties());
+        return agent;
+    }
+
     private Map<String, NewsAiDecision> parse(List<NewsAiDecision> decisions, NewsAiWorkItem input) throws Exception {
         var agent = new NewsAiUnifiedAgent();
         ReflectionTestUtils.setField(agent, "mapper", mapper);
@@ -96,7 +146,7 @@ class NewsAiUnifiedAgentTest {
         analysis.setTitle("公司合同进展");
         analysis.setSummary("合同金额1.2亿元");
         var decision = new NewsAiDecision();
-        decision.setContentKey("hash");
+        decision.setContentKey("n1");
         decision.setAnalysis(analysis);
         decision.setRelation(NewsAiRelation.NEW_EVENT);
         decision.setTargetKey("");

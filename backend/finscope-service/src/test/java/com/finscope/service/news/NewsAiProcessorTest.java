@@ -236,7 +236,7 @@ class NewsAiProcessorTest {
             try {
                 JsonNode result = mapper.readTree(decisions(input, false, false));
                 var decision = (com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0);
-                decision.put("targetKey", eventKey);
+                decision.put("targetKey", input.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
                 decision.put("relation", "PROGRESS");
                 decision.set("newFacts", mapper.valueToTree(List.of("合同完成交付")));
                 if (mutate.getAndSet(false)) {
@@ -301,7 +301,7 @@ class NewsAiProcessorTest {
             try {
                 JsonNode result = mapper.readTree(decisions(input, false, false));
                 var decision = (com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0);
-                decision.put("targetKey", "legacy");
+                decision.put("targetKey", input.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
                 decision.put("relation", "DUPLICATE");
                 return mapper.writeValueAsString(result);
             } catch (Exception error) {
@@ -328,7 +328,7 @@ class NewsAiProcessorTest {
             Map<String, Object> decision = new LinkedHashMap<>();
             decision.put("contentKey", item.path("contentKey").asText());
             decision.put("analysis", item.path("savedAnalysis").isNull() ? analysis() : null);
-            decision.put("targetKey", merge && index > 0 ? "news-ai:" + first : "");
+            decision.put("targetKey", merge && index > 0 ? first : "");
             decision.put("relation", merge && index > 0 ? "DUPLICATE" : "NEW_EVENT");
             decision.put("newFacts", List.of());
             decision.put("reason", "根据原文事实判断");
