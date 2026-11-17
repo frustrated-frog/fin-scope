@@ -9,13 +9,14 @@ import javax.annotation.Resource;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Set;
 
 @Service
 public class NewsRiverService {
     @Resource
     private RadarReplayRepository repository;
-    private Clock clock = Clock.systemDefaultZone();
+    private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
     public NewsRiverOverview overview(LocalDate requested) {
         LocalDate today = LocalDate.now(clock);

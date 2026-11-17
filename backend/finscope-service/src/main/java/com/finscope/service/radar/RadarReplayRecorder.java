@@ -7,13 +7,14 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
 public class RadarReplayRecorder {
     @Resource
     private RadarReplayRepository repository;
-    private Clock clock = Clock.systemDefaultZone();
+    private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
     public List<RadarReplayItem> capture(List<RadarEvent> events) {
         List<RadarReplayItem> result = new ArrayList<>();

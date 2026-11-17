@@ -81,6 +81,19 @@ class RadarReplayRepositoryTest {
     }
 
     @Test
+    void retainsFirstSeenIdentityForLongLivedEventsOutsideTheTopTwenty() {
+        RadarReplayItem active = item("1", "长期跟踪事件", "FINANCE");
+        save("old", now.minusDays(8), List.of(active), List.of());
+        save("still-active", now, List.of(active), List.of());
+        save("next", now.plusMinutes(5), List.of(active), List.of());
+        assertTrue(repository.buckets(now.toLocalDate()).isEmpty());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM radar_replay_seen", Integer.class));
+        save("expired", now.plusMinutes(10), List.of(), List.of());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM radar_replay_seen", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM radar_replay_version", Integer.class));
+    }
+
+    @Test
     void stablePagesContainNoEventsArrivingAfterTheSelectedFrame() {
         var events = java.util.stream.IntStream.range(0, 120).mapToObj(i -> item(String.valueOf(i), "事件" + i, "OTHER")).toList();
         save("many", now, events, events.subList(0, 20));

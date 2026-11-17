@@ -80,7 +80,7 @@ public class RadarReplayRepository implements InitializingBean {
                 throw new IllegalStateException("资讯历史排名保存失败");
             }
         }
-        prune(at.minusDays(7));
+        prune(at.minusDays(7), observed);
     }
 
     private String saveVersion(RadarReplayItem item) {
@@ -172,10 +172,20 @@ public class RadarReplayRepository implements InitializingBean {
         };
     }
 
-    private void prune(LocalDateTime before) {
+    private void prune(LocalDateTime before, List<RadarReplayItem> observed) {
         jdbc.update("DELETE FROM radar_replay_rank WHERE frame_id IN (SELECT id FROM radar_replay_frame WHERE published_at<?)", time(before));
         jdbc.update("DELETE FROM radar_replay_frame WHERE published_at<?", time(before));
-        jdbc.update("DELETE FROM radar_replay_seen WHERE observed_at<? AND event_key NOT IN (SELECT v.event_key FROM radar_replay_rank r JOIN radar_replay_version v ON v.hash=r.version_hash)", time(before));
+        // 仍在当前事件集合中的旧事件保留首次收录身份，避免七天清理后再次被计为新事件。
+        List<Object> parameters = new ArrayList<>();
+        parameters.add(time(before));
+        String activeClause = "";
+        if (!observed.isEmpty()) {
+            activeClause = " AND event_key NOT IN (" + String.join(",", Collections.nCopies(observed.size(), "?")) + ")";
+            for (RadarReplayItem item : observed) {
+                parameters.add(item.getEventKey());
+            }
+        }
+        jdbc.update("DELETE FROM radar_replay_seen WHERE observed_at<? AND event_key NOT IN (SELECT v.event_key FROM radar_replay_rank r JOIN radar_replay_version v ON v.hash=r.version_hash)" + activeClause, parameters.toArray());
         jdbc.update("DELETE FROM radar_replay_version WHERE hash NOT IN (SELECT version_hash FROM radar_replay_seen UNION SELECT version_hash FROM radar_replay_rank)");
     }
 
