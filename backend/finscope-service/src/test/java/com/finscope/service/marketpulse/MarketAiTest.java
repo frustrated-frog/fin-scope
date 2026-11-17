@@ -77,6 +77,28 @@ class MarketAiTest {
     }
 
     @Test
+    void incompatibleBreadthDenominatorsDoNotProduceComparableHistoricRatios() {
+        var today = workspace(date);
+        var previous = workspace(date.minusDays(1));
+        var currentTrend = new MarketTrendBreadth();
+        currentTrend.setMa20Ratio(.3182);
+        currentTrend.setMa20ValidCount(66);
+        currentTrend.setMa60ValidCount(66);
+        today.getBreadth().setTrendBreadth(currentTrend);
+        today.getBreadth().setValidCount(5577);
+        var priorTrend = new MarketTrendBreadth();
+        priorTrend.setMa20Ratio(.4514);
+        priorTrend.setMa20ValidCount(576);
+        priorTrend.setMa60ValidCount(576);
+        previous.getBreadth().setTrendBreadth(priorTrend);
+        when(snapshots.findRecentWorkspaces(6, date)).thenReturn(List.of(previous));
+        var facts = evidence.assemble(today).getFacts();
+        var old = facts.stream().filter(f -> f.getLabel().equals("样本趋势宽度") && f.getBusinessDate().equals(previous.getBusinessDate().toString())).findFirst().orElseThrow();
+        assertFalse(old.getValue().contains("45.14"));
+        assertTrue(old.getValue().contains("不参与跨日比较"));
+    }
+
+    @Test
     void rejectsInventedReferencesNumbersSectorsAndUnsupportedHistoricalComparison() throws Exception {
         var report = report();
         assertNotNull(agent.parse(mapper.writeValueAsString(report), input));

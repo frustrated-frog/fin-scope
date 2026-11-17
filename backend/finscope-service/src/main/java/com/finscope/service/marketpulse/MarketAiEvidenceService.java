@@ -21,10 +21,10 @@ public class MarketAiEvidenceService {
         MarketAiInput input = new MarketAiInput();
         input.setBusinessDate(workspace.getBusinessDate());
         input.setAsOf(workspace.getGeneratedAt());
-        addWorkspace(input, workspace, true);
+        addWorkspace(input, workspace, true, workspace.getBreadth());
         for (MarketPulseWorkspace previous : repository.findRecentWorkspaces(6, workspace.getBusinessDate())) {
             if (previous.getBusinessDate() != null && previous.getBusinessDate().isBefore(workspace.getBusinessDate())) {
-                addWorkspace(input, previous, false);
+                addWorkspace(input, previous, false, workspace.getBreadth());
             }
         }
         try {
@@ -36,7 +36,7 @@ public class MarketAiEvidenceService {
         return input;
     }
 
-    private void addWorkspace(MarketAiInput input, MarketPulseWorkspace workspace, boolean current) {
+    private void addWorkspace(MarketAiInput input, MarketPulseWorkspace workspace, boolean current, MarketBreadthSnapshot reference) {
         LocalDate date = workspace.getBusinessDate();
         MarketBreadthSnapshot breadth = workspace.getBreadth();
         if (breadth != null && date.equals(breadth.getBusinessDate())) {
@@ -45,13 +45,20 @@ public class MarketAiEvidenceService {
             add(input, date, null, "成交与极端涨跌", "成交额 " + amount(breadth.getTotalAmount()) + "；涨停 " + number(breadth.getLimitUpCount()) + " 家；跌停 " + number(breadth.getLimitDownCount()) + " 家");
             if (breadth.getTrendBreadth() != null) {
                 var trend = breadth.getTrendBreadth();
-                add(input, date, null, "趋势宽度", "MA20上方 " + ratio(trend.getMa20Ratio()) + "；MA60上方 " + ratio(trend.getMa60Ratio())
-                        + "；MA20有效样本 " + number(trend.getMa20ValidCount()) + "；MA60有效样本 " + number(trend.getMa60ValidCount()));
+                boolean comparable = current || reference != null && reference.getTrendBreadth() != null
+                        && Objects.equals(trend.getMa20ValidCount(), reference.getTrendBreadth().getMa20ValidCount())
+                        && Objects.equals(trend.getMa60ValidCount(), reference.getTrendBreadth().getMa60ValidCount());
+                String coverage = "MA20有效样本 " + number(trend.getMa20ValidCount()) + "；MA60有效样本 "
+                        + number(trend.getMa60ValidCount()) + "；全A有效家数 " + number(breadth.getValidCount());
+                add(input, date, null, "样本趋势宽度", comparable ? "MA20上方 " + ratio(trend.getMa20Ratio())
+                        + "；MA60上方 " + ratio(trend.getMa60Ratio()) + "；" + coverage + "。均线比例仅描述日K样本，不可直接视为全A。"
+                        : coverage + "。与当前截面的均线分母不同，历史占比不参与跨日比较。");
             }
             if (breadth.getNewHighLow() != null) {
                 var high = breadth.getNewHighLow();
                 add(input, date, null, "新高与新低", "20日新高 " + number(high.getHigh20Count()) + "；20日新低 " + number(high.getLow20Count())
-                        + "；60日新高 " + number(high.getHigh60Count()) + "；60日新低 " + number(high.getLow60Count()));
+                        + "；60日新高 " + number(high.getHigh60Count()) + "；60日新低 " + number(high.getLow60Count())
+                        + "；20日有效样本 " + number(high.getValid20Count()) + "。仅代表所覆盖样本。");
             }
             if (breadth.getVolumePressure() != null) {
                 add(input, date, null, "成交方向", "上涨成交额占比 " + ratio(breadth.getVolumePressure().getAdvanceAmountRatio()));
@@ -114,7 +121,7 @@ public class MarketAiEvidenceService {
         return value == null || !Double.isFinite(value) ? "缺失" : String.format(Locale.ROOT, "%+.2f%%", value);
     }
     private String ratio(Double value) {
-        return value == null ? "缺失" : percent(value * 100);
+        return value == null || !Double.isFinite(value) ? "缺失" : String.format(Locale.ROOT, "%.2f%%", value * 100);
     }
     private String amount(Double value) {
         return value == null ? "缺失" : number(value / 100_000_000D) + "亿元";
