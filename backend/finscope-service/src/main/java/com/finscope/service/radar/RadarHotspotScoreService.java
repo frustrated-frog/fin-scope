@@ -67,8 +67,10 @@ public class RadarHotspotScoreService {
                 + "；可信度 " + confidence + "%"
                 + "；生命周期 " + lifecycle
                 + "；市场反应/用户互动未接入";
-        return new Score(total, confidence, explanation, burst, confirmation, authority,
+        Score result = new Score(total, confidence, explanation, burst, confirmation, authority,
                 freshness, rankTrend, persistence, independentCount, lifecycle);
+        result.sourceAnalysis = sources;
+        return result;
     }
 
     private RadarEventSnapshot normalizedPrevious(RadarEventSnapshot previous, int independentCount) {
@@ -225,6 +227,9 @@ public class RadarHotspotScoreService {
         private final double persistenceScore;
         private final int independentSourceCount;
         private final String lifecycleState;
+        private RadarSourceIndependenceService.Analysis sourceAnalysis;
+
+        public RadarSourceIndependenceService.Analysis getSourceAnalysis() { return sourceAnalysis; }
 
         Score(int totalScore, int confidenceScore, String explanation, double burstScore,
               double confirmationScore, double authorityScore, double freshnessScore,

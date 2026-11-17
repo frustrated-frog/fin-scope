@@ -346,25 +346,20 @@ public class RadarRepository {
 
     /** 只读取当前 TTL 窗口的事件集合；由上层先筛选用户状态再截断。 */
     public List<RadarEvent> findWorkspaceEvents(String category, boolean watchlistOnly) {
-        return activeEvents().stream()
+        List<RadarEvent> candidates = activeEvents().stream()
                 .filter(value -> blank(category) || "ALL".equalsIgnoreCase(category)
                         || category.trim().equalsIgnoreCase(value.getCategoryCode()))
                 .filter(value -> !watchlistOnly || value.getWatchlistRelevance() > 0)
-                .sorted(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
-                        .thenComparing(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed())
-                        .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                        .thenComparing(RadarEvent::getId, Comparator.reverseOrder()))
                 .collect(Collectors.toList());
+        return com.finscope.domain.radar.NewswireRankingPolicy.rank(candidates, true);
     }
 
     public List<RadarEvent> findTopByDashboardCategory(String dashboardCategory, int limit) {
-        return activeEvents().stream()
+        List<RadarEvent> candidates = activeEvents().stream()
                 .filter(value -> dashboardCategory != null && dashboardCategory.equals(value.getDashboardCategory()))
-                .sorted(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed()
-                        .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                        .thenComparing(RadarEvent::getId, Comparator.reverseOrder()))
-                .limit(normalizeLimit(limit))
                 .collect(Collectors.toList());
+        return com.finscope.domain.radar.NewswireRankingPolicy.rank(candidates, false).stream()
+                .limit(normalizeLimit(limit)).collect(Collectors.toList());
     }
 
     public List<RadarEvent> findObservationCandidates(int limit) {

@@ -23,7 +23,7 @@ class DashboardHotspotRankingServiceTest {
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
+        DashboardHotspotRankingService service = service(repository);
         List<DashboardHotspotRankingService.Ranking> rankings = service.rankings();
 
         assertEquals(3, rankings.size());
@@ -49,7 +49,7 @@ class DashboardHotspotRankingServiceTest {
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
+        DashboardHotspotRankingService service = service(repository);
         service.rankings();
 
         verify(repository, never()).findEventsForDashboardClassification(500);
@@ -66,10 +66,16 @@ class DashboardHotspotRankingServiceTest {
         when(repository.findTopByDashboardCategory("TECHNOLOGY", 5)).thenReturn(Collections.emptyList());
         when(repository.findTopByDashboardCategory("POLITICS", 5)).thenReturn(Collections.emptyList());
 
-        DashboardHotspotRankingService service = new DashboardHotspotRankingService(repository);
+        DashboardHotspotRankingService service = service(repository);
         service.rankings();
 
         verify(repository, never()).updateDashboardCategory(13L, "FINANCE");
+    }
+
+    private DashboardHotspotRankingService service(RadarRepository repository) {
+        DashboardHotspotRankingService service = new DashboardHotspotRankingService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "repository", repository);
+        return service;
     }
 
     private RadarEvent event(Long id, String title, String summary, int score) {

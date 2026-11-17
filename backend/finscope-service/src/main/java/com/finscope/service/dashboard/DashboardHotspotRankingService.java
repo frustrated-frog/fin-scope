@@ -7,17 +7,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Collections;
 import java.util.List;
 
 @Service
 public class DashboardHotspotRankingService {
     private static final int BOARD_SIZE = 5;
-    private final RadarRepository repository;
-    public DashboardHotspotRankingService(RadarRepository repository) {
-        this.repository = repository;
-    }
+    @javax.annotation.Resource
+    private RadarRepository repository;
 
     public List<Ranking> rankings() {
         List<Ranking> result = new ArrayList<Ranking>();
@@ -48,13 +45,15 @@ public class DashboardHotspotRankingService {
     private Ranking ranking(List<RadarEvent> events, String categoryCode, String label) {
         List<RadarEvent> selected = new ArrayList<RadarEvent>();
         for (RadarEvent event : events) {
-            if (event != null && active(event) && categoryCode.equals(event.getDashboardCategory())) selected.add(event);
+            if (event != null && active(event) && categoryCode.equals(event.getDashboardCategory())) {
+                selected.add(event);
+            }
         }
-        selected.sort(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed()
-                .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(RadarEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
+        selected = com.finscope.domain.radar.NewswireRankingPolicy.rank(selected, false);
         List<Item> items = new ArrayList<Item>();
-        for (RadarEvent event : selected.subList(0, Math.min(BOARD_SIZE, selected.size()))) items.add(new Item(event));
+        for (RadarEvent event : selected.subList(0, Math.min(BOARD_SIZE, selected.size()))) {
+            items.add(new Item(event));
+        }
         return new Ranking(categoryCode, label, items);
     }
 

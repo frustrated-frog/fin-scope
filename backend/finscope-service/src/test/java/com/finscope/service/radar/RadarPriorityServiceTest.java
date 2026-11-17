@@ -30,7 +30,7 @@ class RadarPriorityServiceTest {
 
         assertEquals(25, result.getWatchlistScore());
         assertTrue(result.getReasons().contains("与自选「宁德时代」直接相关"));
-        assertEquals(result.componentTotal(), result.getTotalScore());
+        assertEquals(11, result.getTotalScore());
         assertTrue(result.getNoveltyScore() <= 15);
         assertTrue(result.getSourceDiversityScore() <= 20);
         assertTrue(result.getSourceQualityScore() <= 15);
@@ -117,7 +117,7 @@ class RadarPriorityServiceTest {
                 Collections.singletonList(watchlist("300750", "宁德时代")), NOW, 80, 90);
 
         assertEquals(100, result.getRelevanceScore());
-        assertEquals(91, result.getTotalScore());
+        assertEquals(92, result.getTotalScore());
     }
 
     @Test

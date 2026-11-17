@@ -3,6 +3,9 @@ package com.finscope.domain.radar;
 import java.time.LocalDateTime;
 
 public class RadarEvent {
+    @lombok.Getter
+    @lombok.Setter
+    private NewsworthinessAssessment newsworthiness;
     private Long id;
     private String eventKey;
     private String canonicalTitle;

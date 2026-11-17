@@ -15,10 +15,11 @@ import java.util.Set;
 
 @Service
 public class RadarPriorityService {
+    @javax.annotation.Resource
+    private NewswireRankingProperties rankingProperties;
     public PriorityResult score(RadarEvent event, List<RadarSignal> signals,
                                 List<WatchlistItem> watchlist, LocalDateTime now) {
-        PriorityResult legacy = legacyScore(event, signals, watchlist, now, null);
-        return legacy;
+        return score(event, signals, watchlist, now, event.getHotspotScore(), event.getConfidenceScore());
     }
 
     public PriorityResult score(RadarEvent event, List<RadarSignal> signals,
@@ -32,7 +33,10 @@ public class RadarPriorityService {
                                 int hotnessScore, int confidenceScore, Integer independentSourceCount) {
         PriorityResult legacy = legacyScore(event, signals, watchlist, now, independentSourceCount);
         int relevance = relevance(legacy.matchType);
-        int total = bounded(relevance * 0.45D + hotnessScore * 0.35D + confidenceScore * 0.20D);
+        int base = event.getNewsworthiness() == null ? hotnessScore : event.getNewsworthiness().getPublicScore();
+        int bonusLimit = rankingProperties == null ? NewswireRankingProperties.DEFAULT_PERSONAL_BONUS : rankingProperties.getMaxPersonalBonus();
+        int total = bounded(base + relevance / 100.0D * bonusLimit);
+        legacy.reasons.add("公共资讯价值 " + base + "；个人相关加分 " + (total - base));
         return new PriorityResult(legacy.noveltyScore, legacy.watchlistScore,
                 legacy.sourceDiversityScore, legacy.sourceQualityScore, legacy.recencyScore,
                 legacy.reasons, legacy.watchlistExplanation, legacy.uncertainty,

@@ -143,6 +143,12 @@ finscope:
     refresh-cron: 0 30 15 * * MON-FRI
     recovery-initial-delay-ms: 30000
     recovery-interval-ms: 3600000
+  newswire-ranking:
+    importance-weight: 0.45
+    novelty-weight: 0.20
+    heat-weight: 0.20
+    freshness-weight: 0.15
+    max-personal-bonus: 12
   radar:
     refresh-initial-delay-ms: 15000
     refresh-interval-ms: 300000

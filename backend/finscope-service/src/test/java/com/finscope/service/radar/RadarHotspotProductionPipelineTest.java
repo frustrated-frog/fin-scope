@@ -289,6 +289,9 @@ class RadarHotspotProductionPipelineTest {
         ReflectionTestUtils.setField(identityResolver, "repository", repository);
         ReflectionTestUtils.setField(pipeline, "identityResolver", identityResolver);
         ReflectionTestUtils.setField(pipeline, "priority", priority);
+        RadarNewsworthinessService newsworthiness = new RadarNewsworthinessService();
+        ReflectionTestUtils.setField(newsworthiness, "properties", new NewswireRankingProperties());
+        ReflectionTestUtils.setField(pipeline, "newsworthiness", newsworthiness);
         ReflectionTestUtils.setField(pipeline, "watchlist", watchlist);
         ReflectionTestUtils.setField(pipeline, "runs", runs);
         ReflectionTestUtils.setField(pipeline, "enhancement", enhancement);

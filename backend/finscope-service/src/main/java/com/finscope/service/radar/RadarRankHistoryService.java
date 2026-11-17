@@ -17,10 +17,7 @@ public class RadarRankHistoryService {
     private RadarRepository radar;
 
     public void record(List<RadarEvent> events, LocalDateTime now) {
-        List<RadarEvent> ordered = new ArrayList<>(events);
-        ordered.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
-                .thenComparing(Comparator.comparingInt(RadarEvent::getHotspotScore).reversed())
-                .thenComparing(RadarEvent::getEventKey));
+        List<RadarEvent> ordered = com.finscope.domain.radar.NewswireRankingPolicy.rank(events, true);
         LocalDateTime bucket = now.withMinute(now.getMinute() < 30 ? 0 : 30).withSecond(0).withNano(0);
         List<RadarRankPoint> batch = new ArrayList<>();
         for (int index = 0; index < ordered.size(); index++) {

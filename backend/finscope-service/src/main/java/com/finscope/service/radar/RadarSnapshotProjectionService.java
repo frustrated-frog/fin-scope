@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
@@ -95,13 +94,9 @@ public class RadarSnapshotProjectionService {
     }
 
     private ResearchRadarView radarView(List<RadarEvent> events, RadarRefreshRun run) {
-        List<RadarEvent> ranked = new ArrayList<RadarEvent>(events);
-        ranked.sort(Comparator.comparingInt(RadarEvent::getPriorityScore).reversed()
-                .thenComparing(RadarEvent::getHotspotScore, Comparator.reverseOrder())
-                .thenComparing(RadarEvent::getLastSeenAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(RadarEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
+        List<RadarEvent> ranked = com.finscope.domain.radar.NewswireRankingPolicy.rank(events, true);
         List<ResearchRadarView.EventCard> allCards = cards(ranked, ranked.size());
-        return new ResearchRadarView(RadarEventCardQuery.filter(allCards, "ALL", 20), Collections.emptyList(),
+        return new ResearchRadarView(RadarEventCardQuery.ranked(allCards, events, "ALL", 20), Collections.emptyList(),
                 Collections.emptyList(), run.getCompletedAt(), ResearchRadarView.ProductionStatus.of(false,
                 run.getStatus(), run.getCompletedAt(), run.getSourceCount(), run.getSignalCount(),
                 run.getEventCount(), run.getWarning())).withStateCounts(RadarEventCardQuery.counts(allCards));

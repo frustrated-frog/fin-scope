@@ -126,6 +126,14 @@ public final class ResearchRadarView {
         private final int confidenceScore;
         private final String confidenceExplanation;
         private final String scoreVersion;
+        @lombok.Getter
+        private final int publicValueScore;
+        @lombok.Getter
+        private final int importanceScore;
+        @lombok.Getter
+        private final int noveltyScore;
+        @lombok.Getter
+        private final String newsValueVersion;
         private final int priorityScore;
         private final String recommendation;
         private final List<String> reasons;
@@ -167,6 +175,10 @@ public final class ResearchRadarView {
             this.hotspotLifecycleState=event.getHotspotLifecycleState();
             this.confidenceScore=event.getConfidenceScore(); this.confidenceExplanation=event.getConfidenceExplanation();
             this.scoreVersion=event.getScoreVersion();
+            this.publicValueScore=com.finscope.domain.radar.NewswireRankingPolicy.publicScore(event);
+            this.importanceScore=event.getNewsworthiness()==null?0:event.getNewsworthiness().getImportance();
+            this.noveltyScore=event.getNewsworthiness()==null?0:event.getNewsworthiness().getNovelty();
+            this.newsValueVersion=event.getNewsworthiness()==null?null:event.getNewsworthiness().getVersion();
             this.priorityScore=event.getPriorityScore();
             this.recommendation=recommendation(event.getPriorityScore()); this.reasons=splitReasons(event.getScoreExplanation());
             this.watchlistRelated=event.getWatchlistRelevance()>0; this.watchlistExplanation=event.getWatchlistExplanation();

@@ -48,6 +48,8 @@ public class RadarHotspotProductionPipeline {
     @Resource
     private RadarPriorityService priority;
     @Resource
+    private RadarNewsworthinessService newsworthiness;
+    @Resource
     private WatchlistRepository watchlist;
     @Resource
     private RadarRefreshRunRepository runs;
@@ -137,11 +139,15 @@ public class RadarHotspotProductionPipeline {
         List<RankedCluster> values = new ArrayList<>();
         Map<String, RadarEventSnapshot> previous = snapshots == null ? Collections.emptyMap()
                 : snapshots.findLatestBeforeByEventKeys(clusters.stream().map(cluster -> cluster.getEvent().getEventKey()).toList(), now);
+        Map<String, RadarEvent> previousEvents = repository.findEventsByKeys(clusters.stream().map(cluster -> cluster.getEvent().getEventKey()).toList());
         for (RadarClusteringService.ClusterResult cluster : clusters) {
             RadarEvent event = cluster.getEvent();
             event.setDashboardCategory(dashboardCategories.classify(event));
             RadarHotspotScoreService.Score hotspot = hotspotScores.score(cluster.getSignals(), now,
                     previous.get(event.getEventKey()));
+            RadarEvent before = previousEvents.get(event.getEventKey());
+            event.setNewsworthiness(newsworthiness.assess(hotspot.getSourceAnalysis(), hotspot.getTotalScore(),
+                    before == null ? null : before.getNewsworthiness(), now));
             event.setHotspotScore(hotspot.getTotalScore());
             event.setHotspotExplanation(hotspot.getExplanation());
             event.setHotspotLifecycleState(hotspot.getLifecycleState());
@@ -152,7 +158,7 @@ public class RadarHotspotProductionPipeline {
             RadarPriorityService.PriorityResult result = priority.score(event, cluster.getSignals(), followed, now,
                     hotspot.getTotalScore(), hotspot.getConfidenceScore(), hotspot.getIndependentSourceCount());
             event.setPriorityScore(result.getTotalScore());
-            event.setScoreExplanation(hotspot.getExplanation() + "；" + String.join("；", result.getReasons()));
+            event.setScoreExplanation(event.getNewsworthiness().getExplanation() + "；" + String.join("；", result.getReasons()));
             event.setWatchlistRelevance(result.getWatchlistScore());
             event.setWatchlistExplanation(result.getWatchlistExplanation());
             event.setUncertainty(result.getUncertainty());

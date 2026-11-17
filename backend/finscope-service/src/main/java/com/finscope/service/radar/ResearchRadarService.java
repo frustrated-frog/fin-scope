@@ -182,7 +182,7 @@ public class ResearchRadarService {
         Map<Long, ResearchRadarView.EventCard> index = cardIndex(ranked);
         ResearchRadarView.ProductionStatus status = productionStatus();
         List<ResearchRadarView.EventCard> allCards = new ArrayList<>(index.values());
-        return new ResearchRadarView(RadarEventCardQuery.filter(allCards, state, limit), Collections.emptyList(),
+        return new ResearchRadarView(RadarEventCardQuery.ranked(allCards, ranked, state, limit), Collections.emptyList(),
                 Collections.emptyList(), status.getCompletedAt(), status).withStateCounts(RadarEventCardQuery.counts(allCards));
     }
 
@@ -341,18 +341,7 @@ public class ResearchRadarService {
     }
 
     private List<ResearchRadarView.EventCard> filteredCards(List<RadarEvent> events, Map<Long, ResearchRadarView.EventCard> index, String state, int limit) {
-        List<ResearchRadarView.EventCard> result = new ArrayList<ResearchRadarView.EventCard>();
-        Set<Long> added = new HashSet<Long>();
-        for (RadarEvent event : events) {
-            ResearchRadarView.EventCard card = index.get(event.getId());
-            if (card != null && added.add(card.getId()) && matchesState(card, state)) result.add(card);
-            if (result.size() >= limit) break;
-        }
-        return result;
-    }
-
-    private boolean matchesState(ResearchRadarView.EventCard card, String state) {
-        return RadarEventCardQuery.matches(card, state);
+        return RadarEventCardQuery.ranked(new ArrayList<>(index.values()), events, state, limit);
     }
 
     private boolean matches(String category, RadarEvent event) {

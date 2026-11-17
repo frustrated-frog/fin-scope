@@ -32,6 +32,20 @@ final class RadarEventCardQuery {
         return cards.stream().filter(card -> matches(card, state)).limit(limit).collect(Collectors.toList());
     }
 
+    static List<ResearchRadarView.EventCard> ranked(List<ResearchRadarView.EventCard> cards,
+            List<com.finscope.domain.radar.RadarEvent> events, String state, int limit) {
+        Map<Long, ResearchRadarView.EventCard> visible = new LinkedHashMap<>();
+        for (ResearchRadarView.EventCard card : cards) {
+            if (matches(card, state)) {
+                visible.putIfAbsent(card.getId(), card);
+            }
+        }
+        List<com.finscope.domain.radar.RadarEvent> candidates = events.stream()
+                .filter(event -> visible.containsKey(event.getId())).collect(Collectors.toList());
+        return com.finscope.domain.radar.NewswireRankingPolicy.rank(candidates, true).stream()
+                .map(event -> visible.get(event.getId())).limit(limit).collect(Collectors.toList());
+    }
+
     static Map<String, Integer> counts(List<ResearchRadarView.EventCard> cards) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String state : List.of("ALL", "UNREAD", "FOLLOWED", "LATER", "IGNORED")) {
