@@ -232,12 +232,26 @@ public class NewsAiProcessor {
         if (!repository.bind(claim.key(), claim.owner(), binding, next, expected, now)) {
             return null;
         }
+        if (joining && current == null) {
+            linkOriginalReports(next.getEventKey());
+        }
         acceptedVersions.put(next.getEventKey(), next.getRevision());
         aliases.put(ownKey, next.getEventKey());
         if (joining) {
             aliases.put(decision.getTargetKey(), next.getEventKey());
         }
         return next;
+    }
+
+    private void linkOriginalReports(String eventKey) {
+        for (RadarSignal original : selector.originals(eventKey)) {
+            NewsAiBinding binding = new NewsAiBinding();
+            binding.setContentKey(NewsAiContentIdentity.occurrence(original.getTitle(), original.getContent(),
+                    original.getPublishedAt() == null ? original.getFirstSeenAt() : original.getPublishedAt()));
+            binding.setEventKey(eventKey);
+            binding.setRelation(NewsAiRelation.SAME_EVENT);
+            repository.linkOriginalReport(original.getItemId(), original.getTitle(), original.getContent(), binding);
+        }
     }
 
     private NewsAiAnalysis copy(NewsAiAnalysis value) {

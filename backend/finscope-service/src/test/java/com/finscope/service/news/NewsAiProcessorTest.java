@@ -37,6 +37,7 @@ class NewsAiProcessorTest {
     private NewsAiProperties properties;
     private NewsAiProviderConfig provider;
     private NewsAiUnifiedAgent agent;
+    private RadarRepository radar;
     private JdbcTemplate jdbc;
     private HttpServer server;
     private final List<JsonNode> requests = new ArrayList<>();
@@ -82,7 +83,8 @@ class NewsAiProcessorTest {
         agent = new NewsAiUnifiedAgent();
         inject(agent, "client", client, "mapper", mapper, "properties", properties);
         NewsAiCandidateSelector selector = new NewsAiCandidateSelector();
-        inject(selector, "ai", repository, "radar", mock(RadarRepository.class));
+        radar = mock(RadarRepository.class);
+        inject(selector, "ai", repository, "radar", radar);
         NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
         NewsCategory category = new NewsCategory("COMPANY", "公司", "公司经营披露", true, 1);
         when(categories.findEnabled()).thenReturn(List.of(category));
@@ -274,6 +276,48 @@ class NewsAiProcessorTest {
         responder = input -> decisions(input, false, false);
         processor.process(List.of(two), now);
         assertEquals("MANUAL", reports.find("b").orElseThrow().getCategoryCode());
+    }
+
+    @Test
+    void matchingAnOldLocalEventGroupsItsOriginalWithoutPayingForBackfill() {
+        properties.setBackfillExisting(false);
+        var old = signal("old", "公司签订合同", "合同金额2亿元");
+        persist(old);
+        processor.process(List.of(old), now.plusMinutes(1));
+        var legacy = new com.finscope.domain.radar.RadarEvent();
+        legacy.setId(1L);
+        legacy.setEventKey("legacy");
+        legacy.setCanonicalTitle(old.getTitle());
+        legacy.setSummary(old.getContent());
+        legacy.setCategoryCode("COMPANY");
+        legacy.setFirstSeenAt(old.getPublishedAt());
+        legacy.setLastSeenAt(old.getPublishedAt());
+        when(radar.findWorkspaceEvents("ALL", false)).thenReturn(List.of(legacy));
+        when(radar.findEventByKey("legacy")).thenReturn(Optional.of(legacy));
+        when(radar.findSignalsByEventId(1L)).thenReturn(List.of(old));
+        var fresh = signal("new", "公司披露同一份合同", "转述合同金额2亿元");
+        persistAt(fresh, now.plusMinutes(2));
+        responder = input -> {
+            try {
+                JsonNode result = mapper.readTree(decisions(input, false, false));
+                var decision = (com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0);
+                decision.put("targetKey", "legacy");
+                decision.put("relation", "DUPLICATE");
+                return mapper.writeValueAsString(result);
+            } catch (Exception error) {
+                throw new IllegalStateException(error);
+            }
+        };
+        processor.process(List.of(old, fresh), now.plusMinutes(3));
+        assertEquals(1, calls.get());
+        var query = new NewsWindowQuery();
+        query.setAsOfSequence(reports.latestSequence());
+        var page = reports.query(query, now.minusHours(1), now.plusMinutes(3));
+        assertEquals(1, page.getTotal());
+        assertEquals(2, page.getItems().getFirst().getMergedReportCount());
+        assertEquals(old.getPublishedAt(), repository.event("legacy").getLastAt());
+        assertEquals(1, repository.event("legacy").getRevision());
+        assertTrue(repository.bindingsByHashes(List.of(key(old))).isEmpty());
     }
 
     private String decisions(JsonNode input, boolean merge, boolean truncate) {

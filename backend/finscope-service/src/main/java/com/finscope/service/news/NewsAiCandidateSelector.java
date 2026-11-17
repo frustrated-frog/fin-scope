@@ -10,6 +10,7 @@ import java.util.*;
 
 /** 候选召回不以公司词典或分类作为门槛；模型负责最终关系判断。 */
 @Service
+@lombok.extern.slf4j.Slf4j
 public class NewsAiCandidateSelector {
     @Resource
     private NewsAiRepository ai;
@@ -29,6 +30,15 @@ public class NewsAiCandidateSelector {
             result.put(event.getEventKey(), event);
         }
         return result;
+    }
+
+    public List<com.finscope.domain.radar.RadarSignal> originals(String eventKey) {
+        try {
+            return radar.findEventByKey(eventKey).map(event -> radar.findSignalsByEventId(event.getId())).orElse(List.of());
+        } catch (RuntimeException error) {
+            log.warn("原有事件报道关联暂不可读，保留新报道的AI结果 eventKey={} errorType={}", eventKey, error.getClass().getSimpleName());
+            return List.of();
+        }
     }
 
     public Index index(Map<String, NewsAiEvent> events) {

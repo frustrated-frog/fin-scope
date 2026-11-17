@@ -185,12 +185,22 @@ public class NewsAiRepository implements InitializingBean {
 
     /** 按实际读取的原文版本关联；正文变化后旧关系不会参与查询。 */
     public boolean linkReport(String id, String title, String content, NewsAiBinding binding) {
+        return linkReport(id, title, content, binding, true);
+    }
+
+    public boolean linkOriginalReport(String id, String title, String content, NewsAiBinding binding) {
+        return linkReport(id, title, content, binding, false);
+    }
+
+    private boolean linkReport(String id, String title, String content, NewsAiBinding binding, boolean replace) {
+        String condition = replace ? "news_ai_report.content_key<>excluded.content_key OR news_ai_report.event_key<>excluded.event_key "
+                + "OR news_ai_report.relation<>excluded.relation OR news_ai_report.content_version<>excluded.content_version"
+                : "news_ai_report.content_version<>excluded.content_version";
         return jdbc.update("INSERT INTO news_ai_report(report_id,content_key,event_key,relation,content_version) "
                         + "SELECT id,?,?,?,content_version FROM news_report WHERE id=? AND title=? AND content=? "
                         + "ON CONFLICT(report_id) DO UPDATE SET content_key=excluded.content_key,event_key=excluded.event_key,"
                         + "relation=excluded.relation,content_version=excluded.content_version "
-                        + "WHERE news_ai_report.content_key<>excluded.content_key OR news_ai_report.event_key<>excluded.event_key "
-                        + "OR news_ai_report.relation<>excluded.relation OR news_ai_report.content_version<>excluded.content_version",
+                        + "WHERE " + condition,
                 binding.getContentKey(), binding.getEventKey(), binding.getRelation().name(), id, title, content) == 1;
     }
 
