@@ -72,3 +72,64 @@ def test_sector_catalog_rejects_unknown_category() -> None:
         assert str(error) == "unsupported sector category: ALL"
     else:
         raise AssertionError("unknown category must be rejected")
+
+
+def test_money_flow_failure_still_returns_verified_directory_without_inventing_metrics():
+    from finscope_market_data.providers.base import ProviderError
+    def fail():
+        raise ProviderError('TIMEOUT', 'timeout')
+    service = TonghuashunSectorService(industry_names=lambda: pd.DataFrame([
+        {'name': '半导体', 'code': '881121'}]), industry_summary=fail)
+    result = service.fetch('INDUSTRY')
+    assert result.entries[0].code == '881121'
+    assert result.entries[0].main_net_inflow is None
+    assert result.entries[0].source_rank is None
+    assert 'TIMEOUT' in result.warnings[0]
+
+
+def test_missing_summary_rows_do_not_remove_directory_entries_and_infinity_is_not_a_metric():
+    service = TonghuashunSectorService(industry_names=lambda: pd.DataFrame([
+        {'name': '半导体', 'code': '881121'}, {'name': '白酒', 'code': '881273'}]),
+        industry_summary=lambda: pd.DataFrame([{'板块': '半导体', '净流入': float('inf')}]))
+    result = service.fetch('INDUSTRY')
+    assert len(result.entries) == 2
+    assert all(row.main_net_inflow is None and row.source_rank is None for row in result.entries)
+
+
+def test_bounded_ths_adapter_validates_pagination_and_closes_http_on_bad_response(monkeypatch):
+    import asyncio
+    import pytest
+    from finscope_market_data.providers.tonghuashun_sectors import TonghuashunSectorSource
+    from finscope_market_data.providers.base import ProviderError
+    class Http:
+        closed = False
+        async def get_text(self, *args, **kwargs):
+            return '<html><span class="page_info">1/99</span></html>'
+        async def aclose(self):
+            self.closed = True
+    http = Http()
+    source = TonghuashunSectorSource(http_factory=lambda: http)
+    monkeypatch.setattr(source, '_headers', lambda: {})
+    with pytest.raises(ProviderError, match='页码'):
+        source.summary()
+    assert http.closed
+
+
+def test_bounded_ths_adapter_reuses_first_page_and_validates_names(monkeypatch):
+    from finscope_market_data.providers.tonghuashun_sectors import TonghuashunSectorSource, SUMMARY_COLUMNS
+    class Http:
+        paths = []
+        async def get_text(self, provider, url, **kwargs):
+            self.paths.append(url)
+            if 'detail' in url:
+                return '<div class="cate_inner"><a href="/thshy/detail/code/881121/">半导体</a></div>'
+            return '<span class="page_info">1/1</span>' + pd.DataFrame([
+                [1, '半导体', 2.0, 1, 1, 3.5, 2, 1, 1, '中芯国际', 1, 1]], columns=SUMMARY_COLUMNS).to_html(index=False)
+        async def aclose(self):
+            pass
+    http = Http()
+    source = TonghuashunSectorSource(http_factory=lambda: http)
+    monkeypatch.setattr(source, '_headers', lambda: {})
+    assert source.names('INDUSTRY').to_dict('records') == [{'name': '半导体', 'code': '881121'}]
+    assert source.summary().iloc[0]['净流入'] == 3.5
+    assert len(http.paths) == 2

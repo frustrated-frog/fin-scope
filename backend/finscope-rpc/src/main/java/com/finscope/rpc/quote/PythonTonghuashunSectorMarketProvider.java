@@ -88,7 +88,8 @@ public class PythonTonghuashunSectorMarketProvider implements SectorMarketProvid
         }
         try {
             URI uri = URI.create(trimTrailingSlash(baseUrl) + "/v1/sectors/" + category.name());
-            FinanceHttpResponse response = http.get(PROVIDER_CODE, uri, Collections.<String, String>emptyMap());
+            FinanceHttpResponse response = http.get(PROVIDER_CODE, uri, Collections.<String, String>emptyMap(),
+                    4 * 1024 * 1024, (int) timeout().toMillis());
             return parse(response, category);
         } catch (ProviderContractException error) {
             throw error;

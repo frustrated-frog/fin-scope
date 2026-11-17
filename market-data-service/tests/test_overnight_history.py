@@ -149,7 +149,7 @@ def test_history_respects_pause_windows_disable_and_bounded_retries(flow):
         calls.append(args)
         raise ProviderError('TIMEOUT', 'private upstream text')
     task.provider.fetch = fail
-    for _ in range(8):
+    for _ in range(20):
         task.tick()
         now[0] += timedelta(seconds=61)
     assert len(calls) == 3
@@ -166,3 +166,68 @@ def test_restart_recovers_a_committed_import_even_when_coverage_would_skip_the_s
     assert not calls
     assert auto.store.job(key)['status'] == 'COMPLETED'
     assert auto.store.job(key)['reason'] == '任务中断后已核实历史数据落库'
+
+
+def test_isolated_conflict_is_quarantined_when_other_days_verify_the_same_source(tmp_path):
+    store = OvernightStore(tmp_path / 'partial.db')
+    now = datetime(2026, 9, 24, 16)
+    good = bar('2026-09-22T09:35:00')
+    captured = bar('2026-09-23T09:35:00')
+    store.save_bars('605058.SH', [good, captured])
+    incoming = [bar('2026-09-21T09:35:00'), good, bar('2026-09-23T09:35:00', 20)]
+    result = store.import_history('605058.SH', incoming, 'TEST', now)
+    assert result['qualityStatus'] == 'PARTIAL'
+    assert result['quarantinedDays'] == ['2026-09-23']
+    assert result['verifiedMatchingDays'] == 1
+    assert result['addedDays'] == 1
+    assert result['conflicts'][0]['errorType'] == 'HISTORY_PRICE_CONFLICT'
+    assert store.bars('605058.SH', now) == [incoming[0], good, captured]
+    with store.connect() as db:
+        assert db.execute("SELECT count(*) FROM overnight_historical_minute WHERE ended_at LIKE '2026-09-23%' ").fetchone()[0] == 0
+    assert store.history_import('605058.SH')['quarantinedDays'] == ['2026-09-23']
+
+
+def test_partial_history_job_remains_partial_and_its_conflict_is_visible(flow, monkeypatch):
+    task, auto, now, calls = flow
+    monkeypatch.setattr(task.minutes, 'import_history', lambda *a: {
+        'quarantinedDays': ['2026-09-21'], 'addedDays': 1, 'qualityStatus': 'PARTIAL'})
+    task.tick()
+    job = auto.store.job(f'{now[0].date()}|HISTORY|605058.SH')
+    assert job['status'] == 'PARTIAL'
+    assert job['quarantinedDays'] == ['2026-09-21']
+    assert '隔离' in job['reason']
+
+
+def test_history_source_empty_range_is_not_schema_drift_and_is_not_retried_immediately(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: SimpleNamespace(returncode=0,
+        stdout=json.dumps({'fields': list(FIELDS), 'rows': []})))
+    with pytest.raises(ProviderError) as caught:
+        BaostockMinuteHistoryProvider().fetch('000602.SZ', datetime(2026, 11, 16, 15))
+    assert caught.value.error_type == 'NO_HISTORY'
+    assert not caught.value.retryable
+
+
+def test_new_import_policy_can_retry_legacy_exhausted_failure_once_without_losing_its_reason(flow):
+    task, auto, now, calls = flow
+    key = f'{now[0].date()}|HISTORY|605058.SH'
+    first = auto.store.claim(key, now[0] - timedelta(minutes=10),
+                             {'phase': 'HISTORY', 'instrumentCode': '605058.SH'})
+    auto.store.finish(first, now[0] - timedelta(minutes=9), status='FAILED', reason='旧版本整批拒绝')
+    with task.minutes.connect() as db:
+        db.execute("UPDATE overnight_automation_job SET payload=json_set(payload,'$.attempts',3) WHERE key=?", (key,))
+    task.tick()
+    current = auto.store.job(key)
+    assert current['status'] == 'COMPLETED'
+    assert current['attempts'] == 1
+    assert current['previousFailure']['reason'] == '旧版本整批拒绝'
+    assert current['previousFailure']['attempts'] == 3
+    task.tick()
+    assert len(calls) == 1
+
+
+def test_history_without_overlap_is_source_only_instead_of_claiming_cross_source_verification(tmp_path):
+    store = OvernightStore(tmp_path / 'source-only.db')
+    result = store.import_history('605058.SH', [bar('2026-09-22T09:35:00')], 'TEST', datetime(2026, 9, 23, 16))
+    assert result['qualityStatus'] == 'SOURCE_ONLY'
+    assert result['verifiedMatchingDays'] == 0

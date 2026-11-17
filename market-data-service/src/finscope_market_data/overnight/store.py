@@ -6,7 +6,7 @@ from pathlib import Path
 import sqlite3
 
 from finscope_market_data.overnight.models import MinuteBar
-from finscope_market_data.overnight.history_quality import compare_history
+from finscope_market_data.overnight.history_quality import compare_history, validated_history
 
 
 class OvernightStore:
@@ -120,7 +120,7 @@ class OvernightStore:
             existing = {row[0]: MinuteBar.model_validate_json(row[1]) for row in db.execute(
                 'SELECT ended_at,payload FROM overnight_minute WHERE code=?', (code,))}
             days = {stamp[:10] for stamp in existing}
-            quality = compare_history(existing, bars)
+            bars, quality = validated_history(existing, bars)
             previous_stamps = {row[0] for row in db.execute(
                 'SELECT ended_at FROM overnight_historical_minute WHERE code=?', (code,))}
             additions = [bar for bar in bars if str(bar.ended_at.date()) not in days

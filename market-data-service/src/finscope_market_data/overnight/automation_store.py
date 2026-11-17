@@ -70,14 +70,22 @@ class AutomationStore:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT payload FROM overnight_automation_job WHERE key=?', (key,)).fetchone()
             old = json.loads(row[0]) if row else {}
+            changed_policy = bool(old and metadata.get('policyVersion')
+                and metadata['policyVersion'] != old.get('policyVersion')
+                and old.get('status') in {'FAILED', 'PARTIAL'})
             if old:
                 age = now - datetime.fromisoformat(old['startedAt'])
-                if old['status'] not in {'FAILED', 'RUNNING'} or old['attempts'] >= 3:
+                if not changed_policy and (old['status'] not in {'FAILED', 'RUNNING'} or old['attempts'] >= 3):
                     return None
                 if age < timedelta(seconds=60) or (old['status'] == 'RUNNING' and age < timedelta(minutes=10)):
                     return None
             value = {**metadata, 'key': key, 'status': 'RUNNING', 'startedAt': now.isoformat(),
-                     'attempts': old.get('attempts', 0) + 1, 'token': uuid4().hex}
+                     'attempts': 1 if changed_policy else old.get('attempts', 0) + 1, 'token': uuid4().hex}
+            if changed_policy:
+                value['previousFailure'] = {field: old.get(field) for field in
+                    ('status', 'reason', 'errorType', 'startedAt', 'finishedAt', 'attempts', 'policyVersion')}
+            elif old.get('previousFailure'):
+                value['previousFailure'] = old['previousFailure']
             db.execute('INSERT INTO overnight_automation_job VALUES(?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload',
                        (key, json.dumps(value)))
             return value

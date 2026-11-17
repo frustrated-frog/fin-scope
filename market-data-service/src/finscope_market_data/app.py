@@ -3,6 +3,7 @@ from __future__ import annotations
 from finscope_market_data.forecast.joint_snapshot import JointSnapshotStore
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from typing import Any, Literal
@@ -334,7 +335,16 @@ def create_app(
     async def sectors_catalog(
         category: Literal["INDUSTRY", "CONCEPT"],
     ) -> JSONResponse:
-        result = await asyncio.to_thread(application.state.sectors.fetch, category)
+        try:
+            result = await asyncio.to_thread(application.state.sectors.fetch, category)
+        except ProviderError as error:
+            logging.getLogger(__name__).warning('Sector catalog unavailable category=%s errorType=%s', category, error.error_type)
+            raise HTTPException(status_code=503, detail={'error_type': error.error_type,
+                'message': '板块目录来源暂不可用', 'retryable': error.retryable}) from error
+        except Exception as error:
+            logging.getLogger(__name__).exception('Sector catalog parsing failed category=%s', category)
+            raise HTTPException(status_code=503, detail={'error_type': 'SECTOR_SCHEMA_DRIFT',
+                'message': '板块目录解析失败，保留最近一次成功数据', 'retryable': False}) from error
         return JSONResponse(
             status_code=200,
             content=jsonable_encoder(result.model_dump(mode="json")),

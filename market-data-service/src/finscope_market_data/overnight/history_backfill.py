@@ -11,6 +11,7 @@ from finscope_market_data.overnight.training_inputs import gap_codes
 
 logger = logging.getLogger(__name__)
 DESIRED_DAYS = 140
+IMPORT_POLICY = 'HISTORY_DAY_QUARANTINE_V1'
 
 
 class OvernightHistoryBackfill:
@@ -47,6 +48,10 @@ class OvernightHistoryBackfill:
         codes.extend(pool)
         codes.extend(coverage)
         for code in list(dict.fromkeys(codes))[:200]:
+            retry_key = f'overnightHistoryRetry:{code}'
+            retry = self.store.get(retry_key)
+            if retry and retry.get('retryAfter', '') > now.isoformat():
+                continue
             enough = coverage.get(code, {}).get('completeDays', 0) >= DESIRED_DAYS
             imported = self.minutes.history_import(code)
             current = latest_session and ((imported or {}).get('lastDate') or '') >= str(latest_session)
@@ -58,7 +63,7 @@ class OvernightHistoryBackfill:
                 continue
             key = f'{now.date()}|HISTORY|{code}'
             job = self.store.claim(key, now, {'phase': 'HISTORY', 'signalDate': str(now.date()),
-                'instrumentCode': code, 'sourceCode': self.provider.source})
+                'instrumentCode': code, 'sourceCode': self.provider.source, 'policyVersion': IMPORT_POLICY})
             if not job:
                 continue
             try:
@@ -70,11 +75,21 @@ class OvernightHistoryBackfill:
                 else:
                     bars = self.provider.fetch(code, through)
                 result = self.minutes.import_history(code, bars, self.provider.source, self.clock())
-                self.store.finish(job, self.clock(), status='COMPLETED', **result)
+                self.store.put(retry_key, None)
+                status = 'PARTIAL' if result.get('quarantinedDays') else 'COMPLETED'
+                reason = '冲突日期已隔离，其余通过校验的历史已入库' if status == 'PARTIAL' else None
+                self.store.finish(job, self.clock(), status=status, reason=reason, **result)
             except Exception as error:
-                logger.warning('Minute history backfill failed for %s: %s', code, type(error).__name__)
+                error_type = getattr(error, 'error_type', type(error).__name__)
+                retryable = getattr(error, 'retryable', not isinstance(error, ValueError))
+                retry_at = self.clock() + (timedelta(minutes=5) if retryable else timedelta(hours=6))
+                self.store.put(retry_key, {'errorType': error_type, 'failedAt': self.clock().isoformat(),
+                    'retryAfter': retry_at.isoformat(), 'retryable': retryable})
+                logger.warning('Minute history backfill failed code=%s source=%s errorType=%s retryAfter=%s',
+                    code, self.provider.source, error_type, retry_at.isoformat(), exc_info=True)
                 reason = str(error) if isinstance(error, ValueError) else '历史分钟源暂不可用；后台将有限重试'
-                self.store.finish(job, self.clock(), status='FAILED', reason=reason)
+                self.store.finish(job, self.clock(), status='FAILED', reason=reason, errorType=error_type,
+                                  retryAfter=retry_at.isoformat(), retryable=retryable)
             return
 
     def _recover_interrupted(self, coverage, now):

@@ -34,6 +34,8 @@ public class PythonOvernightClient {
     private String baseUrl;
     @Value("${finscope.python-market-data.evaluation-timeout-ms:30000}")
     private int timeoutMs;
+    @Value("${finscope.python-market-data.ledger-sync-timeout-ms:10000}")
+    private int ledgerSyncTimeoutMs = 10000;
     private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -85,7 +87,7 @@ public class PythonOvernightClient {
     public void syncAutomationContext(OvernightAutomationContext context) {
         try {
             FinanceHttpResponse response = http.postJson("PYTHON_OVERNIGHT", endpoint("automation/context"),
-                    json.writeValueAsString(context), Collections.emptyMap(), 3000);
+                    json.writeValueAsString(context), Collections.emptyMap(), Math.max(1000, Math.min(15000, ledgerSyncTimeoutMs)));
             if (response.getStatus() != 200 || !json.readTree(response.getBody()).hasNonNull("receivedAt")) {
                 throw new ProviderContractException("UPSTREAM_UNAVAILABLE", "隔夜账本同步未确认", true);
             }

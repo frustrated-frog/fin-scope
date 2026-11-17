@@ -62,7 +62,7 @@ class PythonOvernightClientTest {
         position.setOpenedOn(LocalDate.of(2026, 9, 21));
         context.setPositions(List.of(position));
         var http = mock(FinanceHttpClient.class);
-        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(3000)))
+        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(10000)))
                 .thenAnswer(invocation -> {
                     assertTrue(invocation.getArgument(1).toString().endsWith("/v1/quant/overnight/automation/context"));
                     var body = new ObjectMapper().readTree((String) invocation.getArgument(2));
@@ -75,7 +75,7 @@ class PythonOvernightClientTest {
         ReflectionTestUtils.setField(client, "http", http);
         ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:8000");
         client.syncAutomationContext(context);
-        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(3000)))
+        when(http.postJson(anyString(), any(), anyString(), anyMap(), eq(10000)))
                 .thenReturn(new FinanceHttpResponse(503, "{}", Instant.now(), "test"));
         assertThrows(ProviderContractException.class, () -> client.syncAutomationContext(context));
     }

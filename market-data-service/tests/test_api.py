@@ -874,3 +874,17 @@ def test_forecast_training_does_not_block_health_endpoint(tmp_path: Path, monkey
         finally:
             release.set()
         assert prediction.result(timeout=3).status_code == 200
+
+
+def test_sector_source_failure_is_a_structured_503_instead_of_an_unhandled_500(tmp_path):
+    from finscope_market_data.providers.base import ProviderError
+    class Unavailable:
+        def fetch(self, category):
+            raise ProviderError('TIMEOUT', 'private upstream diagnostics')
+    router = ProviderRouter(providers=[MultiCapabilityProvider()],
+        snapshots=SnapshotStore(tmp_path / 'sector-errors.db'), health=ProviderHealthRegistry(), max_retries=0)
+    api = TestClient(create_app(router, sectors=Unavailable()))
+    result = api.get('/v1/sectors/INDUSTRY')
+    assert result.status_code == 503
+    assert result.json()['detail']['error_type'] == 'TIMEOUT'
+    assert 'private upstream' not in result.text

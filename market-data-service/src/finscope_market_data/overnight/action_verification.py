@@ -89,8 +89,10 @@ class OvernightActionVerification:
                 self.store.save(result, self.automation.clock())
                 meta.finish(job, self.automation.clock(), status='COMPLETED', throughDate=str(end), exDateCount=len(result['exDates']))
             except Exception as error:
-                logger.warning('Company action verification failed: %s', type(error).__name__)
-                meta.finish(job, self.automation.clock(), status='FAILED', reason='公司行为源暂不可用；不把未知当作无除权')
+                error_type = getattr(error, 'error_type', type(error).__name__)
+                logger.warning('Company action verification failed code=%s errorType=%s', code, error_type, exc_info=True)
+                meta.finish(job, self.automation.clock(), status='FAILED', reason='公司行为源暂不可用；不把未知当作无除权',
+                            errorType=error_type, retryable=getattr(error, 'retryable', True))
             return
 
     async def run(self, stop):

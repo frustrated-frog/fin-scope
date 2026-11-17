@@ -4,6 +4,7 @@ import com.finscope.domain.quant.overnight.OvernightAutomationContext;
 import com.finscope.domain.quant.overnight.OvernightLedgerPosition;
 import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.rpc.quant.PythonOvernightClient;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.service.strategy.holding.StockTransactionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +51,7 @@ public class OvernightAutomationScheduler {
     }
 
     public void synchronizeLedger() {
+        long started = System.nanoTime();
         try {
             OvernightAutomationContext context = new OvernightAutomationContext();
             context.setEnabled(enabled);
@@ -70,7 +72,10 @@ public class OvernightAutomationScheduler {
             }
             client.syncAutomationContext(context);
         } catch (RuntimeException error) {
-            log.warn("隔夜自动研究账本同步失败，下个周期重试：{}", error.getClass().getSimpleName());
+            String errorType = error instanceof ProviderContractException contract ? contract.getErrorType()
+                    : error.getClass().getSimpleName();
+            log.warn("隔夜自动研究账本同步失败 errorType={} durationMs={} retryNextCycle=true", errorType,
+                    (System.nanoTime() - started) / 1_000_000L, error);
         }
     }
 }

@@ -33,6 +33,8 @@ class BaostockMinuteHistoryProvider:
             raise ProviderError('HISTORY_UNAVAILABLE', '历史分钟源暂不可用，请确认依赖已同步', True)
         try:
             payload = json.loads(result.stdout)
+            if isinstance(payload, dict) and payload.get('fields') == list(FIELDS) and payload.get('rows') == []:
+                raise ProviderError('NO_HISTORY', '该标的在请求区间内没有可用历史分钟数据', False)
             return self.parse(payload, code, through)
         except (ValueError, KeyError, TypeError) as error:
             raise ProviderError('SCHEMA_DRIFT', '历史分钟源返回无效数据', False) from error

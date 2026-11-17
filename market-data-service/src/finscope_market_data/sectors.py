@@ -3,8 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal
+import math
 
 from pydantic import BaseModel, ConfigDict, Field
+from finscope_market_data.providers.base import ProviderError
+from finscope_market_data.providers.tonghuashun_sectors import TonghuashunSectorSource
 
 
 SectorCategory = Literal["INDUSTRY", "CONCEPT"]
@@ -48,9 +51,10 @@ class TonghuashunSectorService:
         industry_summary: FrameLoader | None = None,
         concept_names: FrameLoader | None = None,
     ) -> None:
-        self._industry_names = industry_names or self._load_industry_names
-        self._industry_summary = industry_summary or self._load_industry_summary
-        self._concept_names = concept_names or self._load_concept_names
+        source = TonghuashunSectorSource()
+        self._industry_names = industry_names or (lambda: source.names('INDUSTRY'))
+        self._industry_summary = industry_summary or source.summary
+        self._concept_names = concept_names or (lambda: source.names('CONCEPT'))
 
     def fetch(self, category: str) -> SectorEnvelope:
         if category == "INDUSTRY":
@@ -60,7 +64,7 @@ class TonghuashunSectorService:
         else:
             raise ValueError(f"unsupported sector category: {category}")
         if not entries:
-            raise RuntimeError(f"同花顺{category}板块目录为空")
+            raise ProviderError('EMPTY_SECTOR_CATALOG', f"同花顺{category}板块目录为空")
         return SectorEnvelope(
             category=category,
             retrieved_at=datetime.now().isoformat(),
@@ -70,12 +74,20 @@ class TonghuashunSectorService:
 
     def _industries(self) -> tuple[list[SectorEntry], list[str]]:
         names = self._industry_names()
-        summary = self._industry_summary()
         code_by_name = {
             _text(row.get("name")): _text(row.get("code"))
             for _, row in names.iterrows()
             if _text(row.get("name")) and _text(row.get("code"))
         }
+        try:
+            summary = self._industry_summary()
+            if summary.empty or not {'板块', '净流入'}.issubset(summary.columns):
+                raise ProviderError('SCHEMA_DRIFT', '行业资金榜字段不完整', False)
+        except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
+            # Directory identity remains usable; never invent rankings or monetary values.
+            return [SectorEntry(code=code, name=name, category='INDUSTRY')
+                    for name, code in code_by_name.items()], [
+                f"日内行业资金榜暂不可用，保留名称目录；资金与排名未填充（{getattr(error, 'error_type', type(error).__name__)}）"]
         ordered = summary.sort_values("净流入", ascending=False)
         entries: list[SectorEntry] = []
         warnings: list[str] = []
@@ -90,7 +102,7 @@ class TonghuashunSectorService:
                     code=code,
                     name=name,
                     category="INDUSTRY",
-                    source_rank=len(entries) + 1,
+                    source_rank=len(entries) + 1 if _number(row.get('净流入')) is not None else None,
                     change_pct=_number(row.get("涨跌幅")),
                     main_net_inflow=_yuan_from_yi(row.get("净流入")),
                     leader_stock_name=_text(row.get("领涨股")),
@@ -100,6 +112,9 @@ class TonghuashunSectorService:
                     breadth_ratio=_breadth_ratio(row),
                 )
             )
+        present = {entry.code for entry in entries}
+        entries.extend(SectorEntry(code=code, name=name, category='INDUSTRY')
+                       for name, code in code_by_name.items() if code not in present)
         return entries, warnings
 
     def _concepts(self) -> tuple[list[SectorEntry], list[str]]:
@@ -122,31 +137,12 @@ class TonghuashunSectorService:
             )
         return entries, warnings
 
-    @staticmethod
-    def _load_industry_names() -> Any:
-        import akshare as ak
-
-        return ak.stock_board_industry_name_ths()
-
-    @staticmethod
-    def _load_industry_summary() -> Any:
-        import akshare as ak
-
-        return ak.stock_board_industry_summary_ths()
-
-    @staticmethod
-    def _load_concept_names() -> Any:
-        import akshare as ak
-
-        return ak.stock_board_concept_name_ths()
-
-
 def _number(value: object) -> float | None:
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number == number else None
+    return number if math.isfinite(number) else None
 
 
 def _yuan_from_yi(value: object) -> float | None:

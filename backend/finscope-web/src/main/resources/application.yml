@@ -94,6 +94,7 @@ finscope:
       max-per-domain: 2
       concurrency: 3
   python-market-data:
+    ledger-sync-timeout-ms: 10000
     base-url: http://127.0.0.1:8000
     daily-bars-timeout-ms: 45000
     breadth-timeout-ms: 120000
