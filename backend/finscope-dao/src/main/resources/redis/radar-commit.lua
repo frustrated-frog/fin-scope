@@ -26,7 +26,9 @@ for i = 1, count do
     local a = 3 + (i - 1) * 4
     local recordType = redis.call('TYPE', KEYS[k]).ok
     local indexType = redis.call('TYPE', KEYS[k + 1]).ok
-    if (recordType ~= 'none' and recordType ~= 'string') or (indexType ~= 'none' and indexType ~= 'zset') then
+    local validRecord = recordType == 'none' or recordType == 'string'
+        or (ARGV[a + 1] == keepTtl and recordType == 'zset')
+    if not validRecord or (indexType ~= 'none' and indexType ~= 'zset') then
         return redis.error_reply('RADAR_CACHE_WRONGTYPE')
     end
     if incoming[KEYS[k]] and ARGV[a + 3] == '1' and not incoming[KEYS[k + 2]] then

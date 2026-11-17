@@ -245,6 +245,30 @@ class RadarHotspotProductionPipelineTest {
         return service;
     }
 
+    @Test
+    void recordsActualFailureTimeAndPreservesTheOriginalErrorWhenJournalWriteAlsoFails() {
+        RadarHotspotProductionPipeline pipeline = new RadarHotspotProductionPipeline();
+        NewsWindowService news = mock(NewsWindowService.class);
+        RadarRefreshRunRepository runs = mock(RadarRefreshRunRepository.class);
+        RadarRefreshRun run = new RadarRefreshRun();
+        run.setId(91L);
+        RuntimeException original = new IllegalStateException("original fetch failure");
+        RuntimeException journal = new IllegalStateException("redis unavailable");
+        when(runs.startRun(anyString(), eq("TEST"), eq(now))).thenReturn(run);
+        when(news.productionSnapshot()).thenThrow(original);
+        LocalDateTime finishedAt = now.plusMinutes(2);
+        when(runs.failRun(91L, original.getMessage(), finishedAt)).thenThrow(journal);
+        ReflectionTestUtils.setField(pipeline, "news", news);
+        ReflectionTestUtils.setField(pipeline, "runs", runs);
+        ReflectionTestUtils.setField(pipeline, "clock", java.time.Clock.fixed(
+                finishedAt.toInstant(java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC));
+        RuntimeException actual = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> pipeline.run("ALL", "TEST", now));
+        org.junit.jupiter.api.Assertions.assertSame(original, actual);
+        org.junit.jupiter.api.Assertions.assertArrayEquals(new Throwable[]{journal}, actual.getSuppressed());
+        verify(runs).failRun(91L, original.getMessage(), finishedAt);
+    }
+
     private void wire(RadarHotspotProductionPipeline pipeline,
                       NewsWindowService news,
                       RadarRepository repository,
@@ -257,6 +281,7 @@ class RadarHotspotProductionPipelineTest {
                       RadarDashboardCategoryService dashboardCategories,
                       RadarHotspotPersistenceService persistence,
                       RadarEventSnapshotRepository snapshots) {
+        ReflectionTestUtils.setField(pipeline, "clock", java.time.Clock.fixed(now.toInstant(java.time.ZoneOffset.UTC), java.time.ZoneOffset.UTC));
         ReflectionTestUtils.setField(pipeline, "news", news);
         ReflectionTestUtils.setField(pipeline, "repository", repository);
         ReflectionTestUtils.setField(pipeline, "clustering", clustering);

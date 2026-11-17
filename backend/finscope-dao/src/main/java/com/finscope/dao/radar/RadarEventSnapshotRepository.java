@@ -5,10 +5,8 @@ import org.springframework.stereotype.Repository;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,42 +18,18 @@ public class RadarEventSnapshotRepository {
     private RedisRadarCacheStore store;
 
     public RadarEventSnapshot save(RadarEventSnapshot snapshot) {
-        return store.update(state -> save(state, snapshot));
-    }
-
-    public void saveBatch(List<RadarEventSnapshot> snapshots) {
-        for (int start = 0; start < snapshots.size(); start += RadarCacheLayout.BATCH_SIZE) {
-            List<RadarEventSnapshot> batch = snapshots.subList(start, Math.min(start + RadarCacheLayout.BATCH_SIZE, snapshots.size()));
-            store.update(state -> {
-                List<Long> ids = batch.stream().map(RadarEventSnapshot::getEventId).toList();
-                RedisRadarCacheStore.prefetch(state.getEvents(), ids);
-                RedisRadarCacheStore.prefetch(state.getSnapshots(), ids);
-                for (RadarEventSnapshot snapshot : batch) {
-                    save(state, snapshot);
-                }
-                return null;
-            });
-        }
-    }
-
-    private RadarEventSnapshot save(RadarCacheState state, RadarEventSnapshot snapshot) {
-        snapshot.setId(store.stableId("snapshot", snapshot.getEventId() + ":" + snapshot.getSnapshotAt()));
-        List<RadarEventSnapshot> values = state.getSnapshots().computeIfAbsent(snapshot.getEventId(),
-                ignored -> new ArrayList<>());
-        LocalDateTime latest = values.stream().map(RadarEventSnapshot::getSnapshotAt)
-                .filter(java.util.Objects::nonNull).max(Comparator.naturalOrder()).orElse(snapshot.getSnapshotAt());
-        LocalDateTime keepAfter = (latest.isAfter(snapshot.getSnapshotAt()) ? latest : snapshot.getSnapshotAt())
-                .minusDays(RadarCacheLayout.SNAPSHOT_KEEP_DAYS);
-        values.removeIf(value -> value.getSnapshotAt() == null || value.getSnapshotAt().isBefore(keepAfter)
-                || snapshot.getSnapshotAt().equals(value.getSnapshotAt()));
-        if (!snapshot.getSnapshotAt().isBefore(keepAfter)) {
-            values.add(snapshot);
-        }
+        saveBatch(List.of(snapshot));
         return snapshot;
     }
 
+    public void saveBatch(List<RadarEventSnapshot> snapshots) {
+        if (!snapshots.isEmpty()) {
+            store.appendSnapshots(snapshots);
+        }
+    }
+
     public Optional<RadarEventSnapshot> findLatestBefore(Long eventId, LocalDateTime before) {
-        return latest(store.read().getSnapshots().getOrDefault(eventId, Collections.emptyList()), before);
+        return Optional.ofNullable(store.latestSnapshots(List.of(eventId), before).get(eventId));
     }
 
     public Map<String, RadarEventSnapshot> findLatestBeforeByEventKeys(Collection<String> eventKeys, LocalDateTime before) {
@@ -66,21 +40,19 @@ public class RadarEventSnapshotRepository {
             RedisRadarCacheStore.prefetch(state.getEventIdsByKey(), eventKeys);
             List<Long> ids = eventKeys.stream().map(key -> state.getEventIdsByKey().get(key))
                     .filter(java.util.Objects::nonNull).toList();
-            RedisRadarCacheStore.prefetch(state.getSnapshots(), ids);
+            Map<Long, RadarEventSnapshot> latest = store.latestSnapshots(ids, before);
             Map<String, RadarEventSnapshot> result = new LinkedHashMap<>();
             for (String key : eventKeys) {
                 Long id = state.getEventIdsByKey().get(key);
                 if (id != null) {
-                    latest(state.getSnapshots().getOrDefault(id, Collections.emptyList()), before)
-                            .ifPresent(value -> result.put(key, value));
+                    RadarEventSnapshot snapshot = latest.get(id);
+                    if (snapshot != null) {
+                        result.put(key, snapshot);
+                    }
                 }
             }
             return result;
         });
     }
 
-    private Optional<RadarEventSnapshot> latest(List<RadarEventSnapshot> snapshots, LocalDateTime before) {
-        return snapshots.stream().filter(value -> value.getSnapshotAt() != null && value.getSnapshotAt().isBefore(before))
-                .max(Comparator.comparing(RadarEventSnapshot::getSnapshotAt).thenComparing(RadarEventSnapshot::getId));
-    }
 }

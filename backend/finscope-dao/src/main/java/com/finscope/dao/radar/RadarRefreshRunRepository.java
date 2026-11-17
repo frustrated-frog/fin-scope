@@ -79,8 +79,49 @@ public class RadarRefreshRunRepository {
             value.setStatus("FAILED");
             value.setCompletedAt(completedAt);
             value.setError(error);
+            closeRunningSteps(state, id, error, completedAt);
             return value;
         });
+    }
+
+    /** 由单实例生产入口在开始下一轮之前回收中断的任务；有效任务不受影响。 */
+    public int failAbandonedRuns(LocalDateTime before, LocalDateTime now) {
+        List<Long> ids = store.read().getRuns().values().stream()
+                .filter(value -> "RUNNING".equals(value.getStatus()) && value.getStartedAt() != null
+                        && value.getStartedAt().isBefore(before))
+                .map(RadarRefreshRun::getId).toList();
+        int recovered = 0;
+        for (int start = 0; start < ids.size(); start += RadarCacheLayout.BATCH_SIZE) {
+            List<Long> batch = ids.subList(start, Math.min(start + RadarCacheLayout.BATCH_SIZE, ids.size()));
+            recovered += store.update(state -> {
+                RedisRadarCacheStore.prefetch(state.getRuns(), batch);
+                RedisRadarCacheStore.prefetch(state.getRunSteps(), batch);
+                int changed = 0;
+                for (Long id : batch) {
+                    RadarRefreshRun run = state.getRuns().get(id);
+                    if (run != null && "RUNNING".equals(run.getStatus()) && run.getStartedAt().isBefore(before)) {
+                        String reason = "生产任务中断或超过30分钟执行期限，已结束遗留状态";
+                        run.setStatus("FAILED");
+                        run.setCompletedAt(now);
+                        run.setError(reason);
+                        closeRunningSteps(state, id, reason, now);
+                        changed++;
+                    }
+                }
+                return changed;
+            });
+        }
+        return recovered;
+    }
+
+    private void closeRunningSteps(RadarCacheState state, Long id, String error, LocalDateTime now) {
+        for (RadarRefreshStep step : state.getRunSteps().getOrDefault(id, java.util.Collections.emptyList())) {
+            if ("RUNNING".equals(step.getStatus())) {
+                step.setStatus("FAILED");
+                step.setCompletedAt(now);
+                step.setError(error);
+            }
+        }
     }
 
     public Optional<RadarRefreshRun> findLatestCompletedRun() {

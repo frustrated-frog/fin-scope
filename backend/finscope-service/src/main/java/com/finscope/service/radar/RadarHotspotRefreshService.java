@@ -63,10 +63,14 @@ public class RadarHotspotRefreshService {
     LocalDateTime now() { return LocalDateTime.now(clock); }
 
     private boolean request(String triggerType) {
-        if (!running.compareAndSet(false, true)) return false;
+        if (!running.compareAndSet(false, true)) {
+            return false;
+        }
         try {
             executor.execute(() -> {
                 try {
+                    LocalDateTime startedAt = now();
+                    runs.failAbandonedRuns(startedAt.minusMinutes(30), startedAt);
                     RadarHotspotProductionPipeline.ProductionResult result = pipeline.run("ALL", triggerType, now());
                     if (result != null && snapshots != null && snapshots.prewarm(result.getEvents(), result.getRun())) {
                         publishInterpretations(result);

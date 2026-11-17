@@ -20,6 +20,7 @@ import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -34,6 +35,7 @@ import java.util.UUID;
 @Service
 public class RadarHotspotProductionPipeline {
     private static final int SIGNAL_WINDOW_HOURS = 48;
+    private Clock clock = Clock.systemDefaultZone();
 
     @Resource
     private com.finscope.service.news.NewsWindowService news;
@@ -65,30 +67,30 @@ public class RadarHotspotProductionPipeline {
     public ProductionResult run(String requestedCategory, String triggerType, LocalDateTime now) {
         RadarRefreshRun run = runs.startRun("radar-" + UUID.randomUUID(), triggerType, now);
         try {
-            runs.startStep(run.getId(), "FETCH", now);
+            runs.startStep(run.getId(), "FETCH", timestamp(now));
             NewsFeedSnapshot snapshot = news.productionSnapshot();
             runs.completeStep(run.getId(), "FETCH", "SUCCESS", 0, snapshot.getItems().size(),
-                    "warnings=" + snapshot.getWarnings().size(), now);
+                    "warnings=" + snapshot.getWarnings().size(), timestamp(now));
 
-            runs.startStep(run.getId(), "NORMALIZE", now);
+            runs.startStep(run.getId(), "NORMALIZE", timestamp(now));
             List<RadarSignal> captured = captureSignals(snapshot.getItems(), now);
             repository.expireSignals(now.minusHours(SIGNAL_WINDOW_HOURS), now);
             List<RadarSignal> active = repository.findActiveSignals(now.minusHours(SIGNAL_WINDOW_HOURS), Math.max(500, snapshot.getItems().size()));
-            runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", now);
+            runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", timestamp(now));
 
-            runs.startStep(run.getId(), "AGGREGATE", now);
+            runs.startStep(run.getId(), "AGGREGATE", timestamp(now));
             List<RadarClusteringService.ClusterResult> clusters = mergeDuplicateClusters(clustering.cluster(active));
             RadarEventIdentityResolution identityResolution = identityResolver.resolve(clusters);
             runs.completeStep(run.getId(), "AGGREGATE", "SUCCESS", active.size(), clusters.size(),
-                    "connected-components=true," + identityResolution.summary(), now);
+                    "connected-components=true," + identityResolution.summary(), timestamp(now));
 
-            runs.startStep(run.getId(), "RANK", now);
+            runs.startStep(run.getId(), "RANK", timestamp(now));
             List<WatchlistItem> followed = watchlist.findByTypes(Arrays.asList("STOCK", "FUND"));
             List<RankedCluster> ranked = rank(clusters, followed, now);
             runs.completeStep(run.getId(), "RANK", "SUCCESS", clusters.size(), ranked.size(),
-                    "hotspot-score=deterministic", now);
+                    "hotspot-score=deterministic", timestamp(now));
 
-            runs.startStep(run.getId(), "PERSIST", now);
+            runs.startStep(run.getId(), "PERSIST", timestamp(now));
             List<RadarEvent> savedEvents = persist(ranked, now);
             classifyDashboardEvents();
             rankHistory.record(savedEvents, now);
@@ -97,14 +99,23 @@ public class RadarHotspotProductionPipeline {
                 activeEventKeys.add(event.getEventKey());
             }
             repository.expireEventsExcept(activeEventKeys, now.minusHours(SIGNAL_WINDOW_HOURS), now);
-            runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(), "snapshot=latest-completed", now);
+            runs.completeStep(run.getId(), "PERSIST", "SUCCESS", ranked.size(), savedEvents.size(), "snapshot=latest-completed", timestamp(now));
             String warning = joinWarnings(snapshot.getWarnings());
-            RadarRefreshRun completed = runs.completeRun(run.getId(), providerCount(captured), active.size(), savedEvents.size(), warning, now);
+            RadarRefreshRun completed = runs.completeRun(run.getId(), providerCount(captured), active.size(), savedEvents.size(), warning, timestamp(now));
             return new ProductionResult(completed, snapshot, savedEvents);
         } catch (RuntimeException error) {
-            runs.failRun(run.getId(), safeMessage(error), now);
+            try {
+                runs.failRun(run.getId(), safeMessage(error), timestamp(now));
+            } catch (RuntimeException journalError) {
+                error.addSuppressed(journalError);
+            }
             throw error;
         }
+    }
+
+    private LocalDateTime timestamp(LocalDateTime startedAt) {
+        LocalDateTime current = LocalDateTime.now(clock);
+        return current.isBefore(startedAt) ? startedAt : current;
     }
 
     private List<RadarSignal> captureSignals(List<NewsFeedItem> items, LocalDateTime now) {
@@ -298,8 +309,9 @@ public class RadarHotspotProductionPipeline {
 
     private int providerCount(List<RadarSignal> signals) {
         Set<String> providers = new HashSet<>();
-        for (RadarSignal signal : signals)
+        for (RadarSignal signal : signals) {
             providers.add(firstNonBlank(signal.getProviderCode(), signal.getSourceName()));
+        }
         return providers.size();
     }
 

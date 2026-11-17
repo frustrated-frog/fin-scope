@@ -217,13 +217,14 @@ class RedisRadarCacheIntegrationTest {
     }
 
     @Test
-    void rejectsLateChildWriteWhenParentHasExpired() {
+    void skipsLateSnapshotWhenParentHasExpired() {
         Long eventId = repository(new RadarRepository(), store).saveEvent(event(null, "expired-parent")).getId();
         redis.delete(key("events", eventId));
         RadarEventSnapshot snapshot = new RadarEventSnapshot();
         snapshot.setEventId(eventId);
         snapshot.setSnapshotAt(now);
-        assertThrows(IllegalStateException.class, () -> repository(new RadarEventSnapshotRepository(), store).save(snapshot));
+        assertDoesNotThrow(() -> repository(new RadarEventSnapshotRepository(), store).save(snapshot));
+        assertFalse(redis.hasKey(key("snapshotHistory", eventId)));
         assertNull(redis.opsForValue().get(key("snapshots", eventId)));
     }
 
@@ -358,6 +359,100 @@ class RedisRadarCacheIntegrationTest {
         assertTrue(store.readSections.stream().allMatch(name -> List.of("events", "eventIdsByKey", "snapshots").contains(name)));
     }
 
+    @Test
+    void migratesLegacyHistoryThenAppendsOnlyNewPointsAndKeepsNanosecondCutoff() throws Exception {
+        RadarRepository radar = repository(new RadarRepository(), store);
+        Long id = radar.saveEvent(event(null, "history-cutover")).getId();
+        List<RadarEventSnapshot> old = new ArrayList<>();
+        for (int index = 0; index < 2000; index++) {
+            RadarEventSnapshot snapshot = new RadarEventSnapshot();
+            snapshot.setEventId(id);
+            snapshot.setSnapshotAt(now.minusMinutes(2001 - index));
+            old.add(snapshot);
+        }
+        RadarEventSnapshot expired = new RadarEventSnapshot();
+        expired.setEventId(id);
+        expired.setSnapshotAt(now.minusDays(8));
+        old.add(expired);
+        redis.opsForValue().set(key("snapshots", id), mapper.writeValueAsString(old));
+        RadarEventSnapshotRepository history = repository(new RadarEventSnapshotRepository(), store);
+        assertEquals(old.get(1999).getSnapshotAt(), history.findLatestBefore(id, now).orElseThrow().getSnapshotAt());
+        assertFalse(redis.hasKey(key("snapshots", id)));
+        assertEquals(2000L, redis.opsForZSet().size(key("snapshotHistory", id)));
+
+        RadarEventSnapshot point = new RadarEventSnapshot();
+        point.setEventId(id);
+        point.setSnapshotAt(now);
+        point.setHotnessScore(71);
+        history.save(point);
+        point.setHotnessScore(72);
+        history.save(point);
+        assertEquals(2001L, redis.opsForZSet().size(key("snapshotHistory", id)));
+        assertEquals(72, history.findLatestBefore(id, now.plusNanos(1)).orElseThrow().getHotnessScore());
+        assertEquals(old.get(1999).getSnapshotAt(), history.findLatestBefore(id, now).orElseThrow().getSnapshotAt());
+
+        redis.expire(key("snapshotHistory", id), Duration.ofSeconds(2));
+        RadarEvent refreshed = event(null, "history-cutover");
+        refreshed.setLastSeenAt(now.plusMinutes(1));
+        radar.saveEvent(refreshed);
+        assertTrue(redis.getExpire(key("snapshotHistory", id)) > TimeUnit.HOURS.toSeconds(35));
+    }
+
+    @Test
+    void mixedExpiredParentsDoNotAbortValidSnapshotWritesAndEveryBatchIsByteBounded() {
+        RadarRepository radar = repository(new RadarRepository(), store);
+        Long validId = radar.saveEvent(event(null, "valid-history")).getId();
+        Long expiredId = radar.saveEvent(event(null, "expired-history")).getId();
+        redis.delete(key("events", expiredId));
+        StringRedisTemplate observed = org.mockito.Mockito.spy(redis);
+        List<Integer> bytes = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.springframework.data.redis.core.script.RedisScript<?> script = invocation.getArgument(0);
+            if (script.getScriptAsString().contains("local migrate")) {
+                Object[] args = invocation.getArguments();
+                int size = 0;
+                for (int index = 4; index < args.length; index++) {
+                    size += String.valueOf(args[index]).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                }
+                bytes.add(size);
+            }
+            return invocation.callRealMethod();
+        }).when(observed).execute(org.mockito.ArgumentMatchers.any(org.springframework.data.redis.core.script.RedisScript.class),
+                org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+        ReflectionTestUtils.setField(store, "redisTemplate", observed);
+        List<RadarEventSnapshot> points = new ArrayList<>();
+        for (int index = 0; index < 102; index++) {
+            RadarEventSnapshot point = new RadarEventSnapshot();
+            point.setEventId(index % 2 == 0 ? validId : expiredId);
+            point.setSnapshotAt(now.minusSeconds(index));
+            point.setExplanation("说明".repeat(5000));
+            points.add(point);
+        }
+        repository(new RadarEventSnapshotRepository(), store).saveBatch(points);
+        assertEquals(51L, redis.opsForZSet().size(key("snapshotHistory", validId)));
+        assertFalse(redis.hasKey(key("snapshotHistory", expiredId)));
+        assertTrue(bytes.size() > 2);
+        assertTrue(bytes.stream().allMatch(size -> size <= RedisRadarSnapshotStorage.MAX_BATCH_BYTES));
+    }
+
+    @Test
+    void failureAndRecoveryCloseTheActualRunningStepWithoutChangingCompletedRuns() {
+        RadarRefreshRunRepository runs = repository(new RadarRefreshRunRepository(), store);
+        RadarRefreshRun failed = runs.startRun("failed-step", "TEST", now.minusMinutes(2));
+        runs.startStep(failed.getId(), "FETCH", now.minusMinutes(2));
+        runs.failRun(failed.getId(), "provider timeout", now);
+        assertEquals("FAILED", runs.findSteps(failed.getId()).get(0).getStatus());
+        assertEquals(now, runs.findSteps(failed.getId()).get(0).getCompletedAt());
+        RadarRefreshRun abandoned = runs.startRun("old-running", "TEST", now.minusHours(2));
+        runs.startStep(abandoned.getId(), "PERSIST", now.minusHours(2));
+        RadarRefreshRun active = runs.startRun("new-running", "TEST", now.minusMinutes(1));
+        assertEquals(1, runs.failAbandonedRuns(now.minusMinutes(30), now));
+        assertEquals(0, runs.failAbandonedRuns(now.minusMinutes(30), now));
+        assertEquals("FAILED", runs.findSteps(abandoned.getId()).get(0).getStatus());
+        assertEquals("RUNNING", store.read().getRuns().get(active.getId()).getStatus());
+        assertEquals("provider timeout", store.read().getRuns().get(failed.getId()).getError());
+    }
+
     private void concurrentUpdate(CountingStore target, Long id, boolean markRead,
                                   CountDownLatch entered, CountDownLatch release) {
         target.update(state -> {
@@ -420,6 +515,9 @@ class RedisRadarCacheIntegrationTest {
 
     private String key(String collection, Object id) {
         String generation = redis.opsForValue().get(RadarCacheLayout.ACTIVE_KEY);
+        if ("snapshotHistory".equals(collection)) {
+            return RadarCacheLayout.snapshotHistory(mapper).key(RadarCacheLayout.prefix(generation), id);
+        }
         RadarCacheLayout.Section section = RadarCacheLayout.sections(mapper).stream()
                 .filter(value -> value.name().equals(collection)).findFirst().orElseThrow();
         return section.key(RadarCacheLayout.prefix(generation), id);

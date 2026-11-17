@@ -2,6 +2,7 @@ package com.finscope.dao.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.dao.cache.EphemeralContentCacheProperties;
+import com.finscope.domain.radar.RadarEventSnapshot;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -46,6 +47,14 @@ public class RedisRadarCacheStore {
     public RadarCacheState read() {
         String generation = ensureReady();
         return new RedisRadarCacheSession(this, generation, revision(generation), LocalDateTime.now(clock));
+    }
+
+    public void appendSnapshots(List<RadarEventSnapshot> snapshots) {
+        new RedisRadarSnapshotStorage(this, redisTemplate, objectMapper, clock).save(snapshots);
+    }
+
+    public Map<Long, RadarEventSnapshot> latestSnapshots(Collection<Long> eventIds, LocalDateTime before) {
+        return new RedisRadarSnapshotStorage(this, redisTemplate, objectMapper, clock).latest(eventIds, before);
     }
 
     /** 多记录详情在版本稳定后返回；遇到并发提交时重新读取，不持有生产任务的锁。 */

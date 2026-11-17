@@ -233,6 +233,7 @@ final class RedisRadarCacheSession extends RadarCacheState {
                     addRenewal(renewals, written, section(name), change.id(), change.deadline());
                 }
                 addRenewal(renewals, written, section("agentRunsBySubject"), "RADAR_EVENT:" + change.id(), change.deadline());
+                addRenewal(renewals, written, RadarCacheLayout.snapshotHistory(store.mapper()), change.id(), change.deadline());
                 addRenewal(renewals, written, section("eventIdsByKey"),
                         getEvents().get(change.id()).getEventKey(), change.deadline());
             } else if ("signals".equals(change.section().name())) {

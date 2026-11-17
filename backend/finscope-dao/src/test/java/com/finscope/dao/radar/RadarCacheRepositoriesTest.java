@@ -219,6 +219,25 @@ class RadarCacheRepositoriesTest {
         private int updates;
 
         @Override
+        public void appendSnapshots(java.util.List<RadarEventSnapshot> snapshots) {
+            for (RadarEventSnapshot snapshot : snapshots) {
+                state.getSnapshots().computeIfAbsent(snapshot.getEventId(), ignored -> new java.util.ArrayList<>()).add(snapshot);
+            }
+        }
+
+        @Override
+        public java.util.Map<Long, RadarEventSnapshot> latestSnapshots(java.util.Collection<Long> ids, LocalDateTime before) {
+            java.util.Map<Long, RadarEventSnapshot> result = new java.util.HashMap<>();
+            for (Long id : ids) {
+                state.getSnapshots().getOrDefault(id, java.util.List.of()).stream()
+                        .filter(value -> value.getSnapshotAt().isBefore(before))
+                        .max(java.util.Comparator.comparing(RadarEventSnapshot::getSnapshotAt))
+                        .ifPresent(value -> result.put(id, value));
+            }
+            return result;
+        }
+
+        @Override
         public synchronized RadarCacheState read() {
             reads++;
             return state;

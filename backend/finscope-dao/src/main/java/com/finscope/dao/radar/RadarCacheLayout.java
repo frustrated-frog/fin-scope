@@ -68,6 +68,10 @@ final class RadarCacheLayout {
         return section(mapper, "notifications", Long.class, RadarEventWorkspace.Notification.class, state -> Map.of());
     }
 
+    static Section snapshotHistory(ObjectMapper mapper) {
+        return section(mapper, "snapshotHistory", Long.class, String.class, state -> Map.of());
+    }
+
     static Section notificationFingerprints(ObjectMapper mapper) {
         return section(mapper, "notificationFingerprints", String.class, String.class, state -> Map.of());
     }
