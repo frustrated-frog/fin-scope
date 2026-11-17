@@ -13,8 +13,10 @@ import java.util.*;
 
 @Repository
 public class NewsReportRepository {
-    private static final String SELECT = "SELECT n.*,COALESCE(r.read_version,0) read_version FROM news_report n "
-            + "LEFT JOIN news_report_read r ON r.report_id=n.id ";
+    private static final String FROM = " FROM news_report n LEFT JOIN news_report_read r ON r.report_id=n.id "
+            + "LEFT JOIN news_ai_report a ON a.report_id=n.id AND a.content_version=n.content_version ";
+    private static final String GROUP_KEY = "CASE WHEN a.event_key IS NULL THEN 'report:'||n.id ELSE 'event:'||a.event_key END";
+    private static final String SELECT = "SELECT n.*,COALESCE(r.read_version,0) read_version,a.event_key,1 merged_report_count" + FROM;
     @Resource
     private JdbcTemplate jdbc;
     @Resource
@@ -33,9 +35,10 @@ public class NewsReportRepository {
                             + "content_version=news_report.content_version+CASE WHEN news_report.title<>excluded.title OR "
                             + "news_report.content<>excluded.content THEN 1 ELSE 0 END,title=excluded.title,content=excluded.content,"
                             + "url=excluded.url,published_at=COALESCE(news_report.published_at,excluded.published_at),last_seen_at=excluded.last_seen_at,"
-                            + "category_code=CASE WHEN news_report.manually_reviewed=1 THEN news_report.category_code ELSE excluded.category_code END,"
-                            + "category_name=CASE WHEN news_report.manually_reviewed=1 THEN news_report.category_name ELSE excluded.category_name END,"
-                            + "classification_reason=excluded.classification_reason,rule_version=excluded.rule_version",
+                            + "category_code=CASE WHEN (news_report.manually_reviewed=1 OR (news_report.rule_version LIKE 'news-understanding-%' AND news_report.title=excluded.title AND news_report.content=excluded.content)) THEN news_report.category_code ELSE excluded.category_code END,"
+                            + "category_name=CASE WHEN (news_report.manually_reviewed=1 OR (news_report.rule_version LIKE 'news-understanding-%' AND news_report.title=excluded.title AND news_report.content=excluded.content)) THEN news_report.category_name ELSE excluded.category_name END,"
+                            + "classification_reason=CASE WHEN news_report.title=excluded.title AND news_report.content=excluded.content AND news_report.rule_version LIKE 'news-understanding-%' THEN news_report.classification_reason ELSE excluded.classification_reason END,"
+                            + "rule_version=CASE WHEN news_report.title=excluded.title AND news_report.content=excluded.content AND news_report.rule_version LIKE 'news-understanding-%' THEN news_report.rule_version ELSE excluded.rule_version END",
                     report.getId(), report.getProviderCode(), report.getSourceName(), report.getSourceTier(), report.getKind(),
                     report.getTitle(), report.getContent(), report.getUrl(), time(report.getPublishedAt()), time(report.getFirstSeenAt()),
                     time(report.getLastSeenAt()), report.getCategoryCode(), report.getCategoryName(), report.getClassificationReason(), report.getRuleVersion());
@@ -55,6 +58,19 @@ public class NewsReportRepository {
                 time(since), time(until), after, Math.max(1, Math.min(250, size)));
     }
 
+    /** 模型结果只能写回它实际读到的原文版本，且不能覆盖人工修订。 */
+    public boolean applyAi(String id, String title, String content, com.finscope.domain.news.ai.NewsAiAnalysis analysis,
+                           List<NewsCategory> categories, String version) {
+        String name = categories.stream().filter(category -> category.getCode().equals(analysis.getCategoryCode()))
+                .map(NewsCategory::getName).findFirst().orElse(null);
+        if (name == null) {
+            return false;
+        }
+        return jdbc.update("UPDATE news_report SET category_code=?,category_name=?,classification_reason=?,rule_version=? "
+                        + "WHERE id=? AND title=? AND content=? AND manually_reviewed=0 AND (category_code IS NOT ? OR rule_version IS NOT ?)",
+                analysis.getCategoryCode(), name, "AI统一理解：" + analysis.getEventType(), version, id, title, content, analysis.getCategoryCode(), version) == 1;
+    }
+
     public Optional<NewsReport> find(String id) {
         return jdbc.query(SELECT + "WHERE n.id=?", row(), id).stream().findFirst();
     }
@@ -62,8 +78,10 @@ public class NewsReportRepository {
     public List<NewsReport> related(String id) {
         return jdbc.query(SELECT + "WHERE n.id<>? AND n.id IN (SELECT s.origin_key FROM investment_reaction_source s "
                 + "WHERE s.origin_type='NEWS_ITEM' AND s.event_key IN (SELECT event_key FROM investment_reaction_source "
-                + "WHERE origin_type='NEWS_ITEM' AND origin_key=?)) ORDER BY n.published_at,n.arrival_sequence LIMIT 100",
-                row(), id, id);
+                + "WHERE origin_type='NEWS_ITEM' AND origin_key=?)) OR (n.id<>? AND a.event_key IN "
+                + "(SELECT own.event_key FROM news_ai_report own JOIN news_report original ON original.id=own.report_id "
+                + "AND original.content_version=own.content_version WHERE own.report_id=?)) "
+                + "ORDER BY n.published_at,n.arrival_sequence LIMIT 100", row(), id, id, id, id);
     }
 
     public long latestSequence() {
@@ -73,34 +91,46 @@ public class NewsReportRepository {
     public long count(NewsWindowQuery query, LocalDateTime since, LocalDateTime until) {
         List<Object> args = new ArrayList<>();
         String where = where(query, since, until, args);
-        return jdbc.queryForObject("SELECT COUNT(*) FROM news_report n LEFT JOIN news_report_read r ON r.report_id=n.id " + where,
-                Long.class, args.toArray());
+        String expression = query.isGroupEvents() ? "COUNT(DISTINCT " + GROUP_KEY + ")" : "COUNT(*)";
+        return jdbc.queryForObject("SELECT " + expression + FROM + where, Long.class, args.toArray());
     }
 
     public NewsWindowPage query(NewsWindowQuery query, LocalDateTime since, LocalDateTime until) {
         List<Object> args = new ArrayList<>();
         String where = where(query, since, until, args);
         NewsWindowPage page = new NewsWindowPage();
-        page.setTotal(jdbc.queryForObject("SELECT COUNT(*) FROM news_report n LEFT JOIN news_report_read r ON r.report_id=n.id " + where,
-                Long.class, args.toArray()));
+        page.setTotal(count(query, since, until));
         args.add(query.getSize());
         args.add((long) query.getPage() * query.getSize());
-        page.setItems(jdbc.query(SELECT + where + " ORDER BY COALESCE(n.published_at,n.first_seen_at) DESC,n.arrival_sequence DESC LIMIT ? OFFSET ?",
-                row(), args.toArray()));
+        String sql = query.isGroupEvents() ? ranked(where) + "SELECT * FROM ranked WHERE event_rank=1 "
+                + "ORDER BY COALESCE(published_at,first_seen_at) DESC,arrival_sequence DESC LIMIT ? OFFSET ?"
+                : SELECT + where + " ORDER BY COALESCE(n.published_at,n.first_seen_at) DESC,n.arrival_sequence DESC LIMIT ? OFFSET ?";
+        page.setItems(jdbc.query(sql, row(), args.toArray()));
         page.setAsOfSequence(query.getAsOfSequence());
         page.setPage(query.getPage());
         page.setSize(query.getSize());
         page.setSources(jdbc.queryForList("SELECT DISTINCT source_name FROM news_report WHERE COALESCE(published_at,first_seen_at)>=? "
-                + "AND COALESCE(published_at,first_seen_at)<=? ORDER BY source_name", String.class, time(since), time(until)));
+                + "AND COALESCE(published_at,first_seen_at)<=? AND arrival_sequence<=? ORDER BY source_name", String.class,
+                time(since), time(until), query.getAsOfSequence()));
         Map<String, Integer> counts = new LinkedHashMap<>();
-        jdbc.query("SELECT COALESCE(category_code,'UNCLASSIFIED') category,COUNT(*) total FROM news_report "
-                + "WHERE COALESCE(published_at,first_seen_at)>=? AND COALESCE(published_at,first_seen_at)<=? "
-                + "GROUP BY category_code", rs -> {
-                    counts.put(rs.getString("category"), rs.getInt("total"));
-                }, time(since), time(until));
+        List<Object> countArgs = new ArrayList<>();
+        String categoryWhere = where(query, since, until, countArgs, false);
+        String countSql = query.isGroupEvents() ? ranked(categoryWhere) + "SELECT COALESCE(category_code,'UNCLASSIFIED') category,COUNT(*) total FROM ranked WHERE event_rank=1 GROUP BY category_code"
+                : "SELECT COALESCE(n.category_code,'UNCLASSIFIED') category,COUNT(*) total" + FROM + categoryWhere + " GROUP BY n.category_code";
+        jdbc.query(countSql, rs -> {
+            counts.put(rs.getString("category"), rs.getInt("total"));
+        }, countArgs.toArray());
         counts.put("ALL", counts.values().stream().mapToInt(Integer::intValue).sum());
         page.setCategoryCounts(counts);
         return page;
+    }
+
+    /** 筛选与分页快照先于聚合，原文不丢失；优先展示非转载报道的最新进展。 */
+    private String ranked(String where) {
+        return "WITH ranked AS (SELECT n.*,COALESCE(r.read_version,0) read_version,a.event_key,"
+                + "COUNT(*) OVER(PARTITION BY " + GROUP_KEY + ") merged_report_count,"
+                + "ROW_NUMBER() OVER(PARTITION BY " + GROUP_KEY + " ORDER BY CASE WHEN a.relation='DUPLICATE' THEN 1 ELSE 0 END,"
+                + "COALESCE(n.published_at,n.first_seen_at) DESC,n.arrival_sequence DESC) event_rank" + FROM + where + ") ";
     }
 
     /** 后台按到达序号遍历完整窗口，不复用页面的条数限制。 */
@@ -183,10 +213,15 @@ public class NewsReportRepository {
                 + "AND NOT EXISTS(SELECT 1 FROM major_event m WHERE m.origin_type='NEWS_ITEM' AND m.origin_key=news_report.id)", time(before));
         jdbc.update("DELETE FROM news_report_version WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
         jdbc.update("DELETE FROM news_report_read WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
+        jdbc.update("DELETE FROM news_ai_report WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
         jdbc.update("DELETE FROM news_report_interpretation WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id)");
     }
 
     private String where(NewsWindowQuery query, LocalDateTime since, LocalDateTime until, List<Object> args) {
+        return where(query, since, until, args, true);
+    }
+
+    private String where(NewsWindowQuery query, LocalDateTime since, LocalDateTime until, List<Object> args, boolean includeCategory) {
         StringBuilder sql = new StringBuilder("WHERE COALESCE(n.published_at,n.first_seen_at)>=? AND COALESCE(n.published_at,n.first_seen_at)<=? AND n.arrival_sequence<=? ");
         args.add(time(since));
         args.add(time(until));
@@ -203,7 +238,7 @@ public class NewsReportRepository {
             sql.append("AND n.source_name=? ");
             args.add(query.getSource());
         }
-        if (!"ALL".equals(query.getCategory())) {
+        if (includeCategory && !"ALL".equals(query.getCategory())) {
             sql.append("AND COALESCE(n.category_code,'UNCLASSIFIED')=? ");
             args.add(query.getCategory());
         }
@@ -240,6 +275,8 @@ public class NewsReportRepository {
             value.setRuleVersion(rs.getString("rule_version"));
             value.setManuallyReviewed(rs.getInt("manually_reviewed") == 1);
             value.setManualReason(rs.getString("manual_reason"));
+            value.setEventKey(rs.getString("event_key"));
+            value.setMergedReportCount(rs.getInt("merged_report_count"));
             return value;
         };
     }

@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RadarSignal {
+    private boolean aiDuplicate;
+    private String aiRepostGroup;
+    private LocalDateTime aiMeaningfulAt;
     private Long id;
     private String itemId;
     private String providerCode;

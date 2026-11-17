@@ -11,6 +11,7 @@ public class NewsWindowQuery {
     private String category = "ALL";
     private String kind = "ALL";
     private boolean unreadOnly;
+    private boolean groupEvents = true;
     private int hours = 36;
     private int page = 0;
     private int size = 50;

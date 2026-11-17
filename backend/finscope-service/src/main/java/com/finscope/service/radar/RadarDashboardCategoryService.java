@@ -36,7 +36,12 @@ public class RadarDashboardCategoryService {
     };
 
     public String classify(RadarEvent event) {
-        if (event == null) return FINANCE;
+        if (event == null) {
+            return FINANCE;
+        }
+        if (event.getAiAnalysis() != null && event.getAiAnalysis().getDisplayCategory() != null) {
+            return event.getAiAnalysis().getDisplayCategory().name();
+        }
         String category = normalize(event.getCategoryCode());
         String text = normalize(event.getCanonicalTitle()) + " " + normalize(event.getSummary());
 

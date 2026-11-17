@@ -54,8 +54,8 @@ export function LiveNewsPanel({
         const before = pageRef.current;
         const changed =
           before.total !== next.total ||
-          before.items.map((item) => `${item.id}:${item.contentVersion}`).join('|') !==
-            next.items.map((item) => `${item.id}:${item.contentVersion}`).join('|');
+          before.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}`).join('|') !==
+            next.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}`).join('|');
         if (changed) {
           setPending(next);
         }
@@ -206,6 +206,7 @@ export function LiveNewsPanel({
       <div className={depth ? 'news-card-meta' : 'news-flash-meta'}>
         <span>{item.sourceName}</span><small>{item.sourceTier}</small>
         {item.unread ? <em>未读</em> : null}
+        {(item.mergedReportCount ?? 1) > 1 ? <em>合并 {item.mergedReportCount} 条报道</em> : null}
         {item.contentVersion > 1 ? <em>原文更新 · v{item.contentVersion}</em> : null}
       </div>
       <h3>{highlight(item.title, query.query)}</h3>
@@ -310,6 +311,7 @@ export function LiveNewsPanel({
             <label>类型<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value })}>
               <option value="ALL">全部内容</option><option value="FLASH">实时快讯</option><option value="ARTICLE">要闻文章</option>
             </select></label>
+            <label className="news-unread-filter"><input type="checkbox" checked={draft.groupEvents !== false} onChange={(event) => apply({ ...draft, groupEvents: event.target.checked })} />合并同事件报道</label>
             <label className="news-unread-filter"><input type="checkbox" checked={draft.unreadOnly} onChange={(event) => setDraft({ ...draft, unreadOnly: event.target.checked })} />只看未读</label>
             <button type="button" className="ghost-button" aria-pressed={compact} onClick={() => setCompact(!compact)}>{compact ? '舒适阅读' : '紧凑阅读'}</button>
           </div>

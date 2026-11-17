@@ -44,6 +44,8 @@ public class RadarHotspotProductionPipeline {
     @Resource
     private RadarClusteringService clustering;
     @Resource
+    private NewsAiAggregationService aiAggregation;
+    @Resource
     private RadarEventBatchIdentityResolver identityResolver;
     @Resource
     private RadarPriorityService priority;
@@ -81,7 +83,7 @@ public class RadarHotspotProductionPipeline {
             runs.completeStep(run.getId(), "NORMALIZE", "SUCCESS", snapshot.getItems().size(), active.size(), "dedupe=provider+item", timestamp(now));
 
             runs.startStep(run.getId(), "AGGREGATE", timestamp(now));
-            List<RadarClusteringService.ClusterResult> clusters = mergeDuplicateClusters(clustering.cluster(active));
+            List<RadarClusteringService.ClusterResult> clusters = mergeDuplicateClusters(aiAggregation == null ? clustering.cluster(active) : aiAggregation.cluster(active, now));
             RadarEventIdentityResolution identityResolution = identityResolver.resolve(clusters);
             runs.completeStep(run.getId(), "AGGREGATE", "SUCCESS", active.size(), clusters.size(),
                     "connected-components=true," + identityResolution.summary(), timestamp(now));

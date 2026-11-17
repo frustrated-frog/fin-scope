@@ -101,9 +101,8 @@ public class RadarHotspotScoreService {
         int previousCount = previous.getIndependentSourceCount() > 0
                 ? previous.getIndependentSourceCount() : Math.min(previous.getSignalCount(), independentCount);
         int added = Math.max(0, independentCount - previousCount);
-        long newlyPublished = signals.stream().filter(signal -> signal.getPublishedAt() != null
-                && !signal.getPublishedAt().isBefore(previous.getSnapshotAt())
-                && !signal.getPublishedAt().isAfter(now)).count();
+        long newlyPublished = signals.stream().map(this::eventTime).filter(at -> at != null
+                && !at.isBefore(previous.getSnapshotAt()) && !at.isAfter(now)).count();
         added = Math.min(added, (int) newlyPublished);
         long minutes = Math.max(1, Duration.between(previous.getSnapshotAt(), now).toMinutes());
         double normalizedWindow = Math.max(1.0D, minutes / 30.0D);
@@ -208,7 +207,7 @@ public class RadarHotspotScoreService {
     }
 
     private LocalDateTime eventTime(RadarSignal signal) {
-        return signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
+        return signal.getAiMeaningfulAt() != null ? signal.getAiMeaningfulAt() : signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
     }
 
     private String percentage(double value) { return bounded(value * 100.0D) + "%"; }

@@ -21,6 +21,8 @@ export interface NewsReport {
   classificationReason?: string;
   manuallyReviewed: boolean;
   manualReason?: string;
+  eventKey?: string;
+  mergedReportCount?: number;
 }
 export interface NewsQuery {
   query: string;
@@ -29,6 +31,7 @@ export interface NewsQuery {
   category: string;
   kind: string;
   unreadOnly: boolean;
+  groupEvents?: boolean;
   hours: number;
   page: number;
   size: number;
@@ -76,6 +79,7 @@ export const initialQuery: NewsQuery = {
   category: 'ALL',
   kind: 'ALL',
   unreadOnly: false,
+  groupEvents: true,
   hours: 36,
   page: 0,
   size: 50,

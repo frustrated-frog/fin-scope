@@ -66,6 +66,27 @@ finscope:
     refresh-initial-delay-ms: 1000
     refresh-interval-ms: 30000
     source-snapshot-ttl-seconds: 120
+  # 新闻理解独立于全局 LLM；Key 缺失时继续本地分类与聚类。
+  news-ai:
+    enabled: true
+    backfill-existing: false
+    batch-size: 6
+    max-batches-per-run: 8
+    max-candidates: 6
+    content-chars: 1600
+    max-output-tokens: 6000
+    max-attempts: 2
+    daily-budget-micros: 1500000
+    daily-max-calls: 1500
+    input-dollars-per-million: 0.10
+    output-dollars-per-million: 0.50
+    initial-delay-ms: 20000
+    interval-ms: 30000
+    provider:
+      base-url: https://api.openai.com/v1
+      api-key: ""
+      model: gpt-6-luna
+      timeout-ms: 45000
   llm:
     enabled: true
     base-url: https://api.deepseek.com

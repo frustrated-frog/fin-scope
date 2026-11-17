@@ -6,6 +6,9 @@ public class RadarEvent {
     @lombok.Getter
     @lombok.Setter
     private NewsworthinessAssessment newsworthiness;
+    @lombok.Getter
+    @lombok.Setter
+    private com.finscope.domain.news.ai.NewsAiAnalysis aiAnalysis;
     private Long id;
     private String eventKey;
     private String canonicalTitle;

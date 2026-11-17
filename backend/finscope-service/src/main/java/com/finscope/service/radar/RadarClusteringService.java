@@ -123,6 +123,19 @@ public class RadarClusteringService {
         return clusters;
     }
 
+    public ClusterResult group(List<RadarSignal> signals, String stableKey) {
+        if (signals.isEmpty()) {
+            throw new IllegalArgumentException("事件不能没有原始报道");
+        }
+        ClusterResult result = newCluster(signals.get(0));
+        for (int index = 1; index < signals.size(); index++) {
+            result.add(signals.get(index), new MatchDecision("SAME_AI", 1.0, "统一AI事件归属"));
+        }
+        result.finish(analyzer, identities);
+        result.getEvent().setEventKey(stableKey);
+        return result;
+    }
+
     private boolean isCandidate(RadarSignalFeatures a, RadarSignalFeatures b) {
         if (a == null || b == null) {
             return false;

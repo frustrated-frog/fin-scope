@@ -20,7 +20,7 @@ import java.util.Map;
 
 /** 持久化幂等、候选版本与费用预留；网络调用不在事务内。金额单位为百万分之一美元。 */
 @Repository
-@DependsOn("databaseInitializer")
+@DependsOn("newsWindowSchemaMigrator")
 public class NewsAiRepository implements InitializingBean {
     @Resource
     private JdbcTemplate jdbc;
@@ -52,7 +52,7 @@ public class NewsAiRepository implements InitializingBean {
     }
 
     public java.util.Set<String> changedReportsSince(LocalDateTime since) {
-        return new java.util.HashSet<>(jdbc.queryForList("SELECT DISTINCT report_id FROM news_report_version WHERE detected_at>=? LIMIT 20000", String.class, since.toString()));
+        return new java.util.HashSet<>(jdbc.queryForList("SELECT report_id FROM news_report_version WHERE detected_at>=? GROUP BY report_id ORDER BY MAX(detected_at) DESC LIMIT 20000", String.class, since.toString()));
     }
 
     public void defer(String key, String owner, LocalDateTime retryAfter) {
@@ -181,6 +181,50 @@ public class NewsAiRepository implements InitializingBean {
         return jdbc.queryForMap("SELECT COUNT(*) calls,COALESCE(SUM(input_tokens),0) input_tokens,COALESCE(SUM(output_tokens),0) output_tokens,"
                         + "COALESCE(SUM(actual_micros),0) actual_micros,COALESCE(SUM(CASE WHEN actual_micros IS NULL THEN reserved_micros ELSE 0 END),0) unresolved_micros "
                         + "FROM news_ai_call WHERE created_at>=? AND created_at<?", now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString());
+    }
+
+    /** 按实际读取的原文版本关联；正文变化后旧关系不会参与查询。 */
+    public boolean linkReport(String id, String title, String content, NewsAiBinding binding) {
+        return jdbc.update("INSERT INTO news_ai_report(report_id,content_key,event_key,relation,content_version) "
+                        + "SELECT id,?,?,?,content_version FROM news_report WHERE id=? AND title=? AND content=? "
+                        + "ON CONFLICT(report_id) DO UPDATE SET content_key=excluded.content_key,event_key=excluded.event_key,"
+                        + "relation=excluded.relation,content_version=excluded.content_version "
+                        + "WHERE news_ai_report.content_key<>excluded.content_key OR news_ai_report.event_key<>excluded.event_key "
+                        + "OR news_ai_report.relation<>excluded.relation OR news_ai_report.content_version<>excluded.content_version",
+                binding.getContentKey(), binding.getEventKey(), binding.getRelation().name(), id, title, content) == 1;
+    }
+
+    public Map<String, String> linkedReportKeys(Collection<String> ids) {
+        Map<String, String> result = new HashMap<>();
+        List<String> values = List.copyOf(ids);
+        for (int start = 0; start < values.size(); start += 300) {
+            List<String> batch = values.subList(start, Math.min(values.size(), start + 300));
+            String placeholders = String.join(",", java.util.Collections.nCopies(batch.size(), "?"));
+            jdbc.query("SELECT a.report_id,a.content_key FROM news_ai_report a JOIN news_report n "
+                    + "ON n.id=a.report_id AND n.content_version=a.content_version WHERE a.report_id IN (" + placeholders + ")", rs -> {
+                result.put(rs.getString(1), rs.getString(2));
+            }, batch.toArray());
+        }
+        return result;
+    }
+
+    /** 理解缓存保留30天、调用明细保留90天；未决费用与仍被新闻引用的事件不清理。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void prune(LocalDateTime now) {
+        jdbc.update("DELETE FROM news_ai_report WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id AND n.content_version=news_ai_report.content_version)");
+        jdbc.update("DELETE FROM news_ai_content WHERE updated_at<? AND state<>? AND NOT EXISTS(SELECT 1 FROM news_ai_report r WHERE r.content_key=news_ai_content.content_hash)",
+                now.minusDays(30).toString(), NewsAiJobState.CLAIMED.name());
+        jdbc.update("DELETE FROM news_ai_binding WHERE NOT EXISTS(SELECT 1 FROM news_ai_content c WHERE c.cache_key=news_ai_binding.cache_key)");
+        jdbc.update("DELETE FROM news_ai_event WHERE updated_at<? AND NOT EXISTS(SELECT 1 FROM news_ai_report r WHERE r.event_key=news_ai_event.event_key)", now.minusDays(30).toString());
+        jdbc.update("DELETE FROM news_ai_call WHERE created_at<? AND actual_micros IS NOT NULL", now.minusDays(90).toString());
+    }
+
+    public Map<String, Long> jobCounts() {
+        Map<String, Long> result = new HashMap<>();
+        jdbc.query("SELECT state,COUNT(*) total FROM news_ai_content GROUP BY state", rs -> {
+            result.put(rs.getString("state"), rs.getLong("total"));
+        });
+        return result;
     }
 
     private String json(Object value) {

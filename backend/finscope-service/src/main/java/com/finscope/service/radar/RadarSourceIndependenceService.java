@@ -86,11 +86,12 @@ public class RadarSourceIndependenceService {
     }
 
     private LocalDateTime eventTime(RadarSignal signal) {
-        return signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
+        return signal.getAiMeaningfulAt() != null ? signal.getAiMeaningfulAt() : signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt();
     }
 
     private boolean sameEffectiveSource(Observation left, Observation right) {
-        return left.sourceGroup.equals(right.sourceGroup)
+        return (left.signal.getAiRepostGroup() != null && left.signal.getAiRepostGroup().equals(right.signal.getAiRepostGroup()))
+                || left.sourceGroup.equals(right.sourceGroup)
                 || left.repostFingerprint.equals(right.repostFingerprint)
                 || likelyRepost(left, right);
     }

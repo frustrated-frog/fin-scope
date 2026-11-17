@@ -200,3 +200,14 @@ test('saves reusable filters with current applied conditions', async () => {
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   expect(await screen.findByRole('button', { name: '合同跟踪' })).toBeInTheDocument();
 });
+
+
+test('groups event reports by default and can show all originals', async () => {
+  latest = { ...page, items: [{ ...report, mergedReportCount: 3 }] };
+  setup();
+  expect(await screen.findByText('合并 3 条报道')).toBeInTheDocument();
+  const toggle = screen.getByRole('checkbox', { name: '合并同事件报道' });
+  expect(toggle).toBeChecked();
+  fireEvent.click(toggle);
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringMatching(/groupEvents=false/)));
+});

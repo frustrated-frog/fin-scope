@@ -25,6 +25,8 @@ public class NewsWindowService {
     @Resource
     private NewsReportRepository reports;
     @Resource
+    private com.finscope.dao.news.NewsAiRepository ai;
+    @Resource
     private NewsCategoryRepository categories;
     @Resource
     private NewsRuleClassifier rules;
@@ -56,16 +58,61 @@ public class NewsWindowService {
             }
             batch.add(report(material, enabled, now));
             if (batch.size() == 250) {
-                reports.ingest(batch);
+                ingestBatch(batch, enabled);
                 batch.clear();
             }
         }
         if (!batch.isEmpty()) {
-            reports.ingest(batch);
+            ingestBatch(batch, enabled);
         }
         // 七天缓冲供停机恢复；已进入观察或大事记的新闻依据不清理。
         if (hours == 36) {
             reports.prune(now.minusDays(7));
+        }
+    }
+
+    private void ingestBatch(List<NewsReport> batch, List<NewsCategory> enabled) {
+        List<String> keys = batch.stream().map(report -> com.finscope.domain.news.ai.NewsAiContentIdentity.occurrence(
+                report.getTitle(), report.getContent(), report.getPublishedAt() == null ? report.getFirstSeenAt() : report.getPublishedAt())).toList();
+        var cached = cachedBindings(keys);
+        for (int index = 0; index < batch.size(); index++) {
+            var binding = cached.get(keys.get(index));
+            if (binding == null) {
+                continue;
+            }
+            var analysis = binding.getAnalysis();
+            NewsCategory category = enabled.stream().filter(value -> value.getCode().equals(analysis.getCategoryCode())).findFirst().orElse(null);
+            if (category != null) {
+                NewsReport report = batch.get(index);
+                report.setCategoryCode(category.getCode());
+                report.setCategoryName(category.getName());
+                report.setClassificationReason("AI统一理解：" + analysis.getEventType());
+                report.setRuleVersion(NewsAiUnifiedAgent.VERSION);
+            }
+        }
+        reports.ingest(batch);
+        for (int index = 0; index < batch.size(); index++) {
+            var binding = cached.get(keys.get(index));
+            if (binding != null) {
+                NewsReport report = batch.get(index);
+                try {
+                    ai.linkReport(report.getId(), report.getTitle(), report.getContent(), binding);
+                } catch (RuntimeException error) {
+                    log.warn("新闻原文已保存，AI事件关联等待后台修复 reportId={} errorType={}", report.getId(), error.getClass().getSimpleName());
+                }
+            }
+        }
+    }
+
+    private Map<String, com.finscope.domain.news.ai.NewsAiBinding> cachedBindings(List<String> keys) {
+        if (ai == null) {
+            return Map.of();
+        }
+        try {
+            return ai.bindingsByHashes(keys);
+        } catch (RuntimeException error) {
+            log.warn("新闻 AI 缓存暂不可读，继续按本地规则保存原文 errorType={}", error.getClass().getSimpleName());
+            return Map.of();
         }
     }
 
@@ -224,7 +271,7 @@ public class NewsWindowService {
 
     public NewsFeedItem feedItem(NewsReport report) {
         return new NewsFeedItem(report.getId(), report.getKind(), report.getTitle(), report.getContent(), report.getUrl(),
-                report.getPublishedAt(), report.getProviderCode(), report.getSourceName(), report.getSourceTier(),
+                report.getPublishedAt() == null ? report.getFirstSeenAt() : report.getPublishedAt(), report.getProviderCode(), report.getSourceName(), report.getSourceTier(),
                 report.getCategoryCode(), report.getCategoryName(), null, report.getClassificationReason());
     }
 

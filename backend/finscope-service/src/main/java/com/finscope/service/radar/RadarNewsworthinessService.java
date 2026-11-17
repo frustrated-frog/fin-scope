@@ -180,7 +180,7 @@ public class RadarNewsworthinessService {
 
     private String sorted(Set<String> values) { return new TreeSet<>(values).toString(); }
     private String safe(String text) { return text == null ? "" : text; }
-    private LocalDateTime eventTime(RadarSignal signal) { return signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt(); }
+    private LocalDateTime eventTime(RadarSignal signal) { return signal.getAiMeaningfulAt() != null ? signal.getAiMeaningfulAt() : signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt(); }
     private double decay(LocalDateTime at, LocalDateTime now, double halfLifeHours) {
         if (at == null || at.isAfter(now) || !at.isAfter(now.minusHours(48))) {
             return 0;

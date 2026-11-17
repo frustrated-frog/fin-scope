@@ -26,6 +26,8 @@ public class NewsReport {
     private String ruleVersion;
     private boolean manuallyReviewed;
     private String manualReason;
+    private String eventKey;
+    private int mergedReportCount = 1;
 
     public boolean isUnread() {
         return readVersion < contentVersion;

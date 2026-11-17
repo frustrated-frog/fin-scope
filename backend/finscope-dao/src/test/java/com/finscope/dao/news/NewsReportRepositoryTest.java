@@ -146,6 +146,69 @@ class NewsReportRepositoryTest {
         assertEquals(List.of("2"), repository.related("1").stream().map(NewsReport::getId).toList());
     }
 
+    @Test
+    void aiClassificationSurvivesUnchangedFetchButNeverOverwritesANewerOrManualVersion() {
+        var original = report("a", "公司合同");
+        repository.ingest(List.of(original));
+        var analysis = new com.finscope.domain.news.ai.NewsAiAnalysis();
+        analysis.setCategoryCode("COMPANY");
+        var categories = List.of(new NewsCategory("COMPANY", "公司", "经营事项", true, 1));
+        assertTrue(repository.applyAi("a", original.getTitle(), original.getContent(), analysis, categories, "news-understanding-v1"));
+        original.setCategoryCode("INDUSTRY");
+        repository.ingest(List.of(original));
+        assertEquals("COMPANY", repository.find("a").orElseThrow().getCategoryCode());
+        original.setContent("修订正文");
+        repository.ingest(List.of(original));
+        assertFalse(repository.applyAi("a", original.getTitle(), "原文", analysis, categories, "news-understanding-v1"));
+        assertEquals("INDUSTRY", repository.find("a").orElseThrow().getCategoryCode());
+        repository.review("a", "MANUAL", "人工", "人工判断");
+        assertFalse(repository.applyAi("a", original.getTitle(), original.getContent(), analysis, categories, "news-understanding-v1"));
+        assertEquals("MANUAL", repository.find("a").orElseThrow().getCategoryCode());
+    }
+
+    @Test
+    void eventGroupingKeepsOriginalsFiltersAndArrivalWatermarks() {
+        var one = report("a", "合同公告");
+        one.setCategoryCode("COMPANY");
+        var two = report("b", "转述同一合同");
+        two.setSourceName("同花顺");
+        two.setCategoryCode("COMPANY");
+        var three = report("c", "另一公司合同");
+        three.setCategoryCode("INDUSTRY");
+        repository.ingest(List.of(one, two, three));
+        link("a", "e1", "NEW_EVENT");
+        link("b", "e1", "DUPLICATE");
+        link("c", "e2", "NEW_EVENT");
+        var query = query();
+        query.setSize(1);
+        var page = repository.query(query, now.minusHours(1), now);
+        assertEquals(2, page.getTotal());
+        assertEquals(2, page.getCategoryCounts().get("ALL"));
+        query.setPage(1);
+        var grouped = repository.query(query, now.minusHours(1), now).getItems().get(0);
+        assertEquals("a", grouped.getId());
+        assertEquals(2, grouped.getMergedReportCount());
+        assertEquals(List.of("b"), repository.related("a").stream().map(NewsReport::getId).toList());
+        query.setSource("同花顺");
+        query.setPage(0);
+        assertEquals("b", repository.query(query, now.minusHours(1), now).getItems().get(0).getId());
+        query.setSource("ALL");
+        query.setGroupEvents(false);
+        assertEquals(3, repository.count(query, now.minusHours(1), now));
+        query.setGroupEvents(true);
+        repository.ingest(List.of(report("late", "延迟新报道")));
+        link("late", "e3", "NEW_EVENT");
+        assertEquals(2, repository.count(query, now.minusHours(1), now));
+        two.setContent("正文已被修正，不再是相同报道");
+        repository.ingest(List.of(two));
+        assertEquals(3, repository.count(query, now.minusHours(1), now));
+        assertTrue(repository.related("a").isEmpty());
+    }
+
+    private void link(String id, String event, String relation) {
+        jdbc.update("INSERT INTO news_ai_report VALUES(?,?,?,?,1)", id, "hash" + id, event, relation);
+    }
+
     private NewsWindowQuery query() {
         NewsWindowQuery query = new NewsWindowQuery();
         query.setAsOfSequence(repository.latestSequence());
