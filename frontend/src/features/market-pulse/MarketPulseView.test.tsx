@@ -195,10 +195,10 @@ test('keeps market pulse at sector level and hands stock selection to stock disc
   expect(screen.queryByText('数据说明')).not.toBeInTheDocument();
 });
 
-test('opens panorama by default and switches to historical evolution', async () => {
+test('opens daily reading by default and switches to historical evolution', async () => {
   render(<MarketPulseView addToast={vi.fn()} setMessage={vi.fn()} />);
 
-  expect(await screen.findByRole('tab', { name: '市场全景' })).toHaveAttribute('aria-selected', 'true');
+  expect(await screen.findByRole('tab', { name: '今日速读' })).toHaveAttribute('aria-selected', 'true');
   fireEvent.click(screen.getByRole('tab', { name: '历史演变' }));
 
   expect(screen.getByRole('heading', { name: '近 20 日市场演变' })).toBeInTheDocument();

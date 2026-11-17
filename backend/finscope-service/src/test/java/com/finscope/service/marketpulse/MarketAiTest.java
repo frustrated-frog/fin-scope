@@ -159,6 +159,24 @@ class MarketAiTest {
         assertEquals(MarketAiStatus.UNKNOWN, repository.find("running").orElseThrow().getStatus());
     }
 
+    @Test
+    void retryKeepsThePreviousAttemptAndItsUsage() {
+        var view = new MarketAiView();
+        view.setBusinessDate(date);
+        view.setStatus(MarketAiStatus.QUEUED);
+        var now = date.atTime(18, 0);
+        assertTrue(repository.claim("key", "first", view, now));
+        view.setStatus(MarketAiStatus.FAILED);
+        view.setInputTokens(100L);
+        view.setOutputTokens(200L);
+        repository.finish("key", "first", view, now);
+        repository.retryFailed("key");
+        assertTrue(repository.claim("key", "second", view, now));
+        var jdbc = (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbc");
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM market_ai_attempt", Integer.class));
+        assertEquals(200L, jdbc.queryForObject("SELECT output_tokens FROM market_ai_attempt WHERE owner='first'", Long.class));
+    }
+
     private MarketAiService service() {
         var service = new MarketAiService();
         inject(service, "repository", repository, "snapshots", snapshots, "evidence", evidence, "agent", agent,

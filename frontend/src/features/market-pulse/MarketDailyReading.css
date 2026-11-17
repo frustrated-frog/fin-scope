@@ -1,0 +1,60 @@
+.mdr-workspace { --mdr-ink: #eaf2fa; --mdr-muted: #9cb1c4; --mdr-line: #2b4056; --mdr-panel: #15263a; --mdr-accent: #79c4dc; display: grid; gap: 28px; min-width: 0; color: var(--mdr-ink); font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; }
+[data-theme="light"] .mdr-workspace { --mdr-ink: #182b43; --mdr-muted: #617489; --mdr-line: #dce5ed; --mdr-panel: #fff; --mdr-accent: #347fa1; }
+.mdr-workspace * { box-sizing: border-box; }
+.mdr-workspace :is(h2,h3,h4,p) { margin: 0; }
+.mdr-workspace button, .mdr-workspace select { font: inherit; color: inherit; cursor: pointer; }
+.mdr-workspace :is(button,select,summary):focus-visible { outline: 2px solid var(--mdr-accent); outline-offset: 5px; }
+.mdr-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-top: 10px; }
+.mdr-eyebrow { font: 600 10px/1.6 Menlo, monospace; letter-spacing: .13em; color: var(--mdr-accent); }
+.mdr-header h2 { margin: 9px 0; font-size: clamp(22px, 2.4vw, 32px); font-weight: 650; letter-spacing: -.04em; }
+.mdr-header p, .mdr-header label { color: var(--mdr-muted); font-size: 13px; }
+.mdr-header label { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.mdr-header select { background: var(--mdr-panel); border: 1px solid var(--mdr-line); padding: 10px 12px; border-radius: 8px; }
+.mdr-thesis { background: var(--mdr-panel); padding: clamp(22px, 3vw, 40px); border: 1px solid var(--mdr-line); border-radius: 16px; }
+.mdr-thesis-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 22px; font-size: 12px; }
+.mdr-thesis-meta > span { color: var(--mdr-accent); border-bottom: 2px solid currentColor; padding-bottom: 5px; }
+.mdr-thesis-meta small { color: var(--mdr-muted); }
+.mdr-thesis h3 { font-size: clamp(23px, 2.6vw, 36px); font-weight: 600; line-height: 1.5; letter-spacing: -.025em; max-width: 30em; }
+.mdr-thesis > p { font-size: 15px; line-height: 1.95; color: var(--mdr-muted); margin-top: 16px; max-width: 78em; }
+.mdr-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 28px 0; gap: 22px; }
+.mdr-metrics > div { padding-left: 16px; border-left: 1px solid var(--mdr-line); display: grid; gap: 8px; }
+.mdr-metrics span { font-size: 12px; color: var(--mdr-muted); }
+.mdr-metrics strong { font: 500 clamp(18px,2vw,25px)/1.3 "SFMono-Regular", Menlo, monospace; letter-spacing: -.04em; }
+.mdr-thesis footer { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; border-top: 1px solid var(--mdr-line); padding-top: 18px; font-size: 12px; }
+.mdr-thesis footer > span { color: var(--mdr-muted); flex: 1; }
+.mdr-thesis button { padding: 5px 0; border: 0; background: transparent; color: var(--mdr-accent); }
+.mdr-two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+.mdr-section > header { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--mdr-line); }
+.mdr-section > header h3 { font-size: 17px; font-weight: 600; }
+.mdr-section > header > span:last-child:not(.mdr-signal) { margin-left: auto; font-size: 12px; color: var(--mdr-muted); }
+.mdr-signal { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.mdr-support { background: #89d5b9; } .mdr-caution { background: #e7c485; }
+.mdr-point { padding: 20px 0; border-bottom: 1px solid var(--mdr-line); }
+.mdr-point h4 { font-size: 15px; font-weight: 600; margin-bottom: 9px; }
+.mdr-point p, .mdr-change p, .mdr-sectors p { font-size: 14px; line-height: 1.95; color: var(--mdr-muted); max-width: 80em; overflow-wrap: anywhere; }
+.mdr-change { padding: 4px 0 4px 20px; border-left: 3px solid var(--mdr-accent); }
+.mdr-change h3 { font-size: 20px; margin: 8px 0; font-weight: 600; }
+.mdr-facts { margin-top: 12px; font-size: 12px; }
+.mdr-facts summary { color: var(--mdr-muted); cursor: pointer; width: fit-content; }
+.mdr-facts summary span { margin-left: 4px; font-family: Menlo,monospace; }
+.mdr-facts ul { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 12px; }
+.mdr-facts li { display: grid; gap: 5px; line-height: 1.8; overflow-wrap: anywhere; }
+.mdr-facts small { color: var(--mdr-accent); }
+.mdr-facts li > span { color: var(--mdr-muted); }
+.mdr-sectors > article { display: grid; grid-template-columns: minmax(150px,.7fr) 3fr; gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--mdr-line); }
+.mdr-sector-title { display: flex; align-items: baseline; gap: 14px; }
+.mdr-sector-title > span { font: 12px Menlo,monospace; color: var(--mdr-accent); }
+.mdr-sector-title h4 { font-size: 17px; font-weight: 600; }
+.mdr-watch { margin-top: 10px !important; }
+.mdr-watch strong { font-weight: 500; color: var(--mdr-ink); margin-right: 12px; font-size: 12px; }
+.mdr-conditions .mdr-point { padding-left: 20px; border-left: 1px solid var(--mdr-line); margin-top: 14px; }
+.mdr-status { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; background: var(--mdr-panel); border-radius: 10px; border: 1px solid var(--mdr-line); font-size: 13px; color: var(--mdr-muted); }
+.mdr-status button { padding: 8px 12px; border: 1px solid var(--mdr-line); border-radius: 6px; background: transparent; white-space: nowrap; }
+.mdr-rule-reference { color: var(--mdr-muted); font-size: 12px; }
+.mdr-rule-reference summary { cursor: pointer; width: fit-content; }
+.mdr-rule-reference p { margin-top: 12px; line-height: 1.9; }
+@media (max-width: 800px) { .mdr-two-column { grid-template-columns: 1fr; gap: 24px; } .mdr-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .mdr-header { align-items: flex-start; flex-direction: column; } .mdr-sectors > article { grid-template-columns: 1fr; gap: 12px; } .mdr-section > header { flex-wrap: wrap; } }
+@media (max-width: 480px) { .mdr-thesis { padding: 20px 16px; } .mdr-status { flex-direction: column; align-items: flex-start; } .mdr-thesis footer { gap: 12px; } .mdr-thesis footer > span { flex-basis: 100%; } }
+
+.mdr-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.mdr-header-actions > button { padding: 10px 12px; border: 1px solid var(--mdr-line); background: var(--mdr-panel); border-radius: 8px; font-size: 12px; }

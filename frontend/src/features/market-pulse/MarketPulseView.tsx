@@ -7,6 +7,7 @@ import { DailyResearchPanel } from './DailyResearchPanel';
 import type { DailyMarketReview, MarketBreadth, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 import './MarketPulsePolish.css';
 import { MarketPanorama } from './MarketPanorama';
+import { MarketDailyReading } from './MarketDailyReading';
 import { PersonalMarketPanel } from './PersonalMarketPanel';
 import type { PersonalChange } from './personalMarket';
 import { RadarOverview } from './RadarOverview';
@@ -281,7 +282,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const [view, setView] = useState<'panorama' | 'review' | 'transition' | 'breadth' | 'history'>('panorama');
+  const [view, setView] = useState<'reading' | 'panorama' | 'review' | 'transition' | 'breadth' | 'history'>('reading');
   const loadRequest = useRef(0);
 
   const load = async (date?: string) => {
@@ -388,10 +389,11 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
   }
 
   return (
-    <section className={`market-pulse-page${view === 'panorama' ? ' is-panorama' : view === 'review' ? ' is-radar' : view === 'breadth' ? ' is-breadth' : ''}`}
+    <section className={`market-pulse-page${view === 'panorama' || view === 'reading' ? ' is-panorama' : view === 'review' ? ' is-radar' : view === 'breadth' ? ' is-breadth' : ''}`}
       onKeyDownCapture={event => { event.currentTarget.dataset.interaction = 'keyboard'; }}
       onPointerDownCapture={event => { event.currentTarget.dataset.interaction = 'pointer'; }}>
       <nav className="market-pulse-tabs" role="tablist" aria-label="市场机会视图">
+        <button type="button" role="tab" aria-selected={view === 'reading'} onClick={() => setView('reading')}>今日速读</button>
         <button type="button" role="tab" aria-selected={view === 'panorama'} onClick={() => setView('panorama')}>市场全景</button>
         <button type="button" role="tab" aria-selected={view === 'review'} onClick={() => setView('review')}>今日雷达</button>
         <button type="button" role="tab" aria-selected={view === 'transition'} onClick={() => setView('transition')}>转折与情景</button>
@@ -401,7 +403,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'review' && <RadarOverview workspace={workspace} stage={stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}
         dimensions={[{ name: '趋势', value: label(regime?.trendState) }, { name: '流动性', value: label(regime?.liquidityState) }, { name: '风险偏好', value: label(regime?.riskAppetiteState) }, { name: '轮动速度', value: label(regime?.rotationState) }]}
         dates={dates} refreshing={refreshing} onLoad={date => void load(date)} onRefresh={() => void refresh()} />}
-      {view !== 'panorama' && view !== 'review' && view !== 'breadth' && <header className="market-pulse-hero">
+      {view !== 'reading' && view !== 'panorama' && view !== 'review' && view !== 'breadth' && <header className="market-pulse-hero">
         <div className="market-pulse-hero-main">
           <p className="market-pulse-kicker">MARKET REGIME · {workspace.businessDate ?? 'LATEST'}</p>
           <h3>{stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}</h3>
@@ -436,6 +438,8 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
           <button type="button" aria-label="立即补刷新" title={`补刷新当前查看日期 ${workspace.businessDate ?? ''}`} onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在计算…' : '立即补刷新'}</button>
         </div>
       </header>}
+
+      {view === 'reading' && <MarketDailyReading key={workspace.businessDate} workspace={workspace} dates={dates} onRefresh={() => void refresh()} refreshing={refreshing} onLoad={date => void load(date)} onOpenPanorama={() => setView('panorama')} onOpenBreadth={() => setView('breadth')} />}
 
       {view === 'panorama' && <MarketPanorama workspace={workspace} dates={dates} refreshing={refreshing}
         onLoad={date => void load(date)} onRefresh={() => void refresh()} onOpenStock={onOpenStock} onOpenStockDiscovery={onOpenStockDiscovery} />}
