@@ -3,6 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {api} from '../../shared/api/client';
 import {useViewRevision} from '../../shared/api/useViewRevision';
 import {LiveNewsPanel} from './LiveNewsPanel';
+import {NewsRiverPanel} from './NewsRiverPanel';
 import {RadarEventCard} from './RadarEventCard';
 import {RadarEventDetailDrawer} from './RadarEventDetailDrawer';
 import {loadRadarEventOverview} from './radarEventDetailApi';
@@ -37,7 +38,8 @@ export function NewsView({
     initialLiveQuery?: string;
     onInitialRadarEventOpened?: () => void;
 }) {
-    const [mode, setMode] = useState<'live' | 'radar'>(initialRadarEventId ? 'radar' : 'live');
+    const [mode, setMode] = useState<'live' | 'radar' | 'river'>(initialRadarEventId ? 'radar' : 'live');
+    const [riverEventId, setRiverEventId] = useState<string>();
     const props = {setMessage, addToast, onResearch, onOpenMajorEvents};
     return (
         <section className="news-workspace" aria-label="News Wire 工作区">
@@ -45,14 +47,16 @@ export function NewsView({
                 <button type="button" className={mode === 'live' ? 'active' : ''} aria-pressed={mode === 'live'}
                         onClick={() => setMode('live')}>实时资讯
                 </button>
+                <button type="button" className={mode === 'river' ? 'active' : ''} aria-pressed={mode === 'river'}
+                        onClick={() => setMode('river')}>新闻河流 · 回放</button>
                 <button type="button" className={mode === 'radar' ? 'active' : ''} aria-pressed={mode === 'radar'}
                         onClick={() => setMode('radar')}>研究雷达
                 </button>
             </nav>
-            {mode === 'live' ?
+            {mode === 'river' ? <NewsRiverPanel onOpenCurrent={id => { setRiverEventId(id); setMode('radar'); }}/> : mode === 'live' ?
                 <LiveNewsPanel setMessage={setMessage} addToast={addToast}
                                onOpenMajorEvents={onOpenMajorEvents} initialSearch={initialLiveQuery}/> : (
-                    <ResearchRadarPanel {...props} initialEventId={initialRadarEventId}
+                    <ResearchRadarPanel {...props} initialEventId={riverEventId ?? initialRadarEventId}
                                         onInitialEventOpened={onInitialRadarEventOpened}/>
                 )}
         </section>
