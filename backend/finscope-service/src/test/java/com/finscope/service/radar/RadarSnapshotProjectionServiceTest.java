@@ -34,7 +34,7 @@ class RadarSnapshotProjectionServiceTest {
         DashboardHotspotRankingService rankings = mock(DashboardHotspotRankingService.class);
         RadarEventInterpretationService interpretations = mock(RadarEventInterpretationService.class);
         RadarEventWorkspaceService workspace = mock(RadarEventWorkspaceService.class);
-        RadarSnapshotProjectionService service = new RadarSnapshotProjectionService(snapshots, revisions, rankings,
+        RadarSnapshotProjectionService service = service(snapshots, revisions, rankings,
                 interpretations, workspace);
         RadarRefreshRun run = run();
         when(snapshots.nextRevision("radar")).thenReturn(4L);
@@ -78,7 +78,7 @@ class RadarSnapshotProjectionServiceTest {
         ViewSnapshotCacheService snapshots = mock(ViewSnapshotCacheService.class);
         ViewRevisionService revisions = mock(ViewRevisionService.class);
         DashboardHotspotRankingService rankings = mock(DashboardHotspotRankingService.class);
-        RadarSnapshotProjectionService service = new RadarSnapshotProjectionService(snapshots, revisions, rankings,
+        RadarSnapshotProjectionService service = service(snapshots, revisions, rankings,
                 null, null);
         RadarRefreshRun run = run();
         when(snapshots.nextRevision("radar")).thenReturn(4L);
@@ -87,6 +87,41 @@ class RadarSnapshotProjectionServiceTest {
         when(snapshots.write(eq("dashboard"), eq(9L), any(), any(), any())).thenReturn(true);
 
         assertFalse(service.prewarm(Collections.singletonList(event(1L, "FINANCE")), run));
+    }
+
+    @Test
+    void archivesOnlyActivatedViewsAndPreservesEachRepublishedVersion() {
+        ViewSnapshotCacheService snapshots = mock(ViewSnapshotCacheService.class);
+        ViewRevisionService revisions = mock(ViewRevisionService.class);
+        DashboardHotspotRankingService rankings = mock(DashboardHotspotRankingService.class);
+        RadarReplayRecorder replay = mock(RadarReplayRecorder.class);
+        RadarSnapshotProjectionService service = service(snapshots, revisions, rankings, null, null);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "replay", replay);
+        when(snapshots.nextRevision("radar")).thenReturn(4L, 5L, 6L);
+        when(snapshots.nextRevision("dashboard")).thenReturn(7L, 8L, 9L);
+        when(snapshots.write(any(), org.mockito.ArgumentMatchers.anyLong(), any(), any(), any())).thenReturn(true);
+        when(revisions.publishBatch(any(), any())).thenReturn(false, true, true);
+        RadarRefreshRun run = run(); run.setRunKey("real-run");
+        service.prewarm(Collections.singletonList(event(1L, "FINANCE")), run);
+        org.mockito.Mockito.verify(replay, org.mockito.Mockito.never()).record(any(), any(), any());
+        assertTrue(service.prewarm(Collections.singletonList(event(1L, "FINANCE")), run));
+        assertTrue(service.republish());
+        var order = org.mockito.Mockito.inOrder(replay, revisions);
+        order.verify(replay).record(eq("real-run:5"), any(), any());
+        order.verify(revisions).invalidate("news-river");
+        order.verify(replay).record(eq("real-run:6"), any(), any());
+        order.verify(revisions).invalidate("news-river");
+    }
+
+    private RadarSnapshotProjectionService service(ViewSnapshotCacheService snapshots, ViewRevisionService revisions,
+            DashboardHotspotRankingService rankings, RadarEventInterpretationService interpretations, RadarEventWorkspaceService workspace) {
+        RadarSnapshotProjectionService service = new RadarSnapshotProjectionService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "snapshots", snapshots);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "revisions", revisions);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "rankings", rankings);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "interpretations", interpretations);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "workspace", workspace);
+        return service;
     }
 
     private RadarRefreshRun run() {

@@ -34,8 +34,7 @@ class RadarEventEnhancementSchedulerTest {
             context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
             context.registerBean(EphemeralContentCacheProperties.class,
                     () -> new EphemeralContentCacheProperties());
-            context.registerBean(RadarSnapshotProjectionService.class,
-                    () -> mock(RadarSnapshotProjectionService.class));
+            context.getBeanFactory().registerSingleton("radarSnapshotProjectionService", mock(RadarSnapshotProjectionService.class));
             context.registerBean("radarAgentExecutor", Executor.class, () -> Runnable::run);
             context.register(RadarEventEnhancementScheduler.class);
 
