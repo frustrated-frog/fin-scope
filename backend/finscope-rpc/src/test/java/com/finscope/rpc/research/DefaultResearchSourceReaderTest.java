@@ -29,7 +29,7 @@ class DefaultResearchSourceReaderTest {
         String html = "<html><head><title>公告标题</title></head><body><article><h1>公告标题</h1>"
                 + "<p>募集资金将用于研发和产能建设，重点支持先进制程、核心设备验证和技术平台升级，"
                 + "项目建设周期及市场价格波动风险已在公告中同步披露。</p></article></body></html>";
-        DefaultResearchSourceReader reader = new DefaultResearchSourceReader(runtime(
+        DefaultResearchSourceReader reader = reader(runtime(
                 html.getBytes(StandardCharsets.UTF_8), html, "text/html;charset=UTF-8"));
 
         ResearchSourceDocument document = reader.read("https://example.com/notice");
@@ -43,7 +43,7 @@ class DefaultResearchSourceReaderTest {
     @Test
     void extractsPdfText() throws Exception {
         byte[] pdf = pdf("Revenue grew by 18 percent in 2025.");
-        DefaultResearchSourceReader reader = new DefaultResearchSourceReader(runtime(
+        DefaultResearchSourceReader reader = reader(runtime(
                 pdf, "", "application/pdf"));
 
         ResearchSourceDocument document = reader.read("https://example.com/report.pdf");
@@ -55,7 +55,7 @@ class DefaultResearchSourceReaderTest {
 
     @Test
     void rejectsPrivateNetworkUrlsBeforeCallingRuntime() {
-        DefaultResearchSourceReader reader = new DefaultResearchSourceReader(request -> {
+        DefaultResearchSourceReader reader = reader(request -> {
             throw new AssertionError("私网 URL 不应发起请求");
         });
 
@@ -66,7 +66,7 @@ class DefaultResearchSourceReaderTest {
     void disablesAutomaticRedirectsToPreventPublicToPrivateUrlHops() {
         AtomicReference<com.finscope.rpc.acquisition.AcquisitionRequest> captured = new AtomicReference<>();
         String html = "<article>这是一份足够长的公开公司公告正文，用于验证研究材料读取请求不会自动跟随到未经校验的新地址。</article>";
-        DefaultResearchSourceReader reader = new DefaultResearchSourceReader(request -> {
+        DefaultResearchSourceReader reader = reader(request -> {
             captured.set(request);
             return runtime(html.getBytes(StandardCharsets.UTF_8), html, "text/html").fetch(request);
         });
@@ -74,6 +74,26 @@ class DefaultResearchSourceReaderTest {
         reader.read("https://example.com/notice");
 
         assertFalse(captured.get().isFollowRedirects());
+    }
+
+    private DefaultResearchSourceReader reader(AcquisitionRuntime runtime) {
+        DefaultResearchSourceReader reader = new DefaultResearchSourceReader();
+        org.springframework.test.util.ReflectionTestUtils.setField(reader, "acquisitionRuntime", runtime);
+        org.springframework.test.util.ReflectionTestUtils.setField(reader, "pdfOcrReader", org.mockito.Mockito.mock(PdfOcrReader.class));
+        return reader;
+    }
+
+    @Test
+    void fallsBackToOcrForImagePdfAndPreservesPdfIdentity() throws Exception {
+        DefaultResearchSourceReader reader = reader(runtime(pdf(""), "", "application/pdf"));
+        PdfOcrReader ocr = org.mockito.Mockito.mock(PdfOcrReader.class);
+        org.mockito.Mockito.when(ocr.read(org.mockito.ArgumentMatchers.any())).thenReturn("证券代码：600698 公司回购股份的完整公告正文，识别结果需要继续核验发行人。");
+        org.springframework.test.util.ReflectionTestUtils.setField(reader, "pdfOcrReader", ocr);
+        ResearchSourceDocument result = reader.read("https://example.com/report.pdf");
+        assertEquals("pdf:vision-ocr", result.getExtractionMethod());
+        assertEquals("PDF", result.getContentType());
+        assertEquals("https://example.com/report.pdf", result.getFinalUrl());
+        assertTrue(result.getBody().contains("600698"));
     }
 
     private AcquisitionRuntime runtime(byte[] bytes, String text, String contentType) {

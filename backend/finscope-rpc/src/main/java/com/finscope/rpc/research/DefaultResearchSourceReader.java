@@ -13,7 +13,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.springframework.beans.factory.annotation.Autowired;
+import javax.annotation.Resource;
 import org.springframework.stereotype.Component;
 
 import java.net.InetAddress;
@@ -23,18 +23,11 @@ import java.util.Locale;
 @Component
 public class DefaultResearchSourceReader implements ResearchSourceReader {
     private static final int MAX_RESPONSE_BYTES = 6 * 1024 * 1024;
-    private final AcquisitionRuntime acquisitionRuntime;
-    private final WebArticleExtractor articleExtractor;
-
-    @Autowired
-    public DefaultResearchSourceReader(AcquisitionRuntime acquisitionRuntime) {
-        this(acquisitionRuntime, new WebArticleExtractor());
-    }
-
-    DefaultResearchSourceReader(AcquisitionRuntime acquisitionRuntime, WebArticleExtractor articleExtractor) {
-        this.acquisitionRuntime = acquisitionRuntime;
-        this.articleExtractor = articleExtractor;
-    }
+    @Resource
+    private AcquisitionRuntime acquisitionRuntime;
+    @Resource
+    private PdfOcrReader pdfOcrReader;
+    private final WebArticleExtractor articleExtractor = new WebArticleExtractor();
 
     @Override
     public ResearchSourceDocument read(String url) {
@@ -77,11 +70,15 @@ public class DefaultResearchSourceReader implements ResearchSourceReader {
             PDFTextStripper stripper = new PDFTextStripper();
             stripper.setSortByPosition(true);
             String body = stripper.getText(document).replaceAll("[\\t ]+", " ").trim();
+            String extractionMethod = "pdf:pdfbox";
             if (body.length() < 20) {
-                throw new IllegalStateException("PDF 文本过短，可能是扫描件");
+                body = pdfOcrReader.read(response.getBodyBytes());
+                extractionMethod = "pdf:vision-ocr";
             }
             return new ResearchSourceDocument(response.getFinalUri().toString(), fileName(response.getFinalUri()),
-                    body, "PDF", "pdf:pdfbox", "FETCHED");
+                    body, "PDF", extractionMethod, "FETCHED");
+        } catch (com.finscope.rpc.marketintel.ProviderContractException error) {
+            throw error;
         } catch (Exception error) {
             throw new IllegalStateException("PDF 文本抽取失败：" + safe(error), error);
         }
@@ -120,7 +117,9 @@ public class DefaultResearchSourceReader implements ResearchSourceReader {
 
     private String fileName(URI uri) {
         String path = uri.getPath();
-        if (path == null || path.isEmpty()) return uri.getHost();
+        if (path == null || path.isEmpty()) {
+            return uri.getHost();
+        }
         int slash = path.lastIndexOf('/');
         return slash >= 0 ? path.substring(slash + 1) : path;
     }

@@ -26,6 +26,9 @@ class CompanyAnnouncementSyncServiceTest {
         var repository = mock(NewsReportRepository.class);
         var window = mock(NewsWindowService.class);
         var service = new CompanyAnnouncementSyncService();
+        var retries = mock(com.finscope.dao.news.AnnouncementEnrichmentRetryRepository.class);
+        when(retries.canAttempt(anyString(), anyString(), any())).thenReturn(true);
+        ReflectionTestUtils.setField(service, "retries", retries);
         ReflectionTestUtils.setField(service, "client", client);
         ReflectionTestUtils.setField(service, "reports", repository);
         ReflectionTestUtils.setField(service, "window", window);
@@ -57,6 +60,9 @@ class CompanyAnnouncementSyncServiceTest {
         var repository = mock(NewsReportRepository.class);
         var window = mock(NewsWindowService.class);
         var service = new CompanyAnnouncementSyncService();
+        var retries = mock(com.finscope.dao.news.AnnouncementEnrichmentRetryRepository.class);
+        when(retries.canAttempt(anyString(), anyString(), any())).thenReturn(true);
+        ReflectionTestUtils.setField(service, "retries", retries);
         ReflectionTestUtils.setField(service, "client", client);
         ReflectionTestUtils.setField(service, "reports", repository);
         ReflectionTestUtils.setField(service, "window", window);
@@ -92,6 +98,9 @@ class CompanyAnnouncementSyncServiceTest {
         var repository = mock(NewsReportRepository.class);
         var window = mock(NewsWindowService.class);
         var service = new CompanyAnnouncementSyncService();
+        var retries = mock(com.finscope.dao.news.AnnouncementEnrichmentRetryRepository.class);
+        when(retries.canAttempt(anyString(), anyString(), any())).thenReturn(true);
+        ReflectionTestUtils.setField(service, "retries", retries);
         ReflectionTestUtils.setField(service, "client", client);
         ReflectionTestUtils.setField(service, "reports", repository);
         ReflectionTestUtils.setField(service, "window", window);
@@ -100,6 +109,25 @@ class CompanyAnnouncementSyncServiceTest {
         try (var ignored = ProviderCallDeadline.open(Duration.ofNanos(1))) {
             assertFalse(service.sync());
         }
+        verify(client, never()).enrich(any(), any());
+        verify(window).ingestAnnouncements(List.of(material));
+    }
+
+    @Test
+    void retainsListMaterialAndSkipsPdfWhilePersistentBackoffIsActive() {
+        var client = mock(EastmoneyAnnouncementClient.class);
+        var repository = mock(NewsReportRepository.class);
+        var window = mock(NewsWindowService.class);
+        var retries = mock(com.finscope.dao.news.AnnouncementEnrichmentRetryRepository.class);
+        var service = new CompanyAnnouncementSyncService();
+        ReflectionTestUtils.setField(service, "client", client);
+        ReflectionTestUtils.setField(service, "reports", repository);
+        ReflectionTestUtils.setField(service, "window", window);
+        ReflectionTestUtils.setField(service, "retries", retries);
+        var material = material("AN123", "公司：回购法律意见");
+        when(client.page(any(), any(), eq(1), any())).thenReturn(new CompanyAnnouncementPage(List.of(material), false));
+        when(retries.canAttempt(anyString(), anyString(), any())).thenReturn(false);
+        assertFalse(service.sync());
         verify(client, never()).enrich(any(), any());
         verify(window).ingestAnnouncements(List.of(material));
     }

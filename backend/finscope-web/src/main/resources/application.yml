@@ -48,6 +48,11 @@ management:
       enabled: false
 
 finscope:
+  research:
+    pdf-ocr:
+      enabled: true
+      timeout-ms: 45000
+      max-pages: 20
   stock-learning-card:
     synthesis-timeout-ms: 120000
     max-output-tokens: 6000

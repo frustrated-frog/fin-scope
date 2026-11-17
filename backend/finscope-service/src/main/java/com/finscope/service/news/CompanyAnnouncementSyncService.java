@@ -1,6 +1,7 @@
 package com.finscope.service.news;
 
 import com.finscope.dao.news.NewsReportRepository;
+import com.finscope.dao.news.AnnouncementEnrichmentRetryRepository;
 import com.finscope.domain.research.material.ResearchMaterial;
 import com.finscope.rpc.marketintel.ProviderCallDeadline;
 import com.finscope.rpc.research.material.EastmoneyAnnouncementClient;
@@ -28,6 +29,8 @@ public class CompanyAnnouncementSyncService {
     private NewsReportRepository reports;
     @Resource
     private NewsWindowService window;
+    @Resource
+    private AnnouncementEnrichmentRetryRepository retries;
     private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
     public boolean sync() {
@@ -46,17 +49,24 @@ public class CompanyAnnouncementSyncService {
                         continue;
                     }
                     if (material.getTitle().contains("回购")) {
-                        if (ProviderCallDeadline.remainingMillis() <= 0) {
+                        String identity = material.getStockCode() + "\n" + material.getTitle() + "\n" + material.getUrl();
+                        if (ProviderCallDeadline.remainingMillis() <= 0
+                                || !retries.canAttempt(material.getExternalId(), identity, now)) {
                             complete = false;
                         } else {
                             try {
                                 client.enrich(material, context);
+                                retries.markSuccess(material.getExternalId());
                             } catch (ProviderContractException error) {
                                 complete = false;
+                                retries.recordFailure(material.getExternalId(), identity, error.getErrorType(),
+                                        error.isRetryable(), LocalDateTime.now(clock));
                                 log.warn("公告正文补全未完成 id={} stock={} reason={}，保留列表资料，下轮重新核验",
                                         material.getExternalId(), material.getStockCode(), error.getErrorType(), error);
                             } catch (RuntimeException error) {
                                 complete = false;
+                                retries.recordFailure(material.getExternalId(), identity, "BODY_READ_FAILED", true,
+                                        LocalDateTime.now(clock));
                                 log.warn("公告正文补全异常 id={} stock={}，保留列表资料，下轮重试",
                                         material.getExternalId(), material.getStockCode(), error);
                             }
