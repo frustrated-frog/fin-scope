@@ -49,14 +49,37 @@ class NewsAiRepositoryTest {
 
     @Test
     void reservationIncludesOutstandingCallsAndKnownUsageReleasesUnusedBudget() {
-        assertTrue(repository.reserve("one", "luna", 80, 100, 3, now));
-        assertFalse(repository.reserve("two", "luna", 30, 100, 3, now));
+        assertTrue(repository.reserve("one", "luna", 80, 100L, 3, now));
+        assertFalse(repository.reserve("two", "luna", 30, 100L, 3, now));
         repository.settle("one", 10L, 2L, 20L, null);
-        assertTrue(repository.reserve("two", "luna", 70, 100, 3, now));
+        assertTrue(repository.reserve("two", "luna", 70, 100L, 3, now));
         repository.settle("two", null, null, null, "TIMEOUT");
-        assertFalse(repository.reserve("three", "luna", 11, 100, 3, now));
+        assertFalse(repository.reserve("three", "luna", 11, 100L, 3, now));
         assertEquals(70L, ((Number) repository.dailyUsage(now).get("unresolved_micros")).longValue());
-        assertTrue(repository.reserve("tomorrow", "luna", 100, 100, 3, now.plusDays(1)));
+        assertTrue(repository.reserve("tomorrow", "luna", 100, 100L, 3, now.plusDays(1)));
+    }
+
+    @Test
+    void absentDailyLimitsKeepAcceptingCallsAndRecordingUsage() {
+        assertTrue(repository.reserve("one", "luna", 2_000_000L, null, null, now));
+        repository.settle("one", 200L, 100L, 2_000_000L, null);
+        assertTrue(repository.reserve("two", "luna", 3_000_000L, null, null, now));
+        repository.settle("two", null, null, null, "UNKNOWN");
+        assertTrue(repository.reserve("three", "luna", 8_000_000L, null, null, now));
+        var usage = repository.dailyUsage(now);
+        assertEquals(3L, ((Number) usage.get("calls")).longValue());
+        assertEquals(2_000_000L, ((Number) usage.get("actual_micros")).longValue());
+        assertEquals(11_000_000L, ((Number) usage.get("unresolved_micros")).longValue());
+    }
+
+    @Test
+    void optionalLimitsCanBeAppliedIndependentlyAndZeroStillStopsSending() {
+        assertTrue(repository.reserve("amount1", "luna", 80, 100L, null, now));
+        assertFalse(repository.reserve("amount2", "luna", 30, 100L, null, now));
+        assertTrue(repository.reserve("count1", "luna", 500_000L, null, 2, now));
+        assertFalse(repository.reserve("count2", "luna", 1L, null, 2, now));
+        assertFalse(repository.reserve("zeroAmount", "luna", 1L, 0L, null, now));
+        assertFalse(repository.reserve("zeroCalls", "luna", 1L, null, 0, now));
     }
 
     @Test

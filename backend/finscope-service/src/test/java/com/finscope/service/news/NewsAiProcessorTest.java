@@ -122,7 +122,7 @@ class NewsAiProcessorTest {
         provider.setApiKey("");
         processor.process(List.of(one), now);
         provider.setApiKey("local-test-only");
-        properties.setDailyBudgetMicros(0);
+        properties.setDailyBudgetMicros(0L);
         processor.process(List.of(one), now);
         assertEquals(0, calls.get());
         assertTrue(repository.bindingsByHashes(List.of(key(one))).isEmpty());

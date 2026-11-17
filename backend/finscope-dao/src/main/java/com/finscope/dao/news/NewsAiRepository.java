@@ -74,15 +74,16 @@ public class NewsAiRepository implements InitializingBean {
                 NewsAiJobState.RETRYABLE.name(), now.toString(), NewsAiJobState.CLAIMED.name(), now.toString(), NewsAiJobState.READY.name()) == 1;
     }
 
-    public boolean reserve(String callId, String model, long upperMicros, long dailyMicros, int dailyCalls, LocalDateTime now) {
-        if (upperMicros <= 0 || dailyMicros <= 0 || dailyCalls <= 0) {
+    public boolean reserve(String callId, String model, long upperMicros, Long dailyMicros, Integer dailyCalls, LocalDateTime now) {
+        if (upperMicros <= 0 || (dailyMicros != null && dailyMicros <= 0) || (dailyCalls != null && dailyCalls <= 0)) {
             return false;
         }
         return jdbc.update("INSERT INTO news_ai_call(id,created_at,model,state,reserved_micros) SELECT ?,?,?,'RESERVED',? "
-                        + "WHERE (SELECT COALESCE(SUM(COALESCE(actual_micros,reserved_micros)),0) FROM news_ai_call WHERE created_at>=? AND created_at<?)+?<=? "
-                        + "AND (SELECT COUNT(*) FROM news_ai_call WHERE created_at>=? AND created_at<?)<?",
-                callId, now.toString(), model, upperMicros, now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(),
-                upperMicros, dailyMicros, now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(), dailyCalls) == 1;
+                        + "WHERE (? IS NULL OR (SELECT COALESCE(SUM(COALESCE(actual_micros,reserved_micros)),0) FROM news_ai_call WHERE created_at>=? AND created_at<?)+?<=?) "
+                        + "AND (? IS NULL OR (SELECT COUNT(*) FROM news_ai_call WHERE created_at>=? AND created_at<?)<?)",
+                callId, now.toString(), model, upperMicros, dailyMicros,
+                now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(), upperMicros, dailyMicros,
+                dailyCalls, now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(), dailyCalls) == 1;
     }
 
     public boolean attachCall(String key, String owner, String callId) {

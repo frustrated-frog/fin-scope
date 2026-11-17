@@ -47,7 +47,8 @@ class NewsAiConfigurationTest {
                     assertTrue(properties.isEnabled());
                     assertFalse(properties.isBackfillExisting());
                     assertEquals(6, properties.getBatchSize());
-                    assertEquals(1_500_000L, properties.getDailyBudgetMicros());
+                    assertNull(properties.getDailyBudgetMicros());
+                    assertNull(properties.getDailyMaxCalls());
                     assertEquals("gpt-6-luna", provider.getModel());
                     assertFalse(context.getBean(NewsAiLunaClient.class).isConfigured());
                     var repository = context.getBean(NewsAiRepository.class);

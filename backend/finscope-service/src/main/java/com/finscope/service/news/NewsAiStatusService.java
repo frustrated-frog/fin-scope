@@ -33,7 +33,8 @@ public class NewsAiStatusService {
         status.setOutputTokens(number(usage, "output_tokens"));
         status.setActualMicros(number(usage, "actual_micros"));
         status.setUnresolvedMicros(number(usage, "unresolved_micros"));
-        status.setRemainingMicros(Math.max(0, properties.getDailyBudgetMicros() - status.getActualMicros() - status.getUnresolvedMicros()));
+        status.setRemainingMicros(properties.getDailyBudgetMicros() == null ? null
+                : Math.max(0, properties.getDailyBudgetMicros() - status.getActualMicros() - status.getUnresolvedMicros()));
         status.setJobs(repository.jobCounts());
         return status;
     }

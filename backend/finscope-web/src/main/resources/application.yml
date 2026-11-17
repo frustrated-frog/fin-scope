@@ -76,8 +76,6 @@ finscope:
     content-chars: 1600
     max-output-tokens: 6000
     max-attempts: 2
-    daily-budget-micros: 1500000
-    daily-max-calls: 1500
     input-dollars-per-million: 0.10
     output-dollars-per-million: 0.50
     initial-delay-ms: 20000
