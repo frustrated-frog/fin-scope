@@ -1,6 +1,9 @@
 package com.finscope.service.marketpulse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.finscope.common.enums.marketpulse.MarketAiFailureCode;
+import com.finscope.common.enums.marketpulse.MarketStructureDimension;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.marketpulse.ai.*;
 import com.finscope.rpc.llm.LunaResponsesClient;
@@ -47,74 +50,104 @@ public class MarketAiAgent {
         try {
             return client.prepare(system, mapper.writeValueAsString(Map.of("businessDate", input.getBusinessDate().toString(),
                     "facts", input.getFacts(), "sectorNames", input.getSectorNames(), "structure", input.getStructure(),
-                    "adjustmentLimit", input.getAdjustmentLimit(), "observations", input.getObservations())), properties.getMaxOutputTokens(), schema(), properties.getReasoningEffort());
+                    "adjustmentLimit", input.getAdjustmentLimit(), "observations", input.getObservations())), properties.getMaxOutputTokens(), schema(input), properties.getReasoningEffort());
+        } catch (MarketAiValidationException error) {
+            throw error;
         } catch (Exception error) {
             throw new IllegalArgumentException("市场研判输入构建失败", error);
         }
     }
 
     public MarketAiReport parse(String text, MarketAiInput input) {
+        MarketAiReport report;
         try {
-            MarketAiReport report = mapper.readerFor(MarketAiReport.class).with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(text);
-            require(validText(report.getHeadline(), 100) && validText(report.getSummary(), 500) && validText(report.getStateLabel(), 40));
-            Map<String, MarketAiFact> facts = new HashMap<>();
-            input.getFacts().forEach(fact -> facts.put(fact.getId(), fact));
-            point(report.getChange(), facts);
-            points(report.getDrivers(), 2, 4, facts);
-            points(report.getContradictions(), 1, 3, facts);
-            points(report.getConditions(), 2, 3, facts);
-            Set<String> historyDates = new HashSet<>();
-            input.getFacts().forEach(f -> historyDates.add(f.getBusinessDate()));
-            if (historyDates.size() > 1) {
-                Set<String> citedDates = new HashSet<>();
-                report.getChange().getFactIds().forEach(id -> citedDates.add(facts.get(id).getBusinessDate()));
-                require(citedDates.size() > 1 && citedDates.contains(input.getBusinessDate().toString()));
-            }
-            require(report.getSectors() != null && report.getSectors().size() <= 4);
-            Set<String> selected = new HashSet<>();
-            for (MarketAiSector sector : report.getSectors()) {
-                require(selected.add(sector.getSectorCode()) && input.getSectorNames().containsKey(sector.getSectorCode()));
-                require(validText(sector.getReason(), 400) && validText(sector.getWatchCondition(), 300));
-                references(sector.getFactIds(), facts);
-                require(sector.getFactIds().stream().map(facts::get).anyMatch(f -> sector.getSectorCode().equals(f.getSectorCode())
-                        && input.getBusinessDate().toString().equals(f.getBusinessDate())));
-                numbers(sector.getReason() + " " + sector.getWatchCondition(), sector.getFactIds().stream().map(facts::get).toList());
-            }
-            numbers(report.getHeadline() + " " + report.getSummary() + " " + report.getStateLabel(), input.getFacts());
-            validateStructure(report, input, facts);
-            return report;
-        } catch (Exception error) {
-            throw new IllegalArgumentException("市场研判输出未通过事实与结构校验", error);
+            report = mapper.readerFor(MarketAiReport.class)
+                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .without(DeserializationFeature.ACCEPT_FLOAT_AS_INT).readValue(text);
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            // Jackson 的原始异常可能包含整段输出，不传入日志异常链。
+            throw new MarketAiValidationException(MarketAiFailureCode.INVALID_JSON, "$");
         }
+        require(report != null, "$");
+        require(validText(report.getHeadline(), 100), "$.headline");
+        require(validText(report.getSummary(), 500), "$.summary");
+        require(validText(report.getStateLabel(), 40), "$.stateLabel");
+        Map<String, MarketAiFact> facts = new HashMap<>();
+        input.getFacts().forEach(fact -> facts.put(fact.getId(), fact));
+        point(report.getChange(), facts, "$.change");
+        points(report.getDrivers(), 2, 4, facts, "$.drivers");
+        points(report.getContradictions(), 1, 3, facts, "$.contradictions");
+        points(report.getConditions(), 2, 3, facts, "$.conditions");
+        Set<String> historyDates = new HashSet<>();
+        input.getFacts().forEach(f -> historyDates.add(f.getBusinessDate()));
+        if (historyDates.size() > 1) {
+            Set<String> citedDates = new HashSet<>();
+            report.getChange().getFactIds().forEach(id -> citedDates.add(facts.get(id).getBusinessDate()));
+            require(citedDates.size() > 1 && citedDates.contains(input.getBusinessDate().toString()), "$.change.factIds");
+        }
+        require(report.getSectors() != null && report.getSectors().size() <= 4, "$.sectors");
+        Set<String> selected = new HashSet<>();
+        for (int i = 0; i < report.getSectors().size(); i++) {
+            MarketAiSector sector = report.getSectors().get(i);
+            String path = "$.sectors[" + i + "]";
+            require(sector != null, path);
+            require(selected.add(sector.getSectorCode()) && input.getSectorNames().containsKey(sector.getSectorCode()), path + ".sectorCode");
+            require(validText(sector.getReason(), 400), path + ".reason");
+            require(validText(sector.getWatchCondition(), 300), path + ".watchCondition");
+            references(sector.getFactIds(), facts, path + ".factIds");
+            require(sector.getFactIds().stream().map(facts::get).anyMatch(f -> sector.getSectorCode().equals(f.getSectorCode())
+                    && input.getBusinessDate().toString().equals(f.getBusinessDate())), path + ".factIds");
+            var cited = sector.getFactIds().stream().map(facts::get).toList();
+            numbers(sector.getReason(), cited, path + ".reason");
+            numbers(sector.getWatchCondition(), cited, path + ".watchCondition");
+        }
+        numbers(report.getHeadline(), input.getFacts(), "$.headline");
+        numbers(report.getSummary(), input.getFacts(), "$.summary");
+        numbers(report.getStateLabel(), input.getFacts(), "$.stateLabel");
+        validateStructure(report, input, facts);
+        return report;
     }
 
     private void validateStructure(MarketAiReport report, MarketAiInput input, Map<String, MarketAiFact> facts) {
-        Set<com.finscope.common.enums.marketpulse.MarketStructureDimension> expected = new HashSet<>();
+        Set<MarketStructureDimension> expected = new HashSet<>();
         input.getStructure().stream().filter(s -> s.getBaselineScore() != null).forEach(s -> expected.add(s.getDimension()));
-        require(report.getAdjustments() != null && report.getAdjustments().size() == expected.size());
-        Set<com.finscope.common.enums.marketpulse.MarketStructureDimension> seen = new HashSet<>();
-        for (var adjustment : report.getAdjustments()) {
-            require(expected.contains(adjustment.getDimension()) && seen.add(adjustment.getDimension())
-                    && adjustment.getDelta() != null && Math.abs((long) adjustment.getDelta()) <= input.getAdjustmentLimit());
-            require(validText(adjustment.getReason(), 400) && validText(adjustment.getCounterEvidence(), 300));
-            references(adjustment.getFactIds(), facts);
-            require(adjustment.getFactIds().stream().map(facts::get).anyMatch(f -> input.getBusinessDate().toString().equals(f.getBusinessDate())));
-            numbers(adjustment.getReason() + " " + adjustment.getCounterEvidence(), adjustment.getFactIds().stream().map(facts::get).toList());
+        require(report.getAdjustments() != null && report.getAdjustments().size() == expected.size(), "$.adjustments");
+        Set<MarketStructureDimension> seen = new HashSet<>();
+        for (int i = 0; i < report.getAdjustments().size(); i++) {
+            var adjustment = report.getAdjustments().get(i);
+            String path = "$.adjustments[" + i + "]";
+            require(adjustment != null, path);
+            require(expected.contains(adjustment.getDimension()) && seen.add(adjustment.getDimension()), path + ".dimension");
+            require(adjustment.getDelta() != null && Math.abs((long) adjustment.getDelta()) <= input.getAdjustmentLimit(), path + ".delta");
+            require(validText(adjustment.getReason(), 400), path + ".reason");
+            require(validText(adjustment.getCounterEvidence(), 300), path + ".counterEvidence");
+            references(adjustment.getFactIds(), facts, path + ".factIds");
+            require(adjustment.getFactIds().stream().map(facts::get).anyMatch(f -> input.getBusinessDate().toString().equals(f.getBusinessDate())), path + ".factIds");
+            var cited = adjustment.getFactIds().stream().map(facts::get).toList();
+            numbers(adjustment.getReason(), cited, path + ".reason");
+            numbers(adjustment.getCounterEvidence(), cited, path + ".counterEvidence");
         }
-        require(report.getScenarios() != null && report.getScenarios().size() >= 2 && report.getScenarios().size() <= 3);
+        require(report.getScenarios() != null && report.getScenarios().size() >= 2 && report.getScenarios().size() <= 3, "$.scenarios");
         Set<String> titles = new HashSet<>();
-        for (var scenario : report.getScenarios()) {
-            point(scenario.getThesis(), facts);
-            require(titles.add(scenario.getThesis().getTitle()));
-            condition(scenario.getConfirmation(), input, facts);
-            condition(scenario.getInvalidation(), input, facts);
+        for (int i = 0; i < report.getScenarios().size(); i++) {
+            var scenario = report.getScenarios().get(i);
+            String path = "$.scenarios[" + i + "]";
+            require(scenario != null, path);
+            point(scenario.getThesis(), facts, path + ".thesis");
+            require(titles.add(scenario.getThesis().getTitle()), path + ".thesis.title");
+            condition(scenario.getConfirmation(), input, facts, path + ".confirmation");
+            condition(scenario.getInvalidation(), input, facts, path + ".invalidation");
             require(scenario.getConfirmation().getMetric() != scenario.getInvalidation().getMetric()
-                    || scenario.getConfirmation().getDirection() != scenario.getInvalidation().getDirection());
+                    || scenario.getConfirmation().getDirection() != scenario.getInvalidation().getDirection(), path + ".invalidation");
         }
     }
-    private void condition(MarketScenarioCondition condition, MarketAiInput input, Map<String, MarketAiFact> facts) {
-        require(condition != null && condition.getDirection() != null && input.getObservations().containsKey(condition.getMetric()));
-        point(condition.getExplanation(), facts);
+    private void condition(MarketScenarioCondition condition, MarketAiInput input, Map<String, MarketAiFact> facts, String path) {
+        require(condition != null, path);
+        require(condition.getDirection() != null, path + ".direction");
+        Double observation = input.getObservations().get(condition.getMetric());
+        require(observation != null && Double.isFinite(observation), path + ".metric");
+        point(condition.getExplanation(), facts, path + ".explanation");
         String label = switch (condition.getMetric()) {
             case ADVANCE_RATIO, MEDIAN_RETURN -> "市场参与";
             case TOTAL_AMOUNT -> "成交与极端涨跌";
@@ -122,24 +155,34 @@ public class MarketAiAgent {
             case MA20_RATIO -> "样本趋势宽度";
         };
         require(condition.getExplanation().getFactIds().stream().map(facts::get)
-                .anyMatch(f -> input.getBusinessDate().toString().equals(f.getBusinessDate()) && label.equals(f.getLabel())));
+                .anyMatch(f -> input.getBusinessDate().toString().equals(f.getBusinessDate()) && label.equals(f.getLabel())), path + ".explanation.factIds");
     }
 
-    private void points(List<MarketAiPoint> values, int min, int max, Map<String, MarketAiFact> facts) {
-        require(values != null && values.size() >= min && values.size() <= max);
-        values.forEach(value -> point(value, facts));
+    private void points(List<MarketAiPoint> values, int min, int max, Map<String, MarketAiFact> facts, String path) {
+        require(values != null && values.size() >= min && values.size() <= max, path);
+        for (int i = 0; i < values.size(); i++) {
+            point(values.get(i), facts, path + "[" + i + "]");
+        }
     }
-    private void point(MarketAiPoint point, Map<String, MarketAiFact> facts) {
-        require(point != null && validText(point.getTitle(), 80) && validText(point.getDetail(), 450));
-        references(point.getFactIds(), facts);
-        numbers(point.getTitle() + " " + point.getDetail(), point.getFactIds().stream().map(facts::get).toList());
+    private void point(MarketAiPoint point, Map<String, MarketAiFact> facts, String path) {
+        require(point != null, path);
+        require(validText(point.getTitle(), 80), path + ".title");
+        require(validText(point.getDetail(), 450), path + ".detail");
+        references(point.getFactIds(), facts, path + ".factIds");
+        var cited = point.getFactIds().stream().map(facts::get).toList();
+        numbers(point.getTitle(), cited, path + ".title");
+        numbers(point.getDetail(), cited, path + ".detail");
     }
-    private void references(List<String> ids, Map<String, MarketAiFact> facts) {
-        require(ids != null && !ids.isEmpty() && ids.size() <= 12 && ids.stream().allMatch(facts::containsKey));
+    private void references(List<String> ids, Map<String, MarketAiFact> facts, String path) {
+        if (ids == null || ids.isEmpty() || ids.size() > 12 || !ids.stream().allMatch(facts::containsKey)) {
+            throw new MarketAiValidationException(MarketAiFailureCode.INVALID_REFERENCE, path);
+        }
     }
-    private void numbers(String text, Collection<MarketAiFact> facts) {
+    private void numbers(String text, Collection<MarketAiFact> facts, String path) {
         Set<BigDecimal> available = numeric(facts.stream().map(f -> f.getBusinessDate() + " " + f.getLabel() + " " + f.getValue()).reduce("", (a, b) -> a + " " + b));
-        require(available.containsAll(numeric(text)));
+        if (!available.containsAll(numeric(text))) {
+            throw new MarketAiValidationException(MarketAiFailureCode.UNSUPPORTED_NUMBER, path);
+        }
     }
     private Set<BigDecimal> numeric(String text) {
         // 中文“下跌0.50%”与“-0.50%”等价；只规范明确的跌幅表达，不放宽正负号校验。
@@ -161,24 +204,40 @@ public class MarketAiAgent {
     private boolean validText(String value, int max) {
         return value != null && !value.isBlank() && value.length() <= max;
     }
-    private void require(boolean condition) {
+    private void require(boolean condition, String path) {
         if (!condition) {
-            throw new IllegalArgumentException("市场研判引用或字段无效");
+            throw new MarketAiValidationException(MarketAiFailureCode.INVALID_FIELD, path);
         }
     }
-    private Map<String, Object> schema() {
-        var string = Map.<String, Object>of("type", "string");
-        var ids = Map.<String, Object>of("type", "array", "items", string, "minItems", 1, "maxItems", 12);
-        var point = object(fields("title", string, "detail", string, "factIds", ids));
-        var sector = object(fields("sectorCode", string, "reason", string, "watchCondition", string, "factIds", ids));
-        var dimension = Map.<String, Object>of("type", "string", "enum", Arrays.stream(com.finscope.common.enums.marketpulse.MarketStructureDimension.values()).map(Enum::name).toList());
-        var adjustment = object(fields("dimension", dimension, "delta", Map.of("type", "integer", "minimum", -properties.getMaxScoreAdjustment(), "maximum", properties.getMaxScoreAdjustment()),
-                "reason", string, "counterEvidence", string, "factIds", ids));
-        var condition = object(fields("metric", Map.of("type", "string", "enum", Arrays.stream(com.finscope.common.enums.marketpulse.MarketScenarioMetric.values()).map(Enum::name).toList()),
-                "direction", Map.of("type", "string", "enum", List.of("RISE", "FALL")), "explanation", point));
-        var scenario = object(fields("thesis", point, "confirmation", condition, "invalidation", condition));
-        return object(fields("adjustments", array(adjustment), "scenarios", array(scenario), "drivers", array(point), "contradictions", array(point), "change", point,
-                "sectors", array(sector), "conditions", array(point), "stateLabel", string, "headline", string, "summary", string));
+    private Map<String, Object> schema(MarketAiInput input) {
+        var ids = array(Map.of("$ref", "#/$defs/factId"), 1, 12);
+        var point = object(fields("title", text(80), "detail", text(450), "factIds", ids));
+        var pointRef = Map.<String, Object>of("$ref", "#/$defs/point");
+        var sector = object(fields("sectorCode", choice(new ArrayList<>(input.getSectorNames().keySet())),
+                "reason", text(400), "watchCondition", text(300), "factIds", ids));
+        var dimensions = input.getStructure().stream().filter(row -> row.getBaselineScore() != null).map(row -> row.getDimension().name()).toList();
+        var adjustment = object(fields("dimension", choice(dimensions), "delta", Map.of("type", "integer", "minimum", -input.getAdjustmentLimit(), "maximum", input.getAdjustmentLimit()),
+                "reason", text(400), "counterEvidence", text(300), "factIds", ids));
+        var metrics = input.getObservations().entrySet().stream().filter(entry -> entry.getValue() != null && Double.isFinite(entry.getValue()))
+                .map(entry -> entry.getKey().name()).toList();
+        require(!input.getFacts().isEmpty() && !metrics.isEmpty(), "$.input");
+        var condition = object(fields("metric", choice(metrics),
+                "direction", choice(List.of("RISE", "FALL")), "explanation", pointRef));
+        var conditionRef = Map.<String, Object>of("$ref", "#/$defs/condition");
+        var scenario = object(fields("thesis", pointRef, "confirmation", conditionRef, "invalidation", conditionRef));
+        var root = new LinkedHashMap<>(object(fields("adjustments", array(adjustment, dimensions.size(), dimensions.size()), "scenarios", array(scenario, 2, 3),
+                "drivers", array(pointRef, 2, 4), "contradictions", array(pointRef, 1, 3), "change", pointRef,
+                "sectors", array(sector, 0, Math.min(4, input.getSectorNames().size())), "conditions", array(pointRef, 2, 3),
+                "stateLabel", text(40), "headline", text(100), "summary", text(500))));
+        root.put("$defs", Map.of("factId", choice(input.getFacts().stream().map(MarketAiFact::getId).toList()), "point", point, "condition", condition));
+        return root;
+    }
+    private Map<String, Object> choice(List<String> values) {
+        // 没有行业或可评分维度时，相应数组强制为空；不向供应商发送非法空 enum。
+        return values.isEmpty() ? text(80) : Map.of("type", "string", "enum", values);
+    }
+    private Map<String, Object> text(int max) {
+        return Map.of("type", "string", "minLength", 1, "maxLength", max);
     }
     private Map<String, Object> fields(Object... pairs) {
         Map<String, Object> value = new LinkedHashMap<>();
@@ -190,7 +249,7 @@ public class MarketAiAgent {
     private Map<String, Object> object(Map<String, Object> fields) {
         return Map.of("type", "object", "properties", fields, "required", new ArrayList<>(fields.keySet()), "additionalProperties", false);
     }
-    private Map<String, Object> array(Map<String, Object> item) {
-        return Map.of("type", "array", "items", item);
+    private Map<String, Object> array(Map<String, Object> item, int min, int max) {
+        return Map.of("type", "array", "items", item, "minItems", min, "maxItems", max);
     }
 }

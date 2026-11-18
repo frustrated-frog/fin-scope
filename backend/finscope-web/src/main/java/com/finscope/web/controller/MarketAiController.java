@@ -25,4 +25,9 @@ public class MarketAiController {
                                                @RequestParam(defaultValue = "false") boolean retry) {
         return ApiResponses.success(MarketAiResponse.of(service.request(date, retry)));
     }
+
+    @PostMapping("/{date}/revalidate")
+    public ApiResponse<MarketAiResponse> revalidate(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponses.success(MarketAiResponse.of(service.revalidate(date)));
+    }
 }

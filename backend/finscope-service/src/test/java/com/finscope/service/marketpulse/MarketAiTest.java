@@ -213,6 +213,161 @@ class MarketAiTest {
         assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
     }
 
+    @Test
+    void schemaUsesOnlyFrozenMetricsDimensionsReferencesAndBoundsWithoutRepeatingFactCatalog() throws Exception {
+        var real = new NewsAiLunaClient();
+        inject(real, "config", new NewsAiProviderConfig(), "mapper", mapper);
+        inject(agent, "client", real);
+        input.setAdjustmentLimit(7);
+        input.getStructure().getFirst().setBaselineScore(null);
+        input.getObservations().put(MarketScenarioMetric.MA20_RATIO, null);
+        var request = mapper.readTree(agent.prepare(input).getBody());
+        var schema = request.path("text").path("format").path("schema");
+        var metrics = schema.path("$defs").path("condition").path("properties").path("metric").path("enum");
+        assertFalse(metrics.toString().contains("MA20_RATIO"));
+        assertTrue(metrics.toString().contains("ADVANCE_RATIO"));
+        var adjustments = schema.path("properties").path("adjustments");
+        long expected = input.getStructure().stream().filter(row -> row.getBaselineScore() != null).count();
+        assertEquals(expected, adjustments.path("minItems").asLong());
+        assertEquals(expected, adjustments.path("maxItems").asLong());
+        assertEquals(7, adjustments.path("items").path("properties").path("delta").path("maximum").asInt());
+        assertEquals(input.getFacts().size(), schema.path("$defs").path("factId").path("enum").size());
+        assertEquals("#/$defs/point", schema.path("properties").path("change").path("$ref").asText());
+        assertEquals(1, schema.toString().split("\"F1\"", -1).length - 1);
+        input.getSectorNames().clear();
+        input.getStructure().forEach(row -> row.setBaselineScore(null));
+        schema = mapper.readTree(agent.prepare(input).getBody()).path("text").path("format").path("schema");
+        assertEquals(0, schema.path("properties").path("sectors").path("maxItems").asInt());
+        assertEquals(0, schema.path("properties").path("adjustments").path("maxItems").asInt());
+        assertFalse(schema.toString().contains("\"enum\":[]"));
+    }
+
+    @Test
+    void validationRetainsTheExactSafeFieldPath() throws Exception {
+        var report = report();
+        report.getScenarios().getFirst().getConfirmation().setMetric(MarketScenarioMetric.MA20_RATIO);
+        var invalid = assertThrows(MarketAiValidationException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
+        assertEquals(MarketAiFailureCode.INVALID_FIELD, invalid.getCode());
+        assertEquals("$.scenarios[0].confirmation.metric", invalid.getPath());
+        report.getDrivers().getFirst().setDetail("无法证实987.65%");
+        invalid = assertThrows(MarketAiValidationException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
+        assertEquals(MarketAiFailureCode.UNSUPPORTED_NUMBER, invalid.getCode());
+        assertEquals("$.drivers[0].detail", invalid.getPath());
+        assertFalse(invalid.getMessage().contains("987.65"));
+        assertNull(invalid.getCause());
+        assertThrows(MarketAiValidationException.class, () -> agent.parse("null", input));
+        assertThrows(MarketAiValidationException.class, () -> agent.parse(mapper.writeValueAsString(report()) + " {}", input));
+        String fractional = mapper.writeValueAsString(report()).replace("\"delta\":0", "\"delta\":0.5");
+        assertThrows(MarketAiValidationException.class, () -> agent.parse(fractional, input));
+    }
+
+    @Test
+    void failedOutputAndUsageAreStoredBeforeValidationAndNotAutomaticallyResent() throws Exception {
+        var report = report();
+        report.getScenarios().getFirst().getConfirmation().setMetric(MarketScenarioMetric.MA20_RATIO);
+        var reply = reply(mapper.writeValueAsString(report), true);
+        when(client.complete(any())).thenReturn(reply);
+        var service = service();
+        assertEquals(MarketAiStatus.FAILED, service.request(date, false).getStatus());
+        var artifact = artifact();
+        assertEquals(reply.getText(), artifact.getResponseText());
+        assertEquals(input.getFingerprint(), artifact.getInput().getFingerprint());
+        assertEquals(MarketAiFailureCode.INVALID_FIELD, artifact.getFailure().getCode());
+        assertEquals("$.scenarios[0].confirmation.metric", artifact.getFailure().getPath());
+        assertEquals(200L, artifact.getOutputTokens());
+        repository.afterPropertiesSet();
+        assertEquals(reply.getText(), artifact().getResponseText());
+        assertEquals(MarketAiStatus.FAILED, service.read(date).getStatus());
+        assertEquals(MarketAiStatus.FAILED, service.request(date, false).getStatus());
+        assertEquals(MarketAiStatus.FAILED, service.revalidate(date).getStatus());
+        verify(client, times(1)).complete(any());
+    }
+
+    @Test
+    void explicitRetryReplaysValidPaidOutputWithoutAnotherCallOrLosingTheOriginalAttempt() throws Exception {
+        var reply = reply(mapper.writeValueAsString(report()), true);
+        when(client.complete(any())).thenReturn(reply);
+        agent = spy(agent);
+        doThrow(new MarketAiValidationException(MarketAiFailureCode.INVALID_FIELD, "$.scenarios[0].confirmation.metric"))
+                .doCallRealMethod().when(agent).parse(anyString(), any());
+        var service = service();
+        assertEquals(MarketAiStatus.FAILED, service.request(date, false).getStatus());
+        var saved = artifact();
+        var restored = service.request(date, true);
+        assertEquals(MarketAiStatus.READY, restored.getStatus());
+        assertEquals(saved.getRespondedAt(), restored.getGeneratedAt());
+        assertEquals(saved.getOwner(), artifact().getOwner());
+        assertEquals(200L, restored.getOutputTokens());
+        assertEquals(MarketAiFailureCode.INVALID_FIELD, artifact().getFailure().getCode());
+        assertEquals(1, jdbc().queryForObject("SELECT COUNT(*) FROM market_ai_attempt", Integer.class));
+        assertEquals(MarketAiStatus.READY, service.request(date, true).getStatus());
+        verify(client, times(1)).complete(any());
+    }
+
+    @Test
+    void incompleteOrOversizeOutputsKeepUsageAndCannotBeReplayedAsComplete() throws Exception {
+        when(client.complete(any())).thenReturn(reply(mapper.writeValueAsString(report()), false));
+        var service = service();
+        assertEquals(MarketAiStatus.FAILED, service.request(date, false).getStatus());
+        assertEquals(MarketAiFailureCode.INCOMPLETE_RESPONSE, artifact().getFailure().getCode());
+        assertFalse(artifact().isResponseCompleted());
+        assertEquals(200L, artifact().getOutputTokens());
+        assertEquals(MarketAiStatus.FAILED, service.revalidate(date).getStatus());
+        when(client.complete(any())).thenReturn(reply("x".repeat(65537), true));
+        assertEquals(MarketAiStatus.FAILED, service.request(date, true).getStatus());
+        assertEquals(65536, artifact().getResponseText().length());
+        assertTrue(artifact().isResponseTruncated());
+        assertEquals(MarketAiFailureCode.OUTPUT_TOO_LARGE, artifact().getFailure().getCode());
+        assertEquals(MarketAiStatus.FAILED, service.revalidate(date).getStatus());
+        assertEquals(2, jdbc().queryForObject("SELECT COUNT(*) FROM market_ai_attempt", Integer.class));
+        assertEquals(2, jdbc().queryForObject("SELECT COUNT(*) FROM market_ai_artifact", Integer.class));
+        verify(client, times(2)).complete(any());
+    }
+
+    @Test
+    void replyCheckpointCanRecoverAfterRestartAndRejectsStaleOwners() throws Exception {
+        var view = new MarketAiView();
+        view.setBusinessDate(date);
+        view.setStatus(MarketAiStatus.QUEUED);
+        view.setInputTokens(100L);
+        view.setOutputTokens(200L);
+        String key = MarketAiAgent.VERSION + ":gpt-6-luna:low:" + input.getFingerprint();
+        var now = date.atTime(18, 0);
+        assertTrue(repository.claim(key, "first", view, now));
+        repository.saveInput(key, "first", input, now);
+        view.setStatus(MarketAiStatus.RUNNING);
+        assertTrue(repository.markSent(key, "first", view, now));
+        repository.saveReply(key, "first", view, mapper.writeValueAsString(report()), true, now);
+        repository.recover(now.plusMinutes(5));
+        assertEquals(MarketAiStatus.READY, service().revalidate(date).getStatus());
+        verify(client, never()).complete(any());
+        view.setStatus(MarketAiStatus.FAILED);
+        repository.finish(key, "first", view, now);
+        repository.retryFailed(key);
+        view.setStatus(MarketAiStatus.QUEUED);
+        assertTrue(repository.claim(key, "second", view, now));
+        repository.saveInput(key, "second", input, now);
+        assertThrows(IllegalStateException.class, () -> repository.saveReply(key, "first", view, "stale", true, now));
+        assertNull(repository.findArtifact(key).orElseThrow().getResponseText());
+        assertEquals("second", repository.findArtifact(key).orElseThrow().getOwner());
+    }
+
+    private LunaResponsesClient.Reply reply(String text, boolean completed) {
+        var reply = new LunaResponsesClient.Reply();
+        reply.setText(text);
+        reply.setInputTokens(100L);
+        reply.setOutputTokens(200L);
+        reply.setCompleted(completed);
+        return reply;
+    }
+    private JdbcTemplate jdbc() {
+        return (JdbcTemplate) ReflectionTestUtils.getField(repository, "jdbc");
+    }
+    private MarketAiArtifact artifact() {
+        String key = jdbc().queryForObject("SELECT cache_key FROM market_ai_review", String.class);
+        return repository.findArtifact(key).orElseThrow();
+    }
+
     private MarketAiService service() {
         var service = new MarketAiService();
         inject(service, "repository", repository, "snapshots", snapshots, "evidence", evidence, "agent", agent,

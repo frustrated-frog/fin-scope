@@ -32,6 +32,7 @@ class MarketAiControllerTest {
         view.setStructure(java.util.List.of(score, missing));
         when(service.read(date)).thenReturn(view);
         when(service.request(date, true)).thenReturn(view);
+        when(service.revalidate(date)).thenReturn(view);
         var mvc = MockMvcBuilders.standaloneSetup(controller).build();
         mvc.perform(get("/api/market-pulse/ai/2026-11-17"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.businessDate").value("2026-11-17"))
@@ -43,5 +44,11 @@ class MarketAiControllerTest {
         verify(service, never()).request(any(), anyBoolean());
         mvc.perform(post("/api/market-pulse/ai/2026-11-17?retry=true")).andExpect(status().isOk());
         verify(service).request(date, true);
+        mvc.perform(post("/api/market-pulse/ai/2026-11-17/revalidate"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("NOT_GENERATED"))
+                .andExpect(jsonPath("$.data.responseText").doesNotExist())
+                .andExpect(jsonPath("$.data.input").doesNotExist());
+        verify(service).revalidate(date);
+        verify(service, times(1)).request(any(), anyBoolean());
     }
 }
