@@ -25,9 +25,19 @@ public class NewsReportRepository {
     /** 一个批次的正文与版本原子保存；重复抓取不增加内容版本。 */
     @Transactional(rollbackFor = Exception.class)
     public void ingest(List<NewsReport> reports) {
+        saveBatch(reports, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public boolean ingestFetchBatch(List<NewsReport> reports, String batchId) {
+        return saveBatch(reports, batchId);
+    }
+
+    private boolean saveBatch(List<NewsReport> reports, String batchId) {
         if (reports.size() > 250) {
             throw new IllegalArgumentException("新闻保存批次不能超过250条");
         }
+        Map<String, VersionCounts> counts = new LinkedHashMap<>();
         for (NewsReport report : reports) {
             int changed = jdbc.update("INSERT INTO news_report(id,provider_code,source_name,source_tier,kind,title,content,url,"
                             + "published_at,first_seen_at,last_seen_at,category_code,category_name,classification_reason,rule_version) "
@@ -45,10 +55,46 @@ public class NewsReportRepository {
             if (changed != 1) {
                 throw new IllegalStateException("新闻保存影响行数异常");
             }
-            jdbc.update("INSERT INTO news_report_version(report_id,version,title,content,detected_at) "
+            var versions = jdbc.queryForList("INSERT INTO news_report_version(report_id,version,title,content,detected_at) "
                     + "SELECT id,content_version,title,content,last_seen_at FROM news_report WHERE id=? "
-                    + "ON CONFLICT(report_id,version) DO NOTHING", report.getId());
+                    + "ON CONFLICT(report_id,version) DO NOTHING RETURNING version", Integer.class, report.getId());
+            VersionCounts source = counts.computeIfAbsent(report.getProviderCode(), ignored -> new VersionCounts());
+            if (versions.isEmpty()) {
+                source.unchanged++;
+            } else if (versions.getFirst() == 1) {
+                source.added++;
+            } else {
+                source.revised++;
+            }
         }
+        if (batchId != null) {
+            counts.forEach((provider, value) -> {
+                if (jdbc.update("UPDATE news_fetch_batch SET added=added+?, revised=revised+?, unchanged=unchanged+? WHERE batch_id=? AND provider_code=?",
+                        value.added, value.revised, value.unchanged, batchId, provider) != 1) {
+                    throw new IllegalStateException("抓取批次缺少对应来源：" + provider);
+                }
+            });
+        }
+        return counts.values().stream().anyMatch(value -> value.added + value.revised > 0);
+    }
+
+    private static class VersionCounts {
+        private int added;
+        private int revised;
+        private int unchanged;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void beginFetch(String batchId, LocalDateTime started, List<NewsFetchCount> sources) {
+        for (NewsFetchCount source : sources) {
+            jdbc.update("INSERT INTO news_fetch_batch(batch_id,provider_code,started_at,source_status,fetched,cached) VALUES(?,?,?,?,?,?)",
+                    batchId, source.providerCode(), time(started), source.status().name(), source.fetched(), source.cached());
+        }
+        jdbc.update("DELETE FROM news_fetch_batch WHERE started_at<?", time(started.minusDays(30)));
+    }
+
+    public void finishFetch(String batchId, LocalDateTime completed) {
+        jdbc.update("UPDATE news_fetch_batch SET completed_at=? WHERE batch_id=?", time(completed), batchId);
     }
 
     public List<NewsReport> scanAnnouncements(LocalDateTime since, LocalDateTime until, long after, int size) {

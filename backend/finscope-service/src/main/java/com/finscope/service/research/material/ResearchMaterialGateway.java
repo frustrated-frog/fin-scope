@@ -2,6 +2,7 @@ package com.finscope.service.research.material;
 
 import com.finscope.dao.cache.ResearchMaterialCacheRepository;
 import com.finscope.domain.news.NewsSourceHealth;
+import com.finscope.domain.news.NewsFetchCount;
 import com.finscope.common.enums.news.NewsSourceStatus;
 import com.finscope.domain.research.material.ResearchMaterial;
 import com.finscope.domain.research.material.ResearchMaterialCacheEntry;
@@ -128,21 +129,27 @@ public class ResearchMaterialGateway {
         List<ResearchMaterial> materials = new ArrayList<ResearchMaterial>();
         List<String> warnings = new ArrayList<String>();
         Map<String, ResearchMaterial> unique = new LinkedHashMap<String, ResearchMaterial>();
-        for (CompletableFuture<SourceResult> future : futures) {
+        List<NewsFetchCount> counts = new ArrayList<>();
+        for (int index = 0; index < futures.size(); index++) {
+            String provider = ordered.get(index).providerCode();
             SourceResult result;
             try {
-                result = future.join();
+                result = futures.get(index).join();
             } catch (CompletionException error) {
+                counts.add(new NewsFetchCount(provider, NewsSourceStatus.UNAVAILABLE, 0, 0));
                 warnings.add("资讯来源刷新任务异常：" + safe(error));
                 continue;
             }
+            counts.add(result.count);
             warnings.addAll(result.warnings);
             for (ResearchMaterial material : result.materials) {
                 if (valid(material)) unique.putIfAbsent(newsKey(material), material);
             }
         }
         materials.addAll(unique.values());
-        return new ResearchMaterialGatewayResult(materials, warnings);
+        ResearchMaterialGatewayResult refreshed = new ResearchMaterialGatewayResult(materials, warnings);
+        refreshed.setFetchCounts(List.copyOf(counts));
+        return refreshed;
     }
 
     /** 页面与雷达生产专用：只读取最近一次来源快照，绝不调用外部 Provider。 */
@@ -228,13 +235,17 @@ public class ResearchMaterialGateway {
                 return failedSource(provider, "返回空结果对象");
             }
             List<ResearchMaterial> values = new ArrayList<ResearchMaterial>();
-            for (ResearchMaterial material : fetched.getData()) if (valid(material)) values.add(material);
+            for (ResearchMaterial material : fetched.getData()) {
+                if (valid(material)) {
+                    values.add(material);
+                }
+            }
             List<String> warnings = new ArrayList<String>(fetched.getWarnings());
             cache.put(sourceSnapshotKey(provider), new ResearchMaterialCacheEntry(values, warnings, LocalDateTime.now()),
                     sourceSnapshotTtl);
             cache.put(sourceSnapshotKey(provider) + ":health", new ResearchMaterialCacheEntry(
                     Collections.emptyList(), Collections.emptyList(), LocalDateTime.now()), sourceSnapshotTtl);
-            return new SourceResult(values, warnings);
+            return new SourceResult(values, warnings, new NewsFetchCount(provider.providerCode(), NewsSourceStatus.HEALTHY, fetched.getData().size(), 0));
         } catch (RuntimeException error) {
             return failedSource(provider, safe(error));
         }
@@ -248,9 +259,9 @@ public class ResearchMaterialGateway {
         Optional<ResearchMaterialCacheEntry> cached = cache.get(sourceSnapshotKey(provider));
         if (cached.isPresent()) {
             warnings.add(provider.providerCode() + "：已使用最近一次成功快照");
-            return new SourceResult(cached.get().getMaterials(), warnings);
+            return new SourceResult(cached.get().getMaterials(), warnings, new NewsFetchCount(provider.providerCode(), NewsSourceStatus.DEGRADED, 0, cached.get().getMaterials().size()));
         }
-        return new SourceResult(Collections.<ResearchMaterial>emptyList(), warnings);
+        return new SourceResult(List.of(), warnings, new NewsFetchCount(provider.providerCode(), NewsSourceStatus.UNAVAILABLE, 0, 0));
     }
 
     private List<ResearchMaterialProvider> orderedProviders(ResearchMaterialType type, ResearchMaterialRequest request) {
@@ -273,14 +284,7 @@ public class ResearchMaterialGateway {
         return "finscope:news-source:" + provider.providerCode();
     }
 
-    private static final class SourceResult {
-        private final List<ResearchMaterial> materials;
-        private final List<String> warnings;
-
-        private SourceResult(List<ResearchMaterial> materials, List<String> warnings) {
-            this.materials = materials == null ? Collections.<ResearchMaterial>emptyList() : materials;
-            this.warnings = warnings == null ? Collections.<String>emptyList() : warnings;
-        }
+    private record SourceResult(List<ResearchMaterial> materials, List<String> warnings, NewsFetchCount count) {
     }
 
     private String cacheKey(ResearchMaterialType type, ResearchMaterialRequest request) {

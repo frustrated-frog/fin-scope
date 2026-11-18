@@ -12,6 +12,9 @@ public final class ResearchMaterialGatewayResult {
     @lombok.Getter
     @lombok.Setter
     private List<NewsSourceHealth> sourceHealth = Collections.emptyList();
+    @lombok.Getter
+    @lombok.Setter
+    private List<com.finscope.domain.news.NewsFetchCount> fetchCounts = Collections.emptyList();
     private final List<ResearchMaterial> materials;
     private final List<String> warnings;
 

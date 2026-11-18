@@ -37,6 +37,20 @@ class NewsReportRepositoryTest {
     }
 
     @Test
+    void recordsCommittedVersionChangesBySourceEvenAcrossChunks() {
+        var status = com.finscope.common.enums.news.NewsSourceStatus.HEALTHY;
+        repository.beginFetch("run", now, List.of(new NewsFetchCount("CLS", status, 3, 0)));
+        var first = report("1", "公司公告");
+        assertTrue(repository.ingestFetchBatch(List.of(first), "run"));
+        assertFalse(repository.ingestFetchBatch(List.of(first), "run"));
+        first.setContent("公告更正");
+        assertTrue(repository.ingestFetchBatch(List.of(first), "run"));
+        repository.finishFetch("run", now.plusSeconds(1));
+        assertEquals(Map.of("added", 1, "revised", 1, "unchanged", 1), jdbc.queryForMap(
+                "SELECT added,revised,unchanged FROM news_fetch_batch WHERE batch_id='run' AND completed_at IS NOT NULL"));
+    }
+
+    @Test
     void successiveSourceSnapshotsAccumulateAndSearchBeyondFirstHundred() {
         List<NewsReport> batch = new ArrayList<>();
         for (int i = 1; i <= 250; i++) {

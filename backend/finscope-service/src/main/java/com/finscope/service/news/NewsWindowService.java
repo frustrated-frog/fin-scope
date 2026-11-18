@@ -37,14 +37,23 @@ public class NewsWindowService {
     private Clock clock = Clock.systemDefaultZone();
 
     public void ingest(List<ResearchMaterial> materials) {
-        ingest(materials, 36);
+        ingest(materials, 36, null);
     }
 
     public void ingestAnnouncements(List<ResearchMaterial> materials) {
-        ingest(materials, 7 * 24);
+        ingest(materials, 7 * 24, null);
     }
 
-    private void ingest(List<ResearchMaterial> materials, int hours) {
+    public boolean ingestRefresh(List<ResearchMaterial> materials, List<NewsFetchCount> sources, LocalDateTime started) {
+        String batchId = UUID.randomUUID().toString();
+        reports.beginFetch(batchId, started, sources);
+        boolean changed = ingest(materials, 36, batchId);
+        reports.finishFetch(batchId, LocalDateTime.now(clock));
+        return changed;
+    }
+
+    private boolean ingest(List<ResearchMaterial> materials, int hours, String batchId) {
+        boolean changed = false;
         LocalDateTime now = LocalDateTime.now(clock);
         List<NewsCategory> enabled = categories.findEnabled();
         List<NewsReport> batch = new ArrayList<>();
@@ -58,20 +67,21 @@ public class NewsWindowService {
             }
             batch.add(report(material, enabled, now));
             if (batch.size() == 250) {
-                ingestBatch(batch, enabled);
+                changed |= ingestBatch(batch, enabled, batchId);
                 batch.clear();
             }
         }
         if (!batch.isEmpty()) {
-            ingestBatch(batch, enabled);
+            changed |= ingestBatch(batch, enabled, batchId);
         }
         // 七天缓冲供停机恢复；已进入观察或大事记的新闻依据不清理。
         if (hours == 36) {
             reports.prune(now.minusDays(7));
         }
+        return changed;
     }
 
-    private void ingestBatch(List<NewsReport> batch, List<NewsCategory> enabled) {
+    private boolean ingestBatch(List<NewsReport> batch, List<NewsCategory> enabled, String batchId) {
         List<String> keys = batch.stream().map(report -> com.finscope.domain.news.ai.NewsAiContentIdentity.occurrence(
                 report.getTitle(), report.getContent(), report.getPublishedAt() == null ? report.getFirstSeenAt() : report.getPublishedAt())).toList();
         var cached = cachedBindings(keys);
@@ -90,7 +100,12 @@ public class NewsWindowService {
                 report.setRuleVersion(NewsAiUnifiedAgent.VERSION);
             }
         }
-        reports.ingest(batch);
+        boolean changed = false;
+        if (batchId == null) {
+            reports.ingest(batch);
+        } else {
+            changed = reports.ingestFetchBatch(batch, batchId);
+        }
         for (int index = 0; index < batch.size(); index++) {
             var binding = cached.get(keys.get(index));
             if (binding != null) {
@@ -102,6 +117,7 @@ public class NewsWindowService {
                 }
             }
         }
+        return changed;
     }
 
     private Map<String, com.finscope.domain.news.ai.NewsAiBinding> cachedBindings(List<String> keys) {

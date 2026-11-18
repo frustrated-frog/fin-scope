@@ -113,6 +113,10 @@ class ResearchMaterialGatewayTest {
 
         assertEquals(2, result.getMaterials().size());
         assertTrue(result.getWarnings().get(0).contains("FAILED"));
+        var fallback = result.getFetchCounts().stream().filter(source -> source.providerCode().equals("FAILED")).findFirst().orElseThrow();
+        assertEquals(0, fallback.fetched());
+        assertEquals(1, fallback.cached());
+        assertEquals(1, result.getFetchCounts().stream().mapToInt(com.finscope.domain.news.NewsFetchCount::fetched).sum());
         assertTrue(cache.entries.containsKey("finscope:news-source:HEALTHY"));
         assertEquals(Duration.ofHours(36), cache.lastTtl);
         LocalDateTime successAt = cache.entries.get("finscope:news-source:FAILED").getFetchedAt();

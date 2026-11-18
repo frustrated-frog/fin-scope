@@ -31,12 +31,15 @@ class NewsSourceRefreshServiceTest {
         NewsWindowService window = mock(NewsWindowService.class);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "window", window);
 
+        when(window.ingestRefresh(any(), any(), any())).thenReturn(true, false);
         assertTrue(service.requestRefresh());
 
         verify(gateway).refreshNewsFlashSources(any());
         var order = org.mockito.Mockito.inOrder(window, revisions, radar);
-        order.verify(window).ingest(Collections.emptyList());
+        order.verify(window).ingestRefresh(any(), any(), any());
         order.verify(revisions).invalidate("news");
         order.verify(radar).requestScheduledRefresh();
+        assertTrue(service.requestRefresh());
+        org.mockito.Mockito.verifyNoMoreInteractions(radar);
     }
 }

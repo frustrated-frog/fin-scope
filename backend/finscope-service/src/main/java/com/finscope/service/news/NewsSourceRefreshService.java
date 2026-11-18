@@ -55,10 +55,13 @@ public class NewsSourceRefreshService {
     }
 
     public ResearchMaterialGatewayResult refreshNow() {
+        var started = java.time.LocalDateTime.now();
         ResearchMaterialGatewayResult result = gateway.refreshNewsFlashSources(REQUEST);
-        window.ingest(result.getMaterials());
+        boolean changed = window.ingestRefresh(result.getMaterials(), result.getFetchCounts(), started);
         viewRevisions.invalidate("news");
-        radarRefresh.requestScheduledRefresh();
+        if (changed) {
+            radarRefresh.requestScheduledRefresh();
+        }
         return result;
     }
 

@@ -40,6 +40,14 @@ public class NewsWindowSchemaMigrator implements InitializingBean {
                     + "queued_at_ms INTEGER NOT NULL,result_json TEXT,failure_message TEXT,"
                     + "PRIMARY KEY(report_id,content_version),"
                     + "FOREIGN KEY(report_id) REFERENCES news_report(id) ON DELETE CASCADE)");
+            jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS news_fetch_batch(
+                        batch_id TEXT NOT NULL, provider_code TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT,
+                        source_status TEXT NOT NULL, fetched INTEGER NOT NULL, cached INTEGER NOT NULL,
+                        added INTEGER NOT NULL DEFAULT 0, revised INTEGER NOT NULL DEFAULT 0,
+                        unchanged INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(batch_id,provider_code))
+                    """);
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_fetch_batch_time ON news_fetch_batch(started_at)");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_saved_filter (id TEXT PRIMARY KEY,name TEXT NOT NULL,query_json TEXT NOT NULL)");
         });
     }
