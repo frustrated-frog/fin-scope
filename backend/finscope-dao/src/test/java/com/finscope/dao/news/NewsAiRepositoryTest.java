@@ -157,6 +157,15 @@ class NewsAiRepositoryTest {
         assertEquals(1000, usage.getRequestBytes());
         assertEquals(6, usage.getCandidateReferences());
         assertEquals(1, usage.getUniqueCandidateCards());
+        var audits = repository.recentCalls(20);
+        assertEquals(2, audits.size());
+        assertEquals("v3", audits.getFirst().getProtocol());
+        assertEquals(NewsAiInputMode.UNDERSTAND, audits.getFirst().getItems().getFirst().getMode());
+        assertEquals(7, audits.getFirst().getActualMicros());
+        assertTrue(audits.getLast().isCancelledBeforeSend());
+        assertNull(audits.getLast().getProtocol());
+        assertThrows(IllegalArgumentException.class, () -> repository.recentCalls(0));
+        assertThrows(IllegalArgumentException.class, () -> repository.recentCalls(101));
     }
 
     @Test

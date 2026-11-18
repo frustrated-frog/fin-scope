@@ -7,6 +7,9 @@ import com.finscope.web.response.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.finscope.domain.news.ai.NewsAiCallAudit;
+import java.util.List;
 import javax.annotation.Resource;
 
 @RestController
@@ -19,4 +22,9 @@ public class NewsAiController {
     public ApiResponse<NewsAiStatus> status() {
         return ApiResponses.success(service.status());
     }
+    @GetMapping("/calls")
+    public ApiResponse<List<NewsAiCallAudit>> calls(@RequestParam(value = "limit", defaultValue = "20") int limit) {
+        return ApiResponses.success(service.calls(limit));
+    }
 }
+

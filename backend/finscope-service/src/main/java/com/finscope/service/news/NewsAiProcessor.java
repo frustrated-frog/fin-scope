@@ -235,6 +235,7 @@ public class NewsAiProcessor {
     private NewsAiDispatchItem dispatchItem(Claim claim) {
         var item = new NewsAiDispatchItem();
         item.setJobKey(claim.key());
+        item.setReportId(claim.signal().getItemId());
         item.setOwner(claim.owner());
         item.setOccurrenceKey(claim.work().getContentKey());
         item.setMode(claim.work().getMode());

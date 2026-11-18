@@ -7,6 +7,9 @@ import com.finscope.domain.news.ai.NewsAiBinding;
 import com.finscope.domain.news.ai.NewsAiEvent;
 import com.finscope.domain.news.ai.NewsAiDispatchItem;
 import com.finscope.domain.news.ai.NewsAiEfficiency;
+import com.finscope.domain.news.ai.NewsAiCallAudit;
+import com.finscope.domain.news.ai.NewsAiCallItemAudit;
+import com.finscope.common.enums.news.NewsAiCallState;
 import com.finscope.domain.news.ai.NewsAiContentIdentity;
 import com.finscope.common.enums.news.NewsAiInputMode;
 import org.springframework.beans.factory.InitializingBean;
@@ -46,6 +49,9 @@ public class NewsAiRepository implements InitializingBean {
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_understanding_time ON news_ai_understanding(updated_at)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_dispatch(call_id TEXT PRIMARY KEY,protocol TEXT NOT NULL,request_bytes INTEGER NOT NULL,candidate_refs INTEGER NOT NULL,unique_candidates INTEGER NOT NULL)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_dispatch_item(call_id TEXT NOT NULL,job_key TEXT NOT NULL,occurrence_key TEXT NOT NULL,mode TEXT NOT NULL,attempt INTEGER NOT NULL,source_chars INTEGER NOT NULL,sent_chars INTEGER NOT NULL,PRIMARY KEY(call_id,job_key))");
+        if (jdbc.queryForList("PRAGMA table_info(news_ai_dispatch_item)").stream().noneMatch(column -> "report_id".equals(column.get("name")))) {
+            jdbc.execute("ALTER TABLE news_ai_dispatch_item ADD COLUMN report_id TEXT NOT NULL DEFAULT ''");
+        }
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_efficiency_run(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,eligible_checks INTEGER NOT NULL,binding_reuses INTEGER NOT NULL,guarded_checks INTEGER NOT NULL,processing_ms INTEGER NOT NULL)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_efficiency_time ON news_ai_efficiency_run(created_at)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_version_detected ON news_report_version(detected_at,report_id)");
@@ -197,8 +203,8 @@ public class NewsAiRepository implements InitializingBean {
                     callId, NewsAiContentIdentity.bodyHash(item.getOccurrenceKey()), item.getOwner(), NewsAiJobState.CLAIMED.name()) != 1) {
                 throw new IllegalStateException("新闻理解发送所有权冲突");
             }
-            jdbc.update("INSERT INTO news_ai_dispatch_item SELECT ?,cache_key,content_hash,?,attempt,?,? FROM news_ai_content WHERE cache_key=?",
-                    callId, item.getMode().name(), item.getSourceChars(), item.getSentChars(), item.getJobKey());
+            jdbc.update("INSERT INTO news_ai_dispatch_item(call_id,job_key,occurrence_key,mode,attempt,source_chars,sent_chars,report_id) SELECT ?,cache_key,content_hash,?,attempt,?,?,? FROM news_ai_content WHERE cache_key=?",
+                    callId, item.getMode().name(), item.getSourceChars(), item.getSentChars(), java.util.Objects.toString(item.getReportId(), ""), item.getJobKey());
         }
         jdbc.update("INSERT INTO news_ai_dispatch VALUES(?,?,?,?,?)", callId, protocol, requestBytes, candidateRefs, uniqueCandidates);
         return true;
@@ -244,6 +250,47 @@ public class NewsAiRepository implements InitializingBean {
         value.setCandidateReferences(((Number) payload.get("refs")).longValue());
         value.setUniqueCandidateCards(((Number) payload.get("cards")).longValue());
         return value;
+    }
+
+    public List<NewsAiCallAudit> recentCalls(int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("新闻AI调用审计数量须为1至100");
+        }
+        List<NewsAiCallAudit> calls = jdbc.query("SELECT c.*,d.protocol,d.request_bytes,d.candidate_refs,d.unique_candidates FROM news_ai_call c LEFT JOIN news_ai_dispatch d ON d.call_id=c.id ORDER BY c.created_at DESC,c.id DESC LIMIT ?", (rs, n) -> {
+            var call = new NewsAiCallAudit();
+            call.setCallId(rs.getString("id"));
+            call.setCreatedAt(rs.getString("created_at"));
+            call.setModel(rs.getString("model"));
+            call.setState(NewsAiCallState.valueOf(rs.getString("state")));
+            call.setProtocol(rs.getString("protocol"));
+            call.setInputTokens(nullableLong(rs, "input_tokens"));
+            call.setOutputTokens(nullableLong(rs, "output_tokens"));
+            call.setActualMicros(nullableLong(rs, "actual_micros"));
+            call.setReservedMicros(rs.getLong("reserved_micros"));
+            call.setRequestBytes(nullableLong(rs, "request_bytes"));
+            call.setCandidateReferences(nullableInteger(rs, "candidate_refs"));
+            call.setUniqueCandidateCards(nullableInteger(rs, "unique_candidates"));
+            call.setErrorType(rs.getString("error_type"));
+            call.setCancelledBeforeSend("CANCELLED_BEFORE_SEND".equals(call.getErrorType()));
+            return call;
+        }, limit);
+        if (calls.isEmpty()) {
+            return calls;
+        }
+        Map<String, NewsAiCallAudit> byId = new HashMap<>();
+        calls.forEach(call -> byId.put(call.getCallId(), call));
+        String placeholders = String.join(",", java.util.Collections.nCopies(calls.size(), "?"));
+        jdbc.query("SELECT * FROM news_ai_dispatch_item WHERE call_id IN (" + placeholders + ") ORDER BY call_id,job_key", rs -> {
+            var item = new NewsAiCallItemAudit();
+            item.setReportId(rs.getString("report_id"));
+            item.setOccurrenceKey(rs.getString("occurrence_key"));
+            item.setMode(NewsAiInputMode.valueOf(rs.getString("mode")));
+            item.setAttempt(rs.getInt("attempt"));
+            item.setSourceChars(rs.getInt("source_chars"));
+            item.setSentChars(rs.getInt("sent_chars"));
+            byId.get(rs.getString("call_id")).getItems().add(item);
+        }, calls.stream().map(NewsAiCallAudit::getCallId).toArray());
+        return calls;
     }
 
     public Map<String, NewsAiBinding> bindings(Collection<String> keys) {
@@ -370,6 +417,15 @@ public class NewsAiRepository implements InitializingBean {
             result.put(rs.getString("state"), rs.getLong("total"));
         });
         return result;
+    }
+
+    private Long nullableLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        Number value = (Number) rs.getObject(column);
+        return value == null ? null : value.longValue();
+    }
+    private Integer nullableInteger(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        Number value = (Number) rs.getObject(column);
+        return value == null ? null : value.intValue();
     }
 
     private String json(Object value) {

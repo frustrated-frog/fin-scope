@@ -6,6 +6,7 @@ import lombok.Data;
 /** 调用元数据，不保存原文或密钥。 */
 @Data
 public class NewsAiDispatchItem {
+    private String reportId;
     private String jobKey;
     private String owner;
     private String occurrenceKey;

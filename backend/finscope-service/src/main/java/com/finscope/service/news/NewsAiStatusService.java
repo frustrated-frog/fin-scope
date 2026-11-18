@@ -21,7 +21,8 @@ public class NewsAiStatusService {
     private Clock clock = Clock.system(ZoneId.of("Asia/Shanghai"));
 
     public NewsAiStatus status() {
-        Map<String, Object> usage = repository.dailyUsage(LocalDateTime.now(clock));
+        LocalDateTime now = LocalDateTime.now(clock);
+        Map<String, Object> usage = repository.dailyUsage(now);
         NewsAiStatus status = new NewsAiStatus();
         status.setEnabled(properties.isEnabled());
         status.setConfigured(client.isConfigured());
@@ -36,8 +37,12 @@ public class NewsAiStatusService {
         status.setRemainingMicros(properties.getDailyBudgetMicros() == null ? null
                 : Math.max(0, properties.getDailyBudgetMicros() - status.getActualMicros() - status.getUnresolvedMicros()));
         status.setJobs(repository.jobCounts());
-        status.setEfficiency(repository.dailyEfficiency(LocalDateTime.now(clock)));
+        status.setEfficiency(repository.dailyEfficiency(now));
         return status;
+    }
+
+    public java.util.List<com.finscope.domain.news.ai.NewsAiCallAudit> calls(int limit) {
+        return repository.recentCalls(limit);
     }
 
     private long number(Map<String, Object> usage, String key) {
