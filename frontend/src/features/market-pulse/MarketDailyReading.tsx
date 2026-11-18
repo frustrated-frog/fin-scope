@@ -1,68 +1,16 @@
-import { useEffect, useState } from 'react';
-import { api } from '../../shared/api/client';
+import { useMarketReading } from './useMarketReading';
+import type { ReadingFact, ReadingPoint } from './useMarketReading';
 import type { MarketPulseWorkspace } from './marketPulseTypes';
 import './MarketDailyReading.css';
 
-export type ReadingFact = { id: string; label: string; value: string; businessDate: string; sectorCode?: string };
-export type ReadingPoint = { title: string; detail: string; factIds: string[] };
-export type MarketReading = {
-  status: string; businessDate: string; asOf?: string; generatedAt?: string; message?: string;
-  sectorNames: Record<string, string>; facts: ReadingFact[];
-  report?: { headline: string; summary: string; stateLabel: string; change: ReadingPoint;
-    drivers: ReadingPoint[]; contradictions: ReadingPoint[]; conditions: ReadingPoint[];
-    sectors: { sectorCode: string; reason: string; watchCondition: string; factIds: string[] }[] };
-};
+export type { MarketReading } from './useMarketReading';
 
 export function MarketDailyReading({ workspace, dates, onLoad, onOpenPanorama, onOpenBreadth, onRefresh, refreshing }: {
   workspace: MarketPulseWorkspace; dates: string[]; onLoad: (date: string) => void;
   onOpenPanorama: () => void; onOpenBreadth: () => void; onRefresh?: () => void; refreshing?: boolean;
 }) {
-  const [reading, setReading] = useState<MarketReading>();
-  const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  const [sending, setSending] = useState(false);
   const date = workspace.businessDate ?? '';
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const controller = new AbortController();
-    setReading(undefined);
-    setError('');
-    async function load() {
-      try {
-        const next = await api<MarketReading>(`/api/market-pulse/ai/${date}`, { signal: controller.signal });
-        if (!active) {
-          return;
-        }
-        if (!next || next.businessDate !== date || !Array.isArray(next.facts)) {
-          throw new Error('研判数据未完整返回，请重试');
-        }
-        setReading(next);
-        if (['QUEUED', 'RUNNING', 'NOT_GENERATED'].includes(next.status)) {
-          timer = setTimeout(() => void load(), next.status === 'NOT_GENERATED' ? 12000 : 3000);
-        }
-      } catch (cause) {
-        if (active) {
-          setError(cause instanceof Error ? cause.message : '研判暂时无法读取');
-        }
-      }
-    }
-    if (date) {
-      void load();
-    }
-    return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [date, workspace.generatedAt, attempt]);
-  async function generate() {
-    setSending(true);
-    try {
-      await api(`/api/market-pulse/ai/${date}?retry=${reading?.status === 'FAILED'}`, { method: 'POST' });
-      setAttempt(value => value + 1);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '生成提交失败，请重试');
-    } finally {
-      setSending(false);
-    }
-  }
+  const { reading, error, sending, generate, reload } = useMarketReading(date, workspace.generatedAt);
   const report = reading?.status === 'READY' ? reading.report : undefined;
   const facts = new Map((reading?.facts ?? []).map(fact => [fact.id, fact]));
   function evidence(ids: string[]) {
@@ -96,7 +44,7 @@ export function MarketDailyReading({ workspace, dates, onLoad, onOpenPanorama, o
         <button type="button" onClick={onOpenBreadth}>查看市场宽度 <span aria-hidden="true">↗</span></button></footer>
     </section>
     {!report && <div className="mdr-status" role="status"><p>{error ? '研判暂时无法读取，当前显示规则速读。' : ['QUEUED', 'RUNNING'].includes(reading?.status ?? '') ? '正在对比近期市场数据，完成后会自动显示。' : reading?.status === 'DISABLED' ? '市场 AI 已关闭，继续使用规则速读与原始图表。' : reading?.status === 'UNAVAILABLE' ? 'AI 配置或当日市场数据不足，可先查看已保存的市场事实。' : reading?.message ?? '可生成一份当日市场研判，完成后会保存供重复查看。'}</p>
-      {error ? <button type="button" onClick={() => setAttempt(value => value + 1)}>重新读取研判</button>
+      {error ? <button type="button" onClick={reload}>重新读取研判</button>
         : ['NOT_GENERATED', 'FAILED'].includes(reading?.status ?? '') ? <button type="button" disabled={sending} onClick={() => void generate()}>{sending ? '正在提交…' : reading?.status === 'FAILED' ? '重试研判' : '生成当日研判'}</button> : null}</div>}
     {report && <>
       <section className="mdr-change"><span className="mdr-eyebrow">相比前期</span><h3>{report.change.title}</h3><p>{report.change.detail}</p>{evidence(report.change.factIds)}</section>

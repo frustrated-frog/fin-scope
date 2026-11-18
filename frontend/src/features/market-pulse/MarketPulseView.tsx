@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import { buildMarketTransitionDecision } from './marketPulseDecision';
-import { MarketTransitionPanel } from './MarketTransitionPanel';
+import { MarketStructureAssessment } from './MarketStructureAssessment';
 import { DailyResearchPanel } from './DailyResearchPanel';
 import type { DailyMarketReview, MarketBreadth, MarketInternalHistoryPoint, MarketPulseBackfillResult, MarketPulseHistoryPoint, MarketPulseWorkspace, MarketRegime, StockDiscoveryMarketContext } from './marketPulseTypes';
 import './MarketPulsePolish.css';
@@ -403,7 +403,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
       {view === 'review' && <RadarOverview workspace={workspace} stage={stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}
         dimensions={[{ name: '趋势', value: label(regime?.trendState) }, { name: '流动性', value: label(regime?.liquidityState) }, { name: '风险偏好', value: label(regime?.riskAppetiteState) }, { name: '轮动速度', value: label(regime?.rotationState) }]}
         dates={dates} refreshing={refreshing} onLoad={date => void load(date)} onRefresh={() => void refresh()} />}
-      {view !== 'reading' && view !== 'panorama' && view !== 'review' && view !== 'breadth' && <header className="market-pulse-hero">
+      {view !== 'reading' && view !== 'panorama' && view !== 'review' && view !== 'breadth' && view !== 'transition' && <header className="market-pulse-hero">
         <div className="market-pulse-hero-main">
           <p className="market-pulse-kicker">MARKET REGIME · {workspace.businessDate ?? 'LATEST'}</p>
           <h3>{stageLabels[regime?.marketStage ?? ''] ?? '等待判断'}</h3>
@@ -453,7 +453,7 @@ export function MarketPulseView({ addToast, setMessage, onOpenStockDiscovery, on
         </DailyResearchPanel>}
       </>}
 
-      {view === 'transition' && transitionDecision && <MarketTransitionPanel decision={transitionDecision}
+      {view === 'transition' && transitionDecision && <MarketStructureAssessment workspace={workspace} decision={transitionDecision} dates={dates} onLoad={date => void load(date)} onRefresh={() => void refresh()} refreshing={refreshing}
         onOpenStockDiscovery={context => onOpenStockDiscovery?.(context)} />}
 
       {view === 'history' && <><MarketTape regimes={workspace.recentRegimes ?? []} /><HistoryPanel points={workspace.historyPoints} internalPoints={workspace.breadth?.history} backfilling={backfilling} onBackfill={() => void backfillPreviousWeek()} onSelect={(date) => void openHistoricalReview(date)} /></>}

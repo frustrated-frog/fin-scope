@@ -9,6 +9,8 @@ import './MarketTransitionPanel.css';
 
 type Props = {
   decision: MarketTransitionDecision;
+  hideAssessment?: boolean;
+  hideScenarios?: boolean;
   onOpenStockDiscovery?: (context: StockDiscoveryMarketContext) => void;
 };
 
@@ -104,13 +106,13 @@ function TransitionTrajectory({ points }: { points: MarketStateTrajectoryPoint[]
   );
 }
 
-export function MarketTransitionPanel({ decision, onOpenStockDiscovery }: Props) {
+export function MarketTransitionPanel({ decision, onOpenStockDiscovery, hideAssessment = false, hideScenarios = false }: Props) {
   const context = decision.discoveryContext;
   const preferred = context.preferredSectors.join(' · ') || '等待行业轮动确认';
   const avoided = context.avoidSectors.join(' · ') || '当前没有强制回避方向';
   return (
     <section className="market-transition-cockpit" data-transition={decision.transition.code}>
-      <header className="market-transition-thesis">
+      {!hideAssessment && <><header className="market-transition-thesis">
         <div className="market-transition-title">
           <span>MARKET STRUCTURE / DECISION LAYER</span>
           <h3>市场转折雷达</h3>
@@ -136,9 +138,10 @@ export function MarketTransitionPanel({ decision, onOpenStockDiscovery }: Props)
         </article>)}
       </div>
 
+      </>}
       <div className="market-transition-main">
         <TransitionTrajectory points={decision.trajectory} />
-        <section className="market-transition-scenarios">
+        {!hideScenarios && <section className="market-transition-scenarios">
           <header><span>NEXT SESSION PLAYBOOK</span><h3>下一交易日情景</h3><p>不是预测唯一结果，而是提前写清盘面走向与对应动作。</p></header>
           <div>{decision.scenarios.map((scenario, index) => <article key={scenario.code} data-testid="market-scenario" data-emphasis={scenario.emphasis}>
             <div className="scenario-rank"><span>0{index + 1}</span><i /></div>
@@ -148,7 +151,7 @@ export function MarketTransitionPanel({ decision, onOpenStockDiscovery }: Props)
               <p><span>研究姿态</span>{scenario.posture}</p>
             </div>
           </article>)}</div>
-        </section>
+        </section>}
       </div>
 
       <section className="market-transition-handoff" aria-label="市场环境与股票发现联动">
