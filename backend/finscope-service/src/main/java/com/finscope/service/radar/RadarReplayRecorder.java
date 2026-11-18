@@ -28,6 +28,8 @@ public class RadarReplayRecorder {
             item.setTitle(event.getCanonicalTitle());
             item.setSummary(event.getSummary());
             item.setCategory(category(event.getDashboardCategory()));
+            item.setSourceCount(event.getSourceCount());
+            item.setReportCount(event.getSignalCount());
             result.add(item);
         }
         return result;

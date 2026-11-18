@@ -10,4 +10,5 @@ public class NewsAiBinding {
     private String contextHash;
     private NewsAiRelation relation;
     private NewsAiAnalysis analysis;
+    private java.util.List<String> newFacts = new java.util.ArrayList<>();
 }

@@ -30,6 +30,10 @@ class RadarReplayRepositoryTest {
         transaction = new TransactionTemplate(new DataSourceTransactionManager(source));
         repository = new RadarReplayRepository();
         ReflectionTestUtils.setField(repository, "jdbc", jdbc);
+        var changes = new RadarChangeRepository();
+        ReflectionTestUtils.setField(changes, "jdbc", jdbc);
+        changes.afterPropertiesSet();
+        ReflectionTestUtils.setField(repository, "changes", changes);
         repository.afterPropertiesSet();
         repository.afterPropertiesSet();
     }

@@ -288,6 +288,7 @@ public class NewsAiProcessor {
         next.setAnalysis(base);
         NewsAiBinding binding = new NewsAiBinding(); binding.setContentKey(decision.getContentKey()); binding.setEventKey(next.getEventKey());
         binding.setAnalysis(decision.getAnalysis()); binding.setRelation(decision.getRelation());
+        binding.setNewFacts(List.copyOf(decision.getNewFacts()));
         binding.setContextHash(NewsAiContentIdentity.digest(claim.work().getCandidates().stream().map(value -> value.getEventKey() + ":" + value.getRevision()).toList().toString()));
         if (!repository.bind(claim.key(), claim.owner(), binding, next, expected, now)) {
             return null;

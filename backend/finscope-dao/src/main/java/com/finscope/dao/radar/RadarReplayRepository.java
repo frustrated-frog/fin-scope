@@ -30,6 +30,9 @@ public class RadarReplayRepository implements InitializingBean {
     @Resource
     private JdbcTemplate jdbc;
 
+    @Resource
+    private RadarChangeRepository changes;
+
     @Override
     public void afterPropertiesSet() {
         jdbc.execute("CREATE TABLE IF NOT EXISTS radar_replay_frame (id INTEGER PRIMARY KEY AUTOINCREMENT,run_key TEXT NOT NULL UNIQUE,published_at TEXT NOT NULL,event_count INTEGER NOT NULL)");
@@ -80,6 +83,7 @@ public class RadarReplayRepository implements InitializingBean {
                 throw new IllegalStateException("资讯历史排名保存失败");
             }
         }
+        changes.record(frameId, time(at), observed, time(at.minusDays(7)));
         prune(at.minusDays(7), observed);
     }
 

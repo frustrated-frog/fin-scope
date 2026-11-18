@@ -37,6 +37,7 @@ public class NewsAiRepository implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_content (cache_key TEXT PRIMARY KEY,content_hash TEXT NOT NULL,state TEXT NOT NULL,owner TEXT,lease_until TEXT,call_id TEXT,attempt INTEGER NOT NULL DEFAULT 1,retry_after TEXT,analysis_json TEXT,updated_at TEXT NOT NULL)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_ready_time ON news_ai_content(state,updated_at)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_hash ON news_ai_content(content_hash,updated_at)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_binding (cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_event (event_key TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL)");
@@ -55,6 +56,35 @@ public class NewsAiRepository implements InitializingBean {
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_efficiency_run(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,eligible_checks INTEGER NOT NULL,binding_reuses INTEGER NOT NULL,guarded_checks INTEGER NOT NULL,processing_ms INTEGER NOT NULL)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_efficiency_time ON news_ai_efficiency_run(created_at)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_version_detected ON news_report_version(detected_at,report_id)");
+        restoreLegacyProgressFacts();
+    }
+
+    /** 恢复旧版在同一事务写入的最后一条明确进展；同一批有多个可能归属时不推测。 */
+    private void restoreLegacyProgressFacts() {
+        jdbc.update("""
+                WITH candidates AS MATERIALIZED (
+                    SELECT b.cache_key,e.event_key,e.updated_at,
+                           json_extract(e.payload,'$.analysis.summary') summary,e.payload event_payload,
+                           json_extract(b.payload,'$.analysis.summary') report_summary,
+                           json_extract(b.payload,'$.relation') relation,
+                           count(*) OVER (PARTITION BY e.event_key,e.updated_at) matches
+                    FROM news_ai_event e JOIN news_ai_content c ON c.state='READY' AND c.updated_at=e.updated_at
+                    JOIN news_ai_binding b ON b.cache_key=c.cache_key AND json_extract(b.payload,'$.eventKey')=e.event_key
+                    WHERE e.updated_at>=?
+                ), facts AS (
+                    SELECT k.cache_key,f.value fact, char(10)||'最新进展：'||f.value marker,k.summary
+                    FROM candidates k,json_each(k.event_payload,'$.analysis.facts') f
+                    WHERE k.matches=1 AND k.relation='PROGRESS' AND k.summary<>k.report_summary
+                      AND f.type='text' AND length(trim(f.value)) BETWEEN 1 AND 240
+                ), supported AS (
+                    SELECT cache_key,min(fact) fact FROM facts
+                    WHERE substr(summary,-length(marker))=marker OR
+                          (instr(summary,marker||'；')>0 AND instr(substr(summary,instr(summary,marker||'；')+length(marker)),char(10))=0)
+                    GROUP BY cache_key HAVING count(*)=1
+                )
+                UPDATE news_ai_binding AS b SET payload=json_set(b.payload,'$.newFacts',json_array(s.fact))
+                FROM supported s WHERE b.cache_key=s.cache_key AND json_type(b.payload,'$.newFacts') IS NULL
+                """, LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")).minusDays(7).toString());
     }
 
     @Transactional(rollbackFor = Exception.class)
