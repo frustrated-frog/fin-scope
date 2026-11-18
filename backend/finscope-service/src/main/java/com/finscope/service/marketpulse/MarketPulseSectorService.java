@@ -54,10 +54,15 @@ public class MarketPulseSectorService {
         try {
             SectorHistorySnapshot providerHistory = historySource.fetch(businessDate, PROVIDER_HISTORY_WINDOW);
             value.setSectors(fromProviderHistory(current, providerHistory, businessDate));
-            value.setQualityStatus("FRESH_PRIMARY".equals(providerHistory.getQualityStatus())
-                    && providerHistory.getWarnings().isEmpty()
-                    ? MarketPulseQualityStatus.READY : MarketPulseQualityStatus.PARTIAL);
             value.setWarnings(new ArrayList<>(providerHistory.getWarnings()));
+            long missingHistory = current.stream().filter(entry -> providerHistory.getEntries().stream()
+                    .noneMatch(item -> item.getSectorCode().equals(entry.getCode()))).count();
+            if (missingHistory > 0) {
+                value.getWarnings().add(missingHistory + "个行业历史暂缺，已保留当日截面；未补造五日或二十日收益");
+            }
+            value.setQualityStatus("FRESH_PRIMARY".equals(providerHistory.getQualityStatus())
+                    && value.getWarnings().isEmpty()
+                    ? MarketPulseQualityStatus.READY : MarketPulseQualityStatus.PARTIAL);
         } catch (RuntimeException error) {
             value.setSectors(fromWorkspaceHistory(current, businessDate));
             value.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
@@ -101,6 +106,20 @@ public class MarketPulseSectorService {
         for (SectorHistoryItem historyItem : history.getEntries()) {
             raw.add(providerItem(historyItem, currentByCode.get(historyItem.getSectorCode()),
                     previousFlowRanks.get(historyItem.getSectorCode())));
+        }
+        for (SectorMarketEntry entry : current) {
+            if (find(raw, entry.getCode()) == null) {
+                var item = new SectorRotationItem();
+                item.setSectorCode(entry.getCode());
+                item.setSectorName(entry.getName());
+                item.setReturn1d(entry.getChangePct());
+                item.setMainNetInflow(entry.getMainNetInflow());
+                item.setBreadthRatio(entry.getBreadthRatio());
+                item.setFlowRank(entry.getSourceRank());
+                item.setPreviousFlowRank(previousFlowRanks.get(entry.getCode()));
+                item.setCrowdingScore(crowding(item));
+                raw.add(item);
+            }
         }
         applyExcessReturn(raw);
         return scoringService.score(raw);

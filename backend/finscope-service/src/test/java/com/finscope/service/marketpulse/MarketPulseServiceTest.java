@@ -187,6 +187,7 @@ class MarketPulseServiceTest {
         when(features.latestBusinessDate()).thenReturn(latestTradingDate);
         MarketPulseWorkspace existing = workspace(latestTradingDate, breadth(latestTradingDate));
         existing.setGeneratedAt(LocalDateTime.of(2026, 8, 21, 15, 31));
+        existing.setQualityStatus(MarketPulseQualityStatus.READY);
         existing.getBreadth().setIndices(Arrays.asList(index(), index(), index(), index(), index()));
         when(repository.findWorkspace(latestTradingDate)).thenReturn(Optional.of(existing));
 
@@ -195,6 +196,19 @@ class MarketPulseServiceTest {
         assertTrue(!result.isPresent());
         verify(sectors, never()).calculateResult(any(LocalDate.class));
         verify(repository, never()).saveWorkspace(any(MarketPulseWorkspace.class));
+    }
+
+    @Test
+    void recoveryRetriesAnAfterCloseSnapshotWithIncompleteIndustryData() {
+        LocalDate date = LocalDate.of(2026, 8, 21);
+        prepareEmptyRefresh(date);
+        var existing = workspace(date, breadth(date));
+        existing.setGeneratedAt(date.atTime(15, 31));
+        existing.getBreadth().setIndices(Arrays.asList(index(), index(), index(), index(), index()));
+        existing.setQualityStatus(MarketPulseQualityStatus.PARTIAL);
+        when(repository.findWorkspace(date)).thenReturn(Optional.of(existing));
+        assertTrue(service.recoverMissing().isPresent());
+        verify(repository).saveWorkspace(any(MarketPulseWorkspace.class));
     }
 
     @Test

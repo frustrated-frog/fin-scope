@@ -3,7 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
+import math
 from typing import Any, Literal
+
+from finscope_market_data.providers.tonghuashun_sector_history import TonghuashunSectorHistorySource
+from finscope_market_data.providers.tonghuashun_sectors import TonghuashunSectorSource
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,7 +65,8 @@ class TonghuashunSectorHistoryService:
         max_workers: int = 4,
     ) -> None:
         self._catalog_loader = catalog_loader or self._load_catalog
-        self._history_loader = history_loader or self._load_history
+        self._history_loader = history_loader
+        self._history_source = TonghuashunSectorHistorySource(now_provider=now_provider) if history_loader is None else None
         self._now_provider = now_provider or datetime.now
         self._max_workers = max(1, min(max_workers, 6))
 
@@ -74,8 +79,9 @@ class TonghuashunSectorHistoryService:
         dates: set[str] = set()
         warnings_by_index: dict[int, str] = {}
 
-        concurrent_start = len(catalog)
-        for index, (code, name) in enumerate(catalog):
+        headers = self._history_source.headers() if self._history_source is not None else None
+        concurrent_start = 0 if self._history_source is not None else len(catalog)
+        for index, (code, name) in enumerate(catalog if self._history_source is None else []):
             try:
                 entry, trade_dates, bars = self._entry(
                     code,
@@ -101,6 +107,7 @@ class TonghuashunSectorHistoryService:
                     name,
                     start_date,
                     business_date,
+                    headers,
                 ): (index, code, name)
                 for index, (code, name) in enumerate(
                     catalog[concurrent_start:],
@@ -160,12 +167,12 @@ class TonghuashunSectorHistoryService:
         name: str,
         start_date: date,
         business_date: date,
+        headers: dict[str, str] | None = None,
     ) -> tuple[SectorHistoryEntry, list[str], list[tuple[date, float]]]:
-        frame = self._history_loader(
-            name,
-            start_date.strftime("%Y%m%d"),
-            business_date.strftime("%Y%m%d"),
-        )
+        if self._history_source is not None:
+            frame = self._history_source.history(code, start_date, business_date, headers or {})
+        else:
+            frame = self._history_loader(name, start_date.strftime("%Y%m%d"), business_date.strftime("%Y%m%d"))
         bars = _bars(frame, business_date)
         if len(bars) < 2:
             raise RuntimeError("有效交易日少于2日")
@@ -189,19 +196,7 @@ class TonghuashunSectorHistoryService:
 
     @staticmethod
     def _load_catalog() -> Any:
-        import akshare as ak
-
-        return ak.stock_board_industry_name_ths()
-
-    @staticmethod
-    def _load_history(name: str, start_date: str, end_date: str) -> Any:
-        import akshare as ak
-
-        return ak.stock_board_industry_index_ths(
-            symbol=name,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        return TonghuashunSectorSource().names("INDUSTRY")
 
 
 def _bars(frame: Any, maximum_date: date) -> list[tuple[date, float]]:
@@ -292,7 +287,7 @@ def _number(value: object) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number == number else None
+    return number if math.isfinite(number) else None
 
 
 def _text(value: object) -> str:

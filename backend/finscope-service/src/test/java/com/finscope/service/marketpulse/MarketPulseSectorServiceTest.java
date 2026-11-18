@@ -115,6 +115,25 @@ class MarketPulseSectorServiceTest {
         assertEquals(null, result.getFlowRank());
     }
 
+    @Test
+    void missingHistoryKeepsTheDailyIndustryAndDoesNotInventLongWindowReturns() {
+        var date = LocalDate.of(2026, 8, 21);
+        when(market.listEntries(SectorCategory.INDUSTRY, true)).thenReturn(Arrays.asList(
+                market("881121", "半导体", 0.8, 1_200_000_000D, 1, .75),
+                market("881273", "白酒", -1.1, -350_000_000D, 2, .25)));
+        when(history.fetch(date, 60)).thenReturn(history(date, item("881121", "半导体", .8, 3.2, 6.5, 4)));
+        var result = service.calculateResult(date);
+        assertEquals(2, result.getSectors().size());
+        var missing = find(result.getSectors(), "881273");
+        assertEquals(-1.1, missing.getReturn1d());
+        assertEquals(-350_000_000D, missing.getMainNetInflow());
+        assertEquals(.25, missing.getBreadthRatio());
+        assertEquals(null, missing.getReturn5d());
+        assertEquals(null, missing.getReturn20d());
+        assertEquals("PARTIAL", result.getQualityStatus().name());
+        assertTrue(result.getWarnings().getFirst().contains("1个行业历史暂缺"));
+    }
+
     private SectorMarketEntry market(String code, String name, double change, double flow,
                                      int rank, double breadth) {
         SectorMarketEntry value = new SectorMarketEntry();

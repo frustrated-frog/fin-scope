@@ -101,6 +101,7 @@ public class MarketPulseService {
             }
             Optional<MarketPulseWorkspace> existing = repository.findWorkspace(latestBusinessDate);
             if (existing.isPresent() && isAfterCloseSnapshot(existing.get(), latestBusinessDate)
+                    && existing.get().getQualityStatus() == MarketPulseQualityStatus.READY
                     && completeBreadth(existing.get().getBreadth())) {
                 return Optional.empty();
             }
