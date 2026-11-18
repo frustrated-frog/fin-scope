@@ -87,8 +87,10 @@ class NewsAiUnifiedAgentTest {
         var request = mapper.readTree(agent.prepare(List.of(input, next), categories).getBody());
         var wire = mapper.readTree(request.path("input").get(1).path("content").asText());
         assertEquals("n1", wire.path("items").get(0).path("contentKey").asText());
-        assertEquals("e1", wire.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
-        assertEquals("n1", wire.path("items").get(1).path("candidates").get(1).path("eventKey").asText());
+        assertEquals("e1", wire.path("items").get(0).path("candidateKeys").get(0).asText());
+        assertEquals("n1", wire.path("items").get(1).path("candidateKeys").get(1).asText());
+        assertEquals(1, wire.path("candidates").size());
+        assertFalse(wire.path("items").get(0).has("candidates"));
         assertFalse(request.toString().contains(actual));
         assertEquals(actual, input.getContentKey());
         assertEquals("news-ai:" + actual, seed.getEventKey());
@@ -110,6 +112,41 @@ class NewsAiUnifiedAgentTest {
         parsed = agent.parse(mapper.writeValueAsString(Map.of("decisions", List.of(first, second))), List.of(input, next), categories);
         assertFalse(parsed.containsKey(actual));
         assertTrue(parsed.containsKey(next.getContentKey()));
+    }
+
+    @Test
+    void validUnderstandingSurvivesAnInvalidRelationshipWithoutResendingTheBody() throws Exception {
+        var agent = agent();
+        var item = input();
+        var decision = decision();
+        decision.setRelation(NewsAiRelation.DUPLICATE);
+        decision.setTargetKey("not-in-whitelist");
+        String text = mapper.writeValueAsString(Map.of("decisions", List.of(decision)));
+        assertTrue(agent.parse(text, List.of(item), categories).isEmpty());
+        assertEquals("合同金额1.2亿元", agent.parseAnalyses(text, List.of(item), categories).get("hash").getSummary());
+        decision.getAnalysis().setCategoryCode("UNKNOWN");
+        assertTrue(agent.parseAnalyses(mapper.writeValueAsString(Map.of("decisions", List.of(decision))), List.of(item), categories).isEmpty());
+    }
+
+    @Test
+    void aSharedCandidateIsTransmittedOnceForTheWholeBatch() throws Exception {
+        var items = new ArrayList<NewsAiWorkItem>();
+        for (int i = 0; i < 6; i++) {
+            var item = input();
+            item.setContentKey("hash" + i);
+            var event = item.getCandidates().getFirst();
+            event.setAnalysis(decision().getAnalysis());
+            event.getAnalysis().setSummary("同一份既有事件事实卡".repeat(40));
+            items.add(item);
+        }
+        var request = mapper.readTree(agent().prepare(items, categories).getBody());
+        var payload = mapper.readTree(request.path("input").get(1).path("content").asText());
+        assertEquals(1, payload.path("candidates").size());
+        for (var item : payload.path("items")) {
+            assertEquals("e1", item.path("candidateKeys").get(0).asText());
+        }
+        long legacyCandidateBytes = mapper.writeValueAsBytes(items.getFirst().getCandidates().getFirst().getAnalysis()).length * 6L;
+        assertTrue(mapper.writeValueAsBytes(payload).length < legacyCandidateBytes / 2);
     }
 
     private NewsAiUnifiedAgent agent() {

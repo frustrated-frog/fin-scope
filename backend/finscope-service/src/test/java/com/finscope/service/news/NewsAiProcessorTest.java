@@ -236,7 +236,7 @@ class NewsAiProcessorTest {
             try {
                 JsonNode result = mapper.readTree(decisions(input, false, false));
                 var decision = (com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0);
-                decision.put("targetKey", input.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
+                decision.put("targetKey", input.path("items").get(0).path("candidateKeys").get(0).asText());
                 decision.put("relation", "PROGRESS");
                 decision.set("newFacts", mapper.valueToTree(List.of("合同完成交付")));
                 if (mutate.getAndSet(false)) {
@@ -301,7 +301,7 @@ class NewsAiProcessorTest {
             try {
                 JsonNode result = mapper.readTree(decisions(input, false, false));
                 var decision = (com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0);
-                decision.put("targetKey", input.path("items").get(0).path("candidates").get(0).path("eventKey").asText());
+                decision.put("targetKey", input.path("items").get(0).path("candidateKeys").get(0).asText());
                 decision.put("relation", "DUPLICATE");
                 return mapper.writeValueAsString(result);
             } catch (Exception error) {
@@ -318,6 +318,21 @@ class NewsAiProcessorTest {
         assertEquals(old.getPublishedAt(), repository.event("legacy").getLastAt());
         assertEquals(1, repository.event("legacy").getRevision());
         assertTrue(repository.bindingsByHashes(List.of(key(old))).isEmpty());
+    }
+
+    @Test
+    void invalidRelationshipKeepsUnderstandingAndRetrySendsNoOriginalBody() {
+        var signal = signal("a", "公司签订合同", "合同金额2亿元");
+        persist(signal);
+        responder = input -> decisions(input, false, false).replace("NEW_EVENT", "DUPLICATE");
+        processor.process(List.of(signal), now);
+        assertTrue(repository.bindingsByHashes(List.of(key(signal))).isEmpty());
+        responder = input -> decisions(input, false, false);
+        processor.process(List.of(signal), now.plusHours(1));
+        assertEquals(2, calls.get());
+        assertEquals("", requests.get(1).path("items").get(0).path("content").asText());
+        assertFalse(requests.get(1).path("items").get(0).path("savedAnalysis").isNull());
+        assertEquals(1, repository.bindingsByHashes(List.of(key(signal))).size());
     }
 
     private String decisions(JsonNode input, boolean merge, boolean truncate) {

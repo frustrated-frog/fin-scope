@@ -15,7 +15,7 @@ import java.util.*;
 /** 一次结构化调用完成理解与归属；已理解的内容在匹配重试中只发送结构化事实。 */
 @Service
 public class NewsAiUnifiedAgent {
-    public static final String VERSION = "news-understanding-v2";
+    public static final String VERSION = "news-understanding-v3";
     @Resource
     private NewsAiLunaClient client;
     @Resource
@@ -36,7 +36,7 @@ public class NewsAiUnifiedAgent {
                 + "RELATED=主题关联但不同事件，CONFLICT=事实矛盾需独立保留，NEW_EVENT=无匹配候选。"
                 + "正文仅有来源、电头、措辞或信息详略差别，核心事实相同，应合并，不能仅因措辞差异判为RELATED。"
                 + "NEW_EVENT的targetKey必须为空；其他关系必须选择本条candidates中的eventKey，无关联候选时使用NEW_EVENT。"
-                + "n编号代表本批新闻，e编号代表既有事件；前面的n编号可直接成为后续新闻的候选。编号必须原样使用。"
+                + "n编号代表本批新闻，e编号代表共享candidates目录中的既有事件。每条candidateKeys是本条允许的候选白名单；前面的n编号引用本批前文，不再重复提供全文。编号必须原样使用。"
                 + "不得凭空生成主体、数字或进展。正文截断且不足以判断时保守创建事件，reason说明缺失。"
                 + "newFacts只写原文相对目标事件新增的事实，DUPLICATE必须为空数组，PROGRESS必须非空。"
                 + "每条facts最多6项，summary最多120字，newFacts最多4项；reason只解释本条与所选候选的区别或相同点，不输出思维链。";
@@ -45,16 +45,25 @@ public class NewsAiUnifiedAgent {
             List<Map<String, Object>> directory = categories.stream().map(category -> ordered(
                     "code", category.getCode(), "name", category.getName(), "description",
                     category.getClassificationGuidance() == null ? "" : category.getClassificationGuidance())).toList();
-            List<ObjectNode> wireItems = new ArrayList<>();
+            List<Map<String, Object>> wireItems = new ArrayList<>();
+            Map<String, ObjectNode> candidateDirectory = new LinkedHashMap<>();
             for (NewsAiWorkItem item : items) {
-                ObjectNode wire = mapper.valueToTree(item);
-                wire.put("contentKey", ids.items().get(item.getContentKey()));
-                for (JsonNode candidate : wire.path("candidates")) {
-                    ((ObjectNode) candidate).put("eventKey", ids.events().get(candidate.path("eventKey").asText()));
+                List<String> candidates = new ArrayList<>();
+                for (var candidate : item.getCandidates()) {
+                    String alias = ids.events().get(candidate.getEventKey());
+                    candidates.add(alias);
+                    if (alias.startsWith("e") && !candidateDirectory.containsKey(alias)) {
+                        ObjectNode wire = mapper.valueToTree(candidate);
+                        wire.put("eventKey", alias);
+                        wire.remove("revision");
+                        candidateDirectory.put(alias, wire);
+                    }
                 }
-                wireItems.add(wire);
+                wireItems.add(ordered("contentKey", ids.items().get(item.getContentKey()), "title", item.getTitle(),
+                        "content", item.getContent(), "bodyTruncated", item.isBodyTruncated(), "publishedAt", item.getPublishedAt(),
+                        "savedAnalysis", item.getSavedAnalysis(), "candidateKeys", candidates));
             }
-            return client.prepare(system, mapper.writeValueAsString(ordered("categories", directory, "items", wireItems)),
+            return client.prepare(system, mapper.writeValueAsString(ordered("categories", directory, "candidates", candidateDirectory.values(), "items", wireItems)),
                     properties.getMaxOutputTokens(), schema(categories, ids, items.size()));
         } catch (Exception error) {
             throw new IllegalArgumentException("新闻 AI 输入构建失败", error);
@@ -101,6 +110,38 @@ public class NewsAiUnifiedAgent {
             }
         } catch (Exception invalidDocument) {
             return result;
+        }
+        return result;
+    }
+
+    /** 关系字段错误时仍保存通过校验的独立理解，重试只发送事实卡。 */
+    public Map<String, NewsAiAnalysis> parseAnalyses(String text, List<NewsAiWorkItem> items, List<NewsCategory> categories) {
+        Map<String, NewsAiAnalysis> result = new LinkedHashMap<>();
+        WireIds ids = wireIds(items);
+        Map<String, NewsAiWorkItem> inputs = new HashMap<>();
+        items.forEach(item -> inputs.put(item.getContentKey(), item));
+        Set<String> codes = new HashSet<>();
+        categories.forEach(category -> codes.add(category.getCode()));
+        Set<String> seen = new HashSet<>();
+        for (JsonNode node : completeItems(text)) {
+            String key = original(node.path("contentKey").asText(), ids.items());
+            if (key == null) {
+                continue;
+            }
+            if (!seen.add(key)) {
+                result.remove(key);
+                continue;
+            }
+            try {
+                var saved = inputs.get(key).getSavedAnalysis();
+                var analysis = saved == null ? mapper.readerFor(NewsAiAnalysis.class)
+                        .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).<NewsAiAnalysis>readValue(node.path("analysis")) : saved;
+                if (validAnalysis(analysis, codes)) {
+                    result.put(key, analysis);
+                }
+            } catch (Exception invalidAnalysis) {
+                result.remove(key);
+            }
         }
         return result;
     }
@@ -154,11 +195,8 @@ public class NewsAiUnifiedAgent {
 
     private boolean valid(NewsAiDecision decision, NewsAiWorkItem input, Set<String> categories) {
         NewsAiAnalysis value = input.getSavedAnalysis() == null ? decision.getAnalysis() : input.getSavedAnalysis();
-        if (value == null || decision.getRelation() == null || !categories.contains(value.getCategoryCode())
-                || value.getDisplayCategory() == null || value.getEventType() == null
-                || !text(value.getTitle(), 160) || !text(value.getSummary(), 900) || !text(decision.getReason(), 320)
-                || !strings(value.getTopics(), 8, 64) || !strings(value.getEntities(), 16, 100)
-                || !strings(value.getFacts(), 12, 240) || !strings(decision.getNewFacts(), 8, 240) || decision.getTargetKey() == null) {
+        if (!validAnalysis(value, categories) || decision.getRelation() == null || !text(decision.getReason(), 320)
+                || !strings(decision.getNewFacts(), 8, 240) || decision.getTargetKey() == null) {
             return false;
         }
         if ((decision.getRelation() == NewsAiRelation.DUPLICATE && !decision.getNewFacts().isEmpty())
@@ -167,6 +205,12 @@ public class NewsAiUnifiedAgent {
         }
         boolean targetKnown = input.getCandidates().stream().anyMatch(candidate -> candidate.getEventKey().equals(decision.getTargetKey()));
         return decision.getRelation() == NewsAiRelation.NEW_EVENT ? decision.getTargetKey().isEmpty() : targetKnown;
+    }
+
+    private boolean validAnalysis(NewsAiAnalysis value, Set<String> categories) {
+        return value != null && categories.contains(value.getCategoryCode()) && value.getDisplayCategory() != null && value.getEventType() != null
+                && text(value.getTitle(), 160) && text(value.getSummary(), 900) && strings(value.getTopics(), 8, 64)
+                && strings(value.getEntities(), 16, 100) && strings(value.getFacts(), 12, 240);
     }
 
     private boolean text(String value, int max) {

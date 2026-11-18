@@ -159,16 +159,18 @@ public class NewsAiProcessor {
         Long actual = reply.getInputTokens() != null && reply.getOutputTokens() != null
                 ? properties.costMicros(reply.getInputTokens(), reply.getOutputTokens()) : null;
         repository.settle(callId, reply.getInputTokens(), reply.getOutputTokens(), actual, reply.isCompleted() ? null : "INCOMPLETE");
+        Map<String, NewsAiAnalysis> analyses = agent.parseAnalyses(reply.getText(), inputs, directory);
         Map<String, NewsAiDecision> decisions = agent.parse(reply.getText(), inputs, directory);
         Map<String, String> aliases = new HashMap<>();
         Map<String, Integer> acceptedVersions = new HashMap<>();
         for (Claim claim : claims) {
+            NewsAiAnalysis analysis = analyses.get(claim.work().getContentKey());
+            if (analysis != null && !repository.saveAnalysis(claim.key(), claim.owner(), analysis, now)) {
+                continue;
+            }
             NewsAiDecision decision = decisions.get(claim.work().getContentKey());
             if (decision == null) {
                 repository.fail(claim.key(), claim.owner(), NewsAiJobState.RETRYABLE, now.plusHours(1));
-                continue;
-            }
-            if (!repository.saveAnalysis(claim.key(), claim.owner(), decision.getAnalysis(), now)) {
                 continue;
             }
             NewsAiEvent saved = bind(claim, decision, aliases, acceptedVersions, now);
