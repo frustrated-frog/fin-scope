@@ -92,3 +92,28 @@ describe('market transition decision', () => {
     expect(decision.trajectory[1].state).toBe('REPAIR');
   });
 });
+
+
+test('uses bounded assessment values in the existing gauges and scenario calculations', () => {
+  const structure = [
+    { dimension: 'EXPANSION', label: '扩散程度', baselineScore: 60, adjustment: -8, finalScore: 52, scope: '同口径样本', components: {}, factIds: [] },
+    { dimension: 'REPAIR_QUALITY', label: '修复质量', baselineScore: 60, adjustment: -10, finalScore: 50, scope: '同口径样本', components: {}, factIds: [] },
+    { dimension: 'LEADERSHIP', label: '主线持续性', baselineScore: null, finalScore: null, scope: '样本不足', components: {}, factIds: [] },
+    { dimension: 'FRAGILITY', label: '脆弱性', baselineScore: 60, adjustment: 5, finalScore: 65, scope: '同口径样本', components: {}, factIds: [] },
+    { dimension: 'TURN_CONFIRMATION', label: '转折证据', baselineScore: 60, adjustment: -10, finalScore: 50, scope: '同口径样本', components: {}, factIds: [] }
+  ];
+  const reading = { businessDate: repairingWorkspace.businessDate!, status: 'READY', facts: [], sectorNames: {}, structure };
+  const ai = buildMarketTransitionDecision(repairingWorkspace, reading);
+  expect(ai.gauges.map(item => item.score)).toEqual([52, 50, 0, 65]);
+  expect(ai.gauges[2].available).toBe(false);
+  expect(ai.transition.strength).toBe(50);
+  expect(ai.scenarios).toHaveLength(3);
+  expect(ai.scenarios[0].matchScore).toBe(46);
+  expect(ai.gauges[0].detail).toContain('AI 调整 -8');
+  const disabled = buildMarketTransitionDecision(repairingWorkspace, { ...reading, status: 'DISABLED' });
+  expect(disabled.gauges[0].score).toBe(60);
+  expect(disabled.gauges[0].detail).toContain('使用规则评分');
+  expect(disabled.transition.strength).toBe(60);
+  const late = buildMarketTransitionDecision(repairingWorkspace, { ...reading, businessDate: '2026-08-20' });
+  expect(late).toEqual(buildMarketTransitionDecision(repairingWorkspace));
+});

@@ -1,3 +1,4 @@
+import type { MarketReading } from './useMarketReading';
 import type {
   MarketInternalHistoryPoint,
   MarketNextSessionScenario,
@@ -297,29 +298,51 @@ function discoveryContext(workspace: MarketPulseWorkspace, code: MarketTransitio
   };
 }
 
-export function buildMarketTransitionDecision(workspace: MarketPulseWorkspace): MarketTransitionDecision {
-  const participation = participationScore(workspace);
-  const momentum = momentumScore(workspace);
-  const leadership = leadershipScore(workspace.sectors ?? []);
-  const fragility = fragilityScore(workspace, leadership);
-  const impulse = changeImpulse(workspace);
+export function buildMarketTransitionDecision(workspace: MarketPulseWorkspace, reading?: MarketReading): MarketTransitionDecision {
+  const structure = reading && reading.businessDate === workspace.businessDate && reading.structure?.length
+    ? new Map(reading.structure.map(row => [row.dimension, row])) : undefined;
+  const report = structure && reading?.status === 'READY' ? reading.report : undefined;
+  function assessedScore(dimension: string, fallback?: number) {
+    if (!structure) {
+      return fallback;
+    }
+    const row = structure.get(dimension);
+    const value = reading?.status === 'READY' ? row?.finalScore : row?.baselineScore;
+    return finite(value ?? undefined) ? clamp(value!) : undefined;
+  }
+  function assessmentDetail(dimension: string, fallback: string) {
+    const row = structure?.get(dimension);
+    if (!row) {
+      return fallback;
+    }
+    const baseline = row.baselineScore;
+    if (baseline == null) {
+      return row.scope;
+    }
+    return `规则基准 ${baseline}；${row.adjustment == null || reading?.status !== 'READY' ? '使用规则评分' : `AI 调整 ${row.adjustment >= 0 ? '+' : ''}${row.adjustment}`}。${report ? row.reason ?? row.scope : row.scope}`;
+  }
+  const participation = assessedScore('EXPANSION', participationScore(workspace));
+  const momentum = assessedScore('REPAIR_QUALITY', momentumScore(workspace));
+  const leadership = assessedScore('LEADERSHIP', leadershipScore(workspace.sectors ?? []));
+  const fragility = assessedScore('FRAGILITY', fragilityScore(workspace, leadership));
+  const impulse = assessedScore('TURN_CONFIRMATION', changeImpulse(workspace));
   const code = transitionCode(workspace, participation, momentum, leadership, fragility, impulse);
   const strength = code === 'INSUFFICIENT_DATA'
     ? 0
-    : clamp(average([impulse, participation, momentum, leadership, finite(fragility) ? 100 - fragility : undefined]) ?? 0);
+    : structure ? impulse ?? 0 : clamp(average([impulse, participation, momentum, leadership, finite(fragility) ? 100 - fragility : undefined]) ?? 0);
   return {
     transition: {
       code,
-      label: transitionLabels[code],
+      label: report?.stateLabel ?? transitionLabels[code],
       strength,
-      summary: transitionSummary(code),
-      drivers: transitionDrivers(workspace, code, participation, momentum, fragility)
+      summary: report?.summary ?? transitionSummary(code),
+      drivers: report?.drivers.map(item => item.detail) ?? transitionDrivers(workspace, code, participation, momentum, fragility)
     },
     gauges: [
-      gauge('PARTICIPATION', '市场参与度', participation, '参与扩散', '参与收缩', '综合上涨家数、MA20 与 MA60 趋势宽度'),
-      gauge('BREADTH_MOMENTUM', '宽度动量', momentum, '动量改善', '动量偏弱', '综合 McClellan、参与率 EMA 与上涨成交额占比'),
-      gauge('LEADERSHIP_HEALTH', '主线健康度', leadership, '内部健康', '少数领涨', '观察强势行业内部宽度、持续性与轮动得分'),
-      gauge('FRAGILITY', '结构脆弱度', fragility, '结构稳定', '容易分化', '综合资金集中、行业离散与拥挤水平', true)
+      gauge('PARTICIPATION', '市场参与度', participation, '参与扩散', '参与收缩', assessmentDetail('EXPANSION', '综合上涨家数、MA20 与 MA60 趋势宽度')),
+      gauge('BREADTH_MOMENTUM', '宽度动量', momentum, '动量改善', '动量偏弱', assessmentDetail('REPAIR_QUALITY', '综合 McClellan、参与率 EMA 与上涨成交额占比')),
+      gauge('LEADERSHIP_HEALTH', '主线健康度', leadership, '内部健康', '少数领涨', assessmentDetail('LEADERSHIP', '观察强势行业内部宽度、持续性与轮动得分')),
+      gauge('FRAGILITY', '结构脆弱度', fragility, '结构稳定', '容易分化', assessmentDetail('FRAGILITY', '综合资金集中、行业离散与拥挤水平'), true)
     ],
     trajectory: buildTrajectory(workspace),
     scenarios: scenarios(code, participation, momentum, fragility),
