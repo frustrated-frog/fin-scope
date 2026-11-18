@@ -55,9 +55,10 @@ public class NewsReportRepository {
             if (changed != 1) {
                 throw new IllegalStateException("新闻保存影响行数异常");
             }
-            var versions = jdbc.queryForList("INSERT INTO news_report_version(report_id,version,title,content,detected_at) "
-                    + "SELECT id,content_version,title,content,last_seen_at FROM news_report WHERE id=? "
-                    + "ON CONFLICT(report_id,version) DO NOTHING RETURNING version", Integer.class, report.getId());
+            var versions = jdbc.queryForList("INSERT INTO news_report_version(report_id,version,title,content,detected_at,ai_due_at) "
+                    + "SELECT id,content_version,title,content,last_seen_at,CASE WHEN content_version>1 OR COALESCE(published_at,first_seen_at)>=? "
+                    + "THEN max(last_seen_at,coalesce(published_at,first_seen_at)) END FROM news_report WHERE id=? "
+                    + "ON CONFLICT(report_id,version) DO NOTHING RETURNING version", Integer.class, time(report.getLastSeenAt().minusHours(36)), report.getId());
             VersionCounts source = counts.computeIfAbsent(report.getProviderCode(), ignored -> new VersionCounts());
             if (versions.isEmpty()) {
                 source.unchanged++;
@@ -65,6 +66,8 @@ public class NewsReportRepository {
                 source.added++;
             } else {
                 source.revised++;
+                jdbc.update("UPDATE news_report_version SET ai_due_at=NULL WHERE report_id=? AND version<? AND ai_due_at IS NOT NULL",
+                        report.getId(), versions.getFirst());
             }
         }
         if (batchId != null) {
@@ -95,6 +98,16 @@ public class NewsReportRepository {
 
     public void finishFetch(String batchId, LocalDateTime completed) {
         jdbc.update("UPDATE news_fetch_batch SET completed_at=? WHERE batch_id=?", time(completed), batchId);
+    }
+
+    public List<NewsReport> pendingAi(LocalDateTime since, LocalDateTime now, int limit) {
+        return jdbc.query("""
+                SELECT n.*,0 read_version,NULL event_key,1 merged_report_count
+                FROM news_report_version v INDEXED BY idx_news_version_due
+                JOIN news_report n ON n.id=v.report_id AND n.content_version=v.version
+                WHERE v.ai_due_at BETWEEN ? AND ? AND v.detected_at>=?
+                ORDER BY v.ai_due_at,v.report_id LIMIT ?
+                """, row(), time(since), time(now), time(since), limit);
     }
 
     public List<NewsReport> scanAnnouncements(LocalDateTime since, LocalDateTime until, long after, int size) {

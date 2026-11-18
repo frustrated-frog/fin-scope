@@ -2,6 +2,7 @@ package com.finscope.dao.news;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.news.NewsAiJobState;
+import com.finscope.domain.news.NewsReport;
 import com.finscope.domain.news.ai.NewsAiAnalysis;
 import com.finscope.domain.news.ai.NewsAiBinding;
 import com.finscope.domain.news.ai.NewsAiEvent;
@@ -20,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** 持久化幂等、候选版本与费用预留；网络调用不在事务内。金额单位为百万分之一美元。 */
 @Repository
@@ -98,8 +101,33 @@ public class NewsAiRepository implements InitializingBean {
         return LocalDateTime.parse(jdbc.queryForObject("SELECT started_at FROM news_ai_control WHERE id=1", String.class));
     }
 
-    public java.util.Set<String> changedReportsSince(LocalDateTime since) {
-        return new java.util.HashSet<>(jdbc.queryForList("SELECT report_id FROM news_report_version WHERE detected_at>=? GROUP BY report_id ORDER BY MAX(detected_at) DESC LIMIT 20000", String.class, since.toString()));
+    /** 按实际消费的报道版本确认。付费任务的未知结果或耗尽重试不会重新排队。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void finishReportVersions(List<NewsReport> pending, Set<String> bound,
+                                     LocalDateTime now, int maxAttempts) {
+        List<Object[]> completed = new ArrayList<>();
+        List<Object[]> deferred = new ArrayList<>();
+        for (var report : pending) {
+            String occurrence = NewsAiContentIdentity.occurrence(report.getTitle(), report.getContent(),
+                    report.getPublishedAt() == null ? report.getFirstSeenAt() : report.getPublishedAt());
+            if (bound.contains(occurrence)) {
+                completed.add(new Object[]{report.getId(), report.getContentVersion()});
+            } else {
+                deferred.add(new Object[]{now.toString(), maxAttempts, now.plusMinutes(1).toString(), occurrence, report.getId(), report.getContentVersion()});
+            }
+        }
+        jdbc.batchUpdate("UPDATE news_report_version SET ai_due_at=NULL WHERE report_id=? AND version=? AND ai_due_at IS NOT NULL", completed);
+        jdbc.batchUpdate("""
+                UPDATE news_report_version SET ai_due_at=(
+                    SELECT CASE WHEN c.state='UNKNOWN' THEN NULL
+                                WHEN c.state='CLAIMED' AND (c.call_id IS NOT NULL OR c.lease_until>=?) THEN c.lease_until
+                                WHEN c.attempt>=? THEN NULL
+                                WHEN c.state='RETRYABLE' THEN c.retry_after
+                                ELSE ? END
+                    FROM (SELECT ? occurrence) o LEFT JOIN news_ai_occurrence_job j ON j.occurrence_key=o.occurrence
+                    LEFT JOIN news_ai_content c ON c.cache_key=j.cache_key)
+                WHERE report_id=? AND version=? AND ai_due_at IS NOT NULL
+                """, deferred);
     }
 
     public void defer(String key, String owner, LocalDateTime retryAfter) {
@@ -408,20 +436,6 @@ public class NewsAiRepository implements InitializingBean {
                         + "relation=excluded.relation,content_version=excluded.content_version "
                         + "WHERE " + condition,
                 binding.getContentKey(), binding.getEventKey(), binding.getRelation().name(), id, title, content) == 1;
-    }
-
-    public Map<String, String> linkedReportKeys(Collection<String> ids) {
-        Map<String, String> result = new HashMap<>();
-        List<String> values = List.copyOf(ids);
-        for (int start = 0; start < values.size(); start += 300) {
-            List<String> batch = values.subList(start, Math.min(values.size(), start + 300));
-            String placeholders = String.join(",", java.util.Collections.nCopies(batch.size(), "?"));
-            jdbc.query("SELECT a.report_id,a.content_key FROM news_ai_report a JOIN news_report n "
-                    + "ON n.id=a.report_id AND n.content_version=a.content_version WHERE a.report_id IN (" + placeholders + ")", rs -> {
-                result.put(rs.getString(1), rs.getString(2));
-            }, batch.toArray());
-        }
-        return result;
     }
 
     /** 理解缓存保留30天、调用明细保留90天；未决费用与仍被新闻引用的事件不清理。 */

@@ -1,6 +1,5 @@
 package com.finscope.service.news;
 
-import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.cache.ViewRevisionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,8 +13,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 @Slf4j
 public class NewsAiScheduler {
-    @Resource
-    private NewsWindowService news;
     @Resource
     private NewsAiProcessor processor;
     @Resource
@@ -36,16 +33,12 @@ public class NewsAiScheduler {
             executor.execute(() -> {
                 try {
                     LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
-                    boolean active = processor.isActive();
-                    var signals = !active ? java.util.List.<RadarSignal>of() : news.productionSnapshot().getItems().stream().map(item -> RadarSignal.builder()
-                            .itemId(item.getId()).title(item.getTitle()).content(item.getContent()).publishedAt(item.getPublishedAt())
-                            .providerCode(item.getProviderCode()).sourceName(item.getSourceName()).categoryCode(item.getCategoryCode()).build()).toList();
-                    processor.process(signals, now);
+                    boolean changed = processor.process(now);
                     if (!now.toLocalDate().equals(lastCleanup)) {
                         repository.prune(now);
                         lastCleanup = now.toLocalDate();
                     }
-                    if (active) {
+                    if (changed) {
                         revisions.invalidate("news");
                     }
                 } catch (RuntimeException error) {

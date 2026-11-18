@@ -109,8 +109,8 @@ class NewsAiProcessorTest {
         var one = signal("a", "公司签订合同", "合同金额2亿元");
         var two = signal("b", one.getTitle(), one.getContent());
         persist(one, two);
-        processor.process(List.of(one, two), now);
-        processor.process(List.of(one, two), now.plusMinutes(1));
+        processor.process(now);
+        processor.process(now.plusMinutes(1));
         assertEquals(1, calls.get());
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM news_ai_report", Integer.class));
         assertEquals("COMPANY", reports.find("a").orElseThrow().getCategoryCode());
@@ -119,17 +119,50 @@ class NewsAiProcessorTest {
     }
 
     @Test
+    void idleTicksAndIdenticalRefetchDoNotRecheckCompletedContentAfterRestart() {
+        var original = signal("a", "公司签订合同", "合同金额2亿元");
+        persist(original);
+        assertTrue(processor.process(now));
+        persistAt(original, now.plusSeconds(10));
+        var restarted = new NewsAiProcessor();
+        inject(restarted, "repository", repository, "reports", reports, "properties", properties,
+                "client", ReflectionTestUtils.getField(processor, "client"));
+        assertFalse(restarted.process(now.plusMinutes(1)));
+        assertEquals(1, repository.dailyEfficiency(now).getEligibleChecks());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void revisionArrivingDuringACallRemainsDueAndSupersedesTheOldVersion() {
+        var original = signal("a", "公司签订合同", "合同金额2亿元");
+        persist(original);
+        var revision = signal("a", original.getTitle(), "合同金额更正为3亿元");
+        responder = input -> {
+            persistAt(revision, now.plusSeconds(1));
+            return decisions(input, false, false);
+        };
+        assertFalse(processor.process(now));
+        var pending = reports.pendingAi(now.minusHours(36), now.plusMinutes(1), 10);
+        assertEquals(List.of(2), pending.stream().map(NewsReport::getContentVersion).toList());
+        responder = input -> decisions(input, false, false);
+        assertTrue(processor.process(now.plusMinutes(1)));
+        assertEquals(2, calls.get());
+        assertEquals(2, jdbc.queryForObject("SELECT content_version FROM news_ai_report WHERE report_id='a'", Integer.class));
+        assertFalse(processor.process(now.plusMinutes(2)));
+    }
+
+    @Test
     void masterOffMissingKeyAndZeroBudgetNeverSendRequests() {
         var one = signal("a", "公司签订合同", "合同金额2亿元");
         persist(one);
         properties.setEnabled(false);
-        processor.process(List.of(one), now);
+        processor.process(now);
         properties.setEnabled(true);
         provider.setApiKey("");
-        processor.process(List.of(one), now);
+        processor.process(now);
         provider.setApiKey("local-test-only");
         properties.setDailyBudgetMicros(0L);
-        processor.process(List.of(one), now);
+        processor.process(now);
         assertEquals(0, calls.get());
         assertTrue(repository.bindingsByHashes(List.of(key(one))).isEmpty());
         assertTrue(reports.find("a").isPresent());
@@ -141,18 +174,18 @@ class NewsAiProcessorTest {
         properties.setBackfillExisting(false);
         var old = signal("old", "旧新闻", "旧内容");
         persist(old);
-        processor.process(List.of(old), now.plusMinutes(1));
+        processor.process(now.plusMinutes(1));
         assertEquals(0, calls.get());
         var fresh = signal("new", "新新闻", "新内容");
         persistAt(fresh, now.plusMinutes(2));
-        processor.process(List.of(old, fresh), now.plusMinutes(3));
+        processor.process(now.plusMinutes(3));
         assertEquals(1, calls.get());
         properties.setEnabled(false);
-        processor.process(List.of(old, fresh), now.plusMinutes(4));
+        processor.process(now.plusMinutes(4));
         var offline = signal("offline", "停用期间", "另一条新闻");
         persistAt(offline, now.plusMinutes(5));
         properties.setEnabled(true);
-        processor.process(List.of(old, fresh, offline), now.plusMinutes(6));
+        processor.process(now.plusMinutes(6));
         assertEquals(1, calls.get());
     }
 
@@ -162,7 +195,7 @@ class NewsAiProcessorTest {
         var one = signal("a", "公司签订合同", "合同金额2亿元");
         var two = signal("b", "公司披露订单", "合同金额为2亿元，系同一合同");
         persist(one, two);
-        processor.process(List.of(one, two), now);
+        processor.process(now);
         var bindings = repository.bindingsByHashes(List.of(key(one), key(two)));
         assertEquals(bindings.get(key(one)).getEventKey(), bindings.get(key(two)).getEventKey());
         assertEquals(1, repository.event(bindings.get(key(one)).getEventKey()).getRevision());
@@ -173,7 +206,7 @@ class NewsAiProcessorTest {
         assertEquals(1, page.getTotal());
         assertEquals(2, page.getItems().getFirst().getMergedReportCount());
         properties.setEnabled(false);
-        processor.process(List.of(one, two), now.plusMinutes(1));
+        processor.process(now.plusMinutes(1));
         assertEquals(1, reports.query(query, now.minusHours(1), now).getTotal());
     }
 
@@ -183,12 +216,12 @@ class NewsAiProcessorTest {
         var one = signal("a", "公司签订合同", "合同金额2亿元");
         var two = signal("b", "新产品发布", "技术规格升级");
         persist(one, two);
-        processor.process(List.of(one, two), now);
+        processor.process(now);
         assertEquals(1, repository.bindingsByHashes(List.of(key(one), key(two))).size());
-        processor.process(List.of(one, two), now.plusMinutes(30));
+        processor.process(now.plusMinutes(30));
         assertEquals(1, calls.get());
         responder = input -> decisions(input, false, false);
-        processor.process(List.of(one, two), now.plusHours(1));
+        processor.process(now.plusHours(1));
         assertEquals(2, calls.get());
         assertEquals(1, requests.get(1).path("items").size());
         assertEquals(2, repository.bindingsByHashes(List.of(key(one), key(two))).size());
@@ -205,8 +238,8 @@ class NewsAiProcessorTest {
         });
         var one = signal("a", "公司签订合同", "合同金额2亿元");
         persist(one);
-        processor.process(List.of(one), now);
-        processor.process(List.of(one), now.plusHours(1));
+        processor.process(now);
+        processor.process(now.plusHours(1));
         assertEquals(1, calls.get());
         assertTrue(((Number) repository.dailyUsage(now).get("unresolved_micros")).longValue() > 0);
         assertEquals("UNKNOWN", jdbc.queryForObject("SELECT state FROM news_ai_content", String.class));
@@ -216,11 +249,11 @@ class NewsAiProcessorTest {
     void anotherDayReusesUnderstandingButMakesANewOccurrenceDecision() {
         var one = signal("a", "市场收盘", "指数上涨1%");
         persist(one);
-        processor.process(List.of(one), now);
+        processor.process(now);
         var tomorrow = signal("b", one.getTitle(), one.getContent());
         tomorrow.setPublishedAt(one.getPublishedAt().plusDays(1));
         persistAt(tomorrow, now.plusDays(1));
-        processor.process(List.of(tomorrow), now.plusDays(1));
+        processor.process(now.plusDays(1));
         assertEquals(2, calls.get());
         JsonNode second = requests.get(1).path("items").get(0);
         assertEquals("", second.path("content").asText());
@@ -233,7 +266,7 @@ class NewsAiProcessorTest {
     void changedCandidateRetriesOnlyMatchingUsingSavedUnderstanding() throws Exception {
         var original = signal("a", "公司签订合同", "合同金额2亿元");
         persist(original);
-        processor.process(List.of(original), now);
+        processor.process(now);
         String eventKey = repository.bindingsByHashes(List.of(key(original))).get(key(original)).getEventKey();
         var update = signal("b", "公司合同已交付", "合同完成交付");
         persist(update);
@@ -256,9 +289,9 @@ class NewsAiProcessorTest {
                 throw new IllegalStateException(error);
             }
         };
-        processor.process(List.of(update), now.plusMinutes(1));
+        processor.process(now.plusMinutes(1));
         assertTrue(repository.bindingsByHashes(List.of(key(update))).isEmpty());
-        processor.process(List.of(update), now.plusMinutes(7));
+        processor.process(now.plusMinutes(7));
         assertEquals(3, calls.get());
         assertEquals("", requests.get(2).path("items").get(0).path("content").asText());
         assertEquals(eventKey, repository.bindingsByHashes(List.of(key(update))).get(key(update)).getEventKey());
@@ -273,14 +306,14 @@ class NewsAiProcessorTest {
             jdbc.update("UPDATE news_report SET content='修订原文',content_version=2 WHERE id='a'");
             return decisions(input, false, false);
         };
-        processor.process(List.of(one), now);
+        processor.process(now);
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM news_ai_report", Integer.class));
         assertNull(reports.find("a").orElseThrow().getCategoryCode());
         var two = signal("b", "独立新闻", "独立正文");
         persist(two);
         reports.review("b", "MANUAL", "人工分类", "人工判断");
         responder = input -> decisions(input, false, false);
-        processor.process(List.of(two), now);
+        processor.process(now);
         assertEquals("MANUAL", reports.find("b").orElseThrow().getCategoryCode());
     }
 
@@ -289,7 +322,7 @@ class NewsAiProcessorTest {
         properties.setBackfillExisting(false);
         var old = signal("old", "公司签订合同", "合同金额2亿元");
         persist(old);
-        processor.process(List.of(old), now.plusMinutes(1));
+        processor.process(now.plusMinutes(1));
         var legacy = new com.finscope.domain.radar.RadarEvent();
         legacy.setId(1L);
         legacy.setEventKey("legacy");
@@ -314,7 +347,7 @@ class NewsAiProcessorTest {
                 throw new IllegalStateException(error);
             }
         };
-        processor.process(List.of(old, fresh), now.plusMinutes(3));
+        processor.process(now.plusMinutes(3));
         assertEquals(1, calls.get());
         var query = new NewsWindowQuery();
         query.setAsOfSequence(reports.latestSequence());
@@ -331,10 +364,10 @@ class NewsAiProcessorTest {
         var signal = signal("a", "公司签订合同", "合同金额2亿元");
         persist(signal);
         responder = input -> decisions(input, false, false).replace("NEW_EVENT", "DUPLICATE");
-        processor.process(List.of(signal), now);
+        processor.process(now);
         assertTrue(repository.bindingsByHashes(List.of(key(signal))).isEmpty());
         responder = input -> decisions(input, false, false);
-        processor.process(List.of(signal), now.plusHours(1));
+        processor.process(now.plusHours(1));
         assertEquals(2, calls.get());
         assertEquals("", requests.get(1).path("items").get(0).path("content").asText());
         assertFalse(requests.get(1).path("items").get(0).path("savedAnalysis").isNull());
@@ -347,21 +380,21 @@ class NewsAiProcessorTest {
         var yesterday = signal("yesterday", today.getTitle(), today.getContent());
         yesterday.setPublishedAt(today.getPublishedAt().minusDays(1));
         persist(today, yesterday);
-        processor.process(List.of(today, yesterday), now);
+        processor.process(now);
         assertEquals(1, calls.get());
         assertEquals(1, requests.getFirst().path("items").size());
-        processor.process(List.of(today, yesterday), now.plusMinutes(6));
+        processor.process(now.plusMinutes(6));
         assertEquals(2, calls.get());
         assertEquals("", requests.getLast().path("items").get(0).path("content").asText());
         var efficiency = repository.dailyEfficiency(now);
         assertEquals(1, efficiency.getFullTextItems());
         assertEquals(1, efficiency.getMatchingOnlyItems());
         assertTrue(efficiency.getGuardedChecks() > 0);
-        assertTrue(efficiency.getBindingReuseChecks() > 0);
+        assertEquals(0, efficiency.getBindingReuseChecks());
         assertTrue(efficiency.getRequestBytes() > 0);
-        processor.process(List.of(today, yesterday), now.plusMinutes(7));
+        processor.process(now.plusMinutes(7));
         provider.setModel("another-model");
-        processor.process(List.of(today, yesterday), now.plusMinutes(8));
+        processor.process(now.plusMinutes(8));
         assertEquals(2, calls.get());
     }
 
@@ -376,13 +409,13 @@ class NewsAiProcessorTest {
         });
         var original = signal("a", "公司签订合同", "合同金额2亿元");
         persist(original);
-        processor.process(List.of(original), now);
+        processor.process(now);
         provider.setModel("changed-model");
-        processor.process(List.of(original), now.plusHours(1));
+        processor.process(now.plusHours(1));
         var otherDay = signal("b", original.getTitle(), original.getContent());
         otherDay.setPublishedAt(original.getPublishedAt().minusDays(1));
         persist(otherDay);
-        processor.process(List.of(otherDay), now.plusHours(2));
+        processor.process(now.plusHours(2));
         assertEquals(1, calls.get());
     }
 
@@ -390,7 +423,7 @@ class NewsAiProcessorTest {
     void categoryRemovalReusesFactsAndOnlyReclassifiesWithoutSendingBody() {
         var original = signal("a", "公司签订合同", "合同金额2亿元");
         persist(original);
-        processor.process(List.of(original), now);
+        processor.process(now);
         when(categories.findEnabled()).thenReturn(List.of(new NewsCategory("NEW", "新分类", "公司经营披露", true, 1)));
         var next = signal("b", original.getTitle(), original.getContent());
         next.setPublishedAt(original.getPublishedAt().minusDays(1));
@@ -407,7 +440,7 @@ class NewsAiProcessorTest {
                 throw new IllegalStateException(error);
             }
         };
-        processor.process(List.of(next), now.plusMinutes(1));
+        processor.process(now.plusMinutes(1));
         assertEquals(2, calls.get());
         var item = requests.getLast().path("items").get(0);
         assertEquals("RECLASSIFY", item.path("mode").asText());
@@ -438,13 +471,13 @@ class NewsAiProcessorTest {
         };
         var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
-            var running = executor.submit(() -> processor.process(List.of(first), now));
+            var running = executor.submit(() -> processor.process(now));
             assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
-            processor.process(List.of(second), now.plusSeconds(1));
+            processor.process(now.plusSeconds(1));
             assertEquals(1, calls.get());
             release.countDown();
             running.get(5, java.util.concurrent.TimeUnit.SECONDS);
-            processor.process(List.of(second), now.plusMinutes(6));
+            processor.process(now.plusMinutes(6));
             assertEquals(2, calls.get());
             assertEquals(1, repository.dailyEfficiency(now).getFullTextItems());
             assertEquals(1, repository.dailyEfficiency(now).getMatchingOnlyItems());

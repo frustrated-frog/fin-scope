@@ -7,6 +7,7 @@ import com.finscope.dao.news.NewsAiRepository;
 import com.finscope.dao.news.NewsCategoryRepository;
 import com.finscope.dao.news.NewsReportRepository;
 import com.finscope.domain.news.NewsCategory;
+import com.finscope.domain.news.NewsReport;
 import com.finscope.domain.news.ai.*;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.NewsAiLunaClient;
@@ -39,11 +40,21 @@ public class NewsAiProcessor {
         return properties.isEnabled() && client.isConfigured();
     }
 
-    public void process(List<RadarSignal> signals, LocalDateTime now) {
+    public boolean process(LocalDateTime now) {
+        boolean active = isActive();
+        LocalDateTime since = repository.observeMode(active, now);
+        if (!active) {
+            return false;
+        }
+        var pending = reports.pendingAi(properties.isBackfillExisting() ? now.minusHours(36) : since, now,
+                properties.getMaxBatchesPerRun() * properties.getBatchSize());
+        if (pending.isEmpty()) {
+            return false;
+        }
         var efficiency = new NewsAiEfficiency();
         long started = System.nanoTime();
         try {
-            processIncrement(signals, now, efficiency);
+            return processIncrement(pending, now, efficiency);
         } finally {
             efficiency.setProcessingMs((System.nanoTime() - started) / 1_000_000);
             if (efficiency.getEligibleChecks() > 0) {
@@ -56,40 +67,40 @@ public class NewsAiProcessor {
         }
     }
 
-    private void processIncrement(List<RadarSignal> signals, LocalDateTime now, NewsAiEfficiency efficiency) {
-        boolean active = isActive();
-        LocalDateTime since = repository.observeMode(active, now);
-        if (!active) {
-            return;
-        }
-        Set<String> changed = properties.isBackfillExisting() ? Set.of() : repository.changedReportsSince(since.isAfter(now.minusHours(36)) ? since : now.minusHours(36));
+    private boolean processIncrement(List<NewsReport> pending, LocalDateTime now, NewsAiEfficiency efficiency) {
         Map<String, RadarSignal> unique = new LinkedHashMap<>();
-        signals.stream().sorted(Comparator.comparing(RadarSignal::getPublishedAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(RadarSignal::getItemId)).forEach(signal -> {
-            if (properties.isBackfillExisting() || changed.contains(signal.getItemId())) {
-                unique.putIfAbsent(NewsAiContentIdentity.occurrence(signal.getTitle(), signal.getContent(), signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt()), signal);
-            }
-        });
+        Map<String, String> occurrences = new HashMap<>();
+        for (NewsReport report : pending) {
+            LocalDateTime published = report.getPublishedAt() == null ? report.getFirstSeenAt() : report.getPublishedAt();
+            String key = NewsAiContentIdentity.occurrence(report.getTitle(), report.getContent(), published);
+            occurrences.put(report.getId(), key);
+            unique.putIfAbsent(key, RadarSignal.builder().itemId(report.getId()).title(report.getTitle())
+                    .content(report.getContent()).publishedAt(published).build());
+        }
         efficiency.setEligibleChecks(unique.size());
-        Map<String, NewsAiBinding> existing = repository.bindingsByHashes(unique.keySet());
-        Map<String, String> linked = repository.linkedReportKeys(signals.stream().map(RadarSignal::getItemId).toList());
-        for (RadarSignal signal : signals) {
-            String occurrence = NewsAiContentIdentity.occurrence(signal.getTitle(), signal.getContent(),
-                    signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt());
-            NewsAiBinding binding = existing.get(occurrence);
-            if (binding != null && !binding.getContentKey().equals(linked.get(signal.getItemId()))) {
-                repository.linkReport(signal.getItemId(), signal.getTitle(), signal.getContent(), binding);
+        var bindings = new HashMap<>(repository.bindingsByHashes(unique.keySet()));
+        efficiency.setBindingReuseChecks(bindings.size());
+        unique.keySet().removeAll(bindings.keySet());
+        List<NewsCategory> directory = categories.findEnabled();
+        if (!unique.isEmpty() && !directory.isEmpty()) {
+            analyzeMissing(unique, directory, efficiency, now);
+            bindings.putAll(repository.bindingsByHashes(unique.keySet()));
+        }
+        boolean changed = false;
+        for (NewsReport report : pending) {
+            var binding = bindings.get(occurrences.get(report.getId()));
+            if (binding != null) {
+                changed |= reports.applyAi(report.getId(), report.getTitle(), report.getContent(),
+                        binding.getAnalysis(), directory, NewsAiUnifiedAgent.VERSION);
+                changed |= repository.linkReport(report.getId(), report.getTitle(), report.getContent(), binding);
             }
         }
-        efficiency.setBindingReuseChecks(existing.size());
-        unique.keySet().removeAll(existing.keySet());
-        if (unique.isEmpty()) {
-            return;
-        }
-        List<NewsCategory> directory = categories.findEnabled();
-        if (directory.isEmpty()) {
-            return;
-        }
+        repository.finishReportVersions(pending, bindings.keySet(), now, properties.getMaxAttempts());
+        return changed;
+    }
+
+    private void analyzeMissing(Map<String, RadarSignal> unique, List<NewsCategory> directory,
+                                NewsAiEfficiency efficiency, LocalDateTime now) {
         NewsAiCandidateSelector.Index index = null;
         List<Claim> batch = new ArrayList<>();
         int calls = 0;
@@ -222,9 +233,6 @@ public class NewsAiProcessor {
             NewsAiEvent saved = bind(claim, decision, aliases, acceptedVersions, now);
             if (saved != null) {
                 index.put(saved);
-                reports.applyAi(claim.signal().getItemId(), claim.signal().getTitle(), claim.signal().getContent(), decision.getAnalysis(), directory, NewsAiUnifiedAgent.VERSION);
-                NewsAiBinding binding = repository.bindings(List.of(claim.key())).get(claim.key());
-                repository.linkReport(claim.signal().getItemId(), claim.signal().getTitle(), claim.signal().getContent(), binding);
             } else {
                 repository.fail(claim.key(), claim.owner(), NewsAiJobState.RETRYABLE, now.plusMinutes(5));
             }

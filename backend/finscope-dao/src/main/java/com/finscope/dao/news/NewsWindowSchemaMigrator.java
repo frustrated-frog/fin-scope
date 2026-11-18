@@ -31,6 +31,19 @@ public class NewsWindowSchemaMigrator implements InitializingBean {
                     + "ON news_report(COALESCE(published_at,first_seen_at),arrival_sequence)");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_report_version (report_id TEXT NOT NULL,version INTEGER NOT NULL,"
                     + "title TEXT NOT NULL,content TEXT NOT NULL,detected_at TEXT NOT NULL,PRIMARY KEY(report_id,version))");
+            if (jdbc.queryForList("PRAGMA table_info(news_report_version)").stream()
+                    .noneMatch(column -> "ai_due_at".equals(column.get("name")))) {
+                jdbc.execute("ALTER TABLE news_report_version ADD COLUMN ai_due_at TEXT");
+                // 仅在升级时承接原生产窗口中的当前版本；重启不重置已处理记录。
+                var now = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"));
+                jdbc.update("""
+                        UPDATE news_report_version AS v SET ai_due_at=max(v.detected_at,
+                            (SELECT coalesce(n.published_at,n.first_seen_at) FROM news_report n WHERE n.id=v.report_id))
+                        WHERE (v.report_id,v.version) IN (
+                            SELECT id,content_version FROM news_report WHERE coalesce(published_at,first_seen_at)>=?)
+                        """, now.minusHours(36).toString());
+            }
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_version_due ON news_report_version(ai_due_at,report_id) WHERE ai_due_at IS NOT NULL");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_report_read (report_id TEXT PRIMARY KEY,read_version INTEGER NOT NULL)");
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_report (report_id TEXT PRIMARY KEY,content_key TEXT NOT NULL,"
                     + "event_key TEXT NOT NULL,relation TEXT NOT NULL,content_version INTEGER NOT NULL)");

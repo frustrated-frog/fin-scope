@@ -32,6 +32,19 @@ Key 保存在 `~/.config/finscope/llm.local.properties`，配置项为 `finscope
                新闻列表 / 雷达生产只读取持久化结果
 ```
 
+抓取入库按报道 ID、标题和正文识别版本。新版本和 AI 的待处理时间在同一 SQLite 事务内保存。后台通过索引读取到期的当前版本，每轮最多读取「批大小 × 每轮批数」条报道。原样重抓沿用已有版本；修订会替换待处理版本。结构化结果重试沿用原任务的冷却时间，未知付费结果继续保留在调用账本中。升级时只初始化一次原有 36 小时窗口，再按 AI 开关和历史补录设置消费。
+
+每次快讯来源刷新写入 `news_fetch_batch`，保留 30 天。按来源区分适配器返回条数、失败后取用的缓存条数，以及成功入库的新增、修订、重抓次数。入库计数与每个分块同时提交，`completed_at` 为空表示整轮入库尚未完成。下面的查询可在本地 SQLite 中查看当天结果。
+
+```sql
+SELECT provider_code, source_status, count(*) AS batches, sum(fetched) AS fetched,
+       sum(cached) AS cached, sum(added) AS added, sum(revised) AS revised,
+       sum(unchanged) AS unchanged, count(*) - count(completed_at) AS unfinished
+FROM news_fetch_batch
+WHERE started_at >= date('now', 'localtime')
+GROUP BY provider_code, source_status;
+```
+
 每批最多六份待处理内容，一次输出业务分类、展示分类、事件类型、主题、主体、关键事实、短标题、摘要和事件关系。请求内使用 n/e 短编号，原始内容身份和候选版本留在服务端；输出 Schema 固定为内容编号、内容理解、关系判断的顺序，避免在理解原文前先生成关系结论。不会在分类、合并、摘要之间再次读取同一篇全文。正文最多1,600字符，保留开头及后续数字、否定和进展句；截断标识也发送给模型，信息不足时要求保守分开。
 
 内容键保留数字、小数点、正负号、标点和否定词，仅规范 Unicode 与连续空白，避免把“1.2亿/12亿”“+5%/-5%”误当成相同内容。相同标题及原文跨来源共用理解。内容理解可跨日复用；事件归属包含发生日期，避免每天同一句行情描述被永久归为同一事件。

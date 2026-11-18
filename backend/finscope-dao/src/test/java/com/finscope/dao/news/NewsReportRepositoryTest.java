@@ -37,6 +37,29 @@ class NewsReportRepositoryTest {
     }
 
     @Test
+    void migrationQueuesRecentCurrentVersionsOnceAndKeepsCompletedVersionsAcknowledged() {
+        var recent = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")).minusMinutes(5);
+        var report = report("legacy", "旧库报道");
+        report.setPublishedAt(recent);
+        report.setFirstSeenAt(recent);
+        report.setLastSeenAt(recent);
+        repository.ingest(List.of(report));
+        report.setContent("修订后的正文");
+        repository.ingest(List.of(report));
+        jdbc.execute("DROP INDEX idx_news_version_due");
+        jdbc.execute("ALTER TABLE news_report_version DROP COLUMN ai_due_at");
+        var migration = new NewsWindowSchemaMigrator();
+        ReflectionTestUtils.setField(migration, "jdbc", jdbc);
+        ReflectionTestUtils.setField(migration, "transactionManager", new DataSourceTransactionManager(jdbc.getDataSource()));
+        migration.afterPropertiesSet();
+        assertEquals(List.of(2), repository.pendingAi(recent, recent.plusMinutes(1), 10).stream()
+                .map(NewsReport::getContentVersion).toList());
+        jdbc.update("UPDATE news_report_version SET ai_due_at=NULL WHERE version=2");
+        migration.afterPropertiesSet();
+        assertTrue(repository.pendingAi(recent, recent.plusMinutes(1), 10).isEmpty());
+    }
+
+    @Test
     void recordsCommittedVersionChangesBySourceEvenAcrossChunks() {
         var status = com.finscope.common.enums.news.NewsSourceStatus.HEALTHY;
         repository.beginFetch("run", now, List.of(new NewsFetchCount("CLS", status, 3, 0)));
