@@ -142,6 +142,15 @@ public class MarketAiAgent {
         require(available.containsAll(numeric(text)));
     }
     private Set<BigDecimal> numeric(String text) {
+        // 中文“下跌0.50%”与“-0.50%”等价；只规范明确的跌幅表达，不放宽正负号校验。
+        var declines = Pattern.compile("(?:分别下跌|下跌|下挫|跌幅为|跌幅达)\\s*(\\d+(?:\\.\\d+)?%(?:[、和及]\\d+(?:\\.\\d+)?%)*)").matcher(text);
+        StringBuffer normalized = new StringBuffer();
+        while (declines.find()) {
+            String signed = declines.group(1).replaceAll("(\\d+(?:\\.\\d+)?%)", "-$1");
+            declines.appendReplacement(normalized, java.util.regex.Matcher.quoteReplacement(signed));
+        }
+        declines.appendTail(normalized);
+        text = normalized.toString();
         Set<BigDecimal> values = new HashSet<>();
         var matcher = NUMBER.matcher(text);
         while (matcher.find()) {

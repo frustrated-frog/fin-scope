@@ -197,6 +197,22 @@ class MarketAiTest {
         assertTrue(repository.findReviewSource(date.minusDays(1).toString(), date.atStartOfDay()).isEmpty());
     }
 
+    @Test
+    void chineseDeclineMagnitudesKeepTheSameMeaningAsSignedFacts() throws Exception {
+        var fact = new MarketAiFact();
+        fact.setId("Fdecline");
+        fact.setBusinessDate(date.toString());
+        fact.setLabel("指数");
+        fact.setValue("上证 -0.50%；创业板 -1.20%");
+        input.getFacts().add(fact);
+        var report = report();
+        report.getDrivers().getFirst().setDetail("指数分别下跌0.50%、1.20%。");
+        report.getDrivers().getFirst().setFactIds(List.of("Fdecline"));
+        assertNotNull(agent.parse(mapper.writeValueAsString(report), input));
+        report.getDrivers().getFirst().setDetail("指数上涨0.50%。");
+        assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
+    }
+
     private MarketAiService service() {
         var service = new MarketAiService();
         inject(service, "repository", repository, "snapshots", snapshots, "evidence", evidence, "agent", agent,
