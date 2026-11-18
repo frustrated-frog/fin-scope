@@ -46,6 +46,13 @@ class NewsReportRepositoryTest {
         repository.ingest(List.of(report));
         report.setContent("修订后的正文");
         repository.ingest(List.of(report));
+        var completed = report("linked", "已经理解的报道");
+        completed.setPublishedAt(recent);
+        completed.setFirstSeenAt(recent);
+        completed.setLastSeenAt(recent);
+        completed.setRuleVersion("news-understanding-v3");
+        repository.ingest(List.of(completed));
+        link("linked", "event", "NEW_EVENT");
         jdbc.execute("DROP INDEX idx_news_version_due");
         jdbc.execute("ALTER TABLE news_report_version DROP COLUMN ai_due_at");
         var migration = new NewsWindowSchemaMigrator();
