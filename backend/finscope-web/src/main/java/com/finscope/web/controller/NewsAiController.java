@@ -27,4 +27,3 @@ public class NewsAiController {
         return ApiResponses.success(service.calls(limit));
     }
 }
-

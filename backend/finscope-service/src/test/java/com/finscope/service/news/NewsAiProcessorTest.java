@@ -398,8 +398,9 @@ class NewsAiProcessorTest {
         responder = input -> {
             try {
                 var node = mapper.readTree(decisions(input, false, false));
-                var analysis = input.path("items").get(0).path("savedAnalysis").deepCopy();
-                ((com.fasterxml.jackson.databind.node.ObjectNode) analysis).put("categoryCode", "NEW");
+                var analysis = mapper.createObjectNode();
+                analysis.put("categoryCode", "NEW");
+                analysis.put("displayCategory", "FINANCE");
                 ((com.fasterxml.jackson.databind.node.ObjectNode) node.path("decisions").get(0)).set("analysis", analysis);
                 return mapper.writeValueAsString(node);
             } catch (Exception error) {

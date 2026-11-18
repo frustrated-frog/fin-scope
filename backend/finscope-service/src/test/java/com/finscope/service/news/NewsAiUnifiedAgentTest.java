@@ -158,14 +158,34 @@ class NewsAiUnifiedAgentTest {
         old.setFacts(List.of("合同金额1.2亿元"));
         item.setSavedAnalysis(old);
         item.setMode(NewsAiInputMode.RECLASSIFY);
-        var result = decision();
-        result.getAnalysis().setFacts(old.getFacts());
-        String text = mapper.writeValueAsString(Map.of("decisions", List.of(result)));
-        assertEquals(1, agent.parse(text, List.of(item), categories).size());
-        result.getAnalysis().setFacts(List.of("合同金额12亿元"));
-        text = mapper.writeValueAsString(Map.of("decisions", List.of(result)));
+        var result = mapper.valueToTree(Map.of("decisions", List.of(decision())));
+        var classification = mapper.createObjectNode().put("categoryCode", "COMPANY").put("displayCategory", "FINANCE");
+        ((com.fasterxml.jackson.databind.node.ObjectNode) result.path("decisions").get(0)).set("analysis", classification);
+        String text = mapper.writeValueAsString(result);
+        var parsed = agent.parse(text, List.of(item), categories);
+        assertEquals(1, parsed.size());
+        assertEquals(old.getFacts(), parsed.get("hash").getAnalysis().getFacts());
+        assertEquals(old.getSummary(), parsed.get("hash").getAnalysis().getSummary());
+        classification.set("facts", mapper.valueToTree(List.of("合同金额12亿元")));
+        text = mapper.writeValueAsString(result);
         assertTrue(agent.parse(text, List.of(item), categories).isEmpty());
         assertTrue(agent.parseAnalyses(text, List.of(item), categories).isEmpty());
+    }
+
+    @Test
+    void schemaRequiresUnderstandingForNewItemsAndNullForCachedMatchingItems() throws Exception {
+        var fresh = input();
+        var reused = input();
+        reused.setContentKey("cached");
+        reused.setSavedAnalysis(decision().getAnalysis());
+        reused.setMode(NewsAiInputMode.MATCH);
+        var request = mapper.readTree(agent().prepare(List.of(fresh, reused), categories).getBody());
+        var variants = request.path("text").path("format").path("schema").path("properties").path("decisions").path("items").path("anyOf");
+        assertEquals(2, variants.size());
+        assertEquals("object", variants.get(0).path("properties").path("analysis").path("type").asText());
+        assertEquals("n1", variants.get(0).path("properties").path("contentKey").path("enum").get(0).asText());
+        assertEquals("null", variants.get(1).path("properties").path("analysis").path("type").asText());
+        assertEquals("n2", variants.get(1).path("properties").path("contentKey").path("enum").get(0).asText());
     }
 
     private NewsAiUnifiedAgent agent() {
