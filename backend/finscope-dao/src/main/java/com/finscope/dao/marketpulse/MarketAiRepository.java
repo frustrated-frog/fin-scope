@@ -33,6 +33,14 @@ public class MarketAiRepository implements InitializingBean {
         return jdbc.query("SELECT payload FROM market_ai_review WHERE cache_key=?", (rs, n) -> read(rs.getString(1)), key).stream().findFirst();
     }
 
+    /** 仅选择本交易日前已生成的相邻日情景，避免事后生成的情景参与验证。 */
+    public Optional<MarketAiView> findReviewSource(String date, LocalDateTime before) {
+        return jdbc.query("SELECT payload FROM market_ai_review WHERE business_date=? AND status=? ORDER BY updated_at DESC,cache_key DESC LIMIT 20",
+                (rs, n) -> read(rs.getString(1)), date, MarketAiStatus.READY.name()).stream()
+                .filter(v -> v.getGeneratedAt() != null && v.getGeneratedAt().isBefore(before) && v.getReport() != null && !v.getReport().getScenarios().isEmpty())
+                .max(java.util.Comparator.comparing(MarketAiView::getGeneratedAt));
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public boolean claim(String key, String owner, MarketAiView view, LocalDateTime now) {
         int changed = jdbc.update("INSERT OR IGNORE INTO market_ai_review VALUES(?,?,?,?,0,?,?)", key,

@@ -35,9 +35,9 @@ public class MarketAiService {
         MarketAiInput input = input(date);
         MarketAiView base = base(input);
         if (base.getStatus() != MarketAiStatus.NOT_GENERATED) {
-            return base;
+            return reviewed(base, input);
         }
-        return repository.find(key(input)).orElse(base);
+        return reviewed(repository.find(key(input)).orElse(base), input);
     }
 
     public MarketAiView request(LocalDate date, boolean retry) {
@@ -92,6 +92,7 @@ public class MarketAiService {
             // 已收到回复但格式不合法，可以显式重试；不在客户端暗中多次请求。
             sent = false;
             view.setReport(agent.parse(reply.getText(), input));
+            evidence.applyAssessment(view, input);
             view.setStatus(MarketAiStatus.READY);
             view.setGeneratedAt(now());
             view.setMessage(null);
@@ -120,14 +121,25 @@ public class MarketAiService {
         view.setBusinessDate(input.getBusinessDate());
         view.setAsOf(input.getAsOf());
         view.setFacts(input.getFacts());
+        view.setStructure(input.getStructure());
+        view.setObservations(input.getObservations());
+        view.setObservationSamples(input.getObservationSamples());
+        view.setAdjustmentLimit(input.getAdjustmentLimit());
         view.setSectorNames(input.getSectorNames());
         view.setModel(client.model());
         view.setEffort(properties.getReasoningEffort());
         view.setStatus(!properties.isEnabled() ? MarketAiStatus.DISABLED : !client.isConfigured() ? MarketAiStatus.UNAVAILABLE : MarketAiStatus.NOT_GENERATED);
         boolean hasParticipation = input.getFacts().stream().anyMatch(f -> input.getBusinessDate().toString().equals(f.getBusinessDate())
                 && "市场参与".equals(f.getLabel()) && !f.getValue().startsWith("上涨比例 缺失"));
-        if (!hasParticipation) {
+        if (!hasParticipation || !input.getObservations().containsKey(com.finscope.common.enums.marketpulse.MarketScenarioMetric.ADVANCE_RATIO)) {
             view.setStatus(MarketAiStatus.UNAVAILABLE);
+        }
+        return view;
+    }
+    private MarketAiView reviewed(MarketAiView view, MarketAiInput input) {
+        if (input.getPreviousBusinessDate() != null) {
+            repository.findReviewSource(input.getPreviousBusinessDate(), input.getBusinessDate().atStartOfDay())
+                    .ifPresent(previous -> evidence.review(view, input, previous));
         }
         return view;
     }

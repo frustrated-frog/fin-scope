@@ -1,7 +1,7 @@
 package com.finscope.service.marketpulse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.common.enums.marketpulse.MarketAiStatus;
+import com.finscope.common.enums.marketpulse.*;
 import com.finscope.dao.marketpulse.*;
 import com.finscope.domain.marketpulse.*;
 import com.finscope.domain.marketpulse.ai.*;
@@ -40,8 +40,10 @@ class MarketAiTest {
         var future = workspace(date.plusDays(1));
         when(snapshots.findWorkspace(date)).thenReturn(Optional.of(today));
         when(snapshots.findRecentWorkspaces(6, date)).thenReturn(List.of(future, today, previous));
+        when(snapshots.findRecentWorkspaces(21, date)).thenReturn(List.of(future, today, previous));
+        properties = new MarketAiProperties();
         evidence = new MarketAiEvidenceService();
-        inject(evidence, "repository", snapshots, "mapper", mapper);
+        inject(evidence, "repository", snapshots, "mapper", mapper, "scoring", new MarketStructureScoring(), "properties", properties);
         input = evidence.assemble(today);
         SQLiteDataSource source = new SQLiteDataSource();
         source.setUrl("jdbc:sqlite:" + directory.resolve("ai.db"));
@@ -129,6 +131,7 @@ class MarketAiTest {
         verify(client, times(1)).complete(any());
         properties.setEnabled(false);
         assertEquals(MarketAiStatus.DISABLED, service.request(date, false).getStatus());
+        assertTrue(service.read(date).getStructure().stream().anyMatch(row -> row.getBaselineScore() != null));
         verify(client, times(1)).complete(any());
     }
 
@@ -177,6 +180,23 @@ class MarketAiTest {
         assertEquals(200L, jdbc.queryForObject("SELECT output_tokens FROM market_ai_attempt WHERE owner='first'", Long.class));
     }
 
+    @Test
+    void reviewUsesOnlyScenarioCreatedBeforeTheNextTradingDate() {
+        var now = date.atTime(18, 0);
+        var view = new MarketAiView();
+        view.setBusinessDate(date);
+        view.setStatus(MarketAiStatus.READY);
+        view.setReport(report());
+        view.setGeneratedAt(now);
+        repository.claim("before", "one", view, now);
+        repository.finish("before", "one", view, now);
+        view.setGeneratedAt(date.plusDays(1).atTime(16, 0));
+        repository.claim("after", "two", view, view.getGeneratedAt());
+        repository.finish("after", "two", view, view.getGeneratedAt());
+        assertEquals(now, repository.findReviewSource(date.toString(), date.plusDays(1).atStartOfDay()).orElseThrow().getGeneratedAt());
+        assertTrue(repository.findReviewSource(date.minusDays(1).toString(), date.atStartOfDay()).isEmpty());
+    }
+
     private MarketAiService service() {
         var service = new MarketAiService();
         inject(service, "repository", repository, "snapshots", snapshots, "evidence", evidence, "agent", agent,
@@ -194,7 +214,51 @@ class MarketAiTest {
         report.setDrivers(List.of(point(), point()));
         report.setContradictions(List.of(point()));
         report.setConditions(List.of(point(), point()));
+        report.setAdjustments(input.getStructure().stream().filter(row -> row.getBaselineScore() != null).map(row -> {
+            var adjustment = new MarketScoreAdjustment();
+            adjustment.setDimension(row.getDimension());
+            adjustment.setDelta(0);
+            adjustment.setReason("保留基准，观察持续性");
+            adjustment.setCounterEvidence("参与范围仍需验证");
+            adjustment.setFactIds(List.of("F1"));
+            return adjustment;
+        }).toList());
+        report.setScenarios(List.of(scenario("修复延续"), scenario("局部分化")));
         return report;
+    }
+    private MarketAiScenario scenario(String title) {
+        var scenario = new MarketAiScenario();
+        var thesis = point();
+        thesis.setTitle(title);
+        scenario.setThesis(thesis);
+        var confirm = new MarketScenarioCondition();
+        confirm.setMetric(MarketScenarioMetric.ADVANCE_RATIO);
+        confirm.setDirection(MarketScenarioDirection.RISE);
+        confirm.setExplanation(point());
+        scenario.setConfirmation(confirm);
+        var invalidate = new MarketScenarioCondition();
+        invalidate.setMetric(MarketScenarioMetric.ADVANCE_RATIO);
+        invalidate.setDirection(MarketScenarioDirection.FALL);
+        invalidate.setExplanation(point());
+        scenario.setInvalidation(invalidate);
+        return scenario;
+    }
+    @Test
+    void rejectsUnboundedDuplicateOrUnavailableAdjustmentsAndUnverifiableScenarios() throws Exception {
+        var report = report();
+        report.getAdjustments().getFirst().setDelta(16);
+        assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
+        report.getAdjustments().getFirst().setDelta(Integer.MIN_VALUE);
+        assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(report), input));
+        var duplicate = report();
+        duplicate.getAdjustments().getLast().setDimension(duplicate.getAdjustments().getFirst().getDimension());
+        assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(duplicate), input));
+        var unsupported = report();
+        unsupported.getScenarios().getFirst().getConfirmation().setMetric(MarketScenarioMetric.MA20_RATIO);
+        assertThrows(IllegalArgumentException.class, () -> agent.parse(mapper.writeValueAsString(unsupported), input));
+        var adjusted = report();
+        adjusted.getAdjustments().getFirst().setDelta(-8);
+        assertEquals(-8, agent.parse(mapper.writeValueAsString(adjusted), input).getAdjustments().getFirst().getDelta());
     }
     private MarketAiPoint point() {
         var point = new MarketAiPoint();
@@ -210,6 +274,10 @@ class MarketAiTest {
         var breadth = new MarketBreadthSnapshot();
         breadth.setBusinessDate(date);
         breadth.setAdvanceRatio(.63);
+        breadth.setValidCount(5000);
+        var pressure = new MarketVolumePressure();
+        pressure.setAdvanceAmountRatio(.6);
+        breadth.setVolumePressure(pressure);
         breadth.setTotalAmount(2.2e12);
         workspace.setBreadth(breadth);
         var regime = new MarketRegimeSnapshot();

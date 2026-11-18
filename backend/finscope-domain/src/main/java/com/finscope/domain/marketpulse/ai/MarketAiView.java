@@ -16,4 +16,9 @@ public class MarketAiView {
     private java.util.Map<String, String> sectorNames = new java.util.LinkedHashMap<>();
     private Long inputTokens;
     private Long outputTokens;
+    private java.util.List<MarketStructureScore> structure = new java.util.ArrayList<>();
+    private int adjustmentLimit = 15;
+    private java.util.List<MarketScenarioReview> previousScenarios = new java.util.ArrayList<>();
+    private java.util.Map<com.finscope.common.enums.marketpulse.MarketScenarioMetric, Double> observations = new java.util.LinkedHashMap<>();
+    private java.util.Map<com.finscope.common.enums.marketpulse.MarketScenarioMetric, Integer> observationSamples = new java.util.LinkedHashMap<>();
 }

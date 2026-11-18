@@ -9,13 +9,18 @@ import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.*;
 
-/** 从冻结快照构建事实目录；不把规则分数、规则阶段或模板结论喂给模型。 */
+/** 从冻结快照构建事实目录；同时保留可审计的结构基准，供模型有界调整。 */
 @Service
 public class MarketAiEvidenceService {
     @Resource
     private MarketPulseRepository repository;
     @Resource
     private ObjectMapper mapper;
+
+    @Resource
+    private MarketStructureScoring scoring;
+    @Resource
+    private MarketAiProperties properties;
 
     public MarketAiInput assemble(MarketPulseWorkspace workspace) {
         MarketAiInput input = new MarketAiInput();
@@ -27,13 +32,31 @@ public class MarketAiEvidenceService {
                 addWorkspace(input, previous, false, workspace.getBreadth());
             }
         }
+        var history = repository.findRecentWorkspaces(21, workspace.getBusinessDate());
+        input.setStructure(scoring.calculate(workspace, history));
+        history.stream().map(MarketPulseWorkspace::getBusinessDate).filter(Objects::nonNull).filter(d -> d.isBefore(workspace.getBusinessDate()))
+                .max(LocalDate::compareTo).ifPresent(d -> input.setPreviousBusinessDate(d.toString()));
+        scoring.observations(input, workspace);
+        input.setAdjustmentLimit(properties.getMaxScoreAdjustment());
+        for (var score : input.getStructure()) {
+            score.setFactIds(input.getFacts().stream().filter(f -> f.getSectorCode() == null && f.getBusinessDate().equals(input.getBusinessDate().toString()))
+                    .limit(6).map(MarketAiFact::getId).toList());
+        }
         try {
-            byte[] bytes = mapper.writeValueAsBytes(List.of(input.getBusinessDate().toString(), input.getFacts(), input.getSectorNames()));
+            byte[] bytes = mapper.writeValueAsBytes(List.of(input.getBusinessDate().toString(), input.getFacts(), input.getSectorNames(), input.getStructure(), input.getAdjustmentLimit(), input.getObservations(), input.getObservationSamples(), MarketStructureScoring.VERSION));
             input.setFingerprint(HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
         } catch (Exception error) {
             throw new IllegalStateException("市场事实指纹生成失败", error);
         }
         return input;
+    }
+
+    public void applyAssessment(MarketAiView view, MarketAiInput input) {
+        view.setStructure(scoring.apply(input.getStructure(), view.getReport().getAdjustments()));
+    }
+
+    public void review(MarketAiView view, MarketAiInput input, MarketAiView previous) {
+        view.setPreviousScenarios(scoring.review(previous, input));
     }
 
     private void addWorkspace(MarketAiInput input, MarketPulseWorkspace workspace, boolean current, MarketBreadthSnapshot reference) {

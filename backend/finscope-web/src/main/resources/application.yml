@@ -70,7 +70,8 @@ finscope:
   market-ai:
     enabled: true
     reasoning-effort: low
-    max-output-tokens: 5000
+    max-output-tokens: 7000
+    max-score-adjustment: 15
     initial-delay-ms: 45000
     interval-ms: 60000
   news-ai:

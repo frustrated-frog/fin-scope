@@ -18,6 +18,9 @@ public class MarketAiResponse {
     private MarketAiReport report;
     private List<MarketAiFact> facts;
     private Map<String, String> sectorNames;
+    private List<MarketStructureScore> structure;
+    private int adjustmentLimit;
+    private List<MarketScenarioReview> previousScenarios;
     private Long inputTokens;
     private Long outputTokens;
 
@@ -32,6 +35,9 @@ public class MarketAiResponse {
         response.setMessage(view.getMessage());
         response.setReport(view.getReport());
         response.setFacts(view.getFacts());
+        response.setStructure(view.getStructure());
+        response.setPreviousScenarios(view.getPreviousScenarios());
+        response.setAdjustmentLimit(view.getAdjustmentLimit());
         response.setSectorNames(view.getSectorNames());
         response.setInputTokens(view.getInputTokens());
         response.setOutputTokens(view.getOutputTokens());

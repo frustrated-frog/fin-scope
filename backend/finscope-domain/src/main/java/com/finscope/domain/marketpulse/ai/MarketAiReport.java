@@ -12,4 +12,6 @@ public class MarketAiReport {
     private java.util.List<MarketAiPoint> contradictions = new java.util.ArrayList<>();
     private java.util.List<MarketAiSector> sectors = new java.util.ArrayList<>();
     private java.util.List<MarketAiPoint> conditions = new java.util.ArrayList<>();
+    private java.util.List<MarketScoreAdjustment> adjustments = new java.util.ArrayList<>();
+    private java.util.List<MarketAiScenario> scenarios = new java.util.ArrayList<>();
 }
