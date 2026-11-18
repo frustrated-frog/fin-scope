@@ -1,6 +1,7 @@
 package com.finscope.service.news;
 
 import com.finscope.dao.news.NewsAiRepository;
+import com.finscope.domain.news.ai.NewsAiEfficiency;
 import com.finscope.rpc.llm.NewsAiLunaClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -17,6 +18,11 @@ class NewsAiStatusServiceTest {
         var repository = mock(NewsAiRepository.class);
         when(repository.dailyUsage(any())).thenReturn(Map.of("calls", 3L, "input_tokens", 200L,
                 "output_tokens", 100L, "actual_micros", 2_000_000L, "unresolved_micros", 500_000L));
+        var efficiency = new NewsAiEfficiency();
+        efficiency.setFullTextItems(2);
+        efficiency.setMatchingOnlyItems(3);
+        efficiency.setSentChars(1200);
+        when(repository.dailyEfficiency(any())).thenReturn(efficiency);
         var client = mock(NewsAiLunaClient.class);
         when(client.model()).thenReturn("gpt-6-luna");
         var service = new NewsAiStatusService();
@@ -28,6 +34,9 @@ class NewsAiStatusServiceTest {
         assertNull(status.getDailyMaxCalls());
         assertNull(status.getRemainingMicros());
         assertEquals(3L, status.getCalls());
+        assertEquals(2, status.getEfficiency().getFullTextItems());
+        assertEquals(3, status.getEfficiency().getMatchingOnlyItems());
+        assertEquals(1200, status.getEfficiency().getSentChars());
         assertEquals(2_000_000L, status.getActualMicros());
         properties.setDailyBudgetMicros(3_000_000L);
         assertEquals(500_000L, service.status().getRemainingMicros());

@@ -1,6 +1,7 @@
 package com.finscope.service.news;
 
 import com.finscope.common.enums.news.NewsAiJobState;
+import com.finscope.common.enums.news.NewsAiInputMode;
 import com.finscope.common.enums.news.NewsAiRelation;
 import com.finscope.dao.news.NewsAiRepository;
 import com.finscope.dao.news.NewsCategoryRepository;
@@ -39,6 +40,23 @@ public class NewsAiProcessor {
     }
 
     public void process(List<RadarSignal> signals, LocalDateTime now) {
+        var efficiency = new NewsAiEfficiency();
+        long started = System.nanoTime();
+        try {
+            processIncrement(signals, now, efficiency);
+        } finally {
+            efficiency.setProcessingMs((System.nanoTime() - started) / 1_000_000);
+            if (efficiency.getEligibleChecks() > 0) {
+                try {
+                    repository.recordEfficiency(now, efficiency);
+                } catch (RuntimeException error) {
+                    log.warn("新闻AI复用计数暂未保存 errorType={}", error.getClass().getSimpleName());
+                }
+            }
+        }
+    }
+
+    private void processIncrement(List<RadarSignal> signals, LocalDateTime now, NewsAiEfficiency efficiency) {
         boolean active = isActive();
         LocalDateTime since = repository.observeMode(active, now);
         if (!active) {
@@ -52,6 +70,7 @@ public class NewsAiProcessor {
                 unique.putIfAbsent(NewsAiContentIdentity.occurrence(signal.getTitle(), signal.getContent(), signal.getPublishedAt() == null ? signal.getFirstSeenAt() : signal.getPublishedAt()), signal);
             }
         });
+        efficiency.setEligibleChecks(unique.size());
         Map<String, NewsAiBinding> existing = repository.bindingsByHashes(unique.keySet());
         Map<String, String> linked = repository.linkedReportKeys(signals.stream().map(RadarSignal::getItemId).toList());
         for (RadarSignal signal : signals) {
@@ -62,6 +81,7 @@ public class NewsAiProcessor {
                 repository.linkReport(signal.getItemId(), signal.getTitle(), signal.getContent(), binding);
             }
         }
+        efficiency.setBindingReuseChecks(existing.size());
         unique.keySet().removeAll(existing.keySet());
         if (unique.isEmpty()) {
             return;
@@ -70,8 +90,6 @@ public class NewsAiProcessor {
         if (directory.isEmpty()) {
             return;
         }
-        String policy = NewsAiContentIdentity.digest(NewsAiUnifiedAgent.VERSION + client.model() + directory.stream()
-                .map(category -> category.getCode() + ":" + category.getClassificationGuidance()).sorted().toList());
         NewsAiCandidateSelector.Index index = null;
         List<Claim> batch = new ArrayList<>();
         int calls = 0;
@@ -79,19 +97,30 @@ public class NewsAiProcessor {
             if (!properties.isEnabled() || calls >= properties.getMaxBatchesPerRun()) {
                 break;
             }
-            String cacheKey = input.getKey() + ":" + policy;
+            String cacheKey = repository.jobKey(input.getKey());
             String owner = UUID.randomUUID().toString();
             if (!repository.claim(cacheKey, input.getKey(), owner, now, properties.getMaxAttempts())) {
+                efficiency.setGuardedChecks(efficiency.getGuardedChecks() + 1);
                 continue;
             }
             if (index == null) {
                 index = selector.index(selector.pool(now));
             }
-            NewsAiWorkItem work = work(input.getKey(), cacheKey, input.getValue(), index, directory);
+            NewsAiWorkItem work = work(input.getKey(), cacheKey, owner, input.getValue(), index, directory, now);
+            if (work == null) {
+                repository.defer(cacheKey, owner, now.plusMinutes(5));
+                efficiency.setGuardedChecks(efficiency.getGuardedChecks() + 1);
+                continue;
+            }
             batch.add(new Claim(cacheKey, owner, work, input.getValue()));
             // 后续同批新闻可直接比较此前输入，不要求先完成另一次模型调用。
             NewsAiEvent seed = new NewsAiEvent(); seed.setEventKey("news-ai:" + input.getKey());
-            NewsAiAnalysis description = new NewsAiAnalysis(); description.setTitle(work.getTitle()); description.setSummary(work.getContent());
+            NewsAiAnalysis description = work.getSavedAnalysis();
+            if (description == null) {
+                description = new NewsAiAnalysis();
+                description.setTitle(work.getTitle());
+                description.setSummary(work.getContent());
+            }
             seed.setAnalysis(description); seed.setFirstAt(work.getPublishedAt()); seed.setLastAt(work.getPublishedAt()); index.put(seed);
             if (batch.size() >= properties.getBatchSize()) {
                 runBatch(batch, directory, index, now); batch.clear(); calls++;
@@ -102,12 +131,18 @@ public class NewsAiProcessor {
         }
     }
 
-    private NewsAiWorkItem work(String hash, String cacheKey, RadarSignal signal, NewsAiCandidateSelector.Index index, List<NewsCategory> directory) {
+    private NewsAiWorkItem work(String hash, String cacheKey, String owner, RadarSignal signal, NewsAiCandidateSelector.Index index, List<NewsCategory> directory, LocalDateTime now) {
         NewsAiWorkItem work = new NewsAiWorkItem(); work.setContentKey(hash); work.setTitle(signal.getTitle());
         NewsAiAnalysis savedAnalysis = repository.analysis(cacheKey);
         work.setSavedAnalysis(savedAnalysis == null ? repository.reusableAnalysis(hash) : savedAnalysis);
-        if (work.getSavedAnalysis() != null && directory.stream().noneMatch(category -> category.getCode().equals(work.getSavedAnalysis().getCategoryCode()))) {
-            work.setSavedAnalysis(null);
+        if (work.getSavedAnalysis() == null) {
+            if (!repository.claimUnderstanding(hash, owner, now, properties.getMaxAttempts())) {
+                return null;
+            }
+            work.setMode(NewsAiInputMode.UNDERSTAND);
+        } else {
+            work.setMode(directory.stream().anyMatch(category -> category.getCode().equals(work.getSavedAnalysis().getCategoryCode()))
+                    ? NewsAiInputMode.MATCH : NewsAiInputMode.RECLASSIFY);
         }
         work.setContent(work.getSavedAnalysis() == null ? selector.snippet(signal.getContent(), properties.getContentChars()) : "");
         work.setBodyTruncated(signal.getContent() != null && signal.getContent().length() > properties.getContentChars());
@@ -132,16 +167,21 @@ public class NewsAiProcessor {
         NewsAiLunaClient.Prepared prepared = agent.prepare(inputs, directory);
         long upper = properties.costMicros(prepared.getInputTokenUpperBound(), properties.getMaxOutputTokens());
         if (!properties.isEnabled() || !repository.reserve(callId, client.model(), upper, properties.getDailyBudgetMicros(), properties.getDailyMaxCalls(), now)) {
-            claims.forEach(claim -> repository.defer(claim.key(), claim.owner(), now.toLocalDate().plusDays(1).atStartOfDay()));
+            claims.forEach(claim -> {
+                repository.defer(claim.key(), claim.owner(), now.toLocalDate().plusDays(1).atStartOfDay());
+                repository.releaseUnderstanding(claim.work().getContentKey(), claim.owner(), NewsAiJobState.RETRYABLE, now);
+            });
             return;
         }
-        boolean owned = true;
-        for (Claim claim : claims) {
-            owned &= repository.attachCall(claim.key(), claim.owner(), callId);
-        }
+        List<NewsAiDispatchItem> dispatch = claims.stream().map(this::dispatchItem).toList();
+        int references = inputs.stream().mapToInt(item -> item.getCandidates().size()).sum();
+        Set<String> pending = new HashSet<>();
+        inputs.forEach(item -> pending.add("news-ai:" + item.getContentKey()));
+        int uniqueCandidates = (int) inputs.stream().flatMap(item -> item.getCandidates().stream()).map(NewsAiEvent::getEventKey)
+                .filter(key -> !pending.contains(key)).distinct().count();
+        boolean owned = repository.attachDispatch(callId, dispatch, NewsAiUnifiedAgent.VERSION, prepared.getBody().length, references, uniqueCandidates, now);
         if (!owned || !properties.isEnabled()) {
-            repository.settle(callId, 0L, 0L, 0L, "CANCELLED_BEFORE_SEND");
-            claims.forEach(claim -> repository.fail(claim.key(), claim.owner(), NewsAiJobState.RETRYABLE, now.plusMinutes(5)));
+            repository.cancelDispatch(callId, dispatch, now);
             return;
         }
         NewsAiLunaClient.Reply reply;
@@ -152,7 +192,10 @@ public class NewsAiProcessor {
                 Thread.currentThread().interrupt();
             }
             repository.settle(callId, null, null, null, error.getClass().getSimpleName());
-            claims.forEach(claim -> repository.fail(claim.key(), claim.owner(), NewsAiJobState.UNKNOWN, now.plusDays(1)));
+            claims.forEach(claim -> {
+                repository.fail(claim.key(), claim.owner(), NewsAiJobState.UNKNOWN, now.plusDays(1));
+                repository.releaseUnderstanding(claim.work().getContentKey(), claim.owner(), NewsAiJobState.UNKNOWN, now.plusDays(1));
+            });
             log.warn("新闻 AI 请求结果未知，保留费用预留且不自动重发 callId={} errorType={}", callId, error.getClass().getSimpleName());
             return;
         }
@@ -169,6 +212,9 @@ public class NewsAiProcessor {
                 continue;
             }
             NewsAiDecision decision = decisions.get(claim.work().getContentKey());
+            if (analysis == null) {
+                repository.releaseUnderstanding(claim.work().getContentKey(), claim.owner(), NewsAiJobState.RETRYABLE, now.plusHours(1));
+            }
             if (decision == null) {
                 repository.fail(claim.key(), claim.owner(), NewsAiJobState.RETRYABLE, now.plusHours(1));
                 continue;
@@ -184,6 +230,17 @@ public class NewsAiProcessor {
             }
         }
         log.info("新闻 AI 批次完成 callId={} items={} valid={} inputTokens={} outputTokens={}", callId, claims.size(), decisions.size(), reply.getInputTokens(), reply.getOutputTokens());
+    }
+
+    private NewsAiDispatchItem dispatchItem(Claim claim) {
+        var item = new NewsAiDispatchItem();
+        item.setJobKey(claim.key());
+        item.setOwner(claim.owner());
+        item.setOccurrenceKey(claim.work().getContentKey());
+        item.setMode(claim.work().getMode());
+        item.setSourceChars(claim.signal().getContent() == null ? 0 : claim.signal().getContent().length());
+        item.setSentChars(claim.work().getContent().length());
+        return item;
     }
 
     private NewsAiEvent bind(Claim claim, NewsAiDecision decision, Map<String, String> aliases, Map<String, Integer> acceptedVersions, LocalDateTime now) {

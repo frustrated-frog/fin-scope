@@ -149,6 +149,25 @@ class NewsAiUnifiedAgentTest {
         assertTrue(mapper.writeValueAsBytes(payload).length < legacyCandidateBytes / 2);
     }
 
+    @Test
+    void reclassificationCannotRewritePreviouslyUnderstoodFacts() throws Exception {
+        var agent = agent();
+        var item = input();
+        var old = decision().getAnalysis();
+        old.setCategoryCode("OLD");
+        old.setFacts(List.of("合同金额1.2亿元"));
+        item.setSavedAnalysis(old);
+        item.setMode(NewsAiInputMode.RECLASSIFY);
+        var result = decision();
+        result.getAnalysis().setFacts(old.getFacts());
+        String text = mapper.writeValueAsString(Map.of("decisions", List.of(result)));
+        assertEquals(1, agent.parse(text, List.of(item), categories).size());
+        result.getAnalysis().setFacts(List.of("合同金额12亿元"));
+        text = mapper.writeValueAsString(Map.of("decisions", List.of(result)));
+        assertTrue(agent.parse(text, List.of(item), categories).isEmpty());
+        assertTrue(agent.parseAnalyses(text, List.of(item), categories).isEmpty());
+    }
+
     private NewsAiUnifiedAgent agent() {
         var client = new com.finscope.rpc.llm.NewsAiLunaClient();
         ReflectionTestUtils.setField(client, "mapper", mapper);

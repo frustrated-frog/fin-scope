@@ -28,7 +28,7 @@ public class NewsAiUnifiedAgent {
                 + "按输入顺序逐条处理contentKey，每条只根据自己的原文与candidates判断，不能串用其他条目的关系解释。"
                 + "先提取该条原文的主体、动作、对象、时间、数字与阶段，再判断它与候选的关系。"
                 + "analysis只描述该条原文，不混入候选中的事实。savedAnalysis为空时analysis必须是完整对象，重复报道也必须返回；"
-                + "savedAnalysis非空时analysis必须返回null，复用已保存理解，不重新理解正文。"
+                + "savedAnalysis非空且mode不是RECLASSIFY时analysis必须返回null，复用已保存理解，不重新理解正文。RECLASSIFY只允许修改categoryCode和displayCategory，analysis返回完整对象，其余字段必须与savedAnalysis完全一致，不需要正文。"
                 + "一次完成分类、事件类型、主题、主体、关键事实、短标题摘要及事件归属。categoryCode只能使用目录中的代码。"
                 + "财经公司业绩与股价消息属于FINANCE；技术产品进展属于TECHNOLOGY；政策监管按实质分类。"
                 + "同主题或同公司不能作为同事件的充分条件。比较核心动作、参与者、对象、时间、报告期、金额指标与进展阶段。"
@@ -59,7 +59,7 @@ public class NewsAiUnifiedAgent {
                         candidateDirectory.put(alias, wire);
                     }
                 }
-                wireItems.add(ordered("contentKey", ids.items().get(item.getContentKey()), "title", item.getTitle(),
+                wireItems.add(ordered("mode", item.getMode(), "contentKey", ids.items().get(item.getContentKey()), "title", item.getTitle(),
                         "content", item.getContent(), "bodyTruncated", item.isBodyTruncated(), "publishedAt", item.getPublishedAt(),
                         "savedAnalysis", item.getSavedAnalysis(), "candidateKeys", candidates));
             }
@@ -98,7 +98,7 @@ public class NewsAiUnifiedAgent {
                             .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).readValue(decoded);
                     NewsAiWorkItem input = inputs.get(key);
                     if (valid(decision, input, codes)) {
-                        if (input.getSavedAnalysis() != null) {
+                        if (input.getSavedAnalysis() != null && input.getMode() != NewsAiInputMode.RECLASSIFY) {
                             decision.setAnalysis(input.getSavedAnalysis());
                         }
                         result.put(key, decision);
@@ -134,9 +134,9 @@ public class NewsAiUnifiedAgent {
             }
             try {
                 var saved = inputs.get(key).getSavedAnalysis();
-                var analysis = saved == null ? mapper.readerFor(NewsAiAnalysis.class)
+                var analysis = saved == null || inputs.get(key).getMode() == NewsAiInputMode.RECLASSIFY ? mapper.readerFor(NewsAiAnalysis.class)
                         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).<NewsAiAnalysis>readValue(node.path("analysis")) : saved;
-                if (validAnalysis(analysis, codes)) {
+                if (validAnalysis(analysis, codes) && preservesUnderstanding(inputs.get(key), analysis)) {
                     result.put(key, analysis);
                 }
             } catch (Exception invalidAnalysis) {
@@ -194,8 +194,8 @@ public class NewsAiUnifiedAgent {
     }
 
     private boolean valid(NewsAiDecision decision, NewsAiWorkItem input, Set<String> categories) {
-        NewsAiAnalysis value = input.getSavedAnalysis() == null ? decision.getAnalysis() : input.getSavedAnalysis();
-        if (!validAnalysis(value, categories) || decision.getRelation() == null || !text(decision.getReason(), 320)
+        NewsAiAnalysis value = input.getSavedAnalysis() == null || input.getMode() == NewsAiInputMode.RECLASSIFY ? decision.getAnalysis() : input.getSavedAnalysis();
+        if (!validAnalysis(value, categories) || !preservesUnderstanding(input, value) || decision.getRelation() == null || !text(decision.getReason(), 320)
                 || !strings(decision.getNewFacts(), 8, 240) || decision.getTargetKey() == null) {
             return false;
         }
@@ -205,6 +205,16 @@ public class NewsAiUnifiedAgent {
         }
         boolean targetKnown = input.getCandidates().stream().anyMatch(candidate -> candidate.getEventKey().equals(decision.getTargetKey()));
         return decision.getRelation() == NewsAiRelation.NEW_EVENT ? decision.getTargetKey().isEmpty() : targetKnown;
+    }
+
+    private boolean preservesUnderstanding(NewsAiWorkItem input, NewsAiAnalysis result) {
+        var saved = input.getSavedAnalysis();
+        if (saved == null || input.getMode() != NewsAiInputMode.RECLASSIFY) {
+            return true;
+        }
+        return result != null && Objects.equals(saved.getTitle(), result.getTitle()) && Objects.equals(saved.getSummary(), result.getSummary())
+                && Objects.equals(saved.getEntities(), result.getEntities()) && Objects.equals(saved.getTopics(), result.getTopics())
+                && Objects.equals(saved.getFacts(), result.getFacts()) && saved.getEventType() == result.getEventType();
     }
 
     private boolean validAnalysis(NewsAiAnalysis value, Set<String> categories) {

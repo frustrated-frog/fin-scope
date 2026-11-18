@@ -36,6 +36,7 @@ public class NewsAiStatusService {
         status.setRemainingMicros(properties.getDailyBudgetMicros() == null ? null
                 : Math.max(0, properties.getDailyBudgetMicros() - status.getActualMicros() - status.getUnresolvedMicros()));
         status.setJobs(repository.jobCounts());
+        status.setEfficiency(repository.dailyEfficiency(LocalDateTime.now(clock)));
         return status;
     }
 

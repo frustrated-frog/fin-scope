@@ -19,4 +19,5 @@ public class NewsAiStatus {
     private long unresolvedMicros;
     private Long remainingMicros;
     private Map<String, Long> jobs;
+    private NewsAiEfficiency efficiency;
 }

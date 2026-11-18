@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data
 public class NewsAiWorkItem {
+    private com.finscope.common.enums.news.NewsAiInputMode mode = com.finscope.common.enums.news.NewsAiInputMode.UNDERSTAND;
     private String contentKey;
     private String title;
     private String content;

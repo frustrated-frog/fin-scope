@@ -3,6 +3,7 @@ package com.finscope.dao.news;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.news.NewsAiJobState;
 import com.finscope.common.enums.news.NewsAiRelation;
+import com.finscope.common.enums.news.NewsAiInputMode;
 import com.finscope.domain.news.ai.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,6 +107,86 @@ class NewsAiRepositoryTest {
         assertEquals(now, transaction.execute(status -> repository.observeMode(true, now.plusHours(1))));
         transaction.execute(status -> repository.observeMode(false, now.plusHours(2)));
         assertEquals(now.plusHours(3), transaction.execute(status -> repository.observeMode(true, now.plusHours(3))));
+    }
+
+    @Test
+    void stableJobIdentityInheritsUnknownLegacyWorkAcrossPolicyChanges() {
+        String occurrence = "body@2026-11-17";
+        repository.claim("old-model-policy", occurrence, "one", now, 2);
+        repository.attachCall("old-model-policy", "one", "sent");
+        repository.fail("old-model-policy", "one", NewsAiJobState.UNKNOWN, now.plusDays(1));
+        assertEquals("old-model-policy", repository.jobKey(occurrence));
+        assertEquals("old-model-policy", repository.jobKey(occurrence));
+        assertFalse(repository.claim(repository.jobKey(occurrence), occurrence, "new-model", now.plusDays(2), 2));
+        assertFalse(repository.claimUnderstanding("body@2026-11-18", "next", now, 2));
+    }
+
+    @Test
+    void understandingLeaseIsSharedAcrossDatesAndDispatchedUnknownNeverResends() {
+        var first = item("body@2026-11-17", "one", NewsAiInputMode.UNDERSTAND);
+        assertTrue(repository.claim(first.getJobKey(), first.getOccurrenceKey(), "one", now, 2));
+        assertTrue(repository.claimUnderstanding(first.getOccurrenceKey(), "one", now, 2));
+        assertFalse(repository.claimUnderstanding("body@2026-11-18", "two", now, 2));
+        assertTrue(repository.reserve("call", "luna", 100, null, null, now));
+        assertEquals(Boolean.TRUE, transaction.execute(status -> repository.attachDispatch("call", List.of(first), "v3", 1000, 3, 1, now)));
+        assertFalse(repository.claimUnderstanding("body@2026-11-18", "two", now.plusMinutes(6), 2));
+        assertEquals("UNKNOWN", jdbc.queryForObject("SELECT state FROM news_ai_understanding", String.class));
+        assertEquals(1, jdbc.queryForObject("SELECT attempt FROM news_ai_understanding", Integer.class));
+    }
+
+    @Test
+    void cancelledBatchDoesNotPartiallyAttachOrConsumeAttemptsAndAuditCountsOnlySentWork() {
+        var first = item("one@2026-11-17", "one", NewsAiInputMode.UNDERSTAND);
+        var second = item("two@2026-11-17", "wrong-owner", NewsAiInputMode.UNDERSTAND);
+        repository.claim(first.getJobKey(), first.getOccurrenceKey(), "one", now, 2);
+        repository.claimUnderstanding(first.getOccurrenceKey(), "one", now, 2);
+        repository.claim(second.getJobKey(), second.getOccurrenceKey(), "actual-owner", now, 2);
+        repository.reserve("cancel", "luna", 100, null, null, now);
+        assertEquals(Boolean.FALSE, transaction.execute(status -> repository.attachDispatch("cancel", List.of(first, second), "v3", 1000, 0, 0, now)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM news_ai_content WHERE call_id IS NOT NULL", Integer.class));
+        transaction.executeWithoutResult(status -> repository.cancelDispatch("cancel", List.of(first, second), now));
+        assertEquals(0, jdbc.queryForObject("SELECT attempt FROM news_ai_content WHERE cache_key=?", Integer.class, first.getJobKey()));
+        assertEquals(0, repository.dailyEfficiency(now).getItemsSent());
+        assertTrue(repository.claim(first.getJobKey(), first.getOccurrenceKey(), "one", now.plusMinutes(6), 2));
+        assertTrue(repository.claimUnderstanding(first.getOccurrenceKey(), "one", now.plusMinutes(6), 2));
+        repository.reserve("real", "luna", 100, null, null, now.plusMinutes(6));
+        assertEquals(Boolean.TRUE, transaction.execute(status -> repository.attachDispatch("real", List.of(first), "v3", 1000, 6, 1, now.plusMinutes(6))));
+        repository.settle("real", 20L, 10L, 7L, null);
+        var usage = repository.dailyEfficiency(now);
+        assertEquals(1, usage.getFullTextItems());
+        assertEquals(1000, usage.getRequestBytes());
+        assertEquals(6, usage.getCandidateReferences());
+        assertEquals(1, usage.getUniqueCandidateCards());
+    }
+
+    @Test
+    void understandingSurvivesEventConflictAndPruningPreservesUnknownProtection() {
+        String occurrence = "body@2026-11-17";
+        String key = repository.jobKey(occurrence);
+        repository.claim(key, occurrence, "one", now, 2);
+        repository.claimUnderstanding(occurrence, "one", now, 2);
+        var analysis = new NewsAiAnalysis();
+        analysis.setTitle("已理解");
+        assertEquals(Boolean.TRUE, transaction.execute(status -> repository.saveAnalysis(key, "one", analysis, now)));
+        assertEquals("已理解", repository.reusableAnalysis("body@2026-11-18").getTitle());
+        repository.claim("unknown", "uncertain@2026-11-17", "two", now, 2);
+        repository.fail("unknown", "two", NewsAiJobState.UNKNOWN, now);
+        jdbc.execute("CREATE TABLE news_report(id TEXT,content_version INTEGER)");
+        jdbc.execute("CREATE TABLE news_ai_report(report_id TEXT,content_version INTEGER,content_key TEXT,event_key TEXT)");
+        transaction.executeWithoutResult(status -> repository.prune(now.plusDays(100)));
+        assertEquals("unknown", repository.jobKey("uncertain@2026-11-17"));
+        assertFalse(repository.claim("unknown", "uncertain@2026-11-17", "three", now.plusDays(101), 2));
+    }
+
+    private NewsAiDispatchItem item(String occurrence, String owner, NewsAiInputMode mode) {
+        var item = new NewsAiDispatchItem();
+        item.setJobKey(repository.jobKey(occurrence));
+        item.setOccurrenceKey(occurrence);
+        item.setOwner(owner);
+        item.setMode(mode);
+        item.setSourceChars(100);
+        item.setSentChars(mode == NewsAiInputMode.UNDERSTAND ? 100 : 0);
+        return item;
     }
 
     @Test

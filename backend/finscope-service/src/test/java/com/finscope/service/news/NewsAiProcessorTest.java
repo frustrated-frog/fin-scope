@@ -38,6 +38,7 @@ class NewsAiProcessorTest {
     private NewsAiProviderConfig provider;
     private NewsAiUnifiedAgent agent;
     private RadarRepository radar;
+    private NewsCategoryRepository categories;
     private JdbcTemplate jdbc;
     private HttpServer server;
     private final List<JsonNode> requests = new ArrayList<>();
@@ -55,6 +56,11 @@ class NewsAiProcessorTest {
         repository = new NewsAiRepository();
         inject(repository, "jdbc", jdbc, "mapper", mapper);
         repository.afterPropertiesSet();
+        var factory = new org.springframework.aop.framework.ProxyFactory(repository);
+        factory.setProxyTargetClass(true);
+        factory.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(new DataSourceTransactionManager(source),
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        repository = (NewsAiRepository) factory.getProxy();
         reports = new NewsReportRepository();
         inject(reports, "jdbc", jdbc, "mapper", mapper);
         properties = new NewsAiProperties();
@@ -85,7 +91,7 @@ class NewsAiProcessorTest {
         NewsAiCandidateSelector selector = new NewsAiCandidateSelector();
         radar = mock(RadarRepository.class);
         inject(selector, "ai", repository, "radar", radar);
-        NewsCategoryRepository categories = mock(NewsCategoryRepository.class);
+        categories = mock(NewsCategoryRepository.class);
         NewsCategory category = new NewsCategory("COMPANY", "公司", "公司经营披露", true, 1);
         when(categories.findEnabled()).thenReturn(List.of(category));
         processor = new NewsAiProcessor();
@@ -333,6 +339,118 @@ class NewsAiProcessorTest {
         assertEquals("", requests.get(1).path("items").get(0).path("content").asText());
         assertFalse(requests.get(1).path("items").get(0).path("savedAnalysis").isNull());
         assertEquals(1, repository.bindingsByHashes(List.of(key(signal))).size());
+    }
+
+    @Test
+    void sameBodyAcrossDatesInOneBatchOnlySendsOneFullTextAndRecordsReuse() {
+        var today = signal("today", "市场收盘", "指数上涨1%");
+        var yesterday = signal("yesterday", today.getTitle(), today.getContent());
+        yesterday.setPublishedAt(today.getPublishedAt().minusDays(1));
+        persist(today, yesterday);
+        processor.process(List.of(today, yesterday), now);
+        assertEquals(1, calls.get());
+        assertEquals(1, requests.getFirst().path("items").size());
+        processor.process(List.of(today, yesterday), now.plusMinutes(6));
+        assertEquals(2, calls.get());
+        assertEquals("", requests.getLast().path("items").get(0).path("content").asText());
+        var efficiency = repository.dailyEfficiency(now);
+        assertEquals(1, efficiency.getFullTextItems());
+        assertEquals(1, efficiency.getMatchingOnlyItems());
+        assertTrue(efficiency.getGuardedChecks() > 0);
+        assertTrue(efficiency.getBindingReuseChecks() > 0);
+        assertTrue(efficiency.getRequestBytes() > 0);
+        processor.process(List.of(today, yesterday), now.plusMinutes(7));
+        provider.setModel("another-model");
+        processor.process(List.of(today, yesterday), now.plusMinutes(8));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void changingModelCannotBypassAnUnknownRequest() {
+        server.removeContext("/responses");
+        server.createContext("/responses", exchange -> {
+            calls.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        var original = signal("a", "公司签订合同", "合同金额2亿元");
+        persist(original);
+        processor.process(List.of(original), now);
+        provider.setModel("changed-model");
+        processor.process(List.of(original), now.plusHours(1));
+        var otherDay = signal("b", original.getTitle(), original.getContent());
+        otherDay.setPublishedAt(original.getPublishedAt().minusDays(1));
+        persist(otherDay);
+        processor.process(List.of(otherDay), now.plusHours(2));
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void categoryRemovalReusesFactsAndOnlyReclassifiesWithoutSendingBody() {
+        var original = signal("a", "公司签订合同", "合同金额2亿元");
+        persist(original);
+        processor.process(List.of(original), now);
+        when(categories.findEnabled()).thenReturn(List.of(new NewsCategory("NEW", "新分类", "公司经营披露", true, 1)));
+        var next = signal("b", original.getTitle(), original.getContent());
+        next.setPublishedAt(original.getPublishedAt().minusDays(1));
+        persist(next);
+        responder = input -> {
+            try {
+                var node = mapper.readTree(decisions(input, false, false));
+                var analysis = input.path("items").get(0).path("savedAnalysis").deepCopy();
+                ((com.fasterxml.jackson.databind.node.ObjectNode) analysis).put("categoryCode", "NEW");
+                ((com.fasterxml.jackson.databind.node.ObjectNode) node.path("decisions").get(0)).set("analysis", analysis);
+                return mapper.writeValueAsString(node);
+            } catch (Exception error) {
+                throw new IllegalStateException(error);
+            }
+        };
+        processor.process(List.of(next), now.plusMinutes(1));
+        assertEquals(2, calls.get());
+        var item = requests.getLast().path("items").get(0);
+        assertEquals("RECLASSIFY", item.path("mode").asText());
+        assertEquals("", item.path("content").asText());
+        assertEquals("NEW", reports.find("b").orElseThrow().getCategoryCode());
+        assertEquals(1, repository.dailyEfficiency(now).getReclassificationItems());
+    }
+
+    @Test
+    void concurrentDifferentOccurrencesShareTheSameUnderstandingLease() throws Exception {
+        var first = signal("a", "公司签订合同", "合同金额2亿元");
+        var second = signal("b", first.getTitle(), first.getContent());
+        second.setPublishedAt(first.getPublishedAt().minusDays(1));
+        persist(first, second);
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        responder = input -> {
+            entered.countDown();
+            try {
+                if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("测试等待超时");
+                }
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(error);
+            }
+            return decisions(input, false, false);
+        };
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var running = executor.submit(() -> processor.process(List.of(first), now));
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            processor.process(List.of(second), now.plusSeconds(1));
+            assertEquals(1, calls.get());
+            release.countDown();
+            running.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            processor.process(List.of(second), now.plusMinutes(6));
+            assertEquals(2, calls.get());
+            assertEquals(1, repository.dailyEfficiency(now).getFullTextItems());
+            assertEquals(1, repository.dailyEfficiency(now).getMatchingOnlyItems());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
     }
 
     private String decisions(JsonNode input, boolean merge, boolean truncate) {

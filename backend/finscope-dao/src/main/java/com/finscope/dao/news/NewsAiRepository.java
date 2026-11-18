@@ -5,6 +5,10 @@ import com.finscope.common.enums.news.NewsAiJobState;
 import com.finscope.domain.news.ai.NewsAiAnalysis;
 import com.finscope.domain.news.ai.NewsAiBinding;
 import com.finscope.domain.news.ai.NewsAiEvent;
+import com.finscope.domain.news.ai.NewsAiDispatchItem;
+import com.finscope.domain.news.ai.NewsAiEfficiency;
+import com.finscope.domain.news.ai.NewsAiContentIdentity;
+import com.finscope.common.enums.news.NewsAiInputMode;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,6 +41,13 @@ public class NewsAiRepository implements InitializingBean {
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_call (id TEXT PRIMARY KEY,created_at TEXT NOT NULL,model TEXT NOT NULL,state TEXT NOT NULL,reserved_micros INTEGER NOT NULL,actual_micros INTEGER,input_tokens INTEGER,output_tokens INTEGER,error_type TEXT)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_call_time ON news_ai_call(created_at)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_control (id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL,started_at TEXT NOT NULL)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_occurrence_job(occurrence_key TEXT PRIMARY KEY,cache_key TEXT NOT NULL)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_understanding(body_hash TEXT PRIMARY KEY,state TEXT NOT NULL,owner TEXT,lease_until TEXT,call_id TEXT,attempt INTEGER NOT NULL DEFAULT 0,retry_after TEXT,analysis_json TEXT,updated_at TEXT NOT NULL)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_understanding_time ON news_ai_understanding(updated_at)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_dispatch(call_id TEXT PRIMARY KEY,protocol TEXT NOT NULL,request_bytes INTEGER NOT NULL,candidate_refs INTEGER NOT NULL,unique_candidates INTEGER NOT NULL)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_dispatch_item(call_id TEXT NOT NULL,job_key TEXT NOT NULL,occurrence_key TEXT NOT NULL,mode TEXT NOT NULL,attempt INTEGER NOT NULL,source_chars INTEGER NOT NULL,sent_chars INTEGER NOT NULL,PRIMARY KEY(call_id,job_key))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS news_ai_efficiency_run(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,eligible_checks INTEGER NOT NULL,binding_reuses INTEGER NOT NULL,guarded_checks INTEGER NOT NULL,processing_ms INTEGER NOT NULL)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_ai_efficiency_time ON news_ai_efficiency_run(created_at)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_version_detected ON news_report_version(detected_at,report_id)");
     }
 
@@ -80,7 +91,7 @@ public class NewsAiRepository implements InitializingBean {
         }
         return jdbc.update("INSERT INTO news_ai_call(id,created_at,model,state,reserved_micros) SELECT ?,?,?,'RESERVED',? "
                         + "WHERE (? IS NULL OR (SELECT COALESCE(SUM(COALESCE(actual_micros,reserved_micros)),0) FROM news_ai_call WHERE created_at>=? AND created_at<?)+?<=?) "
-                        + "AND (? IS NULL OR (SELECT COUNT(*) FROM news_ai_call WHERE created_at>=? AND created_at<?)<?)",
+                        + "AND (? IS NULL OR (SELECT COUNT(*) FROM news_ai_call WHERE created_at>=? AND created_at<? AND COALESCE(error_type,'')<>'CANCELLED_BEFORE_SEND')<?)",
                 callId, now.toString(), model, upperMicros, dailyMicros,
                 now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(), upperMicros, dailyMicros,
                 dailyCalls, now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString(), dailyCalls) == 1;
@@ -102,9 +113,18 @@ public class NewsAiRepository implements InitializingBean {
                 state.name(), retryAfter.toString(), retryAfter.toString(), key, owner);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public boolean saveAnalysis(String key, String owner, NewsAiAnalysis analysis, LocalDateTime now) {
-        return jdbc.update("UPDATE news_ai_content SET analysis_json=?,updated_at=? WHERE cache_key=? AND owner=? AND state=?",
-                json(analysis), now.toString(), key, owner, NewsAiJobState.CLAIMED.name()) == 1;
+        int changed = jdbc.update("UPDATE news_ai_content SET analysis_json=?,updated_at=? WHERE cache_key=? AND owner=? AND state=?",
+                json(analysis), now.toString(), key, owner, NewsAiJobState.CLAIMED.name());
+        if (changed == 1) {
+            String occurrence = jdbc.queryForObject("SELECT content_hash FROM news_ai_content WHERE cache_key=?", String.class, key);
+            jdbc.update("INSERT INTO news_ai_understanding(body_hash,state,analysis_json,updated_at) VALUES(?,?,?,?) "
+                            + "ON CONFLICT(body_hash) DO UPDATE SET state=excluded.state,analysis_json=excluded.analysis_json,owner=NULL,call_id=NULL,updated_at=excluded.updated_at "
+                            + "WHERE news_ai_understanding.owner=? OR news_ai_understanding.analysis_json IS NOT NULL",
+                    NewsAiContentIdentity.bodyHash(occurrence), NewsAiJobState.READY.name(), json(analysis), now.toString(), owner);
+        }
+        return changed == 1;
     }
 
     public NewsAiAnalysis analysis(String key) {
@@ -113,9 +133,117 @@ public class NewsAiRepository implements InitializingBean {
     }
 
     public NewsAiAnalysis reusableAnalysis(String occurrenceKey) {
-        String hash = occurrenceKey.split("@", 2)[0];
+        String hash = NewsAiContentIdentity.bodyHash(occurrenceKey);
+        var stored = jdbc.query("SELECT analysis_json FROM news_ai_understanding WHERE body_hash=? AND analysis_json IS NOT NULL",
+                (rs, i) -> read(rs.getString(1), NewsAiAnalysis.class), hash);
+        if (!stored.isEmpty()) {
+            return stored.getFirst();
+        }
         return jdbc.query("SELECT analysis_json FROM news_ai_content WHERE content_hash>=? AND content_hash<? AND analysis_json IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
                 (rs, i) -> read(rs.getString(1), NewsAiAnalysis.class), hash + "@", hash + "A").stream().findFirst().orElse(null);
+    }
+
+    /** 任务身份不跟随模型或提示词变化；升级时优先继承旧任务，UNKNOWN不能绕过。 */
+    public String jobKey(String occurrence) {
+        jdbc.update("INSERT OR IGNORE INTO news_ai_occurrence_job(occurrence_key,cache_key) VALUES(?,COALESCE("
+                        + "(SELECT cache_key FROM news_ai_content WHERE content_hash=? ORDER BY CASE state WHEN 'UNKNOWN' THEN 0 WHEN 'CLAIMED' THEN 1 WHEN 'READY' THEN 2 ELSE 3 END,updated_at DESC,cache_key LIMIT 1),?))",
+                occurrence, occurrence, occurrence + ":job");
+        return jdbc.queryForObject("SELECT cache_key FROM news_ai_occurrence_job WHERE occurrence_key=?", String.class, occurrence);
+    }
+
+    public boolean claimUnderstanding(String occurrence, String owner, LocalDateTime now, int maxAttempts) {
+        String hash = NewsAiContentIdentity.bodyHash(occurrence);
+        jdbc.update("UPDATE news_ai_understanding SET state=?,owner=NULL WHERE body_hash=? AND state=? AND lease_until<? AND call_id IS NOT NULL AND analysis_json IS NULL",
+                NewsAiJobState.UNKNOWN.name(), hash, NewsAiJobState.CLAIMED.name(), now.toString());
+        // 旧版已发送且结果未知的全文同样不能因换日绕过。
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM news_ai_content WHERE content_hash>=? AND content_hash<? AND analysis_json IS NULL "
+                + "AND (state=? OR (state=? AND call_id IS NOT NULL))", Integer.class, hash + "@", hash + "A",
+                NewsAiJobState.UNKNOWN.name(), NewsAiJobState.CLAIMED.name()) > 0) {
+            return false;
+        }
+        return jdbc.update("INSERT INTO news_ai_understanding(body_hash,state,owner,lease_until,updated_at) VALUES(?,?,?,?,?) "
+                        + "ON CONFLICT(body_hash) DO UPDATE SET state=excluded.state,owner=excluded.owner,lease_until=excluded.lease_until,call_id=NULL,updated_at=excluded.updated_at "
+                        + "WHERE analysis_json IS NULL AND attempt<? AND ((state=? AND retry_after<=?) OR (state=? AND lease_until<? AND call_id IS NULL))",
+                hash, NewsAiJobState.CLAIMED.name(), owner, now.plusMinutes(5).toString(), now.toString(), maxAttempts,
+                NewsAiJobState.RETRYABLE.name(), now.toString(), NewsAiJobState.CLAIMED.name(), now.toString()) == 1;
+    }
+
+    public void releaseUnderstanding(String occurrence, String owner, NewsAiJobState state, LocalDateTime retryAfter) {
+        jdbc.update("UPDATE news_ai_understanding SET state=?,owner=NULL,retry_after=?,call_id=CASE WHEN ?='UNKNOWN' THEN call_id ELSE NULL END,updated_at=? "
+                        + "WHERE body_hash=? AND owner=? AND analysis_json IS NULL",
+                state.name(), retryAfter.toString(), state.name(), retryAfter.toString(), NewsAiContentIdentity.bodyHash(occurrence), owner);
+    }
+
+    /** 一次短事务原子绑定所有任务与全文租约；慢模型请求在返回后发出。 */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean attachDispatch(String callId, List<NewsAiDispatchItem> items, String protocol, long requestBytes,
+                                  int candidateRefs, int uniqueCandidates, LocalDateTime now) {
+        for (var item : items) {
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM news_ai_content WHERE cache_key=? AND owner=? AND state=? AND call_id IS NULL AND lease_until>=?",
+                    Integer.class, item.getJobKey(), item.getOwner(), NewsAiJobState.CLAIMED.name(), now.toString()) != 1) {
+                return false;
+            }
+            if (item.getMode() == NewsAiInputMode.UNDERSTAND && jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM news_ai_understanding WHERE body_hash=? AND owner=? AND state=? AND call_id IS NULL AND analysis_json IS NULL AND lease_until>=?",
+                    Integer.class, NewsAiContentIdentity.bodyHash(item.getOccurrenceKey()), item.getOwner(), NewsAiJobState.CLAIMED.name(), now.toString()) != 1) {
+                return false;
+            }
+        }
+        for (var item : items) {
+            if (!attachCall(item.getJobKey(), item.getOwner(), callId)) {
+                throw new IllegalStateException("新闻任务发送所有权冲突");
+            }
+            if (item.getMode() == NewsAiInputMode.UNDERSTAND && jdbc.update("UPDATE news_ai_understanding SET call_id=?,attempt=attempt+1 WHERE body_hash=? AND owner=? AND state=? AND analysis_json IS NULL",
+                    callId, NewsAiContentIdentity.bodyHash(item.getOccurrenceKey()), item.getOwner(), NewsAiJobState.CLAIMED.name()) != 1) {
+                throw new IllegalStateException("新闻理解发送所有权冲突");
+            }
+            jdbc.update("INSERT INTO news_ai_dispatch_item SELECT ?,cache_key,content_hash,?,attempt,?,? FROM news_ai_content WHERE cache_key=?",
+                    callId, item.getMode().name(), item.getSourceChars(), item.getSentChars(), item.getJobKey());
+        }
+        jdbc.update("INSERT INTO news_ai_dispatch VALUES(?,?,?,?,?)", callId, protocol, requestBytes, candidateRefs, uniqueCandidates);
+        return true;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelDispatch(String callId, List<NewsAiDispatchItem> items, LocalDateTime now) {
+        for (var item : items) {
+            jdbc.update("UPDATE news_ai_content SET state=?,owner=NULL,call_id=NULL,attempt=MAX(0,attempt-1),retry_after=? WHERE cache_key=? AND owner=? AND (call_id IS NULL OR call_id=?)",
+                    NewsAiJobState.RETRYABLE.name(), now.plusMinutes(5).toString(), item.getJobKey(), item.getOwner(), callId);
+            jdbc.update("UPDATE news_ai_understanding SET state=?,owner=NULL,attempt=MAX(0,attempt-CASE WHEN call_id=? THEN 1 ELSE 0 END),call_id=NULL,retry_after=? "
+                            + "WHERE body_hash=? AND owner=? AND analysis_json IS NULL AND (call_id IS NULL OR call_id=?)",
+                    NewsAiJobState.RETRYABLE.name(), callId, now.toString(), NewsAiContentIdentity.bodyHash(item.getOccurrenceKey()), item.getOwner(), callId);
+        }
+        settle(callId, 0L, 0L, 0L, "CANCELLED_BEFORE_SEND");
+    }
+
+    public void recordEfficiency(LocalDateTime now, NewsAiEfficiency value) {
+        jdbc.update("INSERT INTO news_ai_efficiency_run VALUES(?,?,?,?,?,?)", java.util.UUID.randomUUID().toString(), now.toString(),
+                value.getEligibleChecks(), value.getBindingReuseChecks(), value.getGuardedChecks(), value.getProcessingMs());
+    }
+
+    public NewsAiEfficiency dailyEfficiency(LocalDateTime now) {
+        String start = now.toLocalDate().atStartOfDay().toString();
+        String end = now.toLocalDate().plusDays(1).atStartOfDay().toString();
+        var value = new NewsAiEfficiency();
+        var runs = jdbc.queryForMap("SELECT COALESCE(SUM(eligible_checks),0) eligible,COALESCE(SUM(binding_reuses),0) reused,COALESCE(SUM(guarded_checks),0) guarded,COALESCE(SUM(processing_ms),0) elapsed FROM news_ai_efficiency_run WHERE created_at>=? AND created_at<?", start, end);
+        value.setEligibleChecks(((Number) runs.get("eligible")).longValue());
+        value.setBindingReuseChecks(((Number) runs.get("reused")).longValue());
+        value.setGuardedChecks(((Number) runs.get("guarded")).longValue());
+        value.setProcessingMs(((Number) runs.get("elapsed")).longValue());
+        var sent = jdbc.queryForMap("SELECT COUNT(*) items,COALESCE(SUM(mode='UNDERSTAND'),0) full_text,COALESCE(SUM(mode='MATCH'),0) matching,COALESCE(SUM(mode='RECLASSIFY'),0) classification,COALESCE(SUM(attempt>1),0) retries,COALESCE(SUM(source_chars),0) original,COALESCE(SUM(sent_chars),0) transmitted "
+                + "FROM news_ai_dispatch_item i JOIN news_ai_call c ON c.id=i.call_id WHERE c.created_at>=? AND c.created_at<? AND COALESCE(c.error_type,'')<>'CANCELLED_BEFORE_SEND'", start, end);
+        value.setItemsSent(((Number) sent.get("items")).longValue());
+        value.setFullTextItems(((Number) sent.get("full_text")).longValue());
+        value.setMatchingOnlyItems(((Number) sent.get("matching")).longValue());
+        value.setReclassificationItems(((Number) sent.get("classification")).longValue());
+        value.setRetryItems(((Number) sent.get("retries")).longValue());
+        value.setSourceChars(((Number) sent.get("original")).longValue());
+        value.setSentChars(((Number) sent.get("transmitted")).longValue());
+        var payload = jdbc.queryForMap("SELECT COALESCE(SUM(request_bytes),0) bytes,COALESCE(SUM(candidate_refs),0) refs,COALESCE(SUM(unique_candidates),0) cards FROM news_ai_dispatch d JOIN news_ai_call c ON c.id=d.call_id WHERE c.created_at>=? AND c.created_at<? AND COALESCE(c.error_type,'')<>'CANCELLED_BEFORE_SEND'", start, end);
+        value.setRequestBytes(((Number) payload.get("bytes")).longValue());
+        value.setCandidateReferences(((Number) payload.get("refs")).longValue());
+        value.setUniqueCandidateCards(((Number) payload.get("cards")).longValue());
+        return value;
     }
 
     public Map<String, NewsAiBinding> bindings(Collection<String> keys) {
@@ -179,7 +307,7 @@ public class NewsAiRepository implements InitializingBean {
     }
 
     public Map<String, Object> dailyUsage(LocalDateTime now) {
-        return jdbc.queryForMap("SELECT COUNT(*) calls,COALESCE(SUM(input_tokens),0) input_tokens,COALESCE(SUM(output_tokens),0) output_tokens,"
+        return jdbc.queryForMap("SELECT COALESCE(SUM(CASE WHEN error_type='CANCELLED_BEFORE_SEND' THEN 0 ELSE 1 END),0) calls,COALESCE(SUM(input_tokens),0) input_tokens,COALESCE(SUM(output_tokens),0) output_tokens,"
                         + "COALESCE(SUM(actual_micros),0) actual_micros,COALESCE(SUM(CASE WHEN actual_micros IS NULL THEN reserved_micros ELSE 0 END),0) unresolved_micros "
                         + "FROM news_ai_call WHERE created_at>=? AND created_at<?", now.toLocalDate().atStartOfDay().toString(), now.toLocalDate().plusDays(1).atStartOfDay().toString());
     }
@@ -223,11 +351,17 @@ public class NewsAiRepository implements InitializingBean {
     @Transactional(rollbackFor = Exception.class)
     public void prune(LocalDateTime now) {
         jdbc.update("DELETE FROM news_ai_report WHERE NOT EXISTS(SELECT 1 FROM news_report n WHERE n.id=report_id AND n.content_version=news_ai_report.content_version)");
-        jdbc.update("DELETE FROM news_ai_content WHERE updated_at<? AND state<>? AND NOT EXISTS(SELECT 1 FROM news_ai_report r WHERE r.content_key=news_ai_content.content_hash)",
-                now.minusDays(30).toString(), NewsAiJobState.CLAIMED.name());
+        jdbc.update("DELETE FROM news_ai_content WHERE updated_at<? AND state NOT IN (?,?) AND NOT EXISTS(SELECT 1 FROM news_ai_report r WHERE r.content_key=news_ai_content.content_hash)",
+                now.minusDays(30).toString(), NewsAiJobState.CLAIMED.name(), NewsAiJobState.UNKNOWN.name());
         jdbc.update("DELETE FROM news_ai_binding WHERE NOT EXISTS(SELECT 1 FROM news_ai_content c WHERE c.cache_key=news_ai_binding.cache_key)");
         jdbc.update("DELETE FROM news_ai_event WHERE updated_at<? AND NOT EXISTS(SELECT 1 FROM news_ai_report r WHERE r.event_key=news_ai_event.event_key)", now.minusDays(30).toString());
+        jdbc.update("DELETE FROM news_ai_dispatch_item WHERE call_id IN (SELECT id FROM news_ai_call WHERE created_at<? AND actual_micros IS NOT NULL)", now.minusDays(90).toString());
+        jdbc.update("DELETE FROM news_ai_dispatch WHERE call_id IN (SELECT id FROM news_ai_call WHERE created_at<? AND actual_micros IS NOT NULL)", now.minusDays(90).toString());
         jdbc.update("DELETE FROM news_ai_call WHERE created_at<? AND actual_micros IS NOT NULL", now.minusDays(90).toString());
+        jdbc.update("DELETE FROM news_ai_occurrence_job WHERE NOT EXISTS(SELECT 1 FROM news_ai_content c WHERE c.cache_key=news_ai_occurrence_job.cache_key)");
+        jdbc.update("DELETE FROM news_ai_understanding WHERE updated_at<? AND state NOT IN (?,?) AND NOT EXISTS(SELECT 1 FROM news_ai_content c WHERE c.content_hash>=news_ai_understanding.body_hash||'@' AND c.content_hash<news_ai_understanding.body_hash||'A')",
+                now.minusDays(30).toString(), NewsAiJobState.CLAIMED.name(), NewsAiJobState.UNKNOWN.name());
+        jdbc.update("DELETE FROM news_ai_efficiency_run WHERE created_at<?", now.minusDays(14).toString());
     }
 
     public Map<String, Long> jobCounts() {

@@ -18,6 +18,10 @@ public final class NewsAiContentIdentity {
         return hash(title, content) + "@" + (at == null ? "unknown" : at.toLocalDate());
     }
 
+    public static String bodyHash(String occurrenceKey) {
+        return occurrenceKey.split("@", 2)[0];
+    }
+
     public static String digest(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
