@@ -35,7 +35,7 @@ class RadarChangeRepositoryTest {
         ReflectionTestUtils.setField(replay, "jdbc", jdbc);
         ReflectionTestUtils.setField(replay, "changes", changes);
         replay.afterPropertiesSet();
-        jdbc.execute("CREATE TABLE news_report(id TEXT PRIMARY KEY,content_version INTEGER,title TEXT)");
+        jdbc.execute("CREATE TABLE news_report(id TEXT PRIMARY KEY,content_version INTEGER,title TEXT,content TEXT)");
         jdbc.execute("CREATE TABLE news_report_version(report_id TEXT,version INTEGER,detected_at TEXT)");
         jdbc.execute("CREATE TABLE news_ai_report(report_id TEXT,content_version INTEGER,event_key TEXT,content_key TEXT,relation TEXT)");
         ai = new NewsAiRepository();
@@ -103,6 +103,23 @@ class RadarChangeRepositoryTest {
         assertTrue(list(30, 60).isEmpty());
     }
 
+    @Test
+    void legacyAndAiIdentitiesCollapseOnlyAfterTheirExactReportHasBeenBound() {
+        var local = item("local", 1, 1);
+        local.setTitle("后续公告");
+        local.setSummary("同一篇公告原文");
+        var different = item("different", 1, 1);
+        different.setTitle("后续公告");
+        different.setSummary("相同标题但不同正文");
+        publish(40, local, different, item("news-ai:a", 1, 1));
+        bind("news-ai:a", "具体进展", 45);
+        assertEquals(3, list(30, 44).size());
+        var after = list(30, 60);
+        assertEquals(2, after.size());
+        assertEquals(RadarChangeKind.PROGRESS, after.getFirst().getKind());
+        assertEquals("相同标题但不同正文", after.getLast().getSummary());
+    }
+
     private void bind(String event, String fact, int minute) {
         String at = today.plusMinutes(minute).toString();
         jdbc.update("INSERT INTO news_ai_content(cache_key,content_hash,state,updated_at) VALUES('job','occurrence','READY',?)", at);
@@ -110,7 +127,7 @@ class RadarChangeRepositoryTest {
         if (fact != null) {
             jdbc.update("UPDATE news_ai_binding SET payload=json_set(payload,'$.newFacts',json_array(?))", fact);
         }
-        jdbc.update("INSERT INTO news_report VALUES('original',1,'后续公告')");
+        jdbc.update("INSERT INTO news_report VALUES('original',1,'后续公告','同一篇公告原文')");
         jdbc.update("INSERT INTO news_ai_report VALUES('original',1,?,'occurrence','PROGRESS')",event);
         jdbc.update("INSERT INTO news_report_version VALUES('original',1,?)",at);
     }

@@ -104,12 +104,40 @@ public class RadarChangeRepository implements InitializingBean {
         ), chosen AS (
             SELECT *,row_number() OVER (PARTITION BY event_key ORDER BY priority,at DESC) winner FROM candidates
         )
-        SELECT v.event_id,v.title,v.summary,s.observed_at,k.at,k.kind,k.fact,k.report_title,c.sources_before,c.sources,
+        , visible AS MATERIALIZED (
+            SELECT k.*,v.event_id,v.title,v.summary,s.observed_at FROM chosen k
+            JOIN radar_replay_seen s USING(event_key) JOIN radar_replay_version v ON v.hash=s.version_hash
+            WHERE k.winner=1 AND s.observed_at<=:until
+        ), aliases AS (
+            SELECT k.event_key,min(a.event_key) target FROM visible k
+            JOIN news_report n ON n.title=k.title AND n.content=k.summary
+            JOIN news_ai_report a ON a.report_id=n.id AND a.content_version=n.content_version
+            JOIN news_report_version rv ON rv.report_id=n.id AND rv.version=n.content_version
+            JOIN news_ai_content job ON job.content_hash=a.content_key AND job.state='READY' AND job.updated_at<=:aiUntil
+            JOIN news_ai_binding b ON b.cache_key=job.cache_key AND json_extract(b.payload,'$.eventKey')=a.event_key
+            WHERE k.event_key NOT LIKE 'news-ai:%' AND length(trim(k.summary))>0
+              AND rv.detected_at<=:aiUntil AND substr(rv.detected_at,1,10)=substr(k.observed_at,1,10)
+            GROUP BY k.event_key HAVING count(DISTINCT a.event_key)=1 AND min(a.event_key)<>k.event_key
+        )
+        , resolved AS (
+            SELECT k.*,COALESCE(canonical.event_key,k.event_key) final_key,
+                   COALESCE(v.event_id,k.event_id) final_id,COALESCE(v.title,k.title) final_title,
+                   COALESCE(v.summary,k.summary) final_summary,min(k.observed_at,COALESCE(canonical.observed_at,k.observed_at)) first_at
+            FROM visible k LEFT JOIN aliases a ON a.event_key=k.event_key
+            LEFT JOIN radar_replay_seen canonical ON canonical.event_key=a.target AND canonical.observed_at<=:until
+            LEFT JOIN radar_replay_version v ON v.hash=canonical.version_hash
+        ), identified AS (
+            SELECT *,min(first_at) OVER (PARTITION BY final_key) first_observation FROM resolved
+        ), merged AS (
+            SELECT *,row_number() OVER (PARTITION BY final_key ORDER BY priority,at DESC,event_key) row_num
+            FROM identified WHERE kind<>'NEW' OR first_observation>=:since
+        )
+        SELECT k.final_id event_id,k.final_title title,k.final_summary summary,k.first_observation observed_at,
+               CASE WHEN k.kind='NEW' THEN k.first_observation ELSE k.at END at,k.kind,k.fact,k.report_title,c.sources_before,c.sources,
                max(0,c.reports-c.reports_before) added_reports
-        FROM chosen k JOIN radar_replay_seen s USING(event_key) JOIN radar_replay_version v ON v.hash=s.version_hash
-        LEFT JOIN counts c ON c.event_key=k.event_key AND c.last_row=1
-        WHERE k.winner=1 AND s.observed_at<=:until AND (:kind='ALL' OR k.kind=:kind)
-        ORDER BY k.priority,k.at DESC,k.event_key LIMIT :limit OFFSET :offset
+        FROM merged k LEFT JOIN counts c ON c.event_key=k.event_key AND c.last_row=1
+        WHERE k.row_num=1 AND (:kind='ALL' OR k.kind=:kind)
+        ORDER BY k.priority,at DESC,k.final_key LIMIT :limit OFFSET :offset
         """;
 
     public List<RadarRecentChange> recent(String since, String until, String aiSince, String aiUntil, String kind, int limit, int offset) {

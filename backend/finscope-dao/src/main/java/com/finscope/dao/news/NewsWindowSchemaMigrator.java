@@ -25,6 +25,7 @@ public class NewsWindowSchemaMigrator implements InitializingBean {
                     + "content_version INTEGER NOT NULL DEFAULT 1,category_code TEXT,category_name TEXT,classification_reason TEXT,"
                     + "rule_version TEXT,manually_reviewed INTEGER NOT NULL DEFAULT 0,manual_reason TEXT)");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_report_window ON news_report(published_at,arrival_sequence)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_report_title ON news_report(title)");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_report_source ON news_report(source_name,published_at)");
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_report_effective_time "
                     + "ON news_report(COALESCE(published_at,first_seen_at),arrival_sequence)");
