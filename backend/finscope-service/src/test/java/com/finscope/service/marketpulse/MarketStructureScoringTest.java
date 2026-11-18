@@ -23,6 +23,14 @@ class MarketStructureScoringTest {
     }
 
     @Test
+    void oneDayBounceFromLowParticipationDoesNotImplyStrongTurningEvidence() {
+        var current = workspace(0, .24);
+        current.getBreadth().setMedianChangePct(-1.3);
+        var rows = scoring.calculate(current, List.of(workspace(1, .2), workspace(2, .5)));
+        assertTrue(row(rows, TURN_CONFIRMATION).getBaselineScore() < 50);
+    }
+
+    @Test
     void narrowTrendSampleAndMissingIndustryReturnsDoNotBecomeWholeMarketScores() {
         var today = workspace(0, .4);
         var trend = new MarketTrendBreadth();

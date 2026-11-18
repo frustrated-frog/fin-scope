@@ -11,7 +11,7 @@ import static com.finscope.common.enums.marketpulse.MarketStructureDimension.*;
 /** 可重放的启发式基准；各分项等权，历史位置只辅助，不表示收益概率。 */
 @Service
 public class MarketStructureScoring {
-    public static final String VERSION = "structure-v1";
+    public static final String VERSION = "structure-v2";
     private static final int MIN_MARKET_SAMPLE = 100;
     private static final int MIN_SECTORS = 20;
     private static final double MIN_TREND_COVERAGE = .8;
@@ -45,6 +45,10 @@ public class MarketStructureScoring {
         }
         if (comparable && ratio(previous.getAdvanceRatio())) {
             part(repair, "参与度较前日变化", 50 + (participation - previous.getAdvanceRatio()) * 300);
+            part(turn, "当前上涨参与支持", participation * 100);
+            if (finite(breadth.getMedianChangePct())) {
+                part(turn, "当前个股中位表现", 50 + breadth.getMedianChangePct() * 12);
+            }
             part(turn, "参与度较前日变化", 50 + (participation - previous.getAdvanceRatio()) * 300);
             if (ratio(pressure) && ratio(pressure(previous))) {
                 part(turn, "成交方向较前日变化", 50 + (pressure - pressure(previous)) * 300);
@@ -60,6 +64,7 @@ public class MarketStructureScoring {
                 newer = older;
             }
             part(repair, "改善持续性（最多五日）", Math.min(5, improving) * 20);
+            part(turn, "改善持续性（最多五日）", Math.min(5, improving) * 20);
         }
         var observations = prior.stream().map(this::usable).filter(b -> comparable(breadth, b) && ratio(b.getAdvanceRatio())).toList();
         if (observations.size() >= 5) {
