@@ -3,6 +3,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {api} from '../../shared/api/client';
 import {useViewRevision} from '../../shared/api/useViewRevision';
 import {LiveNewsPanel} from './LiveNewsPanel';
+import {RadarChangesPanel} from './RadarChangesPanel';
 import {NewsRiverPanel} from './NewsRiverPanel';
 import {RadarEventCard} from './RadarEventCard';
 import {RadarEventDetailDrawer} from './RadarEventDetailDrawer';
@@ -39,6 +40,7 @@ export function NewsView({
     onInitialRadarEventOpened?: () => void;
 }) {
     const [mode, setMode] = useState<'live' | 'radar' | 'river'>(initialRadarEventId ? 'radar' : 'live');
+    const [radarTab, setRadarTab] = useState<'events' | 'changes'>('events');
     const [riverEventId, setRiverEventId] = useState<string>();
     const props = {setMessage, addToast, onResearch, onOpenMajorEvents};
     return (
@@ -53,11 +55,17 @@ export function NewsView({
                         onClick={() => setMode('radar')}>研究雷达
                 </button>
             </nav>
-            {mode === 'river' ? <NewsRiverPanel onOpenCurrent={id => { setRiverEventId(id); setMode('radar'); }}/> : mode === 'live' ?
+            {mode === 'river' ? <NewsRiverPanel onOpenCurrent={id => { setRiverEventId(id); setRadarTab('events'); setMode('radar'); }}/> : mode === 'live' ?
                 <LiveNewsPanel setMessage={setMessage} addToast={addToast}
                                onOpenMajorEvents={onOpenMajorEvents} initialSearch={initialLiveQuery}/> : (
-                    <ResearchRadarPanel {...props} initialEventId={riverEventId ?? initialRadarEventId}
-                                        onInitialEventOpened={onInitialRadarEventOpened}/>
+                    <><nav className="radar-state-filters" aria-label="研究雷达视图">
+                        <button type="button" aria-pressed={radarTab === 'events'} className={radarTab === 'events' ? 'active' : ''}
+                                onClick={() => setRadarTab('events')}>事件列表</button>
+                        <button type="button" aria-pressed={radarTab === 'changes'} className={radarTab === 'changes' ? 'active' : ''}
+                                onClick={() => setRadarTab('changes')}>最近变化</button>
+                    </nav>
+                    {radarTab === 'changes' ? <RadarChangesPanel/> : <ResearchRadarPanel {...props} initialEventId={riverEventId ?? initialRadarEventId}
+                                        onInitialEventOpened={onInitialRadarEventOpened}/>}</>
                 )}
         </section>
     );
