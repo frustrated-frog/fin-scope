@@ -13,6 +13,21 @@ import static org.mockito.Mockito.*;
 
 class ReactionStockNameLookupTest {
     @Test
+    void acceptsVerifiedBeijingListedSharesWithoutAdmittingOtherNeeqSecurities() throws Exception {
+        FinanceHttpClient http = mock(FinanceHttpClient.class);
+        var lookup = new ReactionStockNameLookup();
+        ReflectionTestUtils.setField(lookup, "http", http);
+        when(http.get(anyString(), any(URI.class), anyMap(), anyInt(), anyInt())).thenReturn(new FinanceHttpResponse(200, """
+                {"QuotationCodeTable":{"Status":0,"Data":[
+                    {"Code":"920190","Name":"雷神科技","Classify":"NEEQ","SecurityTypeName":"京A"},
+                    {"Code":"830001","Name":"同名挂牌企业","Classify":"NEEQ","SecurityTypeName":"新三板"}]}}
+                """, Instant.now(), "hash"));
+        var result = lookup.search("雷神科技");
+        assertEquals(1, result.size());
+        assertEquals("920190", result.getFirst().getCode());
+    }
+
+    @Test
     void acceptsOnlyAStocksAndRejectsBrokenProviderContract() throws Exception {
         FinanceHttpClient http = mock(FinanceHttpClient.class);
         ReactionStockNameLookup lookup = new ReactionStockNameLookup();

@@ -36,7 +36,10 @@ public class ObservationNewsRepository {
                     JOIN news_ai_occurrence_job j ON j.occurrence_key=a.content_key JOIN news_ai_binding b ON b.cache_key=j.cache_key AND json_extract(b.payload,'$.eventKey')=a.event_key
                     LEFT JOIN investment_news_checked k ON k.report_id=n.id
                     WHERE n.published_at BETWEEN ? AND ? AND (json_extract(b.payload,'$.analysis.eventType')='POLICY'
-                         OR json_array_length(b.payload,'$.analysis.companyActions')>0 OR k.report_id IS NOT NULL))
+                         OR json_array_length(b.payload,'$.analysis.companyActions')>0 OR k.report_id IS NOT NULL
+                         OR (json_type(b.payload,'$.analysis.companyActions') IS NULL
+                             AND json_extract(b.payload,'$.analysis.eventType') IN ('TRANSACTION','EARNINGS','DISCLOSURE')
+                             AND json_array_length(b.payload,'$.analysis.entities')>0)))
                 SELECT * FROM eligible ORDER BY published_at DESC,id
                 """, (rs,i) -> new ObservationNewsInput(rs.getString("id"),rs.getInt("content_version"),rs.getString("event_key"),
                 rs.getString("title"),rs.getString("content"),rs.getString("url"),LocalDateTime.parse(rs.getString("published_at")),

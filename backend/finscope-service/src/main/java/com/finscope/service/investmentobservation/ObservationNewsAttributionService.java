@@ -7,6 +7,7 @@ import com.finscope.dao.investmentobservation.ObservationNewsRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.investmentobservation.*;
 import com.finscope.domain.news.ai.NewsAiContentIdentity;
+import com.finscope.domain.news.ai.NewsCompanyAction;
 import com.finscope.rpc.research.material.CompanyBusinessProfileClient;
 import com.finscope.service.news.NewsAiProperties;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.util.*;
 @Service
 @Slf4j
 public class ObservationNewsAttributionService {
+    private final ReactionEventRules rules = new ReactionEventRules();
     @Resource
     private ObservationNewsRepository repository;
     @Resource
@@ -85,7 +87,7 @@ public class ObservationNewsAttributionService {
     private boolean collectDirect(ObservationNewsInput item, Map<String,ReactionStockResolution> cache,
                                   Map<String,ReactionSample> matches, LocalDateTime now) {
         boolean complete = true;
-        for (var action : item.analysis().getCompanyActions()) {
+        for (var action : actions(item)) {
             if (!item.containsEvidence(action.quote()) || !action.quote().contains(action.company())) {
                 continue;
             }
@@ -100,6 +102,30 @@ public class ObservationNewsAttributionService {
             }
         }
         return complete;
+    }
+
+    /** 旧事实卡没有角色。仅复用原文能逐字定位且主体与已提取实体相符的明确动作。 */
+    private List<NewsCompanyAction> actions(ObservationNewsInput item) {
+        var explicit = item.analysis().getCompanyActions();
+        if (!explicit.isEmpty() || item.analysis().getEventType() == NewsAiEventType.POLICY) {
+            return explicit;
+        }
+        var result = new ArrayList<NewsCompanyAction>();
+        for (String fact : item.analysis().getFacts()) {
+            if (!item.containsEvidence(fact)) {
+                continue;
+            }
+            var decision = rules.evaluate(fact);
+            if (!decision.getSubtype().isSpecific()) {
+                continue;
+            }
+            for (String name : decision.getSubjects()) {
+                if (item.analysis().getEntities().contains(name)) {
+                    result.add(new NewsCompanyAction(name, "公司直接参与原文所述事项", fact));
+                }
+            }
+        }
+        return result;
     }
 
     private ReactionSample sample(ObservationNewsInput news,String code,String name,boolean policy,String note,String quote,LocalDateTime now) {

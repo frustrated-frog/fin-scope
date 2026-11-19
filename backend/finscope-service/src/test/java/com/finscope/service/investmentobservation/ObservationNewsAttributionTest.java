@@ -155,7 +155,7 @@ class ObservationNewsAttributionTest {
                 new NewsCompanyAction("另一公司","中标方","另一公司也中标。")));
         var resolution = new ReactionStockResolution();
         var match = new ReactionStockMatch();
-        match.setCode("872190.BJ");
+        match.setCode("920190.BJ");
         match.setName("雷神科技");
         resolution.setStatus(ReactionResolutionStatus.RESOLVED);
         resolution.setMatches(List.of(match));
@@ -166,10 +166,37 @@ class ObservationNewsAttributionTest {
         verify(resolver,times(1)).resolveDirect(any());
         var sample = samples.findByIdentity("NEWS_EVENT:procure").getFirst();
         assertEquals(fact,sample.getRuleEvidence());
-        assertEquals("872190.BJ",sample.getInstrumentCode());
+        assertEquals("920190.BJ",sample.getInstrumentCode());
         jdbc.update("UPDATE news_report SET content='更正：中标方另有其人',content_version=2 WHERE id='r'");
         service.refresh(now);
         assertTrue(samples.findById(sample.getId()).orElseThrow().isExcluded());
+        assertEquals(0,calls.get());
+    }
+
+    @Test
+    void legacyFactCardForActualProcurementReportCanBeProjectedWithoutAnotherModelCall() throws Exception {
+        properties.setEnabled(false);
+        String title = "雷神科技中标中央国家机关台式机批量集采";
+        String fact = "雷神科技中标中央国家机关2026年11月台式计算机批量集中采购项目。";
+        var analysis = new NewsAiAnalysis();
+        analysis.setEventType(NewsAiEventType.TRANSACTION);
+        analysis.setEntities(List.of("雷神科技","中央政府采购网"));
+        analysis.setFacts(List.of(fact));
+        publish("old",title,"近日，中央政府采购网发布的中标公告显示，" + fact,analysis,"purchase","NEW_EVENT");
+        jdbc.update("UPDATE news_ai_binding SET payload=json_remove(payload,'$.analysis.companyActions','$.analysis.policyProducts')");
+        var stockResolver = new ReactionStockResolver();
+        var net = mock(com.finscope.rpc.marketintel.FinanceHttpClient.class);
+        var lookup = new com.finscope.rpc.investmentobservation.ReactionStockNameLookup();
+        inject(lookup,"http",net);
+        when(net.get(anyString(),any(),anyMap(),anyInt(),anyInt())).thenReturn(new com.finscope.rpc.marketintel.FinanceHttpResponse(
+                200,"""
+                {"QuotationCodeTable":{"Status":0,"Data":[{"Code":"920190","Name":"雷神科技","Classify":"NEEQ","SecurityTypeName":"京A"}]}}
+                """,java.time.Instant.now(),"fixture"));
+        inject(stockResolver,"names",lookup,"instruments",mock(com.finscope.dao.instrument.InstrumentRepository.class));
+        inject(service,"resolver",stockResolver);
+        assertEquals(1,service.refresh(now));
+        assertEquals("920190.BJ",samples.findByIdentity("NEWS_EVENT:purchase").getFirst().getInstrumentCode());
+        assertEquals(0,service.refresh(now));
         assertEquals(0,calls.get());
     }
 

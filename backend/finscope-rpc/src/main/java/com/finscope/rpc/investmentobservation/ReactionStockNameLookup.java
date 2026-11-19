@@ -54,7 +54,10 @@ public class ReactionStockNameLookup {
             for (var row : rows) {
                 String code = row.path("Code").asText();
                 String stockName = row.path("Name").asText();
-                if (!"AStock".equals(row.path("Classify").asText()) || !code.matches("[603489][0-9]{5}")
+                String kind = row.path("Classify").asText();
+                boolean beijingShare = "NEEQ".equals(kind) && "京A".equals(row.path("SecurityTypeName").asText())
+                        && code.matches("[489][0-9]{5}");
+                if (!("AStock".equals(kind) || beijingShare) || !code.matches("[603489][0-9]{5}")
                         || stockName.length() < 3 || stockName.length() > 20) {
                     continue;
                 }
