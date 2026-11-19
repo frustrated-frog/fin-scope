@@ -65,9 +65,13 @@ public class NewsAiUnifiedAgent {
                         candidateDirectory.put(alias, wire);
                     }
                 }
+                ObjectNode saved = item.getSavedAnalysis() == null ? null : mapper.valueToTree(item.getSavedAnalysis());
+                if (saved != null) {
+                    saved.remove(List.of("companyActions", "policyProducts"));
+                }
                 wireItems.add(ordered("mode", item.getMode(), "contentKey", ids.items().get(item.getContentKey()), "title", item.getTitle(),
                         "content", item.getContent(), "bodyTruncated", item.isBodyTruncated(), "publishedAt", item.getPublishedAt(),
-                        "savedAnalysis", item.getSavedAnalysis(), "candidateKeys", candidates));
+                        "savedAnalysis", saved, "candidateKeys", candidates));
             }
             return client.prepare(system, mapper.writeValueAsString(ordered("categories", directory, "candidates", candidateDirectory.values(), "items", wireItems)),
                     properties.getMaxOutputTokens(), schema(categories, ids, items));

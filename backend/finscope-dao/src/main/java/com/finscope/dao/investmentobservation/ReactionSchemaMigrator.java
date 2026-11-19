@@ -50,6 +50,10 @@ public class ReactionSchemaMigrator implements InitializingBean {
         migrateHistoricalCases();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_checked(report_id TEXT PRIMARY KEY,signature TEXT NOT NULL)");
+            if (jdbcTemplate.queryForList("PRAGMA table_info(investment_news_checked)").stream()
+                    .noneMatch(row -> "context".equals(row.get("name")))) {
+                jdbcTemplate.execute("ALTER TABLE investment_news_checked ADD COLUMN context TEXT");
+            }
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_profile(code TEXT PRIMARY KEY,profile_json TEXT,next_at TEXT NOT NULL)");
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_verification(id TEXT PRIMARY KEY,call_id TEXT NOT NULL,created_at TEXT NOT NULL,verdict TEXT)");
             jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_verification_call ON investment_news_verification(call_id)");

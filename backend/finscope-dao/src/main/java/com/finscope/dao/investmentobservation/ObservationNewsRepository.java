@@ -24,11 +24,11 @@ public class ObservationNewsRepository {
     @Resource
     private com.finscope.dao.news.NewsAiRepository ledger;
 
-    public List<ObservationNewsInput> inputs(LocalDateTime since, LocalDateTime now) {
+    public List<ObservationNewsInput> inputs(LocalDateTime since, LocalDateTime now, String catalogVersion) {
         return jdbc.query("""
                 WITH eligible AS (
                     SELECT n.id,n.content_version,a.event_key,n.title,n.content,n.url,n.published_at,n.first_seen_at,
-                           json_extract(b.payload,'$.analysis') analysis,k.signature,
+                           json_extract(b.payload,'$.analysis') analysis,k.signature,k.context,j.cache_key,
                            row_number() OVER (PARTITION BY a.event_key,(json_extract(b.payload,'$.analysis.eventType')='POLICY') ORDER BY
                                CASE a.relation WHEN 'PROGRESS' THEN 0 WHEN 'NEW_EVENT' THEN 1 WHEN 'DUPLICATE' THEN 3 ELSE 2 END,
                                CASE WHEN a.relation='PROGRESS' THEN n.published_at END DESC,n.published_at,n.id) position
@@ -40,11 +40,13 @@ public class ObservationNewsRepository {
                          OR (json_type(b.payload,'$.analysis.companyActions') IS NULL
                              AND json_extract(b.payload,'$.analysis.eventType') IN ('TRANSACTION','EARNINGS','DISCLOSURE')
                              AND json_array_length(b.payload,'$.analysis.entities')>0)))
-                SELECT * FROM eligible ORDER BY published_at DESC,id
+                SELECT * FROM (SELECT eligible.*,content_version||'|'||event_key||'|'||cache_key||'|'||
+                    CASE WHEN position=1 AND json_extract(analysis,'$.eventType')='POLICY' THEN ? ELSE '' END expected
+                    FROM eligible) WHERE context IS NOT expected ORDER BY published_at DESC,id
                 """, (rs,i) -> new ObservationNewsInput(rs.getString("id"),rs.getInt("content_version"),rs.getString("event_key"),
                 rs.getString("title"),rs.getString("content"),rs.getString("url"),LocalDateTime.parse(rs.getString("published_at")),
                 LocalDateTime.parse(rs.getString("first_seen_at")),read(rs.getString("analysis"), NewsAiAnalysis.class),
-                rs.getString("signature"),rs.getInt("position")==1), since.toString(),now.toString());
+                rs.getString("signature"),rs.getString("expected"),rs.getInt("position")==1), since.toString(),now.toString(),catalogVersion);
     }
 
     public List<ObservationCompany> companies(LocalDateTime now, boolean dueOnly) {
@@ -104,14 +106,19 @@ public class ObservationNewsRepository {
                 value,key,callId));
     }
 
+    public void confirmContext(ObservationNewsInput input) {
+        jdbc.update("UPDATE investment_news_checked SET context=? WHERE report_id=? AND signature=?",
+                input.context(), input.reportId(), input.checkpoint());
+    }
+
     @Transactional(rollbackFor = Exception.class)
-    public int reconcile(ObservationNewsInput input, String signature, List<ReactionSample> matches) {
+    public int reconcile(ObservationNewsInput input, String signature, List<ReactionSample> matches, boolean complete) {
         int accepted = jdbc.update("""
-                INSERT INTO investment_news_checked(report_id,signature) SELECT n.id,? FROM news_report n
+                INSERT INTO investment_news_checked(report_id,signature,context) SELECT n.id,?,? FROM news_report n
                 JOIN news_ai_report a ON a.report_id=n.id AND a.content_version=n.content_version
-                WHERE n.id=? AND n.content_version=? AND a.event_key=? ON CONFLICT(report_id) DO UPDATE SET signature=excluded.signature
-                WHERE investment_news_checked.signature<>excluded.signature
-                """, signature,input.reportId(),input.version(),input.eventKey());
+                WHERE n.id=? AND n.content_version=? AND a.event_key=? ON CONFLICT(report_id) DO UPDATE SET signature=excluded.signature,context=excluded.context
+                WHERE investment_news_checked.signature IS ? AND (investment_news_checked.signature<>excluded.signature OR investment_news_checked.context IS NOT excluded.context)
+                """, signature,complete ? input.context() : null,input.reportId(),input.version(),input.eventKey(),input.checkpoint());
         if (accepted == 0) {
             return 0;
         }
@@ -160,6 +167,7 @@ public class ObservationNewsRepository {
                 WHERE n.id=report_id AND n.content_version<>investment_news_link.version) RETURNING sample_id
                 """,Long.class);
         affected.stream().distinct().forEach(this::refreshEvidence);
+        jdbc.update("DELETE FROM investment_news_checked WHERE NOT EXISTS (SELECT 1 FROM news_report n WHERE n.id=report_id)");
     }
 
     private void refreshEvidence(long id) {

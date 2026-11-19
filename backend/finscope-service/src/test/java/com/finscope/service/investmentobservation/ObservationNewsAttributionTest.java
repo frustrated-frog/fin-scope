@@ -121,6 +121,10 @@ class ObservationNewsAttributionTest {
         assertEquals(0,service.refresh(now));
         assertEquals(1,calls.get());
         updateProfile(2,PRODUCT);
+        properties.setEnabled(false);
+        assertEquals(0,service.refresh(now));
+        assertEquals(1,calls.get());
+        properties.setEnabled(true);
         assertEquals(1,service.refresh(now));
         var matched = samples.findByIdentity("NEWS_EVENT:policy");
         assertEquals(2,matched.size());
@@ -152,7 +156,8 @@ class ObservationNewsAttributionTest {
         direct.setEventType(NewsAiEventType.TRANSACTION);
         String fact = "雷神科技中标本次台式机集采。";
         direct.setCompanyActions(List.of(new NewsCompanyAction("雷神科技","中标方",fact),
-                new NewsCompanyAction("另一公司","中标方","另一公司也中标。")));
+                new NewsCompanyAction("另一公司","中标方","另一公司也中标。"),
+                new NewsCompanyAction("另一公司","中标方","另一公司曾参与投标。")));
         var resolution = new ReactionStockResolution();
         var match = new ReactionStockMatch();
         match.setCode("920190.BJ");

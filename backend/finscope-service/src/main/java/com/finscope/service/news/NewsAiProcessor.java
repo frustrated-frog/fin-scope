@@ -326,6 +326,8 @@ public class NewsAiProcessor {
     private NewsAiAnalysis copy(NewsAiAnalysis value) {
         NewsAiAnalysis copy = new NewsAiAnalysis(); copy.setTitle(value.getTitle()); copy.setSummary(value.getSummary());
         copy.setCategoryCode(value.getCategoryCode()); copy.setDisplayCategory(value.getDisplayCategory()); copy.setEventType(value.getEventType());
+        copy.setCompanyActions(new ArrayList<>(value.getCompanyActions()));
+        copy.setPolicyProducts(new ArrayList<>(value.getPolicyProducts()));
         copy.setEntities(new ArrayList<>(value.getEntities())); copy.setTopics(new ArrayList<>(value.getTopics())); copy.setFacts(new ArrayList<>(value.getFacts())); return copy;
     }
     private String cut(String text, int limit) { return text.substring(0, Math.min(text.length(), limit)); }

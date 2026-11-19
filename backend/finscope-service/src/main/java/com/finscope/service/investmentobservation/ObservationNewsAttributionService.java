@@ -39,11 +39,14 @@ public class ObservationNewsAttributionService {
             fillProfiles(now);
         }
         var companies = repository.companies(now,false);
+        String catalogVersion = NewsAiContentIdentity.digest(companies.stream()
+                .map(c -> c.code() + "|" + c.profile().getDescription() + "|" + c.profile().getSourceUrl())
+                .collect(java.util.stream.Collectors.joining("\n")));
         var names = new HashMap<String,ReactionStockResolution>();
         int calls = 0;
         int added = 0;
         long stopAt = System.nanoTime() + java.time.Duration.ofSeconds(100).toNanos();
-        for (var item : repository.inputs(now.minusDays(7),now)) {
+        for (var item : repository.inputs(now.minusDays(7), now, catalogVersion)) {
             if (System.nanoTime() >= stopAt) {
                 break;
             }
@@ -53,6 +56,7 @@ public class ObservationNewsAttributionService {
             String signature = NewsAiContentIdentity.digest("association-v1|" + item.version() + "|" + item.eventKey() + "|"
                     + item.analysis().getCompanyActions() + "|" + keys);
             if (signature.equals(item.checkpoint())) {
+                repository.confirmContext(item);
                 continue;
             }
             Map<String,ReactionSample> matches = new LinkedHashMap<>();
@@ -74,11 +78,11 @@ public class ObservationNewsAttributionService {
             }
             if (resolved && verdicts.size() == keys.size()
                     && verdicts.values().stream().noneMatch(Objects::isNull)) {
-                added += repository.reconcile(item,signature,List.copyOf(matches.values()));
-            } else if (!matches.isEmpty()) {
+                added += repository.reconcile(item,signature,List.copyOf(matches.values()),true);
+            } else if (!matches.isEmpty() || item.checkpoint() != null) {
                 // 个别候选等待核对时，也能先展示有证据的股票。进度签名不等同于全量完成。
                 String partial = NewsAiContentIdentity.digest(signature + "|partial|" + matches.keySet());
-                added += repository.reconcile(item,partial,List.copyOf(matches.values()));
+                added += repository.reconcile(item,partial,List.copyOf(matches.values()),false);
             }
         }
         return added;
@@ -88,7 +92,7 @@ public class ObservationNewsAttributionService {
                                   Map<String,ReactionSample> matches, LocalDateTime now) {
         boolean complete = true;
         for (var action : actions(item)) {
-            if (!item.containsEvidence(action.quote()) || !action.quote().contains(action.company())) {
+            if (!item.containsEvidence(action.quote()) || !action.quote().contains(action.company()) || action.overstatesAward()) {
                 continue;
             }
             var result = cache.computeIfAbsent(action.company(),name -> {
