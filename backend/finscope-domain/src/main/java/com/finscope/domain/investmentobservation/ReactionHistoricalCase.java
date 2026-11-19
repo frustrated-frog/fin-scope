@@ -36,6 +36,9 @@ public record ReactionHistoricalCase(ReactionEventSubtype subtype, String key, S
     public static ReactionHistoricalCase from(String title, String summary, String name, String code, LocalDateTime publishedAt,
                                               ReactionEventSubtype original, boolean automatic, String ruleVersion) {
         ReactionEventSubtype fallback = original == null ? ReactionEventSubtype.UNCLASSIFIED : original;
+        if (fallback == ReactionEventSubtype.POLICY_BUSINESS_SCOPE || fallback == ReactionEventSubtype.DIRECT_COMPANY_ACTION) {
+            return new ReactionHistoricalCase(fallback, null);
+        }
         if (title == null || code == null || code.isBlank()) {
             return new ReactionHistoricalCase(fallback, null);
         }

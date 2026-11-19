@@ -15,7 +15,7 @@ import java.util.*;
 /** 一次结构化调用完成理解与归属；已理解的内容在匹配重试中只发送结构化事实。 */
 @Service
 public class NewsAiUnifiedAgent {
-    public static final String VERSION = "news-understanding-v3";
+    public static final String VERSION = "news-understanding-v4";
     @Resource
     private NewsAiLunaClient client;
     @Resource
@@ -30,6 +30,9 @@ public class NewsAiUnifiedAgent {
                 + "analysis只描述该条原文，不混入候选中的事实。savedAnalysis为空时analysis必须是完整对象，重复报道也必须返回；"
                 + "savedAnalysis非空且mode不是RECLASSIFY时analysis必须返回null，复用已保存理解，不重新理解正文。RECLASSIFY时analysis只返回categoryCode和displayCategory两个字段，服务端复用其余已保存事实，不返回旧摘要或事实，也不需要正文。"
                 + "一次完成分类、事件类型、主题、主体、关键事实、短标题摘要及事件归属。categoryCode只能使用目录中的代码。"
+                + "companyActions只列直接执行、签约、被监管或明确参与事件的公司，company和quote逐字摘自本条原文，quote须含公司名和动作。"
+                + "role简述真实角色并区分投标、候选和正式中标；排除引述者、背景举例、股价联动和推测受益者。无证据返回空数组。"
+                + "policyProducts只对实质政策提取适用的具体产品、关键限定及用于检索的标准产品名或下位产品名，最多8个；其他新闻为空。"
                 + "财经公司业绩与股价消息属于FINANCE；技术产品进展属于TECHNOLOGY；政策监管按实质分类。"
                 + "同主题或同公司不能作为同事件的充分条件。比较核心动作、参与者、对象、时间、报告期、金额指标与进展阶段。"
                 + "DUPLICATE=转载改写无新事实，SAME_EVENT=同一事实的独立报道，PROGRESS=同一事件有新阶段或新事实；"
@@ -56,6 +59,9 @@ public class NewsAiUnifiedAgent {
                         ObjectNode wire = mapper.valueToTree(candidate);
                         wire.put("eventKey", alias);
                         wire.remove("revision");
+                        if (wire.get("analysis") instanceof ObjectNode card) {
+                            card.remove(List.of("companyActions", "policyProducts"));
+                        }
                         candidateDirectory.put(alias, wire);
                     }
                 }
@@ -237,7 +243,10 @@ public class NewsAiUnifiedAgent {
     private boolean validAnalysis(NewsAiAnalysis value, Set<String> categories) {
         return value != null && categories.contains(value.getCategoryCode()) && value.getDisplayCategory() != null && value.getEventType() != null
                 && text(value.getTitle(), 160) && text(value.getSummary(), 900) && strings(value.getTopics(), 8, 64)
-                && strings(value.getEntities(), 16, 100) && strings(value.getFacts(), 12, 240);
+                && strings(value.getEntities(), 16, 100) && strings(value.getFacts(), 12, 240)
+                && strings(value.getPolicyProducts(), 8, 64) && value.getCompanyActions() != null && value.getCompanyActions().size() <= 6
+                && value.getCompanyActions().stream().allMatch(action -> action != null && text(action.company(), 80)
+                        && text(action.role(), 80) && text(action.quote(), 260));
     }
 
     private boolean text(String value, int max) {
@@ -252,7 +261,9 @@ public class NewsAiUnifiedAgent {
         Map<String, Object> analysis = object(ordered(
                 "categoryCode", enumeration(categories.stream().map(NewsCategory::getCode).toList()),
                 "displayCategory", enumeration(NewsAiDisplayCategory.values()), "eventType", enumeration(NewsAiEventType.values()),
-                "title", string(), "summary", string(), "entities", strings(), "topics", strings(), "facts", strings()));
+                "title", string(), "summary", string(), "entities", strings(), "topics", strings(), "facts", strings(),
+                "companyActions", Map.of("type", "array", "maxItems", 6, "items", object(ordered(
+                        "company", string(), "role", string(), "quote", string()))), "policyProducts", strings()));
         List<String> targets = new ArrayList<>();
         targets.add("");
         targets.addAll(ids.events().values());

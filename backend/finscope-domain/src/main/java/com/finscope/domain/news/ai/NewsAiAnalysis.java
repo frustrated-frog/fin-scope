@@ -16,5 +16,7 @@ public class NewsAiAnalysis {
     private String summary;
     private List<String> topics = new ArrayList<>();
     private List<String> entities = new ArrayList<>();
+    private List<NewsCompanyAction> companyActions = new ArrayList<>();
+    private List<String> policyProducts = new ArrayList<>();
     private List<String> facts = new ArrayList<>();
 }
