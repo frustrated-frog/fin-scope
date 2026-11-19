@@ -2,6 +2,7 @@ package com.finscope.dao.investmentobservation;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.enums.investmentobservation.ReactionEventType;
 import com.finscope.domain.fundamentals.CompanyBusinessProfile;
 import com.finscope.domain.investmentobservation.*;
 import com.finscope.domain.news.ai.NewsAiAnalysis;
@@ -112,7 +113,8 @@ public class ObservationNewsRepository {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public int reconcile(ObservationNewsInput input, String signature, List<ReactionSample> matches, boolean complete) {
+    public int reconcile(ObservationNewsInput input, String signature, List<ReactionSample> matches, boolean complete,
+                         Set<String> awaitingPolicyReview) {
         int accepted = jdbc.update("""
                 INSERT INTO investment_news_checked(report_id,signature,context) SELECT n.id,?,? FROM news_report n
                 JOIN news_ai_report a ON a.report_id=n.id AND a.content_version=n.content_version
@@ -122,8 +124,18 @@ public class ObservationNewsRepository {
         if (accepted == 0) {
             return 0;
         }
-        List<Long> previous = jdbc.queryForList("SELECT sample_id FROM investment_news_link WHERE report_id=?", Long.class,input.reportId());
-        jdbc.update("DELETE FROM investment_news_link WHERE report_id=?",input.reportId());
+        // 升级或模型暂停期间，保留当前新闻版本下仍待复核的公司。已判负和已离开候选集的立即撤回。
+        var previous = new HashSet<Long>();
+        jdbc.query("""
+                SELECT l.sample_id,l.version,s.instrument_code,json_extract(s.snapshot_json,'$.eventType') event_type FROM investment_news_link l
+                JOIN investment_reaction_sample s ON s.id=l.sample_id WHERE l.report_id=?
+                """, rs -> {
+            String code = rs.getString("instrument_code");
+            if (rs.getInt("version") != input.version() || !awaitingPolicyReview.contains(code)
+                    || !ReactionEventType.POLICY.name().equals(rs.getString("event_type"))) {
+                previous.add(rs.getLong("sample_id"));
+            }
+        }, input.reportId());
         int added = 0;
         if (!matches.isEmpty()) {
             var first = matches.getFirst();
@@ -146,7 +158,10 @@ public class ObservationNewsRepository {
                 if (!existing.contains(proposed.getInstrumentCode()) || created && proposed == first) {
                     added++;
                 }
-                jdbc.update("INSERT INTO investment_news_link(report_id,sample_id,version,note,evidence) VALUES(?,?,?,?,?)",
+                jdbc.update("""
+                        INSERT INTO investment_news_link(report_id,sample_id,version,note,evidence) VALUES(?,?,?,?,?)
+                        ON CONFLICT(report_id,sample_id) DO UPDATE SET version=excluded.version,note=excluded.note,evidence=excluded.evidence
+                        """,
                         input.reportId(),sample.getId(),input.version(),proposed.getRelationNote(),proposed.getRuleEvidence());
                 if (jdbc.update("DELETE FROM investment_news_withdrawn WHERE sample_id=?",sample.getId()) == 1) {
                     jdbc.update("UPDATE investment_reaction_sample SET excluded=0,revision=revision+1 WHERE id=?",sample.getId());
@@ -155,7 +170,10 @@ public class ObservationNewsRepository {
                 refreshEvidence(sample.getId());
             }
         }
-        previous.forEach(this::refreshEvidence);
+        for (Long id : previous) {
+            jdbc.update("DELETE FROM investment_news_link WHERE report_id=? AND sample_id=?", input.reportId(), id);
+            refreshEvidence(id);
+        }
         return added;
     }
 

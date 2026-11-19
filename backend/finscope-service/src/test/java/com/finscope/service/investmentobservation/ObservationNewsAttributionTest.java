@@ -85,8 +85,10 @@ class ObservationNewsAttributionTest {
             var rows = new ArrayList<Map<String,Object>>();
             for (var company : payload.path("companies")) {
                 boolean matches = company.path("business").asText().contains(PRODUCT);
-                rows.add(Map.of("code",company.path("code").asText(),"matches",matches,"news",matches ? POLICY : "",
-                        "business",matches ? PRODUCT : "","reason",matches ? "已披露主营产品属于政策适用范围" : ""));
+                rows.add(Map.of("code",company.path("code").asText(), "coveredActivity",matches,
+                        "activityExcluded",false, "regionalPolicy",false, "geographyMatches",true, "otherConditionsMet",true,
+                        "news",matches ? POLICY : "", "business",matches ? PRODUCT : "", "location","",
+                        "reason",matches ? "已披露主营产品属于政策适用范围" : "实际产品不属于高频印制电路板"));
             }
             byte[] result = json.writeValueAsBytes(Map.of("status","completed","usage",Map.of("input_tokens",120,"output_tokens",80),
                     "output",List.of(Map.of("type","message","content",List.of(Map.of("type","output_text","text",json.writeValueAsString(Map.of("decisions",rows))))))));
@@ -120,6 +122,10 @@ class ObservationNewsAttributionTest {
         assertEquals(1,calls.get());
         assertEquals(0,service.refresh(now));
         assertEquals(1,calls.get());
+        assertEquals("实际产品不属于高频印制电路板", jdbc.queryForObject("""
+                SELECT json_extract(verdict,'$.reason') FROM investment_news_verification
+                WHERE json_extract(verdict,'$.code')='000823.SZ'
+                """, String.class));
         updateProfile(2,PRODUCT);
         properties.setEnabled(false);
         assertEquals(0,service.refresh(now));
@@ -147,6 +153,76 @@ class ObservationNewsAttributionTest {
         assertTrue(samples.findById(first.getId()).orElseThrow().isExcluded());
         assertEquals(2,calls.get());
         assertEquals(2,jdbc.queryForObject("SELECT count(*) FROM news_ai_call WHERE state='SETTLED'",Integer.class));
+    }
+
+    @Test
+    void keepsExistingPolicyLinkDuringUpgradeAndReplacesLegacyDenial() throws Exception {
+        var analysis = new NewsAiAnalysis();
+        analysis.setEventType(NewsAiEventType.POLICY);
+        analysis.setPolicyProducts(List.of("印制电路板"));
+        addCompany(1, "605058", "澳弘电子", PRODUCT);
+        addCompany(2, "000823", "超声电子", PRODUCT);
+        publish("national", "行业规范", POLICY, analysis, "national", "NEW_EVENT");
+        assertEquals(2, service.refresh(now));
+
+        // 模拟旧版已完成的检查点：旧规则只挂上第一家公司。
+        jdbc.update("UPDATE investment_news_checked SET signature='old-signature',context='old-catalog'");
+        jdbc.update("""
+                UPDATE investment_news_verification SET id='old-'||id, verdict=CASE json_extract(verdict,'$.code')
+                WHEN '605058.SH' THEN json_remove(verdict,'$.code','$.coveredActivity','$.activityExcluded','$.regionalPolicy',
+                    '$.geographyMatches','$.otherConditionsMet','$.location') ELSE '' END
+                """);
+        jdbc.update("DELETE FROM investment_news_link WHERE sample_id IN (SELECT id FROM investment_reaction_sample WHERE instrument_code='000823.SZ')");
+        jdbc.update("DELETE FROM investment_reaction_sample WHERE instrument_code='000823.SZ'");
+        properties.setEnabled(false);
+        service.refresh(now);
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM investment_news_link", Integer.class));
+        assertEquals(1, calls.get());
+
+        properties.setEnabled(true);
+        assertEquals(1, service.refresh(now));
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM investment_news_link", Integer.class));
+        assertEquals(0, service.refresh(now));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void regionalApprovalNeedsVerbatimLocationAndIndependentApplicableBusiness() throws Exception {
+        var analysis = new NewsAiAnalysis();
+        analysis.setEventType(NewsAiEventType.POLICY);
+        analysis.setPolicyProducts(List.of("印制电路板"));
+        String location = "本公司生产基地位于深圳市南山区。";
+        String business = "公司从事印制电路板及覆铜板的生产。";
+        String notice = "仅限深圳市印制电路板生产企业申报。";
+        var profile = new CompanyBusinessProfile();
+        profile.setDescription(location + business);
+        profile.setSourceUrl("https://example.test/manufacturer");
+        var stock = new ObservationCompany(1L, "000001.SZ", "示例公司", profile);
+        var item = new ObservationNewsInput("local", 1, "policy", "本地申报", notice, null,
+                now, now, analysis, null, null, true);
+        var verifier = new ObservationPolicyVerifier();
+        inject(verifier, "mapper", json);
+        var candidates = verifier.candidates(item, List.of(stock));
+        var candidate = candidates.getFirst();
+        assertTrue(candidate.background().contains(location));
+        assertTrue(candidate.excerpt().contains(business));
+        var row = json.createObjectNode().put("code", stock.code()).put("coveredActivity", true)
+                .put("activityExcluded", false).put("regionalPolicy", true).put("geographyMatches", true)
+                .put("otherConditionsMet", true).put("news", notice).put("business", business)
+                .put("location", location).put("reason", "有当地生产基地且实际制造适用产品");
+        var response = json.createObjectNode();
+        response.putArray("decisions").add(row);
+        var decisions = verifier.decode(item, candidates, response.toString());
+        assertTrue(verifier.decision(decisions.get(candidate.key())).matches());
+
+        row.put("location", "本公司在深圳市注册。");
+        assertTrue(verifier.decode(item, candidates, response.toString()).isEmpty());
+        row.put("geographyMatches", false).put("location", "").put("reason", "材料无法证明在当地注册");
+        decisions = verifier.decode(item, candidates, response.toString());
+        assertFalse(verifier.decision(decisions.get(candidate.key())).matches());
+        assertEquals("材料无法证明在当地注册", verifier.decision(decisions.get(candidate.key())).reason());
+        profile.setDescription("本公司生产基地位于常州市。" + business);
+        assertNotEquals(candidate.key(), verifier.candidates(item, List.of(stock)).getFirst().key());
     }
 
     @Test

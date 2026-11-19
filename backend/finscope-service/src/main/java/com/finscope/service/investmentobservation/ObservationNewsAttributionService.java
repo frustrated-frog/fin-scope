@@ -39,8 +39,8 @@ public class ObservationNewsAttributionService {
             fillProfiles(now);
         }
         var companies = repository.companies(now,false);
-        String catalogVersion = NewsAiContentIdentity.digest(companies.stream()
-                .map(c -> c.code() + "|" + c.profile().getDescription() + "|" + c.profile().getSourceUrl())
+        String catalogVersion = NewsAiContentIdentity.digest(ObservationPolicyVerifier.VERSION + "|" + companies.stream()
+                .map(c -> c.code() + "|" + c.name() + "|" + c.profile().getCompanyName() + "|" + c.profile().getDescription() + "|" + c.profile().getSourceUrl())
                 .collect(java.util.stream.Collectors.joining("\n")));
         var names = new HashMap<String,ReactionStockResolution>();
         int calls = 0;
@@ -70,19 +70,26 @@ public class ObservationNewsAttributionService {
             for (var candidate : candidates) {
                 String verdict = verdicts.get(candidate.key());
                 if (verdict != null && !verdict.isEmpty()) {
-                    var evidence = policies.evidence(verdict);
+                    var evidence = policies.decision(verdict);
+                    if (!evidence.matches()) {
+                        continue;
+                    }
                     var company = candidate.company();
-                    String note = evidence.reason() + "。公司资料：“" + evidence.business() + "” " + company.profile().getSourceUrl();
+                    String location = evidence.regionalPolicy() ? "。地域依据：“" + evidence.location() + "”" : "";
+                    String note = evidence.reason() + "。公司资料：“" + evidence.business() + "”" + location
+                            + " " + company.profile().getSourceUrl();
                     matches.putIfAbsent(company.code(),sample(item,company.code(),company.name(),true,note,evidence.news(),now));
                 }
             }
             if (resolved && verdicts.size() == keys.size()
                     && verdicts.values().stream().noneMatch(Objects::isNull)) {
-                added += repository.reconcile(item,signature,List.copyOf(matches.values()),true);
+                added += repository.reconcile(item,signature,List.copyOf(matches.values()),true, Set.of());
             } else if (!matches.isEmpty() || item.checkpoint() != null) {
                 // 个别候选等待核对时，也能先展示有证据的股票。进度签名不等同于全量完成。
-                String partial = NewsAiContentIdentity.digest(signature + "|partial|" + matches.keySet());
-                added += repository.reconcile(item,partial,List.copyOf(matches.values()),false);
+                var awaiting = candidates.stream().filter(c -> verdicts.get(c.key()) == null)
+                        .map(c -> c.company().code()).collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+                String partial = NewsAiContentIdentity.digest(signature + "|partial|" + matches.keySet() + "|" + awaiting);
+                added += repository.reconcile(item,partial,List.copyOf(matches.values()),false, awaiting);
             }
         }
         return added;
