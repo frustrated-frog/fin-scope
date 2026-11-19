@@ -17,6 +17,8 @@ public class ReactionRefreshScheduler {
     private ReactionRefreshService refreshService;
     @Resource
     private ReactionDiscoveryService discovery;
+    @Resource
+    private ObservationNewsAttributionService attributions;
     private volatile ReactionDiscoveryStatus lastStatus =
             new ReactionDiscoveryStatus();
     @Resource(name = "investmentReactionExecutor")
@@ -65,6 +67,10 @@ public class ReactionRefreshScheduler {
             ReactionRefreshResult result = refreshService.refreshPending();
             if (result.getRefreshed() > 0 || result.getFailed() > 0) {
                 log.info("reaction refresh completed refreshed={} failed={}", result.getRefreshed(), result.getFailed());
+            }
+            int added = attributions.refresh(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai")));
+            if (added > 0) {
+                log.info("投资观察新增新闻股票关联 count={}", added);
             }
         } catch (Exception ex) {
             log.error("reaction scheduled refresh failed; next run will retry", ex);

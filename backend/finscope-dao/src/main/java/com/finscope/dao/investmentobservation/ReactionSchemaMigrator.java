@@ -48,6 +48,15 @@ public class ReactionSchemaMigrator implements InitializingBean {
         migrateReactionChanges();
         migrateWorkspace();
         migrateHistoricalCases();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_checked(report_id TEXT PRIMARY KEY,signature TEXT NOT NULL)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_profile(code TEXT PRIMARY KEY,profile_json TEXT,next_at TEXT NOT NULL)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_verification(id TEXT PRIMARY KEY,call_id TEXT NOT NULL,created_at TEXT NOT NULL,verdict TEXT)");
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_verification_call ON investment_news_verification(call_id)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_link(report_id TEXT NOT NULL,sample_id INTEGER NOT NULL,version INTEGER NOT NULL,note TEXT NOT NULL,evidence TEXT NOT NULL,PRIMARY KEY(report_id,sample_id))");
+            jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_news_link_sample ON investment_news_link(sample_id)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS investment_news_withdrawn(sample_id INTEGER PRIMARY KEY)");
+        });
     }
 
     private void migrateAutomaticSources() {

@@ -444,9 +444,14 @@ public class ReactionSampleRepository {
                 id, revision, ReactionSampleState.OBSERVING.name()) == 1;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public boolean exclude(long id, int revision, boolean excluded) {
-        return jdbcTemplate.update("UPDATE investment_reaction_sample SET excluded=?,revision=revision+1 WHERE id=? AND revision=?",
+        boolean updated = jdbcTemplate.update("UPDATE investment_reaction_sample SET excluded=?,revision=revision+1 WHERE id=? AND revision=?",
                 excluded ? 1 : 0, id, revision) == 1;
+        if (updated) {
+            jdbcTemplate.update("DELETE FROM investment_news_withdrawn WHERE sample_id=?", id);
+        }
+        return updated;
     }
 
     public List<ReactionSource> sourceVersions(String eventKey) {
