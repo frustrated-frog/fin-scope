@@ -1,4 +1,4 @@
-import type { NewsReading } from './NewsReadingContent';
+import type { NewsReading } from './newsReading';
 export type RadarNewsItem = {
   id: string;
   kind: 'FLASH' | 'ARTICLE';

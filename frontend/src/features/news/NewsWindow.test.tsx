@@ -161,19 +161,19 @@ test('only generates a selected news version after the reader clicks and reuses 
   await waitFor(() => expect(generate).toBeEnabled());
   expect(post).not.toHaveBeenCalled();
   fireEvent.click(generate);
-  expect(await screen.findByText(result.reading.sections[0].answer)).toBeVisible();
+  expect(await screen.findByText(result.reading.sections[0].answer, { exact: false })).toBeVisible();
   expect(screen.getByText(result.reading.lead)).toBeVisible();
-  const more = screen.getByText(result.reading.sections[1].question).closest('details')!;
-  expect(more.open).toBe(false);
-  fireEvent.click(more.querySelector('summary')!);
-  expect(more.open).toBe(true);
-  expect(screen.getByText(result.reading.sections[1].answer)).toBeVisible();
+  const article = screen.getByText(result.reading.lead).closest('article')!;
+  expect(article.querySelector('details')).toBeNull();
+  expect(article).toHaveTextContent('中标：采购方选定了供应商。');
+  expect(article).toHaveTextContent(result.reading.sections[1].question);
+  expect(article).toHaveTextContent(result.reading.sections[1].answer);
   expect(screen.queryByRole('heading', { name: '待确认事项' })).not.toBeInTheDocument();
   expect(post).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: '关闭新闻详情' }));
   fireEvent.click(screen.getByRole('button', { name: /阅读资讯：开普检测中标/ }));
   fireEvent.click(await screen.findByRole('button', { name: '查看 AI 解读' }));
-  expect(await screen.findByText(result.reading.sections[0].answer)).toBeVisible();
+  expect(await screen.findByText(result.reading.sections[0].answer, { exact: false })).toBeVisible();
   expect(post).toHaveBeenCalledTimes(1);
 });
 

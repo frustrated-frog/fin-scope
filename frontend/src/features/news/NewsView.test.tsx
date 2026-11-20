@@ -255,9 +255,12 @@ test('shows saved interpretation without waiting for read state and hides its in
   expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
 });
 
-test('shows a saved radar reading and expands its concepts without generating again', async () => {
+test('renders a saved reading in the original radar layout without generating again', async () => {
   const original = vi.mocked(api).getMockImplementation()!;
-  const reading = { lead: '厂商发布了一款新电池。', sections: [], concepts: [
+  const reading = { lead: '厂商发布了一款新电池。', sections: [
+    { question: '量产为什么重要？', answer: '量产决定新品能否持续交付。' },
+    { question: '良率会影响什么？', answer: '同样的材料可以产出更多合格品。' },
+  ], concepts: [
     { term: '量产', meaning: '用可重复的工艺批量制造。' },
     { term: '良率', meaning: '生产出的产品中合格品所占比例。[signal:1]' },
   ] };
@@ -266,10 +269,13 @@ test('shows a saved radar reading and expands its concepts without generating ag
       result: { ...detail.interpretation.result, reading } } }) : original(path, options));
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
   expect(await screen.findByText(reading.lead)).toBeVisible();
-  const term = screen.getByText('良率');
-  expect(term.closest('details')?.open).toBe(false);
-  await userEvent.click(term);
-  expect(screen.getByText('生产出的产品中合格品所占比例。')).toBeVisible();
+  const grid = screen.getByText(reading.lead).closest('.radar-interpretation-grid')!;
+  expect(grid.querySelector('.radar-dossier-findings')).toHaveTextContent('良率：生产出的产品中合格品所占比例。');
+  expect(grid.querySelector('.radar-dossier-impact')).toHaveTextContent(reading.sections[0].answer);
+  expect(grid.querySelector('.radar-dossier-chain ol li')).toHaveTextContent(reading.sections[1].answer);
+  expect(grid.querySelector('details')).toBeNull();
+  expect(grid).not.toHaveTextContent('[signal:1]');
+  expect(document.querySelector('.radar-detail-overview')).toHaveTextContent(event.summary);
   expect(screen.queryByText('仍存疑点')).not.toBeInTheDocument();
   expect(vi.mocked(api).mock.calls.some(([path, options]) =>
     path.includes('/interpretation') && options?.method === 'POST')).toBe(false);

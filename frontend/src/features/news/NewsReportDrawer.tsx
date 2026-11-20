@@ -3,7 +3,7 @@ import { api } from '../../shared/api/client';
 import { ReactionChart } from '../investment-observation/ReactionChart';
 import { beforeEventReturn, dateTime, signed, sourceHref, statusLabels, reactionHref, resolutionLabels } from '../investment-observation/reactionTypes';
 import type { NewsDetail, NewsReport } from './newsWindowTypes';
-import { NewsReadingContent } from './NewsReadingContent';
+import { conceptLine, interpretationText, sectionLine } from './newsReading';
 import { useNewsReportInterpretation } from './useNewsReportInterpretation';
 import type { NewsInterpretationResult } from './useNewsReportInterpretation';
 
@@ -363,12 +363,14 @@ export function NewsReportDrawer({
 }
 
 function NewsInterpretationContent({ result }: { result: NewsInterpretationResult }) {
-  if (result.reading) {
-    return <NewsReadingContent reading={result.reading} />;
-  }
-  if (result.formatVersion === 2) {
-    return <article><p><strong>{result.facts[0]}</strong></p>
-      {result.whyItMatters.split('\n\n').filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+  const reading = result.reading;
+  if (reading || result.formatVersion === 2) {
+    const lead = reading?.lead ?? result.facts[0] ?? '';
+    const paragraphs = reading
+      ? [...reading.concepts.map(conceptLine), ...reading.sections.map(sectionLine)]
+      : result.whyItMatters.split('\n\n').filter(Boolean);
+    return <article><p><strong>{interpretationText(lead)}</strong></p>
+      {paragraphs.map((paragraph, index) => <p key={index}>{interpretationText(paragraph)}</p>)}
     </article>;
   }
   return <>

@@ -1,4 +1,4 @@
-import type { NewsReading } from './NewsReadingContent';
+import type { NewsReading } from './newsReading';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 
