@@ -2,6 +2,8 @@ package com.finscope.web.controller;
 
 import com.finscope.common.api.ApiResponse;
 import com.finscope.domain.majorevent.MajorEvent;
+import com.finscope.domain.news.NewsReportInterpretationView;
+import com.finscope.service.majorevent.MajorEventInterpretationService;
 import com.finscope.service.majorevent.MajorEventService;
 import com.finscope.web.request.CreateMajorEventRequest;
 import com.finscope.web.request.UpdateMajorEventRequest;
@@ -27,6 +29,19 @@ import java.util.List;
 public class MajorEventController {
     @Resource
     private MajorEventService service;
+
+    @Resource
+    private MajorEventInterpretationService interpretations;
+
+    @GetMapping("/{id}/interpretation")
+    public ApiResponse<NewsReportInterpretationView> interpretation(@PathVariable long id) {
+        return ApiResponses.success(interpretations.reading(id, false));
+    }
+
+    @PostMapping("/{id}/interpretation")
+    public ApiResponse<NewsReportInterpretationView> requestInterpretation(@PathVariable long id) {
+        return ApiResponses.success(interpretations.reading(id, true));
+    }
 
     /**
      * 查询重大事件列表。

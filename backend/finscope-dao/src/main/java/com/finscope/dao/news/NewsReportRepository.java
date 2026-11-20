@@ -203,6 +203,13 @@ public class NewsReportRepository {
         return jdbc.query("SELECT * FROM news_report_version WHERE report_id=? ORDER BY version DESC LIMIT 100", versionRow(), id);
     }
 
+    public Optional<Integer> archivedVersion(String id, String title, String content, LocalDateTime archivedAt) {
+        return jdbc.queryForList("""
+                SELECT version FROM news_report_version WHERE report_id=? AND title=?
+                    AND trim(content,char(9,10,11,12,13,32))=? AND detected_at<=? ORDER BY version DESC LIMIT 1
+                """, Integer.class, id, title, content == null ? "" : content.trim(), time(archivedAt)).stream().findFirst();
+    }
+
     public Optional<NewsReportVersion> findVersion(String id, int version) {
         return jdbc.query("SELECT * FROM news_report_version WHERE report_id=? AND version=?", versionRow(), id, version)
                 .stream().findFirst();

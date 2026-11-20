@@ -10,6 +10,7 @@ import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.service.cache.ViewRevisionService;
+import com.finscope.service.majorevent.MajorEventRadarReadings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +40,7 @@ class RadarEventInterpretationServiceTest {
     private CapturingExecutor executor;
     private ViewRevisionService revisions;
     private RadarEventInterpretationService service;
+    private MajorEventRadarReadings archive;
     private RadarEvent event;
     private RadarSignal signal;
 
@@ -49,7 +51,9 @@ class RadarEventInterpretationServiceTest {
         agent = mock(RadarEventInterpretationAgent.class); executor = new CapturingExecutor();
         revisions = mock(ViewRevisionService.class);
         service = createRadarEventInterpretationService(interpretations, radar, evidence, agent, executor, revisions);
-        event = new RadarEvent(); event.setId(10L); event.setCanonicalTitle("宁德时代发布新一代电池");
+        archive = mock(MajorEventRadarReadings.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "archive", archive);
+        event = new RadarEvent(); event.setEventKey("battery"); event.setId(10L); event.setCanonicalTitle("宁德时代发布新一代电池");
         event.setSummary("新品正式发布");
         signal = new RadarSignal(); signal.setId(1L); signal.setContentHash("signal-hash");
         signal.setTitle("新品正式发布"); signal.setContent("披露量产时间");
@@ -94,6 +98,7 @@ class RadarEventInterpretationServiceTest {
         ArgumentCaptor<RadarEventInterpretation> updates = ArgumentCaptor.forClass(RadarEventInterpretation.class);
         verify(interpretations, org.mockito.Mockito.atLeast(2)).update(updates.capture());
         assertEquals("SUCCESS", updates.getValue().getStatus());
+        verify(archive).retain("battery", 10L, updates.getValue().getResult());
     }
 
     @Test

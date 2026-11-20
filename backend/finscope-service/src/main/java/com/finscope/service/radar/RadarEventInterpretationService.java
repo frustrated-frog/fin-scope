@@ -1,6 +1,8 @@
 package com.finscope.service.radar;
 
+import com.finscope.service.majorevent.MajorEventRadarReadings;
 import com.finscope.service.news.NewsWorkbenchCapabilities;
+import lombok.extern.slf4j.Slf4j;
 
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ResourceNotFoundException;
@@ -33,6 +35,7 @@ import java.util.concurrent.Executor;
 import com.finscope.common.exception.BizErrorCode;
 
 @Service
+@Slf4j
 public class RadarEventInterpretationService {
     @Autowired
     private NewsWorkbenchCapabilities capabilities;
@@ -49,6 +52,8 @@ public class RadarEventInterpretationService {
     private Executor executor;
     @Autowired
     private ViewRevisionService viewRevisions;
+    @Autowired
+    private MajorEventRadarReadings archive;
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public boolean isAutomaticModelEnabled() {
@@ -217,6 +222,13 @@ public class RadarEventInterpretationService {
             queued.setCompletedAt(LocalDateTime.now());
             try {
                 interpretations.update(queued);
+                if (queued.getResult() != null) {
+                    try {
+                        archive.retain(event.getEventKey(), event.getId(), queued.getResult());
+                    } catch (RuntimeException error) {
+                        log.warn("雷达解读暂未同步至大事记 eventId={} errorType={}", event.getId(), error.getClass().getSimpleName());
+                    }
+                }
                 if (viewRevisions != null) viewRevisions.invalidate("radar");
             } finally { inFlight.remove(key); }
         }

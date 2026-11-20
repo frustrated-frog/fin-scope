@@ -1,6 +1,8 @@
 package com.finscope.web.controller;
 
 import com.finscope.domain.majorevent.MajorEvent;
+import com.finscope.domain.news.NewsReportInterpretationView;
+import com.finscope.service.majorevent.MajorEventInterpretationService;
 import com.finscope.service.majorevent.MajorEventService;
 import com.finscope.web.config.FinScopeProperties;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import java.time.LocalDate;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +26,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class MajorEventControllerTest {
     @Autowired private MockMvc mvc;
     @MockBean private MajorEventService service;
+    @MockBean private MajorEventInterpretationService interpretations;
+
+    @Test
+    void readingTheArchiveAndRequestingGenerationAreSeparateActions() throws Exception {
+        var view = new NewsReportInterpretationView();
+        view.setContentVersion(1);
+        when(interpretations.reading(1L, false)).thenReturn(view);
+        when(interpretations.reading(1L, true)).thenReturn(view);
+        mvc.perform(get("/api/major-events/1/interpretation"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.contentVersion").value(1));
+        org.mockito.Mockito.verify(interpretations, org.mockito.Mockito.never()).reading(1L, true);
+        mvc.perform(post("/api/major-events/1/interpretation"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.contentVersion").value(1));
+        org.mockito.Mockito.verify(interpretations).reading(1L, true);
+    }
 
     @Test
     void createsLiveNewsSnapshotThroughTheStandardEnvelope() throws Exception {

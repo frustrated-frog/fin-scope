@@ -314,6 +314,11 @@ public class DatabaseInitializer implements InitializingBean {
                 + "title TEXT NOT NULL,summary TEXT,source_name TEXT,source_url TEXT,category_code TEXT,"
                 + "occurred_date TEXT NOT NULL,note TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
                 + "UNIQUE(origin_type,origin_key))");
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS major_event_reading (
+                    event_id INTEGER PRIMARY KEY REFERENCES major_event(id) ON DELETE CASCADE,
+                    claim_token TEXT, claimed_at_ms INTEGER, failure_message TEXT, result_json TEXT)
+                """);
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_major_event_timeline "
                 + "ON major_event(occurred_date DESC,created_at DESC)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_major_event_filters "

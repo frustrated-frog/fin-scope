@@ -85,6 +85,12 @@ public class RadarEventInterpretationRepository {
         return values.stream().max(BY_CREATED);
     }
 
+    public Optional<RadarEventInterpretation> latestSuccess(Long eventId) {
+        return store.read().getInterpretations().getOrDefault(eventId, List.of()).stream()
+                .filter(value -> "SUCCESS".equals(value.getStatus()) && value.getResult() != null)
+                .max(BY_CREATED);
+    }
+
     public List<RadarEventInterpretation> findHistory(Long eventId, int limit) {
         return store.read().getInterpretations().getOrDefault(eventId, java.util.Collections.emptyList()).stream()
                 .sorted(BY_CREATED.reversed())

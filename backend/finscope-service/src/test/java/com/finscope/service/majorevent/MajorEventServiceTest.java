@@ -84,6 +84,7 @@ class MajorEventServiceTest {
         MajorEventRepository events = mock(MajorEventRepository.class);
         RadarRepository radar = mock(RadarRepository.class);
         RadarEvent source = new RadarEvent();
+        source.setId(21L);
         source.setEventKey("central-bank-rate-cut");
         source.setCanonicalTitle("央行降息");
         source.setFirstSeenAt(LocalDateTime.of(2026, 8, 4, 9, 0));
@@ -95,8 +96,11 @@ class MajorEventServiceTest {
         command.setOriginType("RADAR_EVENT");
         command.setOriginKey("central-bank-rate-cut");
 
+        var readings = mock(MajorEventRadarReadings.class);
+        ReflectionTestUtils.setField(service, "radarReadings", readings);
         MajorEvent saved = service.create(command);
 
+        org.mockito.Mockito.verify(readings).capture("central-bank-rate-cut", 21L);
         assertEquals("central-bank-rate-cut", saved.getOriginKey());
         assertEquals("央行降息", saved.getTitle());
     }

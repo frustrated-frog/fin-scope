@@ -269,6 +269,19 @@ public class RadarRepository {
                 .build());
     }
 
+    /** 大事记早期保存数字 ID，此后使用业务键。即使事件已过期也可按稳定 ID 查找留存的解读。 */
+    public long archivedEventId(String originKey) {
+        Long mapped = store.read().getEventIdsByKey().get(originKey);
+        if (mapped != null) {
+            return mapped;
+        }
+        try {
+            return Long.parseLong(originKey);
+        } catch (NumberFormatException ignored) {
+            return store.stableId("event", originKey);
+        }
+    }
+
     public Optional<RadarEvent> findEventByKey(String eventKey) {
         return Optional.ofNullable(findEventsByKeys(Collections.singletonList(eventKey)).get(eventKey));
     }

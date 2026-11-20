@@ -12,6 +12,7 @@ import com.finscope.domain.majorevent.MajorEventCreateCommand;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.service.news.NewsFeedItem;
 import com.finscope.service.news.NewsFeedService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -21,6 +22,7 @@ import java.util.List;
 import com.finscope.common.exception.BizErrorCode;
 
 @Service
+@Slf4j
 public class MajorEventService {
     @Resource
     private MajorEventRepository events;
@@ -33,16 +35,28 @@ public class MajorEventService {
     @Resource
     private com.finscope.dao.news.NewsReportRepository reports;
 
+    @Resource
+    private MajorEventRadarReadings radarReadings;
+
     public MajorEvent create(MajorEventCreateCommand command) {
         validateOrigin(command);
+        RadarEvent radarEvent = "RADAR_EVENT".equals(command.getOriginType()) ? findRadarEvent(command.getOriginKey()) : null;
         MajorEvent event = "ARTICLE".equals(command.getOriginType()) ? articleSnapshot(command)
-                : "RADAR_EVENT".equals(command.getOriginType()) ? radarSnapshot(command) : liveNewsSnapshot(command);
+                : radarEvent != null ? radarSnapshot(command, radarEvent) : liveNewsSnapshot(command);
         if (events.findByOrigin(event.getOriginType(), event.getOriginKey()).isPresent()) {
             throw new BusinessException(BizErrorCode.MAJOR_EVENT_ALREADY_RECORDED);
         }
         event.setOccurredDate(command.getOccurredDate() == null ? event.getOccurredDate() : command.getOccurredDate());
         event.setNote(trimToNull(command.getNote()));
-        return events.save(event);
+        MajorEvent saved = events.save(event);
+        if (radarEvent != null) {
+            try {
+                radarReadings.capture(event.getOriginKey(), radarEvent.getId());
+            } catch (RuntimeException error) {
+                log.warn("归档后暂未同步雷达解读，打开记录时重试 id={} errorType={}", saved.getId(), error.getClass().getSimpleName());
+            }
+        }
+        return saved;
     }
 
     public List<MajorEvent> list(String originType, String categoryCode, LocalDate from, LocalDate to) {
@@ -74,8 +88,7 @@ public class MajorEventService {
         return event;
     }
 
-    private MajorEvent radarSnapshot(MajorEventCreateCommand command) {
-        RadarEvent radarEvent = findRadarEvent(command.getOriginKey());
+    private MajorEvent radarSnapshot(MajorEventCreateCommand command, RadarEvent radarEvent) {
         MajorEvent event = base(command);
         event.setOriginKey(radarEvent.getEventKey());
         event.setTitle(radarEvent.getCanonicalTitle());
