@@ -1,6 +1,7 @@
 package com.finscope.service.news;
 
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.llm.NewsAiLunaClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,6 +21,27 @@ class NewsWorkbenchCapabilitiesTest {
         assertTrue(capabilities.isAutomaticModelEnabled());
         ReflectionTestUtils.setField(capabilities, "modelEnabled", false);
         assertFalse(capabilities.isAutomaticModelEnabled());
+    }
+
+    @Test
+    void interpretationUsesOnlyTheNewsKeyAndRequiresExplicitAutomaticOptIn() {
+        NewsWorkbenchCapabilities capabilities = new NewsWorkbenchCapabilities();
+        NewsAiLunaClient luna = mock(NewsAiLunaClient.class);
+        LlmChatClient global = mock(LlmChatClient.class);
+        ReflectionTestUtils.setField(capabilities, "luna", luna);
+        ReflectionTestUtils.setField(capabilities, "llm", global);
+        ReflectionTestUtils.setField(capabilities, "modelEnabled", true);
+        when(global.isConfigured()).thenReturn(true);
+        assertFalse(capabilities.isInterpretationEnabled());
+
+        when(global.isConfigured()).thenReturn(false);
+        when(luna.isConfigured()).thenReturn(true);
+        assertTrue(capabilities.isInterpretationEnabled());
+        assertFalse(capabilities.isAutomaticInterpretationEnabled());
+        ReflectionTestUtils.setField(capabilities, "automaticModelEnabled", true);
+        assertTrue(capabilities.isAutomaticInterpretationEnabled());
+        ReflectionTestUtils.setField(capabilities, "modelEnabled", false);
+        assertFalse(capabilities.isAutomaticInterpretationEnabled());
     }
 
     @Test

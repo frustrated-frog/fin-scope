@@ -40,8 +40,8 @@ class RadarEventEnhancementSchedulerTest {
 
             context.registerBean(com.finscope.rpc.llm.LlmChatClient.class,
                     () -> mock(com.finscope.rpc.llm.LlmChatClient.class));
-            context.registerBean(com.finscope.service.news.NewsWorkbenchCapabilities.class,
-                    () -> mock(com.finscope.service.news.NewsWorkbenchCapabilities.class));
+            context.getBeanFactory().registerSingleton("newsWorkbenchCapabilities",
+                    mock(com.finscope.service.news.NewsWorkbenchCapabilities.class));
             context.refresh();
 
             assertNotNull(context.getBean(RadarEventEnhancementScheduler.class));

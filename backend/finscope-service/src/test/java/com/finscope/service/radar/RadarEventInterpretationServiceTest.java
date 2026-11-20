@@ -63,7 +63,7 @@ class RadarEventInterpretationServiceTest {
         RadarEventInterpretationService value = new RadarEventInterpretationService();
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities =
                 org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isInterpretationEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         org.junit.jupiter.api.Assertions.assertEquals("UNAVAILABLE", value.requestAutomatic(10L).getStatus());
     }
@@ -238,7 +238,7 @@ class RadarEventInterpretationServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "viewRevisions", viewRevisions);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isInterpretationEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }
@@ -255,7 +255,7 @@ class RadarEventInterpretationServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(value, "agent", agent);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "executor", executor);
         com.finscope.service.news.NewsWorkbenchCapabilities capabilities = org.mockito.Mockito.mock(com.finscope.service.news.NewsWorkbenchCapabilities.class);
-        org.mockito.Mockito.when(capabilities.isModelEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(capabilities.isInterpretationEnabled()).thenReturn(true);
         org.springframework.test.util.ReflectionTestUtils.setField(value, "capabilities", capabilities);
         return value;
     }

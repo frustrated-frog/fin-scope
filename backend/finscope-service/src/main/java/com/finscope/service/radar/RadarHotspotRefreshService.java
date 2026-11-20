@@ -91,7 +91,7 @@ public class RadarHotspotRefreshService {
     }
 
     private void publishInterpretations(RadarHotspotProductionPipeline.ProductionResult result) {
-        if (!capabilities.isAutomaticModelEnabled()) {
+        if (!capabilities.isAutomaticInterpretationEnabled()) {
             return;
         }
         List<Long> eventIds = new ArrayList<>();

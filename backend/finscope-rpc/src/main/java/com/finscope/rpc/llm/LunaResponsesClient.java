@@ -33,11 +33,26 @@ public abstract class LunaResponsesClient {
     }
 
     public Prepared prepare(String system, String input, int maxOutputTokens, Map<String, Object> schema, String effort) {
+        return prepareFormat(system, input, maxOutputTokens, effort,
+                Map.of("type", "json_schema", "name", "news_understanding", "strict", true, "schema", schema));
+    }
+
+    public String completeText(String system, String input, int maxOutputTokens) throws Exception {
+        Prepared request = prepareFormat(system, input, maxOutputTokens, "none", Map.of("type", "text"));
+        Reply reply = complete(request);
+        if (!reply.isCompleted() || reply.isRefused()) {
+            throw new IllegalStateException("Luna 未返回完整正文");
+        }
+        return reply.getText();
+    }
+
+    private Prepared prepareFormat(String system, String input, int maxOutputTokens, String effort,
+                                   Map<String, Object> format) {
         try {
             Map<String, Object> body = Map.of("model", config.getModel(), "store", false,
                     "reasoning", Map.of("effort", effort), "max_output_tokens", maxOutputTokens,
                     "input", List.of(Map.of("role", "system", "content", system), Map.of("role", "user", "content", input)),
-                    "text", Map.of("format", Map.of("type", "json_schema", "name", "news_understanding", "strict", true, "schema", schema)));
+                    "text", Map.of("format", format));
             Prepared value = new Prepared();
             value.setBody(mapper.writeValueAsBytes(body));
             // UTF-8 字节数加协议余量作无缓存输入上界，不把中文字符数当作 token 数。
@@ -60,7 +75,7 @@ public abstract class LunaResponsesClient {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() >= 400) {
             // 不输出供应商原始错误正文，避免密钥或原文回显；由账本保留保守预留费用。
-            throw new IllegalStateException("Luna HTTP " + response.statusCode());
+            throw new ProviderHttpException(response.statusCode());
         }
         JsonNode root = mapper.readTree(response.body());
         Reply reply = new Reply();
@@ -69,7 +84,13 @@ public abstract class LunaResponsesClient {
         if (input.isIntegralNumber() && output.isIntegralNumber() && input.asLong() >= 0 && output.asLong() >= 0) {
             reply.setInputTokens(input.asLong()); reply.setOutputTokens(output.asLong());
         }
-        reply.setCompleted("completed".equals(root.path("status").asText()));
+        reply.setStatus(root.path("status").asText(null));
+        reply.setCompleted("completed".equals(reply.getStatus()));
+        reply.setIncompleteReason(root.path("incomplete_details").path("reason").asText(null));
+        JsonNode reasoning = root.path("usage").path("output_tokens_details").path("reasoning_tokens");
+        if (reasoning.isIntegralNumber() && reasoning.canConvertToLong() && reasoning.asLong() >= 0) {
+            reply.setReasoningTokens(reasoning.asLong());
+        }
         StringBuilder text = new StringBuilder();
         for (JsonNode item : root.path("output")) {
             if (!"message".equals(item.path("type").asText())) {
@@ -78,11 +99,26 @@ public abstract class LunaResponsesClient {
             for (JsonNode content : item.path("content")) {
                 if ("output_text".equals(content.path("type").asText())) {
                     text.append(content.path("text").asText());
+                } else if ("refusal".equals(content.path("type").asText())) {
+                    reply.setRefused(true);
                 }
             }
         }
         reply.setText(text.toString());
         return reply;
+    }
+
+    public static final class ProviderHttpException extends IllegalStateException {
+        private final int status;
+
+        private ProviderHttpException(int status) {
+            super("Luna HTTP " + status);
+            this.status = status;
+        }
+
+        public int status() {
+            return status;
+        }
     }
 
     @Data
@@ -96,6 +132,10 @@ public abstract class LunaResponsesClient {
         private String text;
         private Long inputTokens;
         private Long outputTokens;
+        private Long reasoningTokens;
+        private String status;
+        private String incompleteReason;
+        private boolean refused;
         private boolean completed;
     }
 }

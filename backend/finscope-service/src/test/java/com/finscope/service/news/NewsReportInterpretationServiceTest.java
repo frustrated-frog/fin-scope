@@ -9,7 +9,7 @@ import com.finscope.dao.news.NewsReportRepository;
 import com.finscope.dao.news.NewsWindowSchemaMigrator;
 import com.finscope.domain.news.NewsReport;
 import com.finscope.domain.news.NewsReportInterpretation;
-import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.llm.NewsAiLunaClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -44,7 +44,7 @@ class NewsReportInterpretationServiceTest {
     private NewsReportRepository reports;
     private NewsReportInterpretationRepository interpretations;
     private NewsWorkbenchCapabilities capabilities;
-    private LlmChatClient llm;
+    private NewsAiLunaClient llm;
     private NewsReportInterpretationService service;
 
     @BeforeEach
@@ -64,9 +64,9 @@ class NewsReportInterpretationServiceTest {
         ReflectionTestUtils.setField(interpretations, "jdbc", jdbc);
         ReflectionTestUtils.setField(interpretations, "mapper", json);
         capabilities = mock(NewsWorkbenchCapabilities.class);
-        when(capabilities.isModelEnabled()).thenReturn(true);
-        llm = mock(LlmChatClient.class);
-        when(llm.complete(anyString(), anyString(), anyInt(), anyInt())).thenReturn(RESULT);
+        when(capabilities.isInterpretationEnabled()).thenReturn(true);
+        llm = mock(NewsAiLunaClient.class);
+        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn(RESULT);
         NewsReportInterpretationAgent agent = new NewsReportInterpretationAgent();
         ReflectionTestUtils.setField(agent, "llm", llm);
         ReflectionTestUtils.setField(agent, "json", json);
@@ -90,12 +90,12 @@ class NewsReportInterpretationServiceTest {
         jobs.remove(0).run();
         assertEquals(List.of("公司签订框架协议"), service.request(ID, 1).getCurrent().getResult().getFacts());
         assertTrue(jobs.isEmpty());
-        verify(llm).complete(anyString(), anyString(), anyInt(), anyInt());
+        verify(llm).completeText(anyString(), anyString(), anyInt());
     }
 
     @Test
     void acceptsASingleSentenceWithoutInventingFollowUpSections() throws Exception {
-        when(llm.complete(anyString(), anyString(), anyInt(), anyInt())).thenReturn("公司已否认网传订单。");
+        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn("公司已否认网传订单。");
         service.request(ID, 1);
         jobs.remove(0).run();
         var result = service.get(ID, 1).getCurrent().getResult();
@@ -110,7 +110,7 @@ class NewsReportInterpretationServiceTest {
         service.request(ID, 1);
         jobs.remove(0).run();
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
-        verify(llm).complete(anyString(), prompt.capture(), anyInt(), anyInt());
+        verify(llm).completeText(anyString(), prompt.capture(), anyInt());
         assertTrue(prompt.getValue().contains("最初披露框架协议"));
         assertFalse(prompt.getValue().contains("新版披露追加订单"));
         var latest = service.get(ID, 2);
@@ -121,7 +121,7 @@ class NewsReportInterpretationServiceTest {
 
     @Test
     void invalidModelOutputCanBeRetriedWithoutStoringAFakeResult() throws Exception {
-        when(llm.complete(anyString(), anyString(), anyInt(), anyInt())).thenReturn("{}", RESULT);
+        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn("{}", RESULT);
         service.request(ID, 1);
         jobs.remove(0).run();
         var failed = service.get(ID, 1).getCurrent();
@@ -142,7 +142,7 @@ class NewsReportInterpretationServiceTest {
         assertEquals(old, service.get(ID, 1).getPrevious().getResult());
         verifyNoInteractions(llm);
 
-        when(llm.complete(anyString(), anyString(), anyInt(), anyInt()))
+        when(llm.completeText(anyString(), anyString(), anyInt()))
                 .thenReturn("42", RESULT);
         assertEquals(old, service.request(ID, 1).getPrevious().getResult());
         service.request(ID, 1);
@@ -156,12 +156,12 @@ class NewsReportInterpretationServiceTest {
         var upgraded = service.request(ID, 1);
         assertEquals(2, upgraded.getCurrent().getResult().getFormatVersion());
         assertTrue(jobs.isEmpty());
-        verify(llm, times(2)).complete(anyString(), anyString(), anyInt(), anyInt());
+        verify(llm, times(2)).completeText(anyString(), anyString(), anyInt());
     }
 
     @Test
     void disabledModelAndMissingVersionDoNotQueueWork() {
-        when(capabilities.isModelEnabled()).thenReturn(false);
+        when(capabilities.isInterpretationEnabled()).thenReturn(false);
         assertFalse(service.request(ID, 1).isAvailable());
         assertThrows(ResourceNotFoundException.class, () -> service.request(ID, 2));
         assertTrue(jobs.isEmpty());

@@ -7,16 +7,21 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
-import com.finscope.rpc.llm.ChatCompletionReply;
-import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.llm.LunaResponsesClient.Prepared;
+import com.finscope.rpc.llm.LunaResponsesClient.Reply;
+import com.finscope.rpc.llm.NewsAiLunaClient;
 import org.junit.jupiter.api.Test;
 
-import java.net.SocketTimeoutException;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.net.http.HttpTimeoutException;
 import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,8 +30,8 @@ import static org.mockito.Mockito.when;
 class RadarEventInterpretationAgentTest {
     @Test
     void returnsValidatedEvidenceBoundInterpretation() throws Exception {
-        LlmChatClient llm = configuredLlm();
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048))).thenReturn(reply(validJson()));
+        NewsAiLunaClient llm = configuredLlm();
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(validJson()));
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -37,12 +42,12 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void normalizesSingleTextAnalysisFieldsReturnedByTheModel() throws Exception {
-        LlmChatClient llm = configuredLlm();
+        NewsAiLunaClient llm = configuredLlm();
         String response = validJson()
                 .replace("[\"产品发布→量产验证→供应链订单\"]", "\"产品发布→量产验证→供应链订单\"")
                 .replace("[\"价格尚未披露\"]", "\"价格尚未披露\"")
                 .replace("[\"观察公司正式公告\"]", "\"观察公司正式公告\"");
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048))).thenReturn(reply(response));
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(response));
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -54,14 +59,14 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void shortReportsCanOmitSecondarySections() throws Exception {
-        LlmChatClient llm = configuredLlm();
+        NewsAiLunaClient llm = configuredLlm();
         ObjectMapper json = new ObjectMapper();
         var reply = (ObjectNode) json.readTree(validJson());
         reply.put("newDevelopment", "");
         reply.putArray("impactChain");
         reply.putArray("uncertainties");
         reply.putArray("nextObservations");
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+        when(llm.complete(any(Prepared.class)))
                 .thenReturn(reply(reply.toString()));
         var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
         assertEquals("", result.getNewDevelopment());
@@ -70,8 +75,8 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void rejectsReferencesOutsideTheInputEvidenceSet() throws Exception {
-        LlmChatClient llm = configuredLlm();
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+        NewsAiLunaClient llm = configuredLlm();
+        when(llm.complete(any(Prepared.class)))
                 .thenReturn(reply(validJson().replace("evidence:31", "evidence:999")));
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
@@ -84,8 +89,8 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void rejectsInvestmentAdvice() throws Exception {
-        LlmChatClient llm = configuredLlm();
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+        NewsAiLunaClient llm = configuredLlm();
+        when(llm.complete(any(Prepared.class)))
                 .thenReturn(reply(validJson().replace("可能影响供应链订单预期。", "建议买入相关股票。")));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
@@ -95,8 +100,8 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void rejectsUnknownJsonFields() throws Exception {
-        LlmChatClient llm = configuredLlm();
-        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+        NewsAiLunaClient llm = configuredLlm();
+        when(llm.complete(any(Prepared.class)))
                 .thenReturn(reply(validJson().replaceFirst("\\{", "{\"recommendation\":\"关注\",")));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
@@ -106,9 +111,9 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void reportsTheModelTimeoutSeparatelyFromInvalidOutput() throws Exception {
-        LlmChatClient llm = configuredLlm();
-        when(llm.completeDirectJson(anyString(), anyString(), eq(90_000), eq(2048)))
-                .thenThrow(new SocketTimeoutException("Read timed out"));
+        NewsAiLunaClient llm = configuredLlm();
+        when(llm.complete(any(Prepared.class)))
+                .thenThrow(new HttpTimeoutException("Read timed out"));
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
                 RadarEventInterpretationAgent.InterpretationException.class,
@@ -121,7 +126,7 @@ class RadarEventInterpretationAgentTest {
 
     @Test
     void reportsUnavailableWithoutCallingTheModel() {
-        LlmChatClient llm = mock(LlmChatClient.class);
+        NewsAiLunaClient llm = mock(NewsAiLunaClient.class);
         when(llm.isConfigured()).thenReturn(false);
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
@@ -132,9 +137,17 @@ class RadarEventInterpretationAgentTest {
         assertEquals("MODEL_DISABLED", error.getCode());
     }
 
-    private RadarEventInterpretationAgent agent(LlmChatClient llm) {
-        return new RadarEventInterpretationAgent(llm, new ObjectMapper(),
-                recorder());
+    private RadarEventInterpretationAgent agent(NewsAiLunaClient llm) {
+        return agent(llm, recorder());
+    }
+
+    private RadarEventInterpretationAgent agent(NewsAiLunaClient llm, RadarAgentTraceRecorder recorder) {
+        var agent = new RadarEventInterpretationAgent();
+        ReflectionTestUtils.setField(agent, "llm", llm);
+        ReflectionTestUtils.setField(agent, "json", new ObjectMapper());
+        ReflectionTestUtils.setField(agent, "traces", recorder);
+        agent.configureJson();
+        return agent;
     }
 
     private RadarAgentTraceRecorder recorder() {
@@ -143,10 +156,11 @@ class RadarEventInterpretationAgentTest {
         return recorder;
     }
 
-    private LlmChatClient configuredLlm() {
-        LlmChatClient llm = mock(LlmChatClient.class);
+    private NewsAiLunaClient configuredLlm() {
+        NewsAiLunaClient llm = mock(NewsAiLunaClient.class);
         when(llm.isConfigured()).thenReturn(true);
-        when(llm.modelName()).thenReturn("test-model");
+        when(llm.model()).thenReturn("gpt-6-luna");
+        when(llm.prepare(anyString(), anyString(), eq(2048), anyMap())).thenReturn(new Prepared());
         return llm;
     }
 
@@ -166,17 +180,25 @@ class RadarEventInterpretationAgentTest {
         value.setTitle("公司公告"); value.setSummary("公司披露新产品量产安排"); return value;
     }
 
-    private ChatCompletionReply reply(String content) {
-        return new ChatCompletionReply(content, "stop", 100, 200, null, false);
+    private Reply reply(String content) {
+        Reply reply = new Reply();
+        reply.setText(content);
+        reply.setCompleted(true);
+        reply.setStatus("completed");
+        return reply;
     }
 
     @Test
     void reportsTruncationWithUsageWithoutTracingReasoningOrPartialText() throws Exception {
-        LlmChatClient llm = configuredLlm();
+        NewsAiLunaClient llm = configuredLlm();
         var recorder = mock(RadarAgentTraceRecorder.class);
-        var agent = new RadarEventInterpretationAgent(llm, new ObjectMapper(), recorder);
-        when(llm.completeDirectJson(anyString(), anyString(), eq(90_000), eq(2048)))
-                .thenReturn(new ChatCompletionReply("partial text", "length", 700, 2048, 2000, true));
+        var agent = agent(llm, recorder);
+        Reply incomplete = reply("partial text");
+        incomplete.setCompleted(false);
+        incomplete.setStatus("incomplete");
+        incomplete.setIncompleteReason("max_output_tokens");
+        incomplete.setOutputTokens(2048L);
+        when(llm.complete(any(Prepared.class))).thenReturn(incomplete);
         var error = assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
                 () -> agent.interpret(event(), Collections.singletonList(signal()), Collections.emptyList()));
         assertEquals("OUTPUT_LIMIT", error.getCode());
@@ -186,7 +208,8 @@ class RadarEventInterpretationAgentTest {
                 metadata.capture());
         var details = new ObjectMapper().readTree(metadata.getValue());
         assertEquals(2048, details.path("outputTokens").asInt());
-        assertEquals("length", details.path("finishReason").asText());
+        assertEquals("max_output_tokens", details.path("finishReason").asText());
+        assertEquals("gpt-6-luna", details.path("model").asText());
     }
 
     private String validJson() {

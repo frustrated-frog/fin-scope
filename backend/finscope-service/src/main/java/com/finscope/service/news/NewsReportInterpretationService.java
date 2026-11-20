@@ -42,7 +42,7 @@ public class NewsReportInterpretationService {
 
     public NewsReportInterpretationView request(String id, int version) {
         NewsReport report = requireReport(id, version);
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isInterpretationEnabled()) {
             return view(id, version);
         }
         NewsReportVersion input = inputVersion(report, version);
@@ -59,7 +59,7 @@ public class NewsReportInterpretationService {
 
     private NewsReportInterpretationView view(String id, int version) {
         NewsReportInterpretationView result = new NewsReportInterpretationView();
-        result.setAvailable(capabilities.isModelEnabled());
+        result.setAvailable(capabilities.isInterpretationEnabled());
         result.setContentVersion(version);
         result.setCurrent(interpretations.find(id, version, System.currentTimeMillis()).orElse(null));
         var current = result.getCurrent();

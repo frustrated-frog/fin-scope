@@ -10,13 +10,14 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
-import com.finscope.rpc.llm.ChatCompletionReply;
-import com.finscope.rpc.llm.OpenAiCompatibleLlmClient.ProviderHttpException;
-import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.llm.LunaResponsesClient.ProviderHttpException;
+import com.finscope.rpc.llm.NewsAiLunaClient;
 import com.finscope.service.news.NewsReadingGuidance;
 import org.springframework.stereotype.Service;
 
-import java.net.SocketTimeoutException;
+import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
+import java.net.http.HttpTimeoutException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -26,21 +27,32 @@ import java.util.Set;
 
 @Service
 public class RadarEventInterpretationAgent {
-    static final int TIMEOUT_MS = 90_000;
     static final int MAX_OUTPUT_TOKENS = 2048;
     private static final int MAX_ITEMS = 8;
     private static final int MAX_LIST_ITEM_LENGTH = 180;
 
-    private final LlmChatClient llm;
-    private final ObjectMapper json;
-    private final RadarAgentTraceRecorder traces;
+    private static final Map<String, Object> TEXT = Map.of("type", "string");
+    private static final Map<String, Object> TEXT_LIST = Map.of("type", "array", "items", TEXT, "maxItems", MAX_ITEMS);
+    private static final Map<String, Object> RESULT_SCHEMA = Map.of(
+            "type", "object", "additionalProperties", false,
+            "required", List.of("factSummary", "newDevelopment", "whyItMatters", "impactChain",
+                    "uncertainties", "nextObservations", "evidenceRefs"),
+            "properties", Map.of("factSummary", TEXT, "newDevelopment", TEXT, "whyItMatters", TEXT,
+                    "impactChain", TEXT_LIST, "uncertainties", TEXT_LIST,
+                    "nextObservations", TEXT_LIST, "evidenceRefs", TEXT_LIST));
 
-    public RadarEventInterpretationAgent(LlmChatClient llm, ObjectMapper json, RadarAgentTraceRecorder traces) {
-        this.llm = llm;
-        this.json = json.copy().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+    @Resource
+    private NewsAiLunaClient llm;
+    @Resource
+    private RadarAgentTraceRecorder traces;
+    @Resource
+    private ObjectMapper json;
+
+    @PostConstruct
+    void configureJson() {
+        json = json.copy().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-        this.traces = traces;
     }
 
     public RadarEventInterpretation.Result interpret(RadarEvent event, List<RadarSignal> signals,
@@ -52,21 +64,23 @@ public class RadarEventInterpretationAgent {
             throw new InterpretationException("MODEL_DISABLED", "模型未配置");
         }
         try {
-            ChatCompletionReply reply = llm.completeDirectJson(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
-                    TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            metadata.put("finishReason", reply.finishReason());
-            metadata.put("inputTokens", reply.inputTokens());
-            metadata.put("outputTokens", reply.outputTokens());
-            metadata.put("reasoningTokens", reply.reasoningTokens());
-            metadata.put("hasReasoning", reply.hasReasoning());
-            if ("length".equals(reply.finishReason())) {
+            var request = llm.prepare(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
+                    MAX_OUTPUT_TOKENS, RESULT_SCHEMA);
+            var reply = llm.complete(request);
+            metadata.put("finishReason", reply.getIncompleteReason() == null ? reply.getStatus() : reply.getIncompleteReason());
+            metadata.put("inputTokens", reply.getInputTokens());
+            metadata.put("outputTokens", reply.getOutputTokens());
+            metadata.put("reasoningTokens", reply.getReasoningTokens());
+            if ("max_output_tokens".equals(reply.getIncompleteReason())) {
                 throw new InterpretationException("OUTPUT_LIMIT", "模型达到输出上限，解读未写完整");
             }
-            if (blank(reply.content())) {
-                throw new InterpretationException("EMPTY_OUTPUT", reply.hasReasoning()
-                        ? "模型只返回了推理内容，没有生成解读正文" : "模型返回的解读正文为空");
+            if (reply.isRefused() || !reply.isCompleted()) {
+                throw new InterpretationException("INCOMPLETE_OUTPUT", "模型未返回完整解读");
             }
-            RadarEventInterpretation.Result result = parseResult(reply.content());
+            if (blank(reply.getText())) {
+                throw new InterpretationException("EMPTY_OUTPUT", "模型返回的解读正文为空");
+            }
+            RadarEventInterpretation.Result result = parseResult(reply.getText());
             validate(result, allowedRefs(signals, evidence));
             trace(event, "SUCCESS", null, null, started, result, metadata);
             return result;
@@ -78,7 +92,7 @@ public class RadarEventInterpretationAgent {
             String code = "LLM_HTTP_" + error.status();
             trace(event, "FALLBACK", error.getClass().getSimpleName(), code, started, null, metadata);
             throw new InterpretationException(code, "模型服务返回 HTTP " + error.status() + "，解读未生成", error);
-        } catch (SocketTimeoutException error) {
+        } catch (HttpTimeoutException error) {
             trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_TIMEOUT", started, null, metadata);
             throw new InterpretationException("LLM_TIMEOUT", "等待模型回复超时，请重试 AI 解读", error);
         } catch (JsonProcessingException | IllegalArgumentException error) {
@@ -94,7 +108,7 @@ public class RadarEventInterpretationAgent {
     }
 
     public String modelName() {
-        return llm == null ? "unconfigured" : llm.modelName();
+        return llm == null ? "unconfigured" : llm.model();
     }
 
     private void validate(RadarEventInterpretation.Result result, Set<String> allowedRefs) {

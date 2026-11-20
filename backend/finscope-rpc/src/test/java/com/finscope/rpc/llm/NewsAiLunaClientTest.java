@@ -40,6 +40,36 @@ class NewsAiLunaClientTest {
     }
 
     @Test
+    void plainTextUsesLunaWithoutRetriesAndRejectsPartialText() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/v1/responses", exchange -> {
+            int attempt = calls.incrementAndGet();
+            var request = new ObjectMapper().readTree(exchange.getRequestBody());
+            assertEquals("gpt-6-luna", request.path("model").asText());
+            assertEquals("none", request.path("reasoning").path("effort").asText());
+            assertEquals("text", request.path("text").path("format").path("type").asText());
+            assertEquals(1600, request.path("max_output_tokens").asInt());
+            String status = attempt == 1 ? "completed" : "incomplete";
+            byte[] response = """
+                    {"status":"%s","output":[{"type":"message","content":[{"type":"output_text","text":"报道解读"}]}]}
+                    """.formatted(status).getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var client = client(server.getAddress().getPort());
+            assertEquals("报道解读", client.completeText("system", "标题正文", 1600));
+            assertThrows(IllegalStateException.class, () -> client.completeText("system", "标题正文", 1600));
+            assertEquals(2, calls.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void doesNotAutomaticallyRetryRateLimitsOrPrintTheirBody() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicInteger calls = new AtomicInteger();

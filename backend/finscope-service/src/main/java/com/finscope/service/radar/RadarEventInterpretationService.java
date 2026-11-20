@@ -51,7 +51,7 @@ public class RadarEventInterpretationService {
     private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
     public boolean isAutomaticModelEnabled() {
-        return capabilities.isAutomaticModelEnabled();
+        return capabilities.isAutomaticInterpretationEnabled();
     }
 
     public RadarEventInterpretation requestAutomatic(Long eventId) {
@@ -63,7 +63,7 @@ public class RadarEventInterpretationService {
 
     public RadarEventInterpretation request(Long eventId) {
         RadarEvent event = findEvent(eventId);
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isInterpretationEnabled()) {
             return unavailable(eventId);
         }
         List<RadarSignal> signals = radar.findSignalsByEventId(eventId);
@@ -148,7 +148,7 @@ public class RadarEventInterpretationService {
 
     public Optional<RadarEventInterpretation> current(RadarEventDetailSnapshot snapshot) {
         RadarEvent event = snapshot.getEvent();
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isInterpretationEnabled()) {
             return Optional.of(unavailable(event.getId()));
         }
         String fingerprint = fingerprint(event, snapshot.getSignals(), snapshot.getEvidence());
@@ -172,7 +172,7 @@ public class RadarEventInterpretationService {
     }
 
     public Map<Long, RadarEventInterpretation> latestByEventIds(List<Long> eventIds) {
-        if (!capabilities.isModelEnabled()) {
+        if (!capabilities.isInterpretationEnabled()) {
             return Collections.emptyMap();
         }
         return interpretations.findLatestByEventIds(eventIds);

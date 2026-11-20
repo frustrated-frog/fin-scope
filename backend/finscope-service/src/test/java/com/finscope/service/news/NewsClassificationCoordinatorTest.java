@@ -44,7 +44,7 @@ class NewsClassificationCoordinatorTest {
             context.registerBean(EphemeralContentCacheProperties.class,
                     () -> new EphemeralContentCacheProperties());
             context.registerBean("newsClassificationExecutor", Executor.class, () -> Runnable::run);
-            context.registerBean(NewsWorkbenchCapabilities.class, () -> mock(NewsWorkbenchCapabilities.class));
+            context.getBeanFactory().registerSingleton("newsWorkbenchCapabilities", mock(NewsWorkbenchCapabilities.class));
             context.registerBean(NewsRuleClassifier.class, NewsRuleClassifier::new);
             context.registerBean(com.finscope.service.cache.ViewRevisionService.class,
                     () -> mock(com.finscope.service.cache.ViewRevisionService.class));
