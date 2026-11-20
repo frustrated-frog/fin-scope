@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 
 export type NewsInterpretationResult = {
+  formatVersion?: number;
   facts: string[];
   whyItMatters: string;
   unknowns: string[];

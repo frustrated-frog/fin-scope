@@ -362,6 +362,11 @@ export function NewsReportDrawer({
 }
 
 function NewsInterpretationContent({ result }: { result: NewsInterpretationResult }) {
+  if (result.formatVersion === 2) {
+    return <article><p><strong>{result.facts[0]}</strong></p>
+      {result.whyItMatters.split('\n\n').filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+    </article>;
+  }
   return <>
     <article><h4>报道披露的事实</h4><ul>{result.facts.map((value, index) => <li key={index}>{value}</li>)}</ul></article>
     <article><h4>为什么值得关注</h4><p>{result.whyItMatters}</p></article>

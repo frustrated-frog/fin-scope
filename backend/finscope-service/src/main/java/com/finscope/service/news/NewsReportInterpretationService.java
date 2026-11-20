@@ -1,5 +1,6 @@
 package com.finscope.service.news;
 
+import com.finscope.common.enums.news.NewsInterpretationStatus;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ResourceNotFoundException;
@@ -61,7 +62,19 @@ public class NewsReportInterpretationService {
         result.setAvailable(capabilities.isModelEnabled());
         result.setContentVersion(version);
         result.setCurrent(interpretations.find(id, version, System.currentTimeMillis()).orElse(null));
-        if (result.getCurrent() == null || result.getCurrent().getResult() == null) {
+        var current = result.getCurrent();
+        if (current != null && current.getResult() != null
+                && current.getResult().getFormatVersion() < NewsReportInterpretation.CURRENT_FORMAT) {
+            var previous = new NewsReportInterpretation();
+            previous.setContentVersion(version);
+            previous.setStatus(NewsInterpretationStatus.SUCCESS);
+            previous.setResult(current.getResult());
+            result.setPrevious(previous);
+            current.setResult(null);
+            if (current.getStatus() == NewsInterpretationStatus.SUCCESS) {
+                result.setCurrent(null);
+            }
+        } else if (current == null || current.getResult() == null) {
             result.setPrevious(interpretations.latestSuccessBefore(id, version).orElse(null));
         }
         return result;
@@ -94,7 +107,7 @@ public class NewsReportInterpretationService {
     private void interpret(NewsReport report, NewsReportVersion input, String token) {
         String id = report.getId();
         int version = input.getVersion();
-        if (!interpretations.start(id, version, token)) {
+        if (!interpretations.start(id, version, token, System.currentTimeMillis())) {
             return;
         }
         long started = System.nanoTime();

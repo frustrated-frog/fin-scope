@@ -180,6 +180,7 @@ public class RadarEventInterpretationService {
 
     String fingerprint(RadarEvent event, List<RadarSignal> signals, List<RadarEvidence> evidenceItems) {
         List<String> parts = new ArrayList<String>();
+        parts.add("interpretation=reader-v2");
         parts.add("title=" + text(event == null ? null : event.getCanonicalTitle()));
         parts.add("summary=" + text(event == null ? null : event.getSummary()));
         List<RadarSignal> sortedSignals = new ArrayList<RadarSignal>(safe(signals));

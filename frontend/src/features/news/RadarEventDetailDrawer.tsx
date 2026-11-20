@@ -271,18 +271,18 @@ export function RadarEventDetailDrawer({ event, categoryName, overview, onClose,
                   <p>{pollFailures <= MAX_POLL_RETRIES ? '暂时读不到解读进度，正在自动重试。' : '解读进度暂不可读，请重试读取。'}</p>
                   <button type="button" className="radar-dossier-retry" onClick={() => void pollInterpretation(interpretation, 0)}>重试读取</button>
                 </div> : null}
-                {interpretation?.stale && result ? <p className="radar-dossier-notice">这是此前证据版本的解读，可点击「生成 AI 解读」更新。</p> : null}
+                {interpretation?.stale && result ? <p className="radar-dossier-notice">这是此前保存的解读，可点击「生成 AI 解读」更新。</p> : null}
                 {!detail ? (error ? null : <DrawerSkeleton/>) : result ? <div className="radar-interpretation-grid">
                   <div className="radar-dossier-findings">
                     <InterpretationBlock label="已确认事实" value={result.factSummary} fact singleSource={event.sourceCount === 1}/>
-                    <InterpretationBlock label="本次新变化" value={result.newDevelopment}/>
+                    {result.newDevelopment && <InterpretationBlock label="本次新变化" value={result.newDevelopment}/>}
                   </div>
                   <InterpretationBlock label="为什么重要" value={result.whyItMatters} accent/>
                   <InterpretationList label="影响链条" values={result.impactChain} ordered/>
-                  <div className="radar-dossier-findings">
+                  {result.uncertainties.length + result.nextObservations.length > 0 && <div className="radar-dossier-findings">
                     <InterpretationList label="仍存疑点" values={result.uncertainties}/>
                     <InterpretationList label="下一步观察" values={result.nextObservations}/>
-                  </div>
+                  </div>}
                 </div> : interpretation?.status === 'UNAVAILABLE' ? <p className="radar-dossier-notice">模型解读未启用，可继续查看证据与来源、事件脉络。</p>
                   : isPending(interpretation) || requesting ? (pollFailures ? null : <p className="radar-dossier-notice" role="status">正在整理事件事实与证据…</p>)
                     : <p className="radar-dossier-notice">{interpretation?.failureMessage || '点击「生成 AI 解读」开始。'}</p>}
@@ -415,6 +415,9 @@ function InterpretationBlock({ label, value, accent, fact, singleSource }: {
 function InterpretationList({ label, values, ordered = false }: { label: string; values: string[]; ordered?: boolean }) {
   const List = ordered ? 'ol' : 'ul';
   const content = values.map(interpretationText).filter(Boolean);
+  if (!content.length) {
+    return null;
+  }
   return <article className={ordered ? 'radar-dossier-chain' : undefined}>
     <header className="radar-interpretation-heading">
       <h4>{label}</h4><small>{content.length}</small>

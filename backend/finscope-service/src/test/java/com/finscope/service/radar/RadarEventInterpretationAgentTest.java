@@ -1,6 +1,7 @@
 package com.finscope.service.radar;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.finscope.dao.radar.RadarAgentTraceRepository;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
@@ -48,6 +49,22 @@ class RadarEventInterpretationAgentTest {
         assertEquals(Collections.singletonList("产品发布→量产验证→供应链订单"), result.getImpactChain());
         assertEquals(Collections.singletonList("价格尚未披露"), result.getUncertainties());
         assertEquals(Collections.singletonList("观察公司正式公告"), result.getNextObservations());
+    }
+
+    @Test
+    void shortReportsCanOmitSecondarySections() throws Exception {
+        LlmChatClient llm = configuredLlm();
+        ObjectMapper json = new ObjectMapper();
+        var reply = (ObjectNode) json.readTree(validJson());
+        reply.put("newDevelopment", "");
+        reply.putArray("impactChain");
+        reply.putArray("uncertainties");
+        reply.putArray("nextObservations");
+        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
+                .thenReturn(reply.toString());
+        var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
+        assertEquals("", result.getNewDevelopment());
+        assertEquals(Collections.emptyList(), result.getImpactChain());
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.service.news.NewsReadingGuidance;
 import org.springframework.stereotype.Service;
 
 import java.net.SocketTimeoutException;
@@ -77,14 +78,14 @@ public class RadarEventInterpretationAgent {
     }
 
     private void validate(RadarEventInterpretation.Result result, Set<String> allowedRefs) {
-        if (result == null || blank(result.getFactSummary()) || blank(result.getNewDevelopment())
+        if (result == null || blank(result.getFactSummary()) || result.getNewDevelopment() == null
                 || blank(result.getWhyItMatters())) {
             throw new InterpretationException("INVALID_OUTPUT", "解读必填字段为空");
         }
-        validateList(result.getImpactChain(), false);
-        validateList(result.getUncertainties(), false);
-        validateList(result.getNextObservations(), false);
-        validateList(result.getEvidenceRefs(), true);
+        validateList(result.getImpactChain());
+        validateList(result.getUncertainties());
+        validateList(result.getNextObservations());
+        validateList(result.getEvidenceRefs());
         for (String ref : safe(result.getEvidenceRefs())) {
             if (!allowedRefs.contains(ref)) {
                 throw new InterpretationException("INVALID_OUTPUT", "解读引用不属于输入证据");
@@ -96,12 +97,11 @@ public class RadarEventInterpretationAgent {
         if (containsAdvice(all)) throw new InterpretationException("INVALID_OUTPUT", "解读包含投资建议");
     }
 
-    private void validateList(List<String> values, boolean allowEmpty) {
-        List<String> safeValues = safe(values);
-        if ((!allowEmpty && safeValues.isEmpty()) || safeValues.size() > MAX_ITEMS) {
+    private void validateList(List<String> values) {
+        if (values == null || values.size() > MAX_ITEMS) {
             throw new InterpretationException("INVALID_OUTPUT", "解读列表数量不合法");
         }
-        for (String value : safeValues) {
+        for (String value : values) {
             if (blank(value) || value.trim().length() > MAX_LIST_ITEM_LENGTH) {
                 throw new InterpretationException("INVALID_OUTPUT", "解读列表内容不合法");
             }
@@ -140,7 +140,9 @@ public class RadarEventInterpretationAgent {
     }
 
     private String systemPrompt() {
-        return "你是个人研究雷达的事件解读 Agent。只能使用输入中的事件、原始信号和证据，不得补充外部事实。"
+        return NewsReadingGuidance.PROMPT
+                + "factSummary用一句日常话交代报道事实，newDevelopment只说首句之外有据可循的新进展，没有就填空字符串，whyItMatters集中讲清阅读难点。"
+                + "impactChain仅列有依据的后续影响，uncertainties和nextObservations只写具体且有必要的事项，三者均可为空数组。"
                 + "输出单个纯JSON对象，只允许factSummary、newDevelopment、whyItMatters、impactChain、uncertainties、"
                 + "nextObservations、evidenceRefs字段。factSummary、newDevelopment、whyItMatters必须是字符串；"
                 + "impactChain、uncertainties、nextObservations、evidenceRefs必须是字符串数组，即使只有一项也必须使用数组。"

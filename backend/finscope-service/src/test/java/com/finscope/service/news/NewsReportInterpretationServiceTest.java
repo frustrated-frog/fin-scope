@@ -8,6 +8,7 @@ import com.finscope.dao.news.NewsReportInterpretationRepository;
 import com.finscope.dao.news.NewsReportRepository;
 import com.finscope.dao.news.NewsWindowSchemaMigrator;
 import com.finscope.domain.news.NewsReport;
+import com.finscope.domain.news.NewsReportInterpretation;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,10 @@ import static org.mockito.Mockito.*;
 class NewsReportInterpretationServiceTest {
     private static final String ID = "CLS:1";
     private static final String RESULT = """
-            {"facts":["公司签订框架协议"],"whyItMatters":"履约仍取决于后续订单", "unknowns":["实际订单金额"],"nextChecks":["正式订单公告"]}
+            公司签订框架协议
+
+            双方先约定合作方式。
+            实际采购量取决于后续订单。
             """;
     @TempDir
     Path directory;
@@ -90,6 +94,17 @@ class NewsReportInterpretationServiceTest {
     }
 
     @Test
+    void acceptsASingleSentenceWithoutInventingFollowUpSections() throws Exception {
+        when(llm.complete(anyString(), anyString(), anyInt(), anyInt())).thenReturn("公司已否认网传订单。");
+        service.request(ID, 1);
+        jobs.remove(0).run();
+        var result = service.get(ID, 1).getCurrent().getResult();
+        assertEquals(List.of("公司已否认网传订单。"), result.getFacts());
+        assertTrue(result.getWhyItMatters().isEmpty());
+        assertTrue(result.getNextChecks().isEmpty());
+    }
+
+    @Test
     void usesTheClickedVersionAndShowsItsResultAsPreviousAfterUpdate() throws Exception {
         reports.ingest(List.of(report("新版披露追加订单")));
         service.request(ID, 1);
@@ -118,6 +133,33 @@ class NewsReportInterpretationServiceTest {
     }
 
     @Test
+    void legacyResultRemainsReadableThroughFailureAndUpgradesOnlyOnRequest() throws Exception {
+        var old = new NewsReportInterpretation.Result();
+        old.setFacts(List.of("旧解读"));
+        assertTrue(interpretations.tryQueue(ID, 1, "legacy", 1000L));
+        interpretations.finish(ID, 1, "legacy", old, null);
+        assertNull(service.get(ID, 1).getCurrent());
+        assertEquals(old, service.get(ID, 1).getPrevious().getResult());
+        verifyNoInteractions(llm);
+
+        when(llm.complete(anyString(), anyString(), anyInt(), anyInt()))
+                .thenReturn("42", RESULT);
+        assertEquals(old, service.request(ID, 1).getPrevious().getResult());
+        service.request(ID, 1);
+        assertEquals(1, jobs.size());
+        jobs.remove(0).run();
+        var failed = service.get(ID, 1);
+        assertEquals(NewsInterpretationStatus.FAILED, failed.getCurrent().getStatus());
+        assertEquals(old, failed.getPrevious().getResult());
+        service.request(ID, 1);
+        jobs.remove(0).run();
+        var upgraded = service.request(ID, 1);
+        assertEquals(2, upgraded.getCurrent().getResult().getFormatVersion());
+        assertTrue(jobs.isEmpty());
+        verify(llm, times(2)).complete(anyString(), anyString(), anyInt(), anyInt());
+    }
+
+    @Test
     void disabledModelAndMissingVersionDoNotQueueWork() {
         when(capabilities.isModelEnabled()).thenReturn(false);
         assertFalse(service.request(ID, 1).isAvailable());
@@ -138,11 +180,12 @@ class NewsReportInterpretationServiceTest {
     @Test
     void expiredTaskCannotOverwriteARetry() {
         assertTrue(interpretations.tryQueue(ID, 1, "old", 1_000L));
-        assertTrue(interpretations.start(ID, 1, "old"));
-        assertEquals(NewsInterpretationStatus.FAILED, interpretations.find(ID, 1, 121_000L).orElseThrow().getStatus());
-        assertTrue(interpretations.tryQueue(ID, 1, "new", 121_000L));
+        assertTrue(interpretations.start(ID, 1, "old", 100_000L));
+        assertFalse(interpretations.tryQueue(ID, 1, "early", 121_000L));
+        assertEquals(NewsInterpretationStatus.FAILED, interpretations.find(ID, 1, 220_000L).orElseThrow().getStatus());
+        assertTrue(interpretations.tryQueue(ID, 1, "new", 220_000L));
         interpretations.finish(ID, 1, "old", null, "过期任务失败");
-        assertEquals(NewsInterpretationStatus.QUEUED, interpretations.find(ID, 1, 121_000L).orElseThrow().getStatus());
+        assertEquals(NewsInterpretationStatus.QUEUED, interpretations.find(ID, 1, 220_000L).orElseThrow().getStatus());
     }
 
     private NewsReport report(String content) {

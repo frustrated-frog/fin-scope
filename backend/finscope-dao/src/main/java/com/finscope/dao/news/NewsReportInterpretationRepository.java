@@ -27,20 +27,21 @@ public class NewsReportInterpretationRepository {
         return jdbc.update("INSERT INTO news_report_interpretation(report_id,content_version,status,claim_token,queued_at_ms) "
                         + "VALUES(?,?,'QUEUED',?,?) ON CONFLICT(report_id,content_version) DO UPDATE SET "
                         + "status='QUEUED',claim_token=excluded.claim_token,queued_at_ms=excluded.queued_at_ms,"
-                        + "result_json=NULL,failure_message=NULL WHERE status='FAILED' "
+                        + "failure_message=NULL WHERE status='FAILED' "
+                        + "OR (status='SUCCESS' AND coalesce(json_extract(result_json,'$.formatVersion'),0)<?) "
                         + "OR (status IN ('QUEUED','RUNNING') AND queued_at_ms<=?)",
-                id, version, token, nowMs, nowMs - JOB_LEASE_MS) == 1;
+                id, version, token, nowMs, NewsReportInterpretation.CURRENT_FORMAT, nowMs - JOB_LEASE_MS) == 1;
     }
 
-    public boolean start(String id, int version, String token) {
-        return jdbc.update("UPDATE news_report_interpretation SET status='RUNNING' "
-                + "WHERE report_id=? AND content_version=? AND claim_token=? AND status='QUEUED'", id, version, token) == 1;
+    public boolean start(String id, int version, String token, long nowMs) {
+        return jdbc.update("UPDATE news_report_interpretation SET status='RUNNING',queued_at_ms=? "
+                + "WHERE report_id=? AND content_version=? AND claim_token=? AND status='QUEUED'", nowMs, id, version, token) == 1;
     }
 
     public void finish(String id, int version, String token, NewsReportInterpretation.Result result, String failure) {
         try {
             NewsInterpretationStatus status = result == null ? NewsInterpretationStatus.FAILED : NewsInterpretationStatus.SUCCESS;
-            jdbc.update("UPDATE news_report_interpretation SET status=?,result_json=?,failure_message=? "
+            jdbc.update("UPDATE news_report_interpretation SET status=?,result_json=coalesce(?,result_json),failure_message=? "
                             + "WHERE report_id=? AND content_version=? AND claim_token=? AND status IN ('QUEUED','RUNNING')",
                     status.name(), result == null ? null : mapper.writeValueAsString(result), failure, id, version, token);
         } catch (JsonProcessingException error) {
@@ -54,8 +55,9 @@ public class NewsReportInterpretationRepository {
     }
 
     public Optional<NewsReportInterpretation> latestSuccessBefore(String id, int version) {
-        return jdbc.query("SELECT * FROM news_report_interpretation WHERE report_id=? AND content_version<? "
-                + "AND status='SUCCESS' ORDER BY content_version DESC LIMIT 1", row(0), id, version).stream().findFirst();
+        return jdbc.query("SELECT content_version,'SUCCESS' AS status,NULL AS failure_message,queued_at_ms,result_json "
+                + "FROM news_report_interpretation WHERE report_id=? AND content_version<? "
+                + "AND result_json IS NOT NULL ORDER BY content_version DESC LIMIT 1", row(0), id, version).stream().findFirst();
     }
 
     private RowMapper<NewsReportInterpretation> row(long nowMs) {

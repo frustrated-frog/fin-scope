@@ -139,7 +139,7 @@ test('only generates a selected news version after the reader clicks and reuses 
   const path = '/api/news/window/interpretation?id=CLS%3A1&version=2';
   const post = vi.fn();
   const result = {
-    facts: ['公司披露中标设备采购项目'], whyItMatters: '中标后的正式合同和履约进度仍需核对。',
+    formatVersion: 2, facts: ['公司披露中标设备采购项目'], whyItMatters: '中标后的正式合同和履约进度仍需核对。',
     unknowns: ['签署时间'], nextChecks: ['正式合同公告'],
   };
   vi.mocked(api).mockImplementation((url, options) => {
@@ -159,6 +159,8 @@ test('only generates a selected news version after the reader clicks and reuses 
   expect(post).not.toHaveBeenCalled();
   fireEvent.click(generate);
   expect(await screen.findByText(result.whyItMatters)).toBeInTheDocument();
+  expect(screen.getByText(result.facts[0])).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '待确认事项' })).not.toBeInTheDocument();
   expect(post).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: '关闭新闻详情' }));
   fireEvent.click(screen.getByRole('button', { name: /阅读资讯：开普检测中标/ }));

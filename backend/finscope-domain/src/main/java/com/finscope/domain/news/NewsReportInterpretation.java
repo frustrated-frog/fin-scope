@@ -8,6 +8,7 @@ import java.util.List;
 /** 单一报道正文版本的解读结果。 */
 @Data
 public class NewsReportInterpretation {
+    public static final int CURRENT_FORMAT = 2;
     private int contentVersion;
     private NewsInterpretationStatus status;
     private Result result;
@@ -15,6 +16,7 @@ public class NewsReportInterpretation {
 
     @Data
     public static class Result {
+        private int formatVersion;
         private List<String> facts;
         private String whyItMatters;
         private List<String> unknowns;
