@@ -247,6 +247,8 @@ test('shows saved interpretation without waiting for read state and hides its in
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
 
   const drawer = await screen.findByRole('dialog', { name: event.title });
+  expect(drawer).toHaveClass('radar-detail-drawer');
+  expect(drawer).not.toHaveClass('dossier-window');
   expect(within(drawer).getByText('公司发布新产品。')).toBeInTheDocument();
   expect(within(drawer).getByText('产品发布→量产验证')).toBeInTheDocument();
   expect(drawer).not.toHaveTextContent(/\[(signal|evidence):/);

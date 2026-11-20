@@ -1,52 +1,68 @@
-import { conceptLine, interpretationText, sectionLine } from './newsReading';
+import type { RefObject } from 'react';
+import { DossierReading } from './DossierReading';
+import { DossierPrimaryAction } from './NewsDossierDialog';
 import type { NewsInterpretationResult, useNewsInterpretation } from './useNewsReportInterpretation';
 
-export function NewsInterpretationPanel({ interpretation, heading, expandPrevious = false }: {
-  interpretation: ReturnType<typeof useNewsInterpretation>;
+type Interpretation = ReturnType<typeof useNewsInterpretation>;
+
+export function NewsReadingAction({ interpretation, onShow, section, disabled }: {
+  interpretation: Interpretation;
+  onShow: () => void;
+  section: RefObject<HTMLElement>;
+  disabled?: boolean;
+}) {
+  const { view, loading, pending, error } = interpretation;
+  const saved = view?.current?.result;
+  const canRead = saved || view?.previous?.result;
+  const label = error ? '重试读取解读' : pending ? '解读生成中…' : saved || (!view?.available && canRead)
+    ? '查看 AI 解读' : view?.current?.status === 'FAILED' ? '重试 AI 解读' : '生成 AI 解读';
+  function activate() {
+    onShow();
+    requestAnimationFrame(() => section.current?.scrollIntoView?.({ block: 'nearest' }));
+    if (error) {
+      interpretation.refresh();
+    } else if (!saved && view?.available && !pending && !loading) {
+      interpretation.start();
+    }
+  }
+  return <DossierPrimaryAction label={label} onClick={activate}
+    disabled={disabled || loading || (!error && (pending || (!view?.available && !canRead)))}/>;
+}
+
+export function NewsInterpretationPanel({ interpretation, heading, section, expandPrevious = false }: {
+  interpretation: Interpretation;
   heading: string;
+  section: RefObject<HTMLElement>;
   expandPrevious?: boolean;
 }) {
-  return (
-    <section className="news-version-history" aria-label="新闻 AI 解读">
+  const { view, loading, pending, error } = interpretation;
+  const current = view?.current;
+  const result = current?.result;
+  const failed = current?.status === 'FAILED';
+  const status = result ? '解读完成' : pending ? '生成中' : failed ? '生成失败' : view?.available ? '未生成' : '未启用';
+  return <section ref={section} className="radar-detail-section" aria-label="新闻 AI 解读">
+    <div className="radar-detail-section-heading">
       <h3>{heading}</h3>
-      {interpretation.error ? <div className="news-window-error" role="alert">
-        {interpretation.error}<button type="button" onClick={interpretation.refresh}>重试读取</button>
-      </div> : null}
-      {interpretation.loading || (interpretation.pending && !interpretation.error) ? (
-        <p role="status">{interpretation.pending || interpretation.view ? '解读生成中…' : '正在读取解读状态…'}</p>
-      ) : null}
-      {interpretation.view && !interpretation.view.available && !interpretation.view.current?.result ? (
-        <p>模型解读未启用或模型未配置。</p>
-      ) : null}
-      {interpretation.view?.available && !interpretation.view.current?.result && !interpretation.pending
-        && !interpretation.loading && !interpretation.error ? <>
-          {interpretation.view.current?.failureMessage ? <p role="alert">{interpretation.view.current.failureMessage}</p> : null}
-          <div className="news-report-actions"><button type="button" onClick={interpretation.start}>
-            {interpretation.view.current?.status === 'FAILED' ? '重试 AI 解读' : '生成 AI 解读'}
-          </button></div>
-        </> : null}
-      {interpretation.view?.current?.result ? <NewsInterpretationContent result={interpretation.view.current.result} /> : null}
-      {interpretation.view?.previous?.result && !interpretation.view.current?.result ? <details open={expandPrevious || undefined}>
-        <summary>查看旧解读 · 正文 v{interpretation.view.previous.contentVersion}</summary>
-        <NewsInterpretationContent result={interpretation.view.previous.result} />
-      </details> : null}
-    </section>
-  );
+      {view && <span className={result ? 'is-success' : failed ? 'is-error' : undefined}>{status}</span>}
+    </div>
+    {error && <div className="radar-dossier-notice" role="alert">{error}</div>}
+    {loading || (pending && !error) ? <p className="radar-dossier-notice" role="status">
+      {pending || view ? '解读生成中…' : '正在读取解读状态…'}
+    </p> : null}
+    {view && !result && !pending && !loading && !error && <p className="radar-dossier-notice" role={failed ? 'alert' : undefined}>
+      {!view.available ? '模型解读未启用或模型未配置。' : current?.failureMessage || '点击「生成 AI 解读」开始。'}
+    </p>}
+    {result && <NewsInterpretationContent result={result}/>}
+    {view?.previous?.result && !result && <details className="radar-drawer-trace" open={expandPrevious || undefined}>
+      <summary>查看旧解读 · 正文 v{view.previous.contentVersion}</summary>
+      <NewsInterpretationContent result={view.previous.result}/>
+    </details>}
+  </section>;
 }
 
 function NewsInterpretationContent({ result }: { result: NewsInterpretationResult }) {
-  const reading = result.reading;
-  if (reading || result.formatVersion === 2) {
-    const lead = reading?.lead ?? result.facts[0] ?? '';
-    const paragraphs = reading
-      ? [...reading.concepts.map(conceptLine), result.whyItMatters, ...reading.sections.map(sectionLine)].filter(Boolean)
-      : result.whyItMatters.split('\n\n').filter(Boolean);
-    return <article><p><strong>{interpretationText(lead)}</strong></p>
-      {paragraphs.map((paragraph, index) => <p key={index}>{interpretationText(paragraph)}</p>)}
-    </article>;
+  if (!result.reading && result.formatVersion === 2) {
+    return <DossierReading facts={result.facts} detailsLabel="延伸解读" impactChain={result.whyItMatters.split('\n\n').filter(Boolean)}/>;
   }
-  return <>
-    <article><h4>报道披露的事实</h4><ul>{result.facts.map((value, index) => <li key={index}>{value}</li>)}</ul></article>
-    <article><h4>为什么值得关注</h4><p>{result.whyItMatters}</p></article>
-  </>;
+  return <DossierReading reading={result.reading} facts={result.facts} whyItMatters={result.whyItMatters}/>;
 }

@@ -158,15 +158,17 @@ test('only generates a selected news version after the reader clicks and reuses 
   setup();
   fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
   const generate = await screen.findByRole('button', { name: '生成 AI 解读' });
+  expect(screen.getByRole('dialog', { name: report.title })).toHaveClass('radar-detail-drawer', 'dossier-window');
+  expect(screen.getByRole('button', { name: 'AI 解读' })).toHaveAttribute('aria-pressed', 'true');
   await waitFor(() => expect(generate).toBeEnabled());
   expect(post).not.toHaveBeenCalled();
   fireEvent.click(generate);
   expect(await screen.findByText(result.reading.sections[0].answer, { exact: false })).toBeVisible();
   expect(screen.getByText(result.reading.lead)).toBeVisible();
-  const article = screen.getByText(result.reading.lead).closest('article')!;
+  const article = screen.getByText(result.reading.lead).closest('.radar-interpretation-grid')!;
   expect(article.querySelector('details')).toBeNull();
   expect(article).toHaveTextContent('中标：采购方选定了供应商。');
-  expect(article).toHaveTextContent(result.whyItMatters);
+  expect(article.querySelector('.radar-dossier-impact')).toHaveTextContent(result.whyItMatters);
   expect(article).toHaveTextContent(result.reading.sections[1].question);
   expect(article).toHaveTextContent(result.reading.sections[1].answer);
   expect(screen.queryByRole('heading', { name: '待确认事项' })).not.toBeInTheDocument();
@@ -186,6 +188,7 @@ test('allows manual classification of an unclassified report and keeps content a
   const toast = vi.fn();
   render(<LiveNewsPanel setMessage={vi.fn()} addToast={toast} />);
   fireEvent.click(await screen.findByRole('button', { name: /阅读资讯：开普检测中标/ }));
+  fireEvent.click(await screen.findByRole('button', { name: '新闻原文' }));
   await screen.findByText('分类依据');
   fireEvent.change(screen.getByLabelText('调整分类'), {
     target: { value: 'COMPANY' },

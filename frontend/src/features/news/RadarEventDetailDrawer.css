@@ -819,3 +819,76 @@
     --timeline-date: 65px;
   }
 }
+
+.radar-detail-drawer.dossier-window {
+  --dossier-gutter: clamp(20px, 3vw, 40px);
+  --nw-bg: color-mix(in srgb, var(--dossier-accent) 4%, var(--dossier-bg));
+  --nw-surface: var(--dossier-bg);
+  --nw-tint: color-mix(in srgb, var(--dossier-accent) 10%, var(--dossier-bg));
+  --nw-line: var(--dossier-line);
+  --nw-muted: var(--dossier-muted);
+  --nw-accent: var(--dossier-accent);
+  --nw-text: var(--dossier-ink);
+  box-sizing: border-box;
+  width: min(1120px, 92vw);
+  height: fit-content;
+  max-height: 86dvh;
+  margin: auto;
+  border: 1px solid var(--dossier-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 35%);
+}
+
+.dossier-window::backdrop {
+  background: rgb(7 13 19 / 60%);
+}
+
+.dossier-window .radar-detail-scroll {
+  height: auto;
+  max-height: calc(86dvh - 2px);
+}
+
+.dossier-window .radar-dossier {
+  padding-block: 24px 40px;
+}
+
+.dossier-window .radar-dossier-tabs {
+  overflow-x: auto;
+}
+
+.dossier-news-text,
+.dossier-window .radar-dossier-fact p,
+.dossier-window .radar-dossier-impact p {
+  white-space: pre-line;
+}
+
+.dossier-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dossier-secondary-actions a {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding-inline: 6px;
+  border: 1px solid var(--dossier-line);
+  border-radius: 6px;
+  color: var(--dossier-muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.dossier-secondary-actions :is(button, a):hover {
+  border-color: var(--dossier-accent);
+  color: var(--dossier-ink);
+}
+
+@media (max-width: 560px) {
+  .radar-detail-drawer.dossier-window {
+    --dossier-gutter: 16px;
+    width: calc(100% - 24px);
+  }
+}

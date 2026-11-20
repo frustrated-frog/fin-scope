@@ -109,7 +109,9 @@ test.each([events[0], events[2]])('opens the saved analysis of $title without a 
   expect(api).not.toHaveBeenCalledWith(path, expect.anything());
   await userEvent.click(title);
   const dialog = screen.getByRole('dialog', { name: event.title });
+  expect(dialog).toHaveClass('radar-detail-drawer', 'dossier-window');
   expect(await within(dialog).findByText('原有解读中的判断')).toBeVisible();
+  expect(dialog.querySelector('.radar-dossier-impact')).toHaveTextContent('原有解读中的判断');
   await userEvent.click(within(dialog).getByRole('button', { name: '关闭新闻解读' }));
   expect(title).toHaveFocus();
   expect(vi.mocked(api).mock.calls.filter(([url]) => url === path).map(([, init]) => init?.method)).toEqual(['GET']);
