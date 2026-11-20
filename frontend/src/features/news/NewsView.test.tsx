@@ -250,8 +250,29 @@ test('shows saved interpretation without waiting for read state and hides its in
   expect(within(drawer).getByText('公司发布新产品。')).toBeInTheDocument();
   expect(within(drawer).getByText('产品发布→量产验证')).toBeInTheDocument();
   expect(drawer).not.toHaveTextContent(/\[(signal|evidence):/);
+  expect(drawer).not.toHaveTextContent(/仍存疑点|下一步观察/);
   expect(api).toHaveBeenCalledWith(`${detailPath}/state`, { method: 'PATCH', body: '{"read":true}' });
   expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
+});
+
+test('shows a saved radar reading and expands its concepts without generating again', async () => {
+  const original = vi.mocked(api).getMockImplementation()!;
+  const reading = { lead: '厂商发布了一款新电池。', sections: [], concepts: [
+    { term: '量产', meaning: '用可重复的工艺批量制造。' },
+    { term: '良率', meaning: '生产出的产品中合格品所占比例。[signal:1]' },
+  ] };
+  vi.mocked(api).mockImplementation((path, options) => path === overviewPath
+    ? Promise.resolve({ ...overview, interpretation: { ...detail.interpretation,
+      result: { ...detail.interpretation.result, reading } } }) : original(path, options));
+  render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
+  expect(await screen.findByText(reading.lead)).toBeVisible();
+  const term = screen.getByText('良率');
+  expect(term.closest('details')?.open).toBe(false);
+  await userEvent.click(term);
+  expect(screen.getByText('生产出的产品中合格品所占比例。')).toBeVisible();
+  expect(screen.queryByText('仍存疑点')).not.toBeInTheDocument();
+  expect(vi.mocked(api).mock.calls.some(([path, options]) =>
+    path.includes('/interpretation') && options?.method === 'POST')).toBe(false);
 });
 
 test('retries a temporary evidence read failure without reloading the interpretation', async () => {

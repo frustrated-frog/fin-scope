@@ -1,3 +1,4 @@
+import type { NewsReading } from './NewsReadingContent';
 export type RadarNewsItem = {
   id: string;
   kind: 'FLASH' | 'ARTICLE';
@@ -49,6 +50,7 @@ export type RadarEvent = {
 };
 
 export type RadarInterpretationResult = {
+  reading?: NewsReading | null;
   factSummary: string;
   newDevelopment: string;
   whyItMatters: string;

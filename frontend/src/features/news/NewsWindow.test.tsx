@@ -139,7 +139,10 @@ test('only generates a selected news version after the reader clicks and reuses 
   const path = '/api/news/window/interpretation?id=CLS%3A1&version=2';
   const post = vi.fn();
   const result = {
-    formatVersion: 2, facts: ['公司披露中标设备采购项目'], whyItMatters: '中标后的正式合同和履约进度仍需核对。',
+    formatVersion: 3, facts: ['公司披露中标设备采购项目'], whyItMatters: '',
+    reading: { lead: '公司披露中标设备采购项目', concepts: [{ term: '中标', meaning: '采购方选定了供应商。' }],
+      sections: [{ question: '现在就能确认收入吗？', answer: '通常还要履约，收到订单和确认收入的时间可以不同。' },
+        { question: '框架协议有什么区别？', answer: '具体采购量可能由后续订单确定。' }] },
     unknowns: ['签署时间'], nextChecks: ['正式合同公告'],
   };
   vi.mocked(api).mockImplementation((url, options) => {
@@ -158,14 +161,19 @@ test('only generates a selected news version after the reader clicks and reuses 
   await waitFor(() => expect(generate).toBeEnabled());
   expect(post).not.toHaveBeenCalled();
   fireEvent.click(generate);
-  expect(await screen.findByText(result.whyItMatters)).toBeInTheDocument();
-  expect(screen.getByText(result.facts[0])).toBeInTheDocument();
+  expect(await screen.findByText(result.reading.sections[0].answer)).toBeVisible();
+  expect(screen.getByText(result.reading.lead)).toBeVisible();
+  const more = screen.getByText(result.reading.sections[1].question).closest('details')!;
+  expect(more.open).toBe(false);
+  fireEvent.click(more.querySelector('summary')!);
+  expect(more.open).toBe(true);
+  expect(screen.getByText(result.reading.sections[1].answer)).toBeVisible();
   expect(screen.queryByRole('heading', { name: '待确认事项' })).not.toBeInTheDocument();
   expect(post).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: '关闭新闻详情' }));
   fireEvent.click(screen.getByRole('button', { name: /阅读资讯：开普检测中标/ }));
   fireEvent.click(await screen.findByRole('button', { name: '查看 AI 解读' }));
-  expect(await screen.findByText(result.whyItMatters)).toBeInTheDocument();
+  expect(await screen.findByText(result.reading.sections[0].answer)).toBeVisible();
   expect(post).toHaveBeenCalledTimes(1);
 });
 

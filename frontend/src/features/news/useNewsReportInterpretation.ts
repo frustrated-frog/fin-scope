@@ -1,7 +1,9 @@
+import type { NewsReading } from './NewsReadingContent';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 
 export type NewsInterpretationResult = {
+  reading?: NewsReading | null;
   formatVersion?: number;
   facts: string[];
   whyItMatters: string;

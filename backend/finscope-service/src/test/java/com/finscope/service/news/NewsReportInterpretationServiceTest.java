@@ -10,6 +10,8 @@ import com.finscope.dao.news.NewsWindowSchemaMigrator;
 import com.finscope.domain.news.NewsReport;
 import com.finscope.domain.news.NewsReportInterpretation;
 import com.finscope.rpc.llm.NewsAiLunaClient;
+import com.finscope.rpc.llm.LunaResponsesClient.Prepared;
+import com.finscope.rpc.llm.LunaResponsesClient.Reply;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,10 +35,8 @@ import static org.mockito.Mockito.*;
 class NewsReportInterpretationServiceTest {
     private static final String ID = "CLS:1";
     private static final String RESULT = """
-            公司签订框架协议
-
-            双方先约定合作方式。
-            实际采购量取决于后续订单。
+            {"lead":"公司签订框架协议","concepts":[{"term":"框架协议","meaning":"双方先约定合作方式。"}],
+             "sections":[{"question":"签约相当于拿到订单了吗？","answer":"实际采购量取决于后续订单。"}]}
             """;
     @TempDir
     Path directory;
@@ -46,6 +46,13 @@ class NewsReportInterpretationServiceTest {
     private NewsWorkbenchCapabilities capabilities;
     private NewsAiLunaClient llm;
     private NewsReportInterpretationService service;
+
+    private Reply reply(String output) {
+        Reply value = new Reply();
+        value.setCompleted(true);
+        value.setText(output);
+        return value;
+    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -66,7 +73,8 @@ class NewsReportInterpretationServiceTest {
         capabilities = mock(NewsWorkbenchCapabilities.class);
         when(capabilities.isInterpretationEnabled()).thenReturn(true);
         llm = mock(NewsAiLunaClient.class);
-        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn(RESULT);
+        when(llm.prepare(anyString(), anyString(), eq(1600), eq(NewsReadingGuidance.SCHEMA))).thenReturn(new Prepared());
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(RESULT));
         NewsReportInterpretationAgent agent = new NewsReportInterpretationAgent();
         ReflectionTestUtils.setField(agent, "llm", llm);
         ReflectionTestUtils.setField(agent, "json", json);
@@ -89,19 +97,25 @@ class NewsReportInterpretationServiceTest {
         verifyNoInteractions(llm);
         jobs.remove(0).run();
         assertEquals(List.of("公司签订框架协议"), service.request(ID, 1).getCurrent().getResult().getFacts());
+        var saved = service.get(ID, 1).getCurrent().getResult().getReading();
+        assertEquals("框架协议", saved.concepts().getFirst().term());
+        assertEquals("实际采购量取决于后续订单。", saved.sections().getFirst().answer());
         assertTrue(jobs.isEmpty());
-        verify(llm).completeText(anyString(), anyString(), anyInt());
+        verify(llm).complete(any(Prepared.class));
     }
 
     @Test
     void acceptsASingleSentenceWithoutInventingFollowUpSections() throws Exception {
-        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn("公司已否认网传订单。");
+        when(llm.complete(any(Prepared.class))).thenReturn(reply("""
+                {"lead":"公司已否认网传订单。","concepts":[],"sections":[]}
+                """));
         service.request(ID, 1);
         jobs.remove(0).run();
         var result = service.get(ID, 1).getCurrent().getResult();
         assertEquals(List.of("公司已否认网传订单。"), result.getFacts());
         assertTrue(result.getWhyItMatters().isEmpty());
-        assertTrue(result.getNextChecks().isEmpty());
+        assertTrue(result.getReading().concepts().isEmpty());
+        assertTrue(result.getReading().sections().isEmpty());
     }
 
     @Test
@@ -110,7 +124,7 @@ class NewsReportInterpretationServiceTest {
         service.request(ID, 1);
         jobs.remove(0).run();
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
-        verify(llm).completeText(anyString(), prompt.capture(), anyInt());
+        verify(llm).prepare(anyString(), prompt.capture(), eq(1600), eq(NewsReadingGuidance.SCHEMA));
         assertTrue(prompt.getValue().contains("最初披露框架协议"));
         assertFalse(prompt.getValue().contains("新版披露追加订单"));
         var latest = service.get(ID, 2);
@@ -121,7 +135,7 @@ class NewsReportInterpretationServiceTest {
 
     @Test
     void invalidModelOutputCanBeRetriedWithoutStoringAFakeResult() throws Exception {
-        when(llm.completeText(anyString(), anyString(), anyInt())).thenReturn("{}", RESULT);
+        when(llm.complete(any(Prepared.class))).thenReturn(reply("{}"), reply(RESULT));
         service.request(ID, 1);
         jobs.remove(0).run();
         var failed = service.get(ID, 1).getCurrent();
@@ -135,6 +149,7 @@ class NewsReportInterpretationServiceTest {
     @Test
     void legacyResultRemainsReadableThroughFailureAndUpgradesOnlyOnRequest() throws Exception {
         var old = new NewsReportInterpretation.Result();
+        old.setFormatVersion(2);
         old.setFacts(List.of("旧解读"));
         assertTrue(interpretations.tryQueue(ID, 1, "legacy", 1000L));
         interpretations.finish(ID, 1, "legacy", old, null);
@@ -142,8 +157,8 @@ class NewsReportInterpretationServiceTest {
         assertEquals(old, service.get(ID, 1).getPrevious().getResult());
         verifyNoInteractions(llm);
 
-        when(llm.completeText(anyString(), anyString(), anyInt()))
-                .thenReturn("42", RESULT);
+        when(llm.complete(any(Prepared.class)))
+                .thenReturn(reply("42"), reply(RESULT));
         assertEquals(old, service.request(ID, 1).getPrevious().getResult());
         service.request(ID, 1);
         assertEquals(1, jobs.size());
@@ -154,9 +169,9 @@ class NewsReportInterpretationServiceTest {
         service.request(ID, 1);
         jobs.remove(0).run();
         var upgraded = service.request(ID, 1);
-        assertEquals(2, upgraded.getCurrent().getResult().getFormatVersion());
+        assertEquals(NewsReportInterpretation.CURRENT_FORMAT, upgraded.getCurrent().getResult().getFormatVersion());
         assertTrue(jobs.isEmpty());
-        verify(llm, times(2)).completeText(anyString(), anyString(), anyInt());
+        verify(llm, times(2)).complete(any(Prepared.class));
     }
 
     @Test

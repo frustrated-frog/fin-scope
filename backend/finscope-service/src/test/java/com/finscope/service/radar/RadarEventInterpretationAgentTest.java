@@ -37,40 +37,30 @@ class RadarEventInterpretationAgentTest {
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
 
         assertEquals("公司发布新产品，两家来源确认发布事实。", result.getFactSummary());
+        assertEquals("量产", result.getReading().concepts().getFirst().term());
         assertEquals(Arrays.asList("signal:1", "evidence:31"), result.getEvidenceRefs());
     }
 
     @Test
-    void normalizesSingleTextAnalysisFieldsReturnedByTheModel() throws Exception {
+    void rejectsMalformedConcepts() throws Exception {
         NewsAiLunaClient llm = configuredLlm();
-        String response = validJson()
-                .replace("[\"产品发布→量产验证→供应链订单\"]", "\"产品发布→量产验证→供应链订单\"")
-                .replace("[\"价格尚未披露\"]", "\"价格尚未披露\"")
-                .replace("[\"观察公司正式公告\"]", "\"观察公司正式公告\"");
-        when(llm.complete(any(Prepared.class))).thenReturn(reply(response));
-
-        RadarEventInterpretation.Result result = agent(llm).interpret(event(),
-                Collections.singletonList(signal()), Collections.singletonList(evidence()));
-
-        assertEquals(Collections.singletonList("产品发布→量产验证→供应链订单"), result.getImpactChain());
-        assertEquals(Collections.singletonList("价格尚未披露"), result.getUncertainties());
-        assertEquals(Collections.singletonList("观察公司正式公告"), result.getNextObservations());
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(validJson().replace("将样品连续生产出来。", "")));
+        var error = assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
+                () -> agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence())));
+        assertEquals("INVALID_OUTPUT", error.getCode());
     }
 
     @Test
     void shortReportsCanOmitSecondarySections() throws Exception {
         NewsAiLunaClient llm = configuredLlm();
-        ObjectMapper json = new ObjectMapper();
-        var reply = (ObjectNode) json.readTree(validJson());
-        reply.put("newDevelopment", "");
-        reply.putArray("impactChain");
-        reply.putArray("uncertainties");
-        reply.putArray("nextObservations");
-        when(llm.complete(any(Prepared.class)))
-                .thenReturn(reply(reply.toString()));
+        var output = new ObjectMapper().readTree(validJson());
+        var reading = (ObjectNode) output.path("reading");
+        reading.putArray("concepts");
+        reading.putArray("sections");
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(output.toString()));
         var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
-        assertEquals("", result.getNewDevelopment());
-        assertEquals(Collections.emptyList(), result.getImpactChain());
+        assertEquals(Collections.emptyList(), result.getReading().sections());
+        assertEquals(Collections.emptyList(), result.getReading().concepts());
     }
 
     @Test
@@ -85,6 +75,15 @@ class RadarEventInterpretationAgentTest {
                         Collections.singletonList(evidence())));
 
         assertEquals("INVALID_OUTPUT", error.getCode());
+    }
+
+    @Test
+    void canExplainATradeWithoutGivingTheReaderAdvice() throws Exception {
+        NewsAiLunaClient llm = configuredLlm();
+        String description = "投资者买入债券时，成交价格会反映他们愿意接受的回报。";
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(validJson().replace("可能影响供应链订单预期。", description)));
+        var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
+        assertEquals(description, result.getReading().sections().getFirst().answer());
     }
 
     @Test
@@ -213,12 +212,11 @@ class RadarEventInterpretationAgentTest {
     }
 
     private String validJson() {
-        return "{\"factSummary\":\"公司发布新产品，两家来源确认发布事实。\","
-                + "\"newDevelopment\":\"新增量产时间信息。\","
-                + "\"whyItMatters\":\"可能影响供应链订单预期。\","
-                + "\"impactChain\":[\"产品发布→量产验证→供应链订单\"],"
-                + "\"uncertainties\":[\"价格尚未披露\"],"
-                + "\"nextObservations\":[\"观察公司正式公告\"],"
-                + "\"evidenceRefs\":[\"signal:1\",\"evidence:31\"]}";
+        return """
+                {"reading":{"lead":"公司发布新产品，两家来源确认发布事实。",
+                 "concepts":[{"term":"量产","meaning":"将样品连续生产出来。"}],
+                 "sections":[{"question":"量产安排对上游意味着什么？","answer":"可能影响供应链订单预期。"}]},
+                 "evidenceRefs":["signal:1","evidence:31"]}
+                """;
     }
 }

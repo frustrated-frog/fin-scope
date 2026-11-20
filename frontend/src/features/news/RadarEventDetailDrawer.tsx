@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { ApiError, api } from '../../shared/api/client';
+import { interpretationText, NewsReadingContent } from './NewsReadingContent';
 import { RadarRankHistory } from './RadarRankHistory';
 import { RadarTimeline } from './RadarTimeline';
 import { RadarTrustPanel } from './RadarTrustPanel';
@@ -257,7 +258,7 @@ export function RadarEventDetailDrawer({ event, categoryName, overview, onClose,
               </button>)}
             </nav>
             {tab === 'interpretation' ? <>
-              {summary ? <p className="radar-detail-overview">{summary}</p> : null}
+              {summary && !result?.reading ? <p className="radar-detail-overview">{summary}</p> : null}
               <section className="radar-detail-section" aria-labelledby="interpretation-heading">
                 <div className="radar-detail-section-heading">
                   <h3 id="interpretation-heading">事件解读</h3>
@@ -273,16 +274,14 @@ export function RadarEventDetailDrawer({ event, categoryName, overview, onClose,
                 </div> : null}
                 {interpretation?.stale && result ? <p className="radar-dossier-notice">这是此前保存的解读，可点击「生成 AI 解读」更新。</p> : null}
                 {!detail ? (error ? null : <DrawerSkeleton/>) : result ? <div className="radar-interpretation-grid">
-                  <div className="radar-dossier-findings">
-                    <InterpretationBlock label="已确认事实" value={result.factSummary} fact singleSource={event.sourceCount === 1}/>
-                    {result.newDevelopment && <InterpretationBlock label="本次新变化" value={result.newDevelopment}/>}
-                  </div>
-                  <InterpretationBlock label="为什么重要" value={result.whyItMatters} accent/>
-                  <InterpretationList label="影响链条" values={result.impactChain} ordered/>
-                  {result.uncertainties.length + result.nextObservations.length > 0 && <div className="radar-dossier-findings">
-                    <InterpretationList label="仍存疑点" values={result.uncertainties}/>
-                    <InterpretationList label="下一步观察" values={result.nextObservations}/>
-                  </div>}
+                  {result.reading ? <NewsReadingContent reading={result.reading} radarSources={event.sourceCount} /> : <>
+                    <div className="radar-dossier-findings">
+                      <InterpretationBlock label="已确认事实" value={result.factSummary} fact singleSource={event.sourceCount === 1}/>
+                      {result.newDevelopment && <InterpretationBlock label="本次新变化" value={result.newDevelopment}/>}
+                    </div>
+                    <InterpretationBlock label="为什么重要" value={result.whyItMatters} accent/>
+                    <InterpretationList label="影响链条" values={result.impactChain} ordered/>
+                  </>}
                 </div> : interpretation?.status === 'UNAVAILABLE' ? <p className="radar-dossier-notice">模型解读未启用，可继续查看证据与来源、事件脉络。</p>
                   : isPending(interpretation) || requesting ? (pollFailures ? null : <p className="radar-dossier-notice" role="status">正在整理事件事实与证据…</p>)
                     : <p className="radar-dossier-notice">{interpretation?.failureMessage || '点击「生成 AI 解读」开始。'}</p>}
@@ -396,9 +395,6 @@ function StatusBadge({ interpretation }: { interpretation?: RadarInterpretation 
     case 'FAILED': return <span className="is-error">生成失败</span>;
     default: return <span>生成中</span>;
   }
-}
-function interpretationText(value: string) {
-  return value.replace(/[ \t]*\[(?:signal|evidence):\d+(?:[ \t]*[,，、][ \t]*(?:signal|evidence):\d+)*\]/gi, '').trim();
 }
 function InterpretationBlock({ label, value, accent, fact, singleSource }: {
   label: string; value: string; accent?: boolean; fact?: boolean; singleSource?: boolean;

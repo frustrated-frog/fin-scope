@@ -2,7 +2,7 @@ package com.finscope.service.radar;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.finscope.domain.news.NewsReading;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,22 +24,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 public class RadarEventInterpretationAgent {
     static final int MAX_OUTPUT_TOKENS = 2048;
     private static final int MAX_ITEMS = 8;
-    private static final int MAX_LIST_ITEM_LENGTH = 180;
-
-    private static final Map<String, Object> TEXT = Map.of("type", "string");
-    private static final Map<String, Object> TEXT_LIST = Map.of("type", "array", "items", TEXT, "maxItems", MAX_ITEMS);
     private static final Map<String, Object> RESULT_SCHEMA = Map.of(
-            "type", "object", "additionalProperties", false,
-            "required", List.of("factSummary", "newDevelopment", "whyItMatters", "impactChain",
-                    "uncertainties", "nextObservations", "evidenceRefs"),
-            "properties", Map.of("factSummary", TEXT, "newDevelopment", TEXT, "whyItMatters", TEXT,
-                    "impactChain", TEXT_LIST, "uncertainties", TEXT_LIST,
-                    "nextObservations", TEXT_LIST, "evidenceRefs", TEXT_LIST));
+            "type", "object", "additionalProperties", false, "required", List.of("reading", "evidenceRefs"),
+            "properties", Map.of("reading", NewsReadingGuidance.SCHEMA, "evidenceRefs",
+                    Map.of("type", "array", "maxItems", MAX_ITEMS, "items", Map.of("type", "string"))));
+    private static final String PROMPT = NewsReadingGuidance.PROMPT
+            + "reading 是读者看到的讲解。实际用到的输入 ref 放进 evidenceRefs，原样保留编号。";
+
+    // 对读者发出的交易指令与解释报道里的交易动作含义不同。
+    private static final Pattern TRADING_ADVICE = Pattern.compile(
+            "(?:建议(?:投资者|你)?|你(?:应该|可以)|不妨|适合投资者)(?:立即|择机|逢低|适当)?(?:买入|卖出|加仓|减仓)"
+                    + "|(?:你的|建议的)目标价");
+
+    private record CitedReading(NewsReading reading, List<String> evidenceRefs) {
+    }
 
     @Resource
     private NewsAiLunaClient llm;
@@ -64,7 +68,7 @@ public class RadarEventInterpretationAgent {
             throw new InterpretationException("MODEL_DISABLED", "模型未配置");
         }
         try {
-            var request = llm.prepare(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
+            var request = llm.prepare(PROMPT, json.writeValueAsString(payload(event, signals, evidence)),
                     MAX_OUTPUT_TOKENS, RESULT_SCHEMA);
             var reply = llm.complete(request);
             metadata.put("finishReason", reply.getIncompleteReason() == null ? reply.getStatus() : reply.getIncompleteReason());
@@ -80,8 +84,7 @@ public class RadarEventInterpretationAgent {
             if (blank(reply.getText())) {
                 throw new InterpretationException("EMPTY_OUTPUT", "模型返回的解读正文为空");
             }
-            RadarEventInterpretation.Result result = parseResult(reply.getText());
-            validate(result, allowedRefs(signals, evidence));
+            RadarEventInterpretation.Result result = parseResult(reply.getText(), allowedRefs(signals, evidence));
             trace(event, "SUCCESS", null, null, started, result, metadata);
             return result;
         } catch (InterpretationException error) {
@@ -111,43 +114,10 @@ public class RadarEventInterpretationAgent {
         return llm == null ? "unconfigured" : llm.model();
     }
 
-    private void validate(RadarEventInterpretation.Result result, Set<String> allowedRefs) {
-        if (result == null || blank(result.getFactSummary()) || result.getNewDevelopment() == null
-                || blank(result.getWhyItMatters())) {
-            throw new InterpretationException("INVALID_OUTPUT", "解读必填字段为空");
-        }
-        validateList(result.getImpactChain());
-        validateList(result.getUncertainties());
-        validateList(result.getNextObservations());
-        validateList(result.getEvidenceRefs());
-        for (String ref : safe(result.getEvidenceRefs())) {
-            if (!allowedRefs.contains(ref)) {
-                throw new InterpretationException("INVALID_OUTPUT", "解读引用不属于输入证据");
-            }
-        }
-        String all = result.getFactSummary() + result.getNewDevelopment() + result.getWhyItMatters()
-                + String.join("", safe(result.getImpactChain())) + String.join("", safe(result.getUncertainties()))
-                + String.join("", safe(result.getNextObservations()));
-        if (containsAdvice(all)) throw new InterpretationException("INVALID_OUTPUT", "解读包含投资建议");
-    }
-
-    private void validateList(List<String> values) {
-        if (values == null || values.size() > MAX_ITEMS) {
-            throw new InterpretationException("INVALID_OUTPUT", "解读列表数量不合法");
-        }
-        for (String value : values) {
-            if (blank(value) || value.trim().length() > MAX_LIST_ITEM_LENGTH) {
-                throw new InterpretationException("INVALID_OUTPUT", "解读列表内容不合法");
-            }
-        }
-    }
-
     private Map<String, Object> payload(RadarEvent event, List<RadarSignal> signals, List<RadarEvidence> evidence) {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("eventTitle", event == null ? "" : event.getCanonicalTitle());
         value.put("eventSummary", compact(event == null ? "" : event.getSummary(), 600));
-        value.put("existingUncertainty", compact(event == null ? "" : event.getUncertainty(), 240));
-        value.put("existingNextObservation", compact(event == null ? "" : event.getNextObservation(), 240));
         List<Map<String, String>> signalRows = new ArrayList<Map<String, String>>();
         for (RadarSignal signal : first(signals)) {
             Map<String, String> row = new LinkedHashMap<String, String>();
@@ -168,40 +138,30 @@ public class RadarEventInterpretationAgent {
 
     private Set<String> allowedRefs(List<RadarSignal> signals, List<RadarEvidence> evidence) {
         Set<String> refs = new HashSet<String>();
-        for (RadarSignal signal : first(signals)) refs.add("signal:" + signal.getId());
-        for (RadarEvidence item : first(evidence)) refs.add("evidence:" + item.getId());
+        for (RadarSignal signal : first(signals)) {
+            refs.add("signal:" + signal.getId());
+        }
+        for (RadarEvidence item : first(evidence)) {
+            refs.add("evidence:" + item.getId());
+        }
         return refs;
     }
 
-    private String systemPrompt() {
-        return NewsReadingGuidance.PROMPT
-                + "factSummary用一句日常话交代报道事实，newDevelopment只说首句之外有据可循的新进展，没有就填空字符串，whyItMatters集中讲清阅读难点。"
-                + "impactChain仅列有依据的后续影响，uncertainties和nextObservations只写具体且有必要的事项，三者均可为空数组。"
-                + "输出单个纯JSON对象，只允许factSummary、newDevelopment、whyItMatters、impactChain、uncertainties、"
-                + "nextObservations、evidenceRefs字段。factSummary、newDevelopment、whyItMatters必须是字符串；"
-                + "impactChain、uncertainties、nextObservations、evidenceRefs必须是字符串数组，即使只有一项也必须使用数组。"
-                + "清楚区分事实、影响推演与未知项，每个判断以输入证据为依据。"
-                + "将使用的输入ref集中写入evidenceRefs，其他字段只写自然语言，不写ref编号或方括号标记。"
-                + "不得给出买卖、仓位或目标价建议，不得输出Markdown或思维链。";
-    }
-
-    private RadarEventInterpretation.Result parseResult(String raw) throws JsonProcessingException {
-        JsonNode root = json.readTree(extractJson(raw));
-        if (root == null || !root.isObject()) {
-            throw new IllegalArgumentException("解读输出必须是JSON对象");
+    private RadarEventInterpretation.Result parseResult(String raw, Set<String> allowedRefs) throws JsonProcessingException {
+        CitedReading output = json.readValue(raw, CitedReading.class);
+        if (output == null || output.evidenceRefs() == null || output.evidenceRefs().size() > MAX_ITEMS
+                || !allowedRefs.containsAll(output.evidenceRefs())) {
+            throw new InterpretationException("INVALID_OUTPUT", "解读引用不属于输入证据");
         }
-        ObjectNode object = (ObjectNode) root;
-        normalizeTextArray(object, "impactChain");
-        normalizeTextArray(object, "uncertainties");
-        normalizeTextArray(object, "nextObservations");
-        return json.treeToValue(object, RadarEventInterpretation.Result.class);
-    }
-
-    private void normalizeTextArray(ObjectNode object, String field) {
-        JsonNode value = object.get(field);
-        if (value != null && value.isTextual()) {
-            object.set(field, json.createArrayNode().add(value.asText()));
+        NewsReadingGuidance.validate(output.reading());
+        if (TRADING_ADVICE.matcher(raw).find()) {
+            throw new InterpretationException("INVALID_OUTPUT", "解读包含投资建议");
         }
+        var result = new RadarEventInterpretation.Result();
+        result.setReading(output.reading());
+        result.setFactSummary(output.reading().lead());
+        result.setEvidenceRefs(output.evidenceRefs());
+        return result;
     }
 
     private void trace(RadarEvent event, String status, String errorType, String fallbackReason,
@@ -218,24 +178,9 @@ public class RadarEventInterpretationAgent {
         return value == null ? "llm" : value.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
-    private String extractJson(String raw) {
-        if (raw == null) return "";
-        int start = raw.indexOf('{'), end = raw.lastIndexOf('}');
-        return start >= 0 && end >= start ? raw.substring(start, end + 1) : raw.trim();
-    }
-
     private <T> List<T> first(List<T> values) {
         if (values == null || values.isEmpty()) return java.util.Collections.emptyList();
         return values.size() <= MAX_ITEMS ? values : values.subList(0, MAX_ITEMS);
-    }
-
-    private List<String> safe(List<String> values) {
-        return values == null ? java.util.Collections.<String>emptyList() : values;
-    }
-
-    private boolean containsAdvice(String value) {
-        return value.contains("买入") || value.contains("卖出") || value.contains("加仓")
-                || value.contains("减仓") || value.contains("目标价");
     }
 
     private String compact(String value, int max) {

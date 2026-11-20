@@ -1,5 +1,9 @@
 package com.finscope.domain.radar;
 
+import com.finscope.domain.news.NewsReading;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +48,8 @@ public class RadarEventInterpretation {
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 
     public static class Result {
+        @Getter @Setter
+        private NewsReading reading;
         private String factSummary;
         private String newDevelopment;
         private String whyItMatters;

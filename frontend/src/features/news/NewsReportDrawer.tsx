@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import { ReactionChart } from '../investment-observation/ReactionChart';
 import { beforeEventReturn, dateTime, signed, sourceHref, statusLabels, reactionHref, resolutionLabels } from '../investment-observation/reactionTypes';
 import type { NewsDetail, NewsReport } from './newsWindowTypes';
+import { NewsReadingContent } from './NewsReadingContent';
 import { useNewsReportInterpretation } from './useNewsReportInterpretation';
 import type { NewsInterpretationResult } from './useNewsReportInterpretation';
 
@@ -362,6 +363,9 @@ export function NewsReportDrawer({
 }
 
 function NewsInterpretationContent({ result }: { result: NewsInterpretationResult }) {
+  if (result.reading) {
+    return <NewsReadingContent reading={result.reading} />;
+  }
   if (result.formatVersion === 2) {
     return <article><p><strong>{result.facts[0]}</strong></p>
       {result.whyItMatters.split('\n\n').filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
@@ -370,7 +374,5 @@ function NewsInterpretationContent({ result }: { result: NewsInterpretationResul
   return <>
     <article><h4>报道披露的事实</h4><ul>{result.facts.map((value, index) => <li key={index}>{value}</li>)}</ul></article>
     <article><h4>为什么值得关注</h4><p>{result.whyItMatters}</p></article>
-    <article><h4>待确认事项</h4><ul>{result.unknowns.map((value, index) => <li key={index}>{value}</li>)}</ul></article>
-    <article><h4>下一步可核对的证据</h4><ul>{result.nextChecks.map((value, index) => <li key={index}>{value}</li>)}</ul></article>
   </>;
 }
