@@ -88,6 +88,40 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    void directJsonDisablesThinkingOnTheDeepSeekEndpoint() {
+        var client = new OpenAiCompatibleLlmClient(true, "https://api.deepseek.com/v1", "test", "deepseek-flash", 3000, 0.2);
+        var body = client.directJsonRequest("system", "user", 2048);
+        assertEquals(java.util.Map.of("type", "disabled"), body.get("thinking"));
+        assertEquals(java.util.Map.of("type", "json_object"), body.get("response_format"));
+    }
+
+    @Test
+    void directJsonReportsTruncationAndUsageFromASingleRequest() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            calls.incrementAndGet();
+            requestBody.set(new String(readAll(exchange.getRequestBody()), StandardCharsets.UTF_8));
+            byte[] response = """
+                    {"choices":[{"finish_reason":"length","message":{"content":"","reasoning_content":"private"}}],
+                     "usage":{"prompt_tokens":100,"completion_tokens":2048,"completion_tokens_details":{"reasoning_tokens":2048}}}
+                    """.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(response);
+            }
+        });
+        server.start();
+        var client = new OpenAiCompatibleLlmClient(true, "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
+                "test", "compatible-model", 3000, 0.2);
+        var reply = client.completeDirectJson("system", "user", 2000, 2048);
+        assertEquals(new ChatCompletionReply("", "length", 100, 2048, 2048, true), reply);
+        assertFalse(requestBody.get().contains("\"thinking\""));
+        assertEquals(1, calls.get());
+    }
+
+    @Test
     void retriesStructuredCallWithExpandedBudgetWhenProviderReturnsOnlyReasoning() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         List<String> requestBodies = new ArrayList<String>();

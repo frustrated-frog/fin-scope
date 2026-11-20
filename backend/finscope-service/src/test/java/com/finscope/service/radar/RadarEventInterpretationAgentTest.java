@@ -7,6 +7,7 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.rpc.llm.ChatCompletionReply;
 import com.finscope.rpc.llm.LlmChatClient;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +26,7 @@ class RadarEventInterpretationAgentTest {
     @Test
     void returnsValidatedEvidenceBoundInterpretation() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900))).thenReturn(validJson());
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048))).thenReturn(reply(validJson()));
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -41,7 +42,7 @@ class RadarEventInterpretationAgentTest {
                 .replace("[\"产品发布→量产验证→供应链订单\"]", "\"产品发布→量产验证→供应链订单\"")
                 .replace("[\"价格尚未披露\"]", "\"价格尚未披露\"")
                 .replace("[\"观察公司正式公告\"]", "\"观察公司正式公告\"");
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900))).thenReturn(response);
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048))).thenReturn(reply(response));
 
         RadarEventInterpretation.Result result = agent(llm).interpret(event(),
                 Collections.singletonList(signal()), Collections.singletonList(evidence()));
@@ -60,8 +61,8 @@ class RadarEventInterpretationAgentTest {
         reply.putArray("impactChain");
         reply.putArray("uncertainties");
         reply.putArray("nextObservations");
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
-                .thenReturn(reply.toString());
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+                .thenReturn(reply(reply.toString()));
         var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
         assertEquals("", result.getNewDevelopment());
         assertEquals(Collections.emptyList(), result.getImpactChain());
@@ -70,8 +71,8 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsReferencesOutsideTheInputEvidenceSet() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
-                .thenReturn(validJson().replace("evidence:31", "evidence:999"));
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+                .thenReturn(reply(validJson().replace("evidence:31", "evidence:999")));
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
                 RadarEventInterpretationAgent.InterpretationException.class,
@@ -84,8 +85,8 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsInvestmentAdvice() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
-                .thenReturn(validJson().replace("可能影响供应链订单预期。", "建议买入相关股票。"));
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+                .thenReturn(reply(validJson().replace("可能影响供应链订单预期。", "建议买入相关股票。")));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
                 () -> agent(llm).interpret(event(), Collections.singletonList(signal()),
@@ -95,8 +96,8 @@ class RadarEventInterpretationAgentTest {
     @Test
     void rejectsUnknownJsonFields() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(900)))
-                .thenReturn(validJson().replaceFirst("\\{", "{\"recommendation\":\"关注\","));
+        when(llm.completeDirectJson(anyString(), anyString(), eq(RadarEventInterpretationAgent.TIMEOUT_MS), eq(2048)))
+                .thenReturn(reply(validJson().replaceFirst("\\{", "{\"recommendation\":\"关注\",")));
 
         assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
                 () -> agent(llm).interpret(event(), Collections.singletonList(signal()),
@@ -106,7 +107,7 @@ class RadarEventInterpretationAgentTest {
     @Test
     void reportsTheModelTimeoutSeparatelyFromInvalidOutput() throws Exception {
         LlmChatClient llm = configuredLlm();
-        when(llm.complete(anyString(), anyString(), eq(90_000), eq(900)))
+        when(llm.completeDirectJson(anyString(), anyString(), eq(90_000), eq(2048)))
                 .thenThrow(new SocketTimeoutException("Read timed out"));
 
         RadarEventInterpretationAgent.InterpretationException error = assertThrows(
@@ -163,6 +164,29 @@ class RadarEventInterpretationAgentTest {
     private RadarEvidence evidence() {
         RadarEvidence value = new RadarEvidence(); value.setId(31L); value.setSourceName("深交所");
         value.setTitle("公司公告"); value.setSummary("公司披露新产品量产安排"); return value;
+    }
+
+    private ChatCompletionReply reply(String content) {
+        return new ChatCompletionReply(content, "stop", 100, 200, null, false);
+    }
+
+    @Test
+    void reportsTruncationWithUsageWithoutTracingReasoningOrPartialText() throws Exception {
+        LlmChatClient llm = configuredLlm();
+        var recorder = mock(RadarAgentTraceRecorder.class);
+        var agent = new RadarEventInterpretationAgent(llm, new ObjectMapper(), recorder);
+        when(llm.completeDirectJson(anyString(), anyString(), eq(90_000), eq(2048)))
+                .thenReturn(new ChatCompletionReply("partial text", "length", 700, 2048, 2000, true));
+        var error = assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
+                () -> agent.interpret(event(), Collections.singletonList(signal()), Collections.emptyList()));
+        assertEquals("OUTPUT_LIMIT", error.getCode());
+        var metadata = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(recorder).record(eq("radar-event-interpretation"), eq("RADAR_EVENT"), eq(10L),
+                eq("FALLBACK"), anyString(), eq(""), anyString(), eq("OUTPUT_LIMIT"), org.mockito.ArgumentMatchers.anyLong(),
+                metadata.capture());
+        var details = new ObjectMapper().readTree(metadata.getValue());
+        assertEquals(2048, details.path("outputTokens").asInt());
+        assertEquals("length", details.path("finishReason").asText());
     }
 
     private String validJson() {

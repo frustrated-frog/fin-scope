@@ -10,6 +10,8 @@ import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
 import com.finscope.domain.radar.RadarSignal;
+import com.finscope.rpc.llm.ChatCompletionReply;
+import com.finscope.rpc.llm.OpenAiCompatibleLlmClient.ProviderHttpException;
 import com.finscope.rpc.llm.LlmChatClient;
 import com.finscope.service.news.NewsReadingGuidance;
 import org.springframework.stereotype.Service;
@@ -25,7 +27,7 @@ import java.util.Set;
 @Service
 public class RadarEventInterpretationAgent {
     static final int TIMEOUT_MS = 90_000;
-    static final int MAX_OUTPUT_TOKENS = 900;
+    static final int MAX_OUTPUT_TOKENS = 2048;
     private static final int MAX_ITEMS = 8;
     private static final int MAX_LIST_ITEM_LENGTH = 180;
 
@@ -44,31 +46,49 @@ public class RadarEventInterpretationAgent {
     public RadarEventInterpretation.Result interpret(RadarEvent event, List<RadarSignal> signals,
                                                      List<RadarEvidence> evidence) {
         long started = System.currentTimeMillis();
+        ObjectNode metadata = json.createObjectNode().put("model", safeModelName());
         if (llm == null || !llm.isConfigured()) {
-            trace(event, "UNAVAILABLE", "MODEL_DISABLED", "MODEL_DISABLED", started, null);
+            trace(event, "UNAVAILABLE", "MODEL_DISABLED", "MODEL_DISABLED", started, null, metadata);
             throw new InterpretationException("MODEL_DISABLED", "模型未配置");
         }
         try {
-            String raw = llm.complete(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
+            ChatCompletionReply reply = llm.completeDirectJson(systemPrompt(), json.writeValueAsString(payload(event, signals, evidence)),
                     TIMEOUT_MS, MAX_OUTPUT_TOKENS);
-            RadarEventInterpretation.Result result = parseResult(raw);
+            metadata.put("finishReason", reply.finishReason());
+            metadata.put("inputTokens", reply.inputTokens());
+            metadata.put("outputTokens", reply.outputTokens());
+            metadata.put("reasoningTokens", reply.reasoningTokens());
+            metadata.put("hasReasoning", reply.hasReasoning());
+            if ("length".equals(reply.finishReason())) {
+                throw new InterpretationException("OUTPUT_LIMIT", "模型达到输出上限，解读未写完整");
+            }
+            if (blank(reply.content())) {
+                throw new InterpretationException("EMPTY_OUTPUT", reply.hasReasoning()
+                        ? "模型只返回了推理内容，没有生成解读正文" : "模型返回的解读正文为空");
+            }
+            RadarEventInterpretation.Result result = parseResult(reply.content());
             validate(result, allowedRefs(signals, evidence));
-            trace(event, "SUCCESS", null, null, started, result);
+            trace(event, "SUCCESS", null, null, started, result, metadata);
             return result;
         } catch (InterpretationException error) {
-            trace(event, "FALLBACK", error.getClass().getSimpleName(), error.getCode(), started, null);
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), error.getCode(), started, null, metadata);
             throw error;
+        } catch (ProviderHttpException error) {
+            metadata.put("httpStatus", error.status());
+            String code = "LLM_HTTP_" + error.status();
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), code, started, null, metadata);
+            throw new InterpretationException(code, "模型服务返回 HTTP " + error.status() + "，解读未生成", error);
         } catch (SocketTimeoutException error) {
-            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_TIMEOUT", started, null);
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_TIMEOUT", started, null, metadata);
             throw new InterpretationException("LLM_TIMEOUT", "等待模型回复超时，请重试 AI 解读", error);
         } catch (JsonProcessingException | IllegalArgumentException error) {
-            trace(event, "FALLBACK", error.getClass().getSimpleName(), "INVALID_OUTPUT", started, null);
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), "INVALID_OUTPUT", started, null, metadata);
             throw new InterpretationException("INVALID_OUTPUT", "模型解读输出不可用", error);
         } catch (Exception error) {
             if (error instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_REQUEST_FAILED", started, null);
+            trace(event, "FALLBACK", error.getClass().getSimpleName(), "LLM_REQUEST_FAILED", started, null, metadata);
             throw new InterpretationException("LLM_REQUEST_FAILED", "模型请求未完成，请重试 AI 解读", error);
         }
     }
@@ -171,12 +191,12 @@ public class RadarEventInterpretationAgent {
     }
 
     private void trace(RadarEvent event, String status, String errorType, String fallbackReason,
-                       long started, RadarEventInterpretation.Result result) {
+                       long started, RadarEventInterpretation.Result result, ObjectNode metadata) {
         traces.record("radar-event-interpretation", "RADAR_EVENT", event == null ? null : event.getId(),
                 status, "event=" + (event == null ? "" : compact(event.getCanonicalTitle(), 120)),
                 result == null ? "" : "summary=" + compact(result.getFactSummary(), 240),
                 errorType, fallbackReason, System.currentTimeMillis() - started,
-                "{\"model\":\"" + safeModelName() + "\"}");
+                metadata.toString());
     }
 
     private String safeModelName() {

@@ -115,6 +115,36 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         return content;
     }
 
+    @Override
+    public ChatCompletionReply completeDirectJson(String systemPrompt, String userPrompt, int requestedTimeoutMs,
+                                                  int maxOutputTokens) throws Exception {
+        if (!isConfigured()) {
+            throw new IllegalStateException("LLM is not configured");
+        }
+        int deadlineMs = requestedTimeoutMs <= 0 ? timeoutMs : Math.min(timeoutMs, requestedTimeoutMs);
+        var body = directJsonRequest(systemPrompt, userPrompt, maxOutputTokens);
+        JsonNode root = requestCompletion(body, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(deadlineMs));
+        JsonNode choice = root.path("choices").path(0);
+        JsonNode usage = root.path("usage");
+        return new ChatCompletionReply(messageContent(root), choice.path("finish_reason").asText(null),
+                tokenCount(usage.path("prompt_tokens")), tokenCount(usage.path("completion_tokens")),
+                tokenCount(usage.path("completion_tokens_details").path("reasoning_tokens")),
+                !choice.path("message").path("reasoning_content").asText("").isBlank());
+    }
+
+    Map<String, Object> directJsonRequest(String systemPrompt, String userPrompt, int maxOutputTokens) {
+        var body = request(systemPrompt, userPrompt, maxOutputTokens);
+        if ("api.deepseek.com".equalsIgnoreCase(URI.create(baseUrl).getHost())) {
+            body.put("thinking", Map.of("type", "disabled"));
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+        return body;
+    }
+
+    private Integer tokenCount(JsonNode value) {
+        return value.isIntegralNumber() && value.canConvertToInt() ? value.intValue() : null;
+    }
+
     private JsonNode requestCompletionWithTransientRetry(String systemPrompt,
                                                          String userPrompt,
                                                          int maxOutputTokens,
@@ -124,7 +154,7 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
             int remaining = remainingTimeoutMs(deadlineNanos);
             if (remaining <= 0) break;
             try {
-                return requestCompletion(systemPrompt, userPrompt, maxOutputTokens, deadlineNanos);
+                return requestCompletion(request(systemPrompt, userPrompt, maxOutputTokens), deadlineNanos);
             } catch (Exception error) {
                 lastFailure = error;
                 if (attempt >= MAX_TRANSIENT_ATTEMPTS || !isTransient(error)) throw error;
@@ -135,9 +165,8 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         throw new SocketTimeoutException("OpenAI compatible LLM request exceeded its timeout budget");
     }
 
-    private JsonNode requestCompletion(String systemPrompt, String userPrompt,
-                                       int maxOutputTokens, long deadlineNanos) throws Exception {
-        byte[] requestBody = objectMapper.writeValueAsBytes(request(systemPrompt, userPrompt, maxOutputTokens));
+    private JsonNode requestCompletion(Map<String, Object> body, long deadlineNanos) throws Exception {
+        byte[] requestBody = objectMapper.writeValueAsBytes(body);
         HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint()))
                 .header("Content-Type", "application/json; charset=utf-8")
                 .header("Accept", "application/json")
@@ -349,9 +378,13 @@ public class OpenAiCompatibleLlmClient implements LlmChatClient {
         return value == null || value.trim().isEmpty();
     }
 
-    private static final class ProviderHttpException extends IllegalStateException {
+    public static final class ProviderHttpException extends IllegalStateException {
         private final int status;
         private final long retryAfterMillis;
+
+        public int status() {
+            return status;
+        }
 
         private ProviderHttpException(int status, long retryAfterMillis, String message) {
             super(message);
