@@ -13815,6 +13815,8 @@ input[type="checkbox"] {
 .major-event-meta > span:not(:first-child)::before { margin-right: 6px; color: var(--line-strong); content: '·'; }
 .major-event-origin { color: var(--event-tone); font-weight: 800; }
 .major-event-copy h5 { margin: 9px 0 8px; color: var(--ink); font-size: clamp(17px, 1.55vw, 21px); font-weight: 720; letter-spacing: -.025em; line-height: 1.38; }
+.major-event-reading-title { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: start; cursor: pointer; }
+.major-event-reading-title:hover, .major-event-reading-title:focus-visible { text-decoration: underline; text-underline-offset: .18em; }
 .major-event-copy > p { max-width: 860px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; }
 .major-event-copy blockquote { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; margin: 14px 0 0; padding: 11px 13px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--event-tone) 8%, var(--surface-2)); color: var(--ink); font-size: 12px; line-height: 1.65; }
 .major-event-copy blockquote span { color: var(--event-tone); font: 800 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; white-space: nowrap; }

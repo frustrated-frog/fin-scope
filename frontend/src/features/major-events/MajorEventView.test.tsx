@@ -97,3 +97,47 @@ test('keeps the latest archive date inside its summary column', () => {
 
   expect(styles).toMatch(/\.major-events-stats > div:last-child dd\s*{[^}]*display:\s*grid[^}]*white-space:\s*normal/s);
 });
+
+test.each([events[0], events[2]])('opens the saved analysis of $title without a generation request', async (event) => {
+  const path = `/api/major-events/${event.id}/interpretation`;
+  const view = { available: false, contentVersion: 1, current: { status: 'SUCCESS', result: {
+    facts: ['归档时的事实'], whyItMatters: '原有解读中的判断', unknowns: [], nextChecks: [],
+  } } };
+  vi.mocked(api).mockImplementation((url) => Promise.resolve(url === path ? view : events));
+  render(<MajorEventView addToast={vi.fn()} />);
+  const title = await screen.findByRole('button', { name: `查看新闻解读：${event.title}` });
+  expect(api).not.toHaveBeenCalledWith(path, expect.anything());
+  await userEvent.click(title);
+  const dialog = screen.getByRole('dialog', { name: event.title });
+  expect(await within(dialog).findByText('原有解读中的判断')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: '关闭新闻解读' }));
+  expect(title).toHaveFocus();
+  expect(vi.mocked(api).mock.calls.filter(([url]) => url === path).map(([, init]) => init?.method)).toEqual(['GET']);
+});
+
+test('generates a missing archive reading only on click and reuses it after reopening', async () => {
+  const path = '/api/major-events/1/interpretation';
+  let generated = false;
+  vi.mocked(api).mockImplementation((url, init) => {
+    if (url !== path) {
+      return Promise.resolve(events);
+    }
+    if (init?.method === 'POST') {
+      generated = true;
+    }
+    return Promise.resolve({ available: true, contentVersion: 1, current: generated ? {
+      status: 'SUCCESS', result: { facts: ['归档正文'], whyItMatters: '基于归档正文的解释' },
+    } : null });
+  });
+  render(<MajorEventView addToast={vi.fn()} />);
+  const title = await screen.findByRole('button', { name: '查看新闻解读：美联储释放降息信号' });
+  await userEvent.click(title);
+  const generate = await screen.findByRole('button', { name: '生成 AI 解读' });
+  expect(generated).toBe(false);
+  await userEvent.click(generate);
+  expect(await screen.findByText('基于归档正文的解释')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '关闭新闻解读' }));
+  await userEvent.click(title);
+  expect(await screen.findByText('基于归档正文的解释')).toBeVisible();
+  expect(vi.mocked(api).mock.calls.filter(([url, init]) => url === path && init?.method === 'POST')).toHaveLength(1);
+});

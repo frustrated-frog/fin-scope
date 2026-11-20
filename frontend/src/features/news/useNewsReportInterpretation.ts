@@ -26,15 +26,19 @@ type InterpretationView = {
 };
 
 export function useNewsReportInterpretation(id?: string, version?: number) {
+  const path = id && version ? `/api/news/window/interpretation?${new URLSearchParams({ id, version: String(version) })}` : undefined;
+  return useNewsInterpretation(path, version);
+}
+
+export function useNewsInterpretation(path?: string, version?: number) {
   const [state, setState] = useState<{ key: string; view?: InterpretationView; loading: boolean; error?: string }>();
   const action = useRef<(method: 'GET' | 'POST') => void>();
-  const key = id && version ? `${id}:${version}` : '';
+  const key = path ?? '';
 
   useEffect(() => {
-    if (!id || !version) {
+    if (!key) {
       return;
     }
-    const path = `/api/news/window/interpretation?${new URLSearchParams({ id, version: String(version) })}`;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let loading = false;
@@ -49,11 +53,11 @@ export function useNewsReportInterpretation(id?: string, version?: number) {
         setState((current) => ({ key, view: current?.view, loading: true }));
       }
       try {
-        const view = await api<InterpretationView>(path, { method, signal: controller.signal });
+        const view = await api<InterpretationView>(key, { method, signal: controller.signal });
         if (controller.signal.aborted) {
           return;
         }
-        if (view?.contentVersion !== version || typeof view.available !== 'boolean') {
+        if (!view || (version !== undefined && view.contentVersion !== version) || typeof view.available !== 'boolean') {
           throw new Error('解读状态读取失败，请重试');
         }
         setState({ key, view, loading: false });
@@ -77,7 +81,7 @@ export function useNewsReportInterpretation(id?: string, version?: number) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [id, version, key]);
+  }, [version, key]);
 
   const active = state?.key === key ? state : undefined;
   const pending = active?.view?.current?.status === 'QUEUED' || active?.view?.current?.status === 'RUNNING';

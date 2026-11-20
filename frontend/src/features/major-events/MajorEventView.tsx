@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../shared/api/client';
 import type { MajorEvent } from '../../shared/types';
+import { MajorEventReadingDialog } from './MajorEventReadingDialog';
 
 const originLabel: Record<MajorEvent['originType'], string> = {
   NEWS_ITEM: '实时资讯',
@@ -23,6 +24,7 @@ function formatArchiveDate(value?: string) {
 export function MajorEventView({ addToast }: { addToast: (message: string, type?: 'success' | 'error' | 'info') => void }) {
   const [items, setItems] = useState<MajorEvent[]>([]);
   const [originType, setOriginType] = useState<'' | MajorEvent['originType']>('');
+  const [selected, setSelected] = useState<MajorEvent>();
   const [archiveItems, setArchiveItems] = useState<MajorEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -142,7 +144,12 @@ export function MajorEventView({ addToast }: { addToast: (message: string, type?
                         <span>{item.categoryCode || '未分类'}</span>
                         {item.sourceName && <span>{item.sourceName}</span>}
                       </div>
-                      <h5>{item.title}</h5>
+                      <h5>{item.originType === 'NEWS_ITEM' || item.originType === 'RADAR_EVENT' ? (
+                        <button type="button" className="major-event-reading-title" aria-haspopup="dialog"
+                          aria-label={`查看新闻解读：${item.title}`} onClick={() => setSelected(item)}>
+                          {item.title}
+                        </button>
+                      ) : item.title}</h5>
                       {item.summary && <p>{item.summary}</p>}
                       {item.note && (
                         <blockquote>
@@ -172,6 +179,7 @@ export function MajorEventView({ addToast }: { addToast: (message: string, type?
           <p>{originType ? '切换到其他来源，或继续从资讯与雷达中沉淀关键事件。' : '在资讯或雷达中点按「记入大事记」，关键事件会按发生日期归档在这里。'}</p>
         </div>
       )}
+      {selected && <MajorEventReadingDialog key={selected.id} event={selected} onClose={() => setSelected(undefined)} />}
     </section>
   );
 }
