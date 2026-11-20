@@ -36,7 +36,11 @@ class NewsReportInterpretationServiceTest {
     private static final String ID = "CLS:1";
     private static final String RESULT = """
             {"lead":"公司签订框架协议","concepts":[{"term":"框架协议","meaning":"双方先约定合作方式。"}],
-             "sections":[{"question":"签约相当于拿到订单了吗？","answer":"实际采购量取决于后续订单。"}]}
+             "change":{"question":"签约相当于拿到订单了吗？","answer":"实际采购量取决于后续订单。"},
+             "mechanism":{"question":"为什么采购可以分批决定？","answer":"约定交易条件能减少重复谈判。"},
+             "significance":{"implication":"供应商有了进入采购流程的机会。","reason":"客户只有实际下单才会占用产能。"},
+             "transmission":{"question":"谁先承担备货成本？","answer":"若先备货，供应商需要先垫付材料款。"},
+             "scenario":{"question":"需求转弱时会怎样？","answer":"有最低采购量时客户承担更多风险，否则供应商更易落空。"}}
             """;
     @TempDir
     Path directory;
@@ -73,7 +77,7 @@ class NewsReportInterpretationServiceTest {
         capabilities = mock(NewsWorkbenchCapabilities.class);
         when(capabilities.isInterpretationEnabled()).thenReturn(true);
         llm = mock(NewsAiLunaClient.class);
-        when(llm.prepare(anyString(), anyString(), eq(1600), eq(NewsReadingGuidance.SCHEMA))).thenReturn(new Prepared());
+        when(llm.prepare(anyString(), anyString(), eq(NewsReadingGuidance.MAX_OUTPUT_TOKENS), eq(NewsReadingGuidance.SCHEMA))).thenReturn(new Prepared());
         when(llm.complete(any(Prepared.class))).thenReturn(reply(RESULT));
         NewsReportInterpretationAgent agent = new NewsReportInterpretationAgent();
         ReflectionTestUtils.setField(agent, "llm", llm);
@@ -99,7 +103,10 @@ class NewsReportInterpretationServiceTest {
         assertEquals(List.of("公司签订框架协议"), service.request(ID, 1).getCurrent().getResult().getFacts());
         var saved = service.get(ID, 1).getCurrent().getResult().getReading();
         assertEquals("框架协议", saved.concepts().getFirst().term());
-        assertEquals("实际采购量取决于后续订单。", saved.sections().getFirst().answer());
+        assertEquals(List.of("签约相当于拿到订单了吗？", "为什么采购可以分批决定？", "谁先承担备货成本？", "需求转弱时会怎样？"),
+                saved.sections().stream().map(section -> section.question()).toList());
+        assertEquals("供应商有了进入采购流程的机会。 客户只有实际下单才会占用产能。",
+                service.get(ID, 1).getCurrent().getResult().getWhyItMatters());
         assertTrue(jobs.isEmpty());
         verify(llm).complete(any(Prepared.class));
     }
@@ -107,7 +114,8 @@ class NewsReportInterpretationServiceTest {
     @Test
     void acceptsASingleSentenceWithoutInventingFollowUpSections() throws Exception {
         when(llm.complete(any(Prepared.class))).thenReturn(reply("""
-                {"lead":"公司已否认网传订单。","concepts":[],"sections":[]}
+                {"lead":"公司已否认网传订单。","concepts":[],"change":null,"mechanism":null,
+                 "significance":null,"transmission":null,"scenario":null}
                 """));
         service.request(ID, 1);
         jobs.remove(0).run();
@@ -119,12 +127,35 @@ class NewsReportInterpretationServiceTest {
     }
 
     @Test
+    void keepsTheNewReasonWhenAnImplicationCopiesTheSource() throws Exception {
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(RESULT.replace(
+                "供应商有了进入采购流程的机会。", "最初披露框架协议。")));
+        service.request(ID, 1);
+        jobs.remove(0).run();
+        assertEquals("客户只有实际下单才会占用产能。", service.get(ID, 1).getCurrent().getResult().getWhyItMatters());
+        verify(llm).complete(any(Prepared.class));
+    }
+
+    @Test
+    void omitsTheHighlightWhenBothClausesRepeatTheLeadOrGlossary() throws Exception {
+        when(llm.complete(any(Prepared.class))).thenReturn(reply(RESULT
+                .replace("供应商有了进入采购流程的机会。", "公司签订框架协议。")
+                .replace("客户只有实际下单才会占用产能。", "双方先约定合作方式！")));
+        service.request(ID, 1);
+        jobs.remove(0).run();
+        var result = service.get(ID, 1).getCurrent().getResult();
+        assertEquals("", result.getWhyItMatters());
+        assertEquals(4, result.getReading().sections().size());
+        verify(llm).complete(any(Prepared.class));
+    }
+
+    @Test
     void usesTheClickedVersionAndShowsItsResultAsPreviousAfterUpdate() throws Exception {
         reports.ingest(List.of(report("新版披露追加订单")));
         service.request(ID, 1);
         jobs.remove(0).run();
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
-        verify(llm).prepare(anyString(), prompt.capture(), eq(1600), eq(NewsReadingGuidance.SCHEMA));
+        verify(llm).prepare(anyString(), prompt.capture(), eq(NewsReadingGuidance.MAX_OUTPUT_TOKENS), eq(NewsReadingGuidance.SCHEMA));
         assertTrue(prompt.getValue().contains("最初披露框架协议"));
         assertFalse(prompt.getValue().contains("新版披露追加订单"));
         var latest = service.get(ID, 2);
@@ -149,7 +180,7 @@ class NewsReportInterpretationServiceTest {
     @Test
     void legacyResultRemainsReadableThroughFailureAndUpgradesOnlyOnRequest() throws Exception {
         var old = new NewsReportInterpretation.Result();
-        old.setFormatVersion(2);
+        old.setFormatVersion(3);
         old.setFacts(List.of("旧解读"));
         assertTrue(interpretations.tryQueue(ID, 1, "legacy", 1000L));
         interpretations.finish(ID, 1, "legacy", old, null);

@@ -367,7 +367,7 @@ function NewsInterpretationContent({ result }: { result: NewsInterpretationResul
   if (reading || result.formatVersion === 2) {
     const lead = reading?.lead ?? result.facts[0] ?? '';
     const paragraphs = reading
-      ? [...reading.concepts.map(conceptLine), ...reading.sections.map(sectionLine)]
+      ? [...reading.concepts.map(conceptLine), result.whyItMatters, ...reading.sections.map(sectionLine)].filter(Boolean)
       : result.whyItMatters.split('\n\n').filter(Boolean);
     return <article><p><strong>{interpretationText(lead)}</strong></p>
       {paragraphs.map((paragraph, index) => <p key={index}>{interpretationText(paragraph)}</p>)}

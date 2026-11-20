@@ -139,7 +139,7 @@ test('only generates a selected news version after the reader clicks and reuses 
   const path = '/api/news/window/interpretation?id=CLS%3A1&version=2';
   const post = vi.fn();
   const result = {
-    formatVersion: 3, facts: ['公司披露中标设备采购项目'], whyItMatters: '',
+    formatVersion: 4, facts: ['公司披露中标设备采购项目'], whyItMatters: '采购进度决定供应商何时需要先行垫资。',
     reading: { lead: '公司披露中标设备采购项目', concepts: [{ term: '中标', meaning: '采购方选定了供应商。' }],
       sections: [{ question: '现在就能确认收入吗？', answer: '通常还要履约，收到订单和确认收入的时间可以不同。' },
         { question: '框架协议有什么区别？', answer: '具体采购量可能由后续订单确定。' }] },
@@ -166,6 +166,7 @@ test('only generates a selected news version after the reader clicks and reuses 
   const article = screen.getByText(result.reading.lead).closest('article')!;
   expect(article.querySelector('details')).toBeNull();
   expect(article).toHaveTextContent('中标：采购方选定了供应商。');
+  expect(article).toHaveTextContent(result.whyItMatters);
   expect(article).toHaveTextContent(result.reading.sections[1].question);
   expect(article).toHaveTextContent(result.reading.sections[1].answer);
   expect(screen.queryByRole('heading', { name: '待确认事项' })).not.toBeInTheDocument();

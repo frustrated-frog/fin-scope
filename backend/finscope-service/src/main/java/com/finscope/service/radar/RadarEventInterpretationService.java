@@ -7,6 +7,7 @@ import com.finscope.common.exception.ResourceNotFoundException;
 import com.finscope.dao.radar.RadarEventInterpretationRepository;
 import com.finscope.dao.radar.RadarEvidenceRepository;
 import com.finscope.dao.radar.RadarRepository;
+import com.finscope.domain.news.NewsReading;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventDetailSnapshot;
 import com.finscope.domain.radar.RadarEventInterpretation;
@@ -180,7 +181,7 @@ public class RadarEventInterpretationService {
 
     String fingerprint(RadarEvent event, List<RadarSignal> signals, List<RadarEvidence> evidenceItems) {
         List<String> parts = new ArrayList<String>();
-        parts.add("interpretation=reader-v3");
+        parts.add("interpretation=reader-v" + NewsReading.FORMAT_VERSION);
         parts.add("title=" + text(event == null ? null : event.getCanonicalTitle()));
         parts.add("summary=" + text(event == null ? null : event.getSummary()));
         List<RadarSignal> sortedSignals = new ArrayList<RadarSignal>(safe(signals));

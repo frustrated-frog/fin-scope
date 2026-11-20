@@ -10,6 +10,7 @@ import com.finscope.domain.radar.RadarSignal;
 import com.finscope.rpc.llm.LunaResponsesClient.Prepared;
 import com.finscope.rpc.llm.LunaResponsesClient.Reply;
 import com.finscope.rpc.llm.NewsAiLunaClient;
+import com.finscope.service.news.NewsReadingGuidance;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.test.util.ReflectionTestUtils;
@@ -38,6 +39,7 @@ class RadarEventInterpretationAgentTest {
 
         assertEquals("公司发布新产品，两家来源确认发布事实。", result.getFactSummary());
         assertEquals("量产", result.getReading().concepts().getFirst().term());
+        assertEquals("发布样品后，单位成本仍取决于良率。 不合格品也会消耗材料。", result.getWhyItMatters());
         assertEquals(Arrays.asList("signal:1", "evidence:31"), result.getEvidenceRefs());
     }
 
@@ -56,11 +58,13 @@ class RadarEventInterpretationAgentTest {
         var output = new ObjectMapper().readTree(validJson());
         var reading = (ObjectNode) output.path("reading");
         reading.putArray("concepts");
-        reading.putArray("sections");
+        reading.putNull("transmission");
+        reading.putNull("significance");
         when(llm.complete(any(Prepared.class))).thenReturn(reply(output.toString()));
         var result = agent(llm).interpret(event(), Collections.singletonList(signal()), Collections.singletonList(evidence()));
         assertEquals(Collections.emptyList(), result.getReading().sections());
         assertEquals(Collections.emptyList(), result.getReading().concepts());
+        assertEquals("", result.getWhyItMatters());
     }
 
     @Test
@@ -159,7 +163,7 @@ class RadarEventInterpretationAgentTest {
         NewsAiLunaClient llm = mock(NewsAiLunaClient.class);
         when(llm.isConfigured()).thenReturn(true);
         when(llm.model()).thenReturn("gpt-6-luna");
-        when(llm.prepare(anyString(), anyString(), eq(2048), anyMap())).thenReturn(new Prepared());
+        when(llm.prepare(anyString(), anyString(), eq(NewsReadingGuidance.MAX_OUTPUT_TOKENS), anyMap())).thenReturn(new Prepared());
         return llm;
     }
 
@@ -196,7 +200,7 @@ class RadarEventInterpretationAgentTest {
         incomplete.setCompleted(false);
         incomplete.setStatus("incomplete");
         incomplete.setIncompleteReason("max_output_tokens");
-        incomplete.setOutputTokens(2048L);
+        incomplete.setOutputTokens((long) NewsReadingGuidance.MAX_OUTPUT_TOKENS);
         when(llm.complete(any(Prepared.class))).thenReturn(incomplete);
         var error = assertThrows(RadarEventInterpretationAgent.InterpretationException.class,
                 () -> agent.interpret(event(), Collections.singletonList(signal()), Collections.emptyList()));
@@ -206,7 +210,7 @@ class RadarEventInterpretationAgentTest {
                 eq("FALLBACK"), anyString(), eq(""), anyString(), eq("OUTPUT_LIMIT"), org.mockito.ArgumentMatchers.anyLong(),
                 metadata.capture());
         var details = new ObjectMapper().readTree(metadata.getValue());
-        assertEquals(2048, details.path("outputTokens").asInt());
+        assertEquals(NewsReadingGuidance.MAX_OUTPUT_TOKENS, details.path("outputTokens").asInt());
         assertEquals("max_output_tokens", details.path("finishReason").asText());
         assertEquals("gpt-6-luna", details.path("model").asText());
     }
@@ -215,7 +219,9 @@ class RadarEventInterpretationAgentTest {
         return """
                 {"reading":{"lead":"公司发布新产品，两家来源确认发布事实。",
                  "concepts":[{"term":"量产","meaning":"将样品连续生产出来。"}],
-                 "sections":[{"question":"量产安排对上游意味着什么？","answer":"可能影响供应链订单预期。"}]},
+                 "change":null,"mechanism":null,"scenario":null,
+                 "transmission":{"question":"量产安排对上游意味着什么？","answer":"可能影响供应链订单预期。"},
+                 "significance":{"implication":"发布样品后，单位成本仍取决于良率。","reason":"不合格品也会消耗材料。"}},
                  "evidenceRefs":["signal:1","evidence:31"]}
                 """;
     }

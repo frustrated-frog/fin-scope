@@ -2,10 +2,10 @@ package com.finscope.service.radar;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.finscope.domain.news.NewsReading;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.finscope.domain.news.NewsReadingAnalysis;
 import com.finscope.domain.radar.RadarEvent;
 import com.finscope.domain.radar.RadarEventInterpretation;
 import com.finscope.domain.radar.RadarEvidence;
@@ -28,7 +28,6 @@ import java.util.regex.Pattern;
 
 @Service
 public class RadarEventInterpretationAgent {
-    static final int MAX_OUTPUT_TOKENS = 2048;
     private static final int MAX_ITEMS = 8;
     private static final Map<String, Object> RESULT_SCHEMA = Map.of(
             "type", "object", "additionalProperties", false, "required", List.of("reading", "evidenceRefs"),
@@ -42,7 +41,7 @@ public class RadarEventInterpretationAgent {
             "(?:建议(?:投资者|你)?|你(?:应该|可以)|不妨|适合投资者)(?:立即|择机|逢低|适当)?(?:买入|卖出|加仓|减仓)"
                     + "|(?:你的|建议的)目标价");
 
-    private record CitedReading(NewsReading reading, List<String> evidenceRefs) {
+    private record CitedReading(NewsReadingAnalysis reading, List<String> evidenceRefs) {
     }
 
     @Resource
@@ -69,7 +68,7 @@ public class RadarEventInterpretationAgent {
         }
         try {
             var request = llm.prepare(PROMPT, json.writeValueAsString(payload(event, signals, evidence)),
-                    MAX_OUTPUT_TOKENS, RESULT_SCHEMA);
+                    NewsReadingGuidance.MAX_OUTPUT_TOKENS, RESULT_SCHEMA);
             var reply = llm.complete(request);
             metadata.put("finishReason", reply.getIncompleteReason() == null ? reply.getStatus() : reply.getIncompleteReason());
             metadata.put("inputTokens", reply.getInputTokens());
@@ -84,7 +83,7 @@ public class RadarEventInterpretationAgent {
             if (blank(reply.getText())) {
                 throw new InterpretationException("EMPTY_OUTPUT", "模型返回的解读正文为空");
             }
-            RadarEventInterpretation.Result result = parseResult(reply.getText(), allowedRefs(signals, evidence));
+            RadarEventInterpretation.Result result = parseResult(reply.getText(), allowedRefs(signals, evidence), event);
             trace(event, "SUCCESS", null, null, started, result, metadata);
             return result;
         } catch (InterpretationException error) {
@@ -147,19 +146,22 @@ public class RadarEventInterpretationAgent {
         return refs;
     }
 
-    private RadarEventInterpretation.Result parseResult(String raw, Set<String> allowedRefs) throws JsonProcessingException {
+    private RadarEventInterpretation.Result parseResult(String raw, Set<String> allowedRefs, RadarEvent event)
+            throws JsonProcessingException {
         CitedReading output = json.readValue(raw, CitedReading.class);
         if (output == null || output.evidenceRefs() == null || output.evidenceRefs().size() > MAX_ITEMS
                 || !allowedRefs.containsAll(output.evidenceRefs())) {
             throw new InterpretationException("INVALID_OUTPUT", "解读引用不属于输入证据");
         }
-        NewsReadingGuidance.validate(output.reading());
+        var reading = NewsReadingGuidance.reading(output.reading());
         if (TRADING_ADVICE.matcher(raw).find()) {
             throw new InterpretationException("INVALID_OUTPUT", "解读包含投资建议");
         }
         var result = new RadarEventInterpretation.Result();
-        result.setReading(output.reading());
-        result.setFactSummary(output.reading().lead());
+        result.setReading(reading);
+        result.setFactSummary(reading.lead());
+        result.setWhyItMatters(NewsReadingGuidance.whyItMatters(output.reading(),
+                event == null ? null : event.getCanonicalTitle(), event == null ? null : event.getSummary()));
         result.setEvidenceRefs(output.evidenceRefs());
         return result;
     }

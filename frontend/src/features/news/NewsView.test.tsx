@@ -255,7 +255,7 @@ test('shows saved interpretation without waiting for read state and hides its in
   expect(vi.mocked(api).mock.calls.filter(([path]) => path === overviewPath)).toHaveLength(1);
 });
 
-test('renders a saved reading in the original radar layout without generating again', async () => {
+test.each([detail.interpretation.result.whyItMatters, null])('shows only saved significance (%s)', async (whyItMatters) => {
   const original = vi.mocked(api).getMockImplementation()!;
   const reading = { lead: '厂商发布了一款新电池。', sections: [
     { question: '量产为什么重要？', answer: '量产决定新品能否持续交付。' },
@@ -266,13 +266,22 @@ test('renders a saved reading in the original radar layout without generating ag
   ] };
   vi.mocked(api).mockImplementation((path, options) => path === overviewPath
     ? Promise.resolve({ ...overview, interpretation: { ...detail.interpretation,
-      result: { ...detail.interpretation.result, reading } } }) : original(path, options));
+      result: { ...detail.interpretation.result, reading, whyItMatters } } }) : original(path, options));
   render(<NewsView setMessage={vi.fn()} addToast={vi.fn()} initialRadarEventId={10} />);
   expect(await screen.findByText(reading.lead)).toBeVisible();
   const grid = screen.getByText(reading.lead).closest('.radar-interpretation-grid')!;
   expect(grid.querySelector('.radar-dossier-findings')).toHaveTextContent('良率：生产出的产品中合格品所占比例。');
-  expect(grid.querySelector('.radar-dossier-impact')).toHaveTextContent(reading.sections[0].answer);
-  expect(grid.querySelector('.radar-dossier-chain ol li')).toHaveTextContent(reading.sections[1].answer);
+  const impact = grid.querySelector('.radar-dossier-impact');
+  if (whyItMatters) {
+    expect(impact).toHaveTextContent(whyItMatters);
+    expect(impact).not.toHaveTextContent(reading.sections[0].answer);
+  } else {
+    expect(impact).toBeNull();
+  }
+  const answers = grid.querySelectorAll('.radar-dossier-chain ol li');
+  expect(answers).toHaveLength(2);
+  expect(answers[0]).toHaveTextContent(reading.sections[0].answer);
+  expect(answers[1]).toHaveTextContent(reading.sections[1].answer);
   expect(grid.querySelector('details')).toBeNull();
   expect(grid).not.toHaveTextContent('[signal:1]');
   expect(document.querySelector('.radar-detail-overview')).toHaveTextContent(event.summary);

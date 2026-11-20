@@ -2,7 +2,7 @@ package com.finscope.service.news;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finscope.domain.news.NewsReading;
+import com.finscope.domain.news.NewsReadingAnalysis;
 import com.finscope.domain.news.NewsReport;
 import com.finscope.domain.news.NewsReportInterpretation;
 import com.finscope.domain.news.NewsReportVersion;
@@ -16,7 +16,6 @@ import java.util.Map;
 @Service
 public class NewsReportInterpretationAgent {
     private static final int MAX_BODY_CHARS = 18_000;
-    private static final int MAX_OUTPUT_TOKENS = 1_600;
     @Resource
     private NewsAiLunaClient llm;
     @Resource
@@ -24,24 +23,26 @@ public class NewsReportInterpretationAgent {
 
     public NewsReportInterpretation.Result interpret(NewsReport report, NewsReportVersion version) throws Exception {
         String body = text(version.getContent());
+        String excerpt = body.substring(0, Math.min(body.length(), MAX_BODY_CHARS));
         String input = json.writeValueAsString(Map.of(
-                "title", text(version.getTitle()), "body", body.substring(0, Math.min(body.length(), MAX_BODY_CHARS)),
+                "title", text(version.getTitle()), "body", excerpt,
                 "bodyTruncated", body.length() > MAX_BODY_CHARS, "source", text(report.getSourceName()),
                 "publishedAt", text(report.getPublishedAt()), "contentVersion", version.getVersion()));
-        var request = llm.prepare(NewsReadingGuidance.PROMPT, input, MAX_OUTPUT_TOKENS, NewsReadingGuidance.SCHEMA);
+        var request = llm.prepare(NewsReadingGuidance.PROMPT, input,
+                NewsReadingGuidance.MAX_OUTPUT_TOKENS, NewsReadingGuidance.SCHEMA);
         var reply = llm.complete(request);
         if (!reply.isCompleted() || reply.isRefused()) {
             throw new IllegalStateException("模型未返回完整的新闻解读");
         }
-        NewsReading reading = json.readerFor(NewsReading.class)
+        NewsReadingAnalysis analysis = json.readerFor(NewsReadingAnalysis.class)
                 .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
                 .readValue(reply.getText());
-        NewsReadingGuidance.validate(reading);
+        var reading = NewsReadingGuidance.reading(analysis);
         var result = new NewsReportInterpretation.Result();
         result.setFormatVersion(NewsReportInterpretation.CURRENT_FORMAT);
         result.setReading(reading);
         result.setFacts(List.of(reading.lead()));
-        result.setWhyItMatters("");
+        result.setWhyItMatters(NewsReadingGuidance.whyItMatters(analysis, version.getTitle(), excerpt));
         result.setUnknowns(List.of());
         result.setNextChecks(List.of());
         return result;
