@@ -252,16 +252,13 @@
 
 .radar-dossier-findings {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.radar-dossier-findings > article:first-child {
-  padding-right: 32px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
 }
 
 .radar-dossier-findings > article + article {
-  padding-left: 32px;
-  border-left: 1px solid var(--dossier-line);
+  padding-top: 20px;
+  border-top: 1px solid var(--dossier-line);
 }
 
 .radar-interpretation-heading {
@@ -802,21 +799,6 @@
   .radar-detail-overview {
     margin: 24px 0 32px;
     padding-left: 14px;
-  }
-
-  .radar-dossier-findings {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
-  .radar-dossier-findings > article:first-child {
-    padding-right: 0;
-  }
-
-  .radar-dossier-findings > article + article {
-    padding: 20px 0 0;
-    border-top: 1px solid var(--dossier-line);
-    border-left: 0;
   }
 
   .radar-dossier-impact {
