@@ -357,6 +357,14 @@
   counter-increment: dossier-step;
 }
 
+.radar-dossier-chain li > h5 {
+  margin: 0 0 6px;
+  color: var(--dossier-ink);
+  font-size: inherit;
+  line-height: 1.6;
+  font-weight: 650;
+}
+
 .radar-dossier-chain li::before {
   content: counter(dossier-step, decimal-leading-zero);
   position: absolute;

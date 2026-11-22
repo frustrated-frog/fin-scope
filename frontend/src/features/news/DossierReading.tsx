@@ -1,4 +1,5 @@
-import { conceptLine, interpretationText, sectionLine, type NewsReading } from './newsReading';
+import { Fragment, type ReactNode } from 'react';
+import { conceptLine, interpretationText, type NewsReading } from './newsReading';
 
 export function DossierReading({ reading, facts, whyItMatters, newDevelopment, impactChain = [], detailsLabel, singleSource }: {
   reading?: NewsReading | null;
@@ -18,7 +19,14 @@ export function DossierReading({ reading, facts, whyItMatters, newDevelopment, i
     </div>
     {whyItMatters && <InterpretationBlock label="为什么重要" value={whyItMatters} accent/>}
     <InterpretationList label={detailsLabel ?? (reading ? '延伸解读' : '影响链条')}
-      values={reading ? reading.sections.map(sectionLine) : impactChain} ordered/>
+      values={reading ? reading.sections.map(({ question, answer }) => {
+        const title = interpretationText(question);
+        const body = interpretationText(answer);
+        return (title || body) && <Fragment>
+          {title && <h5>{title}</h5>}
+          {body && <p>{body}</p>}
+        </Fragment>;
+      }) : impactChain} ordered/>
   </div>;
 }
 
@@ -34,9 +42,9 @@ function InterpretationBlock({ label, value, accent, fact, singleSource }: {
     <p>{interpretationText(value)}</p>
   </article>;
 }
-function InterpretationList({ label, values, ordered = false }: { label: string; values: string[]; ordered?: boolean }) {
+function InterpretationList({ label, values, ordered = false }: { label: string; values: ReactNode[]; ordered?: boolean }) {
   const List = ordered ? 'ol' : 'ul';
-  const content = values.map(interpretationText).filter(Boolean);
+  const content = values.map((value) => typeof value === 'string' ? interpretationText(value) : value).filter(Boolean);
   if (!content.length) {
     return null;
   }

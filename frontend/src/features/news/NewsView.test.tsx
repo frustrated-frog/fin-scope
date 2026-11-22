@@ -282,8 +282,11 @@ test.each([detail.interpretation.result.whyItMatters, null])('shows only saved s
   }
   const answers = grid.querySelectorAll('.radar-dossier-chain ol li');
   expect(answers).toHaveLength(2);
-  expect(answers[0]).toHaveTextContent(reading.sections[0].answer);
-  expect(answers[1]).toHaveTextContent(reading.sections[1].answer);
+  reading.sections.forEach(({ question, answer }, index) => {
+    const title = within(answers[index] as HTMLElement).getByRole('heading', { level: 5, name: question });
+    expect(title.nextElementSibling?.tagName).toBe('P');
+    expect(title.nextElementSibling).toHaveTextContent(answer);
+  });
   expect(grid.querySelector('details')).toBeNull();
   expect(grid).not.toHaveTextContent('[signal:1]');
   expect(document.querySelector('.radar-detail-overview')).toHaveTextContent(event.summary);

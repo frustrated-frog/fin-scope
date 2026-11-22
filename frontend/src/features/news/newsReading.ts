@@ -11,7 +11,3 @@ export function interpretationText(value: string) {
 export function conceptLine({ term, meaning }: NewsReading['concepts'][number]) {
   return `${term}：${meaning}`;
 }
-
-export function sectionLine({ question, answer }: NewsReading['sections'][number]) {
-  return `${question} ${answer}`;
-}
