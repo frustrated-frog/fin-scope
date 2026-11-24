@@ -159,9 +159,8 @@ export function StrategyCatalogPanel({ datasets, addToast, onPaper, onFactor, fa
   return <section className="strategy-academy">
     <header className="strategy-academy-hero">
       <div className="strategy-academy-title">
-        <span>FINSCOPE / STRATEGY ACADEMY</span>
         <h3>自动策略学院</h3>
-        <p>从公开研究出发，用真实历史数据重新验证。先看懂策略为什么可能有效，再决定是否值得长期观察。</p>
+        <p>选择一份历史数据集，复现公开策略，查看收益来源与失效条件。</p>
       </div>
       <div className="strategy-academy-build">
         <label>

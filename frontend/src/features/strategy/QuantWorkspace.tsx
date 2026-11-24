@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 import { PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
+import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
@@ -204,7 +205,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
       open: () => { setSelectedExperimentId(v.id); setPane('dailyResult'); } }))
   ].sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
 
-  return <section className="quant-workspace">
+  return <section className="quant-workspace" data-research={inLibrary || inLab || pane === 'paper' ? primary : undefined}>
     {pane === 'forecast' && <header className="quant-hero">
       <div className="quant-hero-copy"><p className="quant-eyebrow">FinScope Quant · Research protocol</p><h3>把想法压进一条<br/><em>可复现的实验链</em></h3><p>数据快照、因子假设、T+1 执行与结果解读各自留痕。Agent 可以起草，但不会替你确认或偷偷运行。</p></div>
       <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
@@ -218,18 +219,21 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         </button>)}
     </nav>
 
-    {inLibrary && <nav className="quant-catalog-filters" aria-label="学习内容">
+    {(inLibrary || pane === 'experiments' || pane === 'paper') && <ResearchHeader section={inLibrary ? 'catalog' : pane === 'paper' ? 'paper' : 'experiments'}
+      count={paperCatalog.loading || paperCatalog.error ? undefined : inLibrary ? paperCatalog.rows.length : pane === 'paper' ? running : archive.length}>
+      {pane === 'experiments' && <button className="quant-action research-create" onClick={() => openPaper({hypothesis: ''})}><span aria-hidden="true">＋</span>新建实验</button>}
+      {inLibrary && <nav className="quant-catalog-filters" aria-label="学习内容">
       <button className={pane === 'catalog' ? 'active' : ''} aria-pressed={pane === 'catalog'} onClick={() => setPane('catalog')}>策略</button>
       <button className={pane === 'factors' ? 'active' : ''} aria-pressed={pane === 'factors'} onClick={() => setPane('factors')}>因子</button>
     </nav>}
+    </ResearchHeader>}
 
     {pane === 'experiments' && <section className="quant-panel quant-archive">
-      <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4><p>查看盘中规则与日频策略的历史回测。</p></div>
-        <button className="quant-action" onClick={() => openPaper({hypothesis: ''})}>新建实验</button></header>
+      <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4></div></header>
       {paperCatalog.error && <p className="quant-error" role="alert">{paperCatalog.error} <button onClick={paperCatalog.refresh}>重试</button></p>}
       {archive.length ? <div className="quant-table-wrap"><table><thead><tr><th>策略</th><th>实验类型</th><th>状态</th><th>创建时间</th></tr></thead>
         <tbody>{archive.map(record => <tr key={record.key}><td><button className="quant-record-link" onClick={record.open}>{record.name}</button></td>
-          <td>{record.type}</td><td>{record.status}</td><td>{record.date?.slice(0,16).replace('T',' ') ?? '—'}</td></tr>)}</tbody></table></div>
+          <td>{record.type}</td><td><span className="research-record-status" data-running={record.status === '模拟中'}>{record.status}</span></td><td>{record.date?.slice(0,16).replace('T',' ') ?? '—'}</td></tr>)}</tbody></table></div>
         : <div className="quant-empty"><strong>{paperCatalog.loading ? '正在读取实验' : '暂无实验记录'}</strong><p>新建实验后，可在这里查看规则、数据和回测结果。</p></div>}
     </section>}
 
@@ -276,15 +280,15 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </div>}
 
     {pane === 'factors' && <div className="quant-factor-page">
-      <header><span>FACTOR MANUAL / {researchFactors.length}</span><h4>先看懂，再验证</h4><p>每个因子都有明确公式、可获得时间和误读边界；诊断评价同日股票池排序，不预测单只股票。</p></header>
+      <header><h4>因子手册</h4><p>查看因子公式与数据可用时间，检验它能否把同一天的股票排出高低。</p></header>
       {(entryDraft || entrySourceLabel) && <section className="quant-research-entry" aria-label="资金行为研究上下文">
         <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
         <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
       </section>}
       <PaperLibrary catalog={paperCatalog} factors onOpen={showPaperVersion} />
-      <button type="button" className="quant-action" onClick={()=>openPaper({hypothesis:'提出一个可用五分钟价量验证的新因子，解释它可能有效的市场条件。'})}>AI 寻找盘中因子</button>
+      <div className="research-factor-actions"><button type="button" className="quant-action" onClick={()=>openPaper({hypothesis:'提出一个可用五分钟价量验证的新因子，解释它可能有效的市场条件。'})}>AI 寻找盘中因子</button>
       {selectedFactorCode && <button className="quant-action" type="button" onClick={() => openPaper({factorCode:selectedFactorCode,
-        hypothesis:researchFactors.find(item=>item.identity.code===selectedFactorCode)?.hypothesis ?? selectedFactorCode})}>用此因子创建盘中实验</button>}
+        hypothesis:researchFactors.find(item=>item.identity.code===selectedFactorCode)?.hypothesis ?? selectedFactorCode})}>用此因子创建盘中实验</button>}</div>
       {linkedStrategies.length > 0 && <div className="quant-readout"><header><h4>使用此因子的策略</h4></header>
         <p>{linkedStrategies.map(v => v.name + ' v' + v.version).join(' · ')}</p></div>}
       <FactorGuide

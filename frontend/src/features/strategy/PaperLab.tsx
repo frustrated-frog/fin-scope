@@ -121,7 +121,11 @@ function Trace({
   selected?: string;
 }) {
   if (!points.length) {
-    return <div className="quant-empty compact">等待首个完整的盘中行情截面</div>;
+    return <div className="paper-trace-pending">
+      <i aria-hidden="true"/>
+      <div><strong>{onDay ? '等待首个盘中行情截面' : '暂无回测净值数据'}</strong>
+        {onDay && <p>收到行情后，这里会同时绘制账户与基准的净值。</p>}</div>
+    </div>;
   }
   const values = [
     capital,
@@ -316,7 +320,9 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
   return (
     <details className="paper-library">
       <summary>
-        {factors ? 'AI 盘中因子库' : 'AI 盘中策略库'} · {rows.length} 个版本
+        <span className="research-library-title">{factors ? 'AI 盘中因子库' : 'AI 盘中策略库'}
+          <small>{factors ? '查看每项因子的计算窗口与权重' : '查看已回测的盘中规则与研究假设'}</small></span>
+        <span className="research-library-count">{catalog.loading || error ? '—' : rows.length} 个版本</span>
       </summary>
       {error && <p role="alert">{error}</p>}
       {!catalog.loading && !error && !rows.length && (
@@ -507,10 +513,10 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               </select>
             </label>
           </div>
-          <p>
+          <p className="research-method-note">
             {parent
               ? '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
-              : '冻结创建时名单中的前 24 只沪深 A 股，使用最近可取得的五分钟行情回测。'}
+              : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
           </p>
           <button className="quant-action" disabled={busy}>
             {busy ? '正在生成规则并回测…' : 'AI 编写规则并回测'}
@@ -556,13 +562,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     </button>
                   )}
                 </header>
-                {accountsOnly ? <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details> : <p>{spec.rule.hypothesis}</p>}
+                {!accountsOnly && <p>{spec.rule.hypothesis}</p>}
                 {accountsOnly && book && <div className="quant-metrics paper-metrics">
                   <div><span>账户总资产（元）</span><strong>{currency(equity)}</strong></div>
                   <div><span>累计收益</span><strong>{pct(equity / spec.capital - 1)}</strong></div>
                   <div><span>当日盈亏（元）</span><strong>{latest && prior !== undefined ? currency(latest.equity-prior) : '—'}</strong></div>
                   <div><span>相对等权基准</span><strong>{latest ? pct((latest.equity-latest.benchmark)/spec.capital) : '—'}</strong></div>
                 </div>}
+                {accountsOnly && <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details>}
                 {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟 · {spec.codes.length} 只股票</p>}
                 {accountsOnly && active.started && (
                   <>
@@ -653,11 +660,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {book.fills} 笔成交 · 累计费用 ¥{currency(book.fees)}
                     </small>
                   </header>
-                  <p>
-                    现金 ¥{currency(book.cash)} · 已实现盈亏 ¥
-                    {currency(book.realized)} · 未实现盈亏 ¥
-                    {currency(book.equity - spec.capital - book.realized)}
-                  </p>
+                  <dl className="paper-cash-ledger">
+                    <div><dt>可用现金</dt><dd>¥{currency(book.cash)}</dd></div>
+                    <div><dt>已实现盈亏</dt><dd>¥{currency(book.realized)}</dd></div>
+                    <div><dt>未实现盈亏</dt><dd>¥{currency(book.equity - spec.capital - book.realized)}</dd></div>
+                  </dl>
                   {Object.entries(book.positions).map(([code, pos]) => (
                     <div className="paper-position" key={code}>
                       <b>{code}</b>
@@ -681,7 +688,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   </header>
                   <p>
                     {detail.days.length} 个观察日 · {book?.fills ?? 0}{' '}
-                    笔模拟成交
+                    笔模拟成交{!detail.daily.length && '。记录首个交易日的行情后，即可生成复盘。'}
                   </p>
                   {detail.review && (
                     <>
