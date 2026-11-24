@@ -50,6 +50,50 @@ public class PaperResearchService {
         return paper.deploy(id);
     }
 
+    public JsonNode review(long id) {
+        JsonNode detail = paper.detail(id, null);
+        JsonNode book = detail.path("book");
+        String at = book.path("last").asText("");
+        if (at.isEmpty() || at.equals("null")) {
+            throw invalid("至少需要一个前向行情时点才能复盘");
+        }
+        if (at.equals(detail.path("review").path("at").asText())) {
+            return detail.get("review");
+        }
+        if (!llm.isConfigured()) {
+            throw invalid("请先配置本地 LLM");
+        }
+        ObjectNode evidence = json.createObjectNode();
+        evidence.set("spec", detail.path("spec"));
+        evidence.set("book", book);
+        evidence.put("observedDays", detail.path("days").size());
+        evidence.set("recentCloses", json.valueToTree(
+                java.util.stream.StreamSupport.stream(detail.path("daily").spliterator(), false)
+                        .skip(Math.max(0, detail.path("daily").size() - 20)).toList()));
+        JsonNode history = detail.path("history");
+        JsonNode curve = history.path("curve");
+        if (!curve.isEmpty()) {
+            evidence.set("historicalLast", curve.get(curve.size() - 1));
+        }
+        evidence.set("historicalFills", history.get("fills"));
+        String report;
+        try {
+            report = llm.complete("作为量化学习助教，用中文基于给定数据复盘。分别描述历史回测与实时模拟，"
+                    + "说明观察天数、成交、成本、相对基准或同期对照的结果和下一条可检验假设。"
+                    + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。最多800字，纯文本。", evidence.toString());
+        } catch (Exception error) {
+            throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "模拟账户复盘生成失败", error);
+        }
+        if (report == null || report.isBlank() || report.length() > 6000) {
+            throw invalid("模型复盘内容无效，请重试");
+        }
+        ObjectNode review = json.createObjectNode();
+        review.put("at", at);
+        review.put("model", llm.modelName());
+        review.put("text", report);
+        return paper.saveReview(id, review);
+    }
+
     public JsonNode generate(PaperResearchInput input) {
         if (input.hypothesis() == null || input.hypothesis().isBlank() || input.hypothesis().length() > 1200) {
             throw invalid("请填写 1 至 1200 字研究假设");

@@ -18,6 +18,12 @@ from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, 
 log = logging.getLogger(__name__)
 
 
+class Review(BaseModel):
+    at: str = Field(max_length=50)
+    text: str = Field(min_length=1, max_length=6000)
+    model: str = Field(max_length=200)
+
+
 class Research(BaseModel):
     rule: Rule
     pool: Literal["DISCOVERY", "WATCHLIST"]
@@ -44,6 +50,7 @@ class PaperLab:
 
     @contextmanager
     def db(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
             db.row_factory = sqlite3.Row
             db.executescript("""
@@ -53,6 +60,8 @@ class PaperLab:
               CREATE TABLE IF NOT EXISTS paper_account (
                 id INTEGER PRIMARY KEY REFERENCES paper_version(id), started TEXT NOT NULL,
                 book TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS paper_review (
+                id INTEGER NOT NULL, at TEXT NOT NULL, review TEXT NOT NULL, PRIMARY KEY(id,at));
               CREATE TABLE IF NOT EXISTS paper_point (
                 id INTEGER NOT NULL, at TEXT NOT NULL, point TEXT NOT NULL, PRIMARY KEY(id,at));
             """)
@@ -86,6 +95,7 @@ class PaperLab:
             raise HTTPException(422, "本金至少一分钱")
         payload = spec.model_dump(mode="json")
         fingerprint = hashlib.sha256(dumps([ENGINE, payload]).encode()).hexdigest()
+        parent = None
         with self.db() as db:
             row = db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()
             if row:
@@ -94,13 +104,21 @@ class PaperLab:
                 parent = self.spec(db, spec.parent)
                 if (spec.codes, spec.pool, spec.capital) != (parent.codes, parent.pool, parent.capital):
                     raise HTTPException(422, "因子对照须沿用原版本股票池和本金")
+                if (spec.rule.entry, spec.rule.exit, spec.rule.slots) != (parent.rule.entry, parent.rule.exit, parent.rule.slots):
+                    raise HTTPException(422, "因子实验须沿用原版本阈值和仓位")
         now = stamp()
         panel = await self.panel(spec.codes)
         book = new_book(spec.capital)
+        control = new_book(spec.capital) if parent else None
         curve = []
         for end, history in self.frames(panel, now - timedelta(seconds=5)):
-            point = advance(book, spec.rule, history, end, end, spec.capital)
-            curve.append(dict(at=point["at"], equity=point["equity"], benchmark=point["benchmark"]))
+            available = end + timedelta(seconds=3)
+            point = advance(book, spec.rule, history, end, available, spec.capital)
+            sample = {k:point[k] for k in ("at","equity","benchmark")}
+            if parent:
+                advance(control, parent.rule, history, end, available, spec.capital)
+                sample["control"] = control["equity"]
+            curve.append(sample)
         if len(curve) <= max(t.window for t in spec.rule.terms):
             raise HTTPException(422, "股票池共同的历史五分钟行情不足，无法验证此版本")
         summary = dict(curve=curve, fills=book["fills"], fees=book["fees"], engine=ENGINE)
@@ -119,8 +137,13 @@ class PaperLab:
     def deploy(self, version):
         with self.db() as db:
             spec = self.spec(db, version)
+            started = stamp().isoformat()
+            book = new_book(spec.capital)
+            if spec.parent:
+                book["control"] = new_book(spec.capital)
+                book["controlRule"] = self.spec(db, spec.parent).rule.model_dump()
             db.execute("INSERT OR IGNORE INTO paper_account(id,started,book,status) VALUES(?,?,?,?)",
-                       (version, stamp().isoformat(), dumps(new_book(spec.capital)), "等待盘中行情"))
+                       (version, started, dumps(book), "等待盘中行情"))
         return {"id":version}
 
     def catalog(self):
@@ -132,6 +155,7 @@ class PaperLab:
 
     def detail(self, version, day):
         with self.db() as db:
+            db.execute("BEGIN")
             spec = self.spec(db, version)
             history = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (version,)).fetchone()[0])
             days = [r[0] for r in db.execute("SELECT DISTINCT substr(at,1,10) FROM paper_point WHERE id=? ORDER BY 1 DESC LIMIT 365", (version,))]
@@ -139,7 +163,24 @@ class PaperLab:
             points = [json.loads(r[0]) for r in db.execute(
                 "SELECT point FROM paper_point WHERE id=? AND at>=? AND at<? ORDER BY at LIMIT 256",
                 (version, selected, selected+"Z"))]
-        return dict(history=history, days=days, day=selected, points=points, spec=spec.model_dump())
+            closes = [json.loads(r[0]) for r in db.execute("""
+                SELECT p.point FROM paper_point p JOIN
+                (SELECT max(at) AS at FROM paper_point WHERE id=? GROUP BY substr(at,1,10)
+                 ORDER BY at DESC LIMIT 365) d ON p.at=d.at WHERE p.id=? ORDER BY p.at""", (version,version))]
+            daily = [{k:p[k] for k in ("at","equity","benchmark","control") if k in p} for p in closes]
+            row = db.execute("SELECT review FROM paper_review WHERE id=? ORDER BY at DESC LIMIT 1",(version,)).fetchone()
+            account = db.execute("SELECT book FROM paper_account WHERE id=?", (version,)).fetchone()
+        return dict(history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
+                    book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
+
+    def save_review(self, version, review):
+        with self.db() as db:
+            existing = db.execute("SELECT 1 FROM paper_point WHERE id=? AND at=?", (version, review.at)).fetchone()
+            if not existing:
+                raise HTTPException(422, "没有对应行情时点的前向记录")
+            db.execute("INSERT OR IGNORE INTO paper_review(id,at,review) VALUES(?,?,?)",
+                       (version, review.at, review.model_dump_json()))
+            return json.loads(db.execute("SELECT review FROM paper_review WHERE id=? AND at=?", (version,review.at)).fetchone()[0])
 
     async def tick(self):
         now = stamp()
@@ -165,6 +206,10 @@ class PaperLab:
             if end.isoformat() <= (book["last"] or row["started"]):
                 continue
             point = advance(book, spec.rule, history, end, seen, spec.capital)
+            if "controlRule" in book:
+                control = advance(book["control"], Rule.model_validate(book["controlRule"]), history, end, seen, spec.capital)
+                point["control"] = control["equity"]
+                point["controlEvents"] = control["events"]
             with self.db() as db:
                 changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
                                      (dumps(book), "已同步盘中行情", row["id"], row["revision"]))
@@ -194,8 +239,11 @@ class PaperLab:
         def read(version: int, day: str = ""):
             return self.detail(version, day)
 
+        @router.post("/versions/{version}/review")
+        def review(version: int, value: Review):
+            return self.save_review(version, value)
+
         @router.post("/versions/{version}/deploy")
         def deploy(version: int):
             return self.deploy(version)
         return router
-

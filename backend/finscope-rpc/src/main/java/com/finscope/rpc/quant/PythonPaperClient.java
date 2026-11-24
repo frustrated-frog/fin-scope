@@ -7,6 +7,7 @@ import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ExternalServiceException;
 import com.finscope.rpc.marketintel.FinanceHttpClient;
 import com.finscope.rpc.marketintel.FinanceHttpResponse;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +39,10 @@ public class PythonPaperClient {
         return call("/" + id + "/deploy", json.createObjectNode());
     }
 
+    public JsonNode saveReview(long id, JsonNode review) {
+        return call("/" + id + "/review", review);
+    }
+
     public JsonNode research(JsonNode spec) {
         return call("", spec);
     }
@@ -57,6 +62,15 @@ public class PythonPaperClient {
                 throw new ExternalServiceException("盘中实验服务暂不可用");
             }
             return result;
+        } catch (ProviderContractException error) {
+            if ("HTTP_422".equals(error.getErrorType())) {
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
+                        "回测未能执行，请检查规则阈值、因子窗口与股票池的五分钟行情覆盖", error);
+            }
+            if ("HTTP_404".equals(error.getErrorType())) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "未找到模拟实验，请检查行情服务版本", error);
+            }
+            throw new ExternalServiceException(ErrorCode.MARKET_DATA_UNAVAILABLE, "模拟行情请求未完成，请重试", error);
         } catch (BusinessException error) {
             throw error;
         } catch (Exception error) {

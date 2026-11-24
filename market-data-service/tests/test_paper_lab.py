@@ -52,3 +52,49 @@ def test_invalid_thresholds():
     with pytest.raises(ValueError):
         Rule.model_validate({**RULE.model_dump(),"exit":2})
 
+
+
+@pytest.mark.asyncio
+async def test_replay_manual_deployment_and_paired_forward_evidence(tmp_path, monkeypatch):
+    from finscope_market_data.models import StockSymbol, MinutePriceBar
+    from finscope_market_data.paper import lab as module
+
+    now = START + timedelta(seconds=10)
+    symbol = StockSymbol(code="600000", market="SH")
+    samples = []
+    def add(t, price):
+        samples.append(MinutePriceBar(symbol=symbol, observed_at=t, frequency_minutes=5,
+                                      open=price, close=price, high=price+.02, low=price-.02, volume=200000))
+    for i in range(6):
+        add(START-timedelta(minutes=25-i*5),10+i*.1)
+
+    async def fetch(*args, **kwargs):
+        return SimpleNamespace(data=samples)
+    monkeypatch.setattr(module, "stamp", lambda:now)
+    lab = PaperLab(tmp_path/"paper.db", lambda:SimpleNamespace(fetch=fetch))
+    base = Research(rule=RULE, capital=10000,pool="DISCOVERY",codes=["600000"],source="run 1",origin="test")
+    parent = (await lab.research(base))["id"]
+    assert await lab.research(base) == {"id":parent}
+    assert not lab.catalog()[0]["book"]
+    child = base.model_copy(deep=True)
+    child.parent = parent
+    child.rule.terms[0].weight = -1
+    version = (await lab.research(child))["id"]
+    lab.deploy(version)
+    for i in range(1,5):
+        end = START+timedelta(minutes=i*5)
+        now = end+timedelta(seconds=10)
+        add(end,10.5+i*.15)
+        await lab.tick()
+        await lab.tick()  # same observed bar after restart or retry
+    detail = lab.detail(version,"")
+    assert len(detail["points"]) == 4 and len(detail["daily"]) == 1
+    assert detail["book"]["fills"] == 0 and detail["book"]["control"]["fills"] == 1
+    assert detail["daily"][0]["control"] != detail["daily"][0]["equity"]
+    assert lab.detail(parent,"")["book"] is None
+    review = module.Review(at=detail["points"][-1]["at"],model="test",text="样本不足")
+    lab.save_review(version, review)
+    assert lab.detail(version,"")["review"]["at"] == review.at
+    now += timedelta(minutes=10)
+    await lab.tick()
+    assert lab.catalog()[0]["status"] == "行情缺失或延迟，等待同步"

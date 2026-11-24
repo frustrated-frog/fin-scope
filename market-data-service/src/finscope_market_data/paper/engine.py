@@ -69,16 +69,24 @@ def new_book(capital):
                 fills=0, fees=0.0, realized=0.0, last=None)
 
 
-def executable(order, bar, end):
+def unfilled_reason(order, bar, end):
     available = datetime.fromisoformat(order["available"])
-    return (available.date() == end.date() and available <= end - INTERVAL
-            and end - available <= 2 * INTERVAL and bar.volume > 0
-            and bar.high > bar.low)
+    if available.date() != end.date() or end - available > 2 * INTERVAL:
+        return "委托超过两个五分钟窗口或已跨日"
+    if bar.volume <= 0:
+        return "行情无成交量"
+    if bar.high == bar.low:
+        return "一字线，无法确认可成交"
+    return None
 
 
 def execute(book, order, bar, end):
     code, side = order["code"], order["side"]
-    price = round(bar.open * (1.0005 if side == "BUY" else 0.9995), 4)
+    reason = unfilled_reason(order, bar, end)
+    if reason:
+        return {**order, "action": "未成交", "reason": reason}
+    adjusted = bar.open * (1.0005 if side == "BUY" else 0.9995)
+    price = round(min(bar.high, max(bar.low, adjusted)), 4)
     lot = 200 if code.startswith(("688", "689")) else 100
     pos = book["positions"].get(code, {})
     capacity = int(bar.volume * 0.05) // lot * lot
@@ -89,8 +97,11 @@ def execute(book, order, bar, end):
             quantity -= lot
     else:
         quantity = min(capacity, sum(q for day, q in pos.get("lots", []) if day < end.date().isoformat()))
-    if not executable(order, bar, end) or quantity <= 0:
-        return {**order, "action": "未成交", "reason": "委托已过期、不可卖、成交量或资金不足，或行情为一字线"}
+    if quantity <= 0:
+        reason = "可用资金不足一个交易单位" if side == "BUY" else "T+1 限制，可卖股数为零"
+        if capacity <= 0:
+            reason = "本根成交量的 5% 不足一个交易单位"
+        return {**order, "action": "未成交", "reason": reason}
     gross = money(quantity * price)
     fee = money(max(5, gross * 0.0003) + (gross * 0.0005 if side == "SELL" else 0))
     if side == "BUY":
@@ -154,6 +165,7 @@ def advance(book, rule, histories, end, available, capital):
     book.update(equity=equity, last=end.isoformat())
     return dict(at=end.isoformat(), equity=equity, benchmark=money(benchmark * capital),
                 cash=book["cash"], scores=scores, events=events,
+                holdings={c:sum(q for _,q in pos["lots"]) for c,pos in book["positions"].items()},
                 reason="已检查持仓和入场条件" if ranking else "因子窗口数据不足")
 
 

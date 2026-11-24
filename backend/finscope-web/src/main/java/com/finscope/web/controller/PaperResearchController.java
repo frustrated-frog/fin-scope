@@ -33,6 +33,11 @@ public class PaperResearchController {
         return ApiResponses.success(service.detail(id, day));
     }
 
+    @PostMapping("/{id}/review")
+    public ApiResponse<JsonNode> review(@PathVariable long id) {
+        return ApiResponses.success(service.review(id));
+    }
+
     @PostMapping("/{id}/deploy")
     public ApiResponse<JsonNode> deploy(@PathVariable long id) {
         return ApiResponses.success(service.deploy(id));
