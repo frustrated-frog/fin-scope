@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
+import { PaperLab, PaperLibrary, type PaperSeed } from './PaperLab';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
@@ -9,7 +10,7 @@ import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { OvernightStrategyPanel } from './OvernightStrategyPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments';
+type Pane = 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'paper';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -44,6 +45,18 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   marketContext?: StockDiscoveryMarketContext;
 }) {
   const [pane, setPane] = useState<Pane>('discovery');
+  const [paperSeed,setPaperSeed] = useState<PaperSeed>();
+  const [paperId, setPaperId] = useState<number>();
+  function showPaperVersion(id: number) {
+    setPaperId(id);
+    setPaperSeed(undefined);
+    setPane('paper');
+  }
+  function openPaper(seed: PaperSeed) {
+    setPaperId(undefined);
+    setPaperSeed(seed);
+    setPane('paper');
+  }
   const [forecastCode, setForecastCode] = useState<string>();
   const [datasets, setDatasets] = useState<QuantDataset[]>([]);
   const [researchFactors, setResearchFactors] = useState<ResearchFactorDefinition[]>([]);
@@ -168,23 +181,26 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     : undefined;
 
   return <section className="quant-workspace">
-    {pane !== 'discovery' && pane !== 'overnight' && <header className="quant-hero">
+    {pane !== 'discovery' && pane !== 'overnight' && pane !== 'paper' && <header className="quant-hero">
       <div className="quant-hero-copy"><p className="quant-eyebrow">FinScope Quant · Research protocol</p><h3>把想法压进一条<br/><em>可复现的实验链</em></h3><p>数据快照、因子假设、T+1 执行与结果解读各自留痕。Agent 可以起草，但不会替你确认或偷偷运行。</p></div>
       <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
     </header>}
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['discovery','股票发现'],['overnight','尾盘与盘后'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略学院'],['factors','因子观测站'],['experiments','实验档案']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => setPane(id)}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'overnight' ? 'T+1' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'LEARN' : id === 'factors' ? researchFactors.length : experiments.length}</small></button>)}
+      {([['discovery','股票发现'],['overnight','尾盘与盘后'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略学院'],['factors','因子观测站'],['experiments','实验档案'],['paper','模拟实盘']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => { setPaperSeed(undefined); setPane(id); }}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'overnight' ? 'T+1' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'LEARN' : id === 'factors' ? researchFactors.length : id === 'paper' ? '5m' : experiments.length}</small></button>)}
     </nav>
 
     {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} marketContext={marketContext}
       onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
 
+    {pane === 'paper' && <PaperLab seed={paperSeed} initialId={paperId} />}
+
     {pane === 'overnight' && <OvernightStrategyPanel />}
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
-    {pane === 'catalog' && <StrategyCatalogPanel datasets={datasets} addToast={addToast} />}
+    {pane === 'catalog' && <PaperLibrary onOpen={showPaperVersion} />}
+    {pane === 'catalog' && <StrategyCatalogPanel onPaper={openPaper} datasets={datasets} addToast={addToast} />}
 
     {pane === 'laboratory' && <div className="quant-lab-grid">
       <aside className="quant-dataset-panel quant-panel"><div className="quant-panel-title"><span>01 / DATASET</span><h4>研究样本</h4></div>
@@ -208,6 +224,10 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
         <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
       </section>}
+      <PaperLibrary factors onOpen={showPaperVersion} />
+      <button type="button" className="quant-action" onClick={()=>openPaper({hypothesis:'提出一个可用五分钟价量验证的新因子，解释它可能有效的市场条件。'})}>AI 寻找盘中因子</button>
+      {selectedFactorCode && <button className="quant-action" type="button" onClick={() => openPaper({factorCode:selectedFactorCode,
+        hypothesis:researchFactors.find(item=>item.identity.code===selectedFactorCode)?.hypothesis ?? selectedFactorCode})}>用此因子创建盘中实验</button>}
       <FactorGuide
         definitions={researchFactors}
         selectedCode={selectedFactorCode}

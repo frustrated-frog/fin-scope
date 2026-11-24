@@ -44,7 +44,8 @@ function cardTone(card: QuantStrategyAcademyCard) {
   return 'learn';
 }
 
-export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDataset[]; addToast: Toast }) {
+export function StrategyCatalogPanel({ datasets, addToast, onPaper }: { datasets: QuantDataset[]; addToast: Toast;
+  onPaper?: (seed: { hypothesis: string; academyVersionId?: number }) => void }) {
   const [source, setSource] = useState<QuantStrategyCatalogSource>();
   const [cards, setCards] = useState<QuantStrategyAcademyCard[]>([]);
   const [selectedId, setSelectedId] = useState<number>();
@@ -224,6 +225,7 @@ export function StrategyCatalogPanel({ datasets, addToast }: { datasets: QuantDa
 
       {selected && <article className="strategy-academy-dossier">
         <header>
+          {onPaper && <button type="button" className="quant-action" onClick={()=>onPaper({hypothesis:selected.title+' · '+selected.earningLogic, academyVersionId:selected.strategyVersionId})}>创建盘中衍生实验</button>}
           <div><span>{evidenceCopy[selected.evidenceLevel]} · {selected.datasetName ?? '等待本地数据'}</span><h4>{selected.title}</h4><p>{selected.evidenceSummary}</p></div>
           <div className="strategy-academy-score" data-tone={cardTone(selected)}><strong>{selected.evidenceScore || '—'}</strong><small>证据分 / 100</small></div>
         </header>
