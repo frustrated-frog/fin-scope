@@ -95,8 +95,8 @@ public class PaperResearchService {
     }
 
     public JsonNode generate(PaperResearchInput input) {
-        if (input.hypothesis() == null || input.hypothesis().isBlank() || input.hypothesis().length() > 1200) {
-            throw invalid("请填写 1 至 1200 字研究假设");
+        if (input.hypothesis() != null && input.hypothesis().length() > 1200) {
+            throw invalid("研究方向最多 1200 字");
         }
         ObjectNode spec = json.createObjectNode();
         JsonNode parent = null;
@@ -107,7 +107,9 @@ public class PaperResearchService {
         } else {
             freezePool(input, spec);
         }
-        String origin = input.hypothesis();
+        String origin = input.hypothesis() == null || input.hypothesis().isBlank()
+                ? "请自主提出一个可用五分钟价量数据检验的研究假设，解释理由并设计对应的因子和调仓规则。"
+                : input.hypothesis().strip();
         if (input.academyVersionId() != null) {
             QuantStrategyVersion version = strategies.findVersion(input.academyVersionId()).orElseThrow(() -> invalid("学院策略版本不存在"));
             origin = "学院策略 #" + version.getId() + " 的盘中衍生实验 · " + origin;

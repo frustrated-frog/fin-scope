@@ -524,14 +524,12 @@ export function PaperLab({
             </button>
           </header>
           <label>
-            研究假设
+            研究方向（选填）
             <textarea
-              autoFocus
-              required
               maxLength={1200}
               value={hypothesis}
               onChange={(e) => setHypothesis(e.target.value)}
-              placeholder="例如，五分钟动量得到成交量确认后，趋势是否更容易延续？"
+              placeholder="留空由 AI 提出假设。也可以写一句你想验证的想法。"
             />
           </label>
           <div className="paper-fields">
@@ -603,7 +601,7 @@ export function PaperLab({
                 <i />
               </div>
               <h4>{loading ? '正在读取模拟账户' : '创建你的第一个模拟账户'}</h4>
-              <p>填写研究假设和本金，查看历史回测后即可启动。</p>
+              <p>填写模拟本金并选择股票池，AI 会提出假设、编写规则并回测。</p>
             </div>
           ) : (
             <>

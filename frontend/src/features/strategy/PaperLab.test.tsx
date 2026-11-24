@@ -26,11 +26,11 @@ test('research freezes the requested pool and leaves deployment to the user', as
   }));
 
   const user = userEvent.setup();
-  render(<PaperLab seed={{ hypothesis: '观察短窗动量', factorCode: 'MOMENTUM' }} />);
+  render(<PaperLab seed={{ hypothesis: '', factorCode: 'MOMENTUM' }} />);
   await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '24000');
   await user.selectOptions(screen.getByLabelText('实验股票池'), 'WATCHLIST');
   await user.click(screen.getByRole('button', { name: 'AI 编写规则并回测' }));
   expect(await screen.findByRole('button', { name: '启动模拟' })).toBeEnabled();
-  expect(creates).toEqual([{ hypothesis: '观察短窗动量', factorCode: 'MOMENTUM', capital: 24000, pool: 'WATCHLIST' }]);
+  expect(creates).toEqual([{ hypothesis: '', factorCode: 'MOMENTUM', capital: 24000, pool: 'WATCHLIST' }]);
   expect(posts).toEqual([endpoint]);
 });
