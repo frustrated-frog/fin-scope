@@ -44,7 +44,8 @@ function cardTone(card: QuantStrategyAcademyCard) {
   return 'learn';
 }
 
-export function StrategyCatalogPanel({ datasets, addToast, onPaper }: { datasets: QuantDataset[]; addToast: Toast;
+export function StrategyCatalogPanel({ datasets, addToast, onPaper, onFactor, factorCodes = [] }: { datasets: QuantDataset[]; addToast: Toast;
+  factorCodes?: string[]; onFactor?: (code: string) => void;
   onPaper?: (seed: { hypothesis: string; academyVersionId?: number }) => void }) {
   const [source, setSource] = useState<QuantStrategyCatalogSource>();
   const [cards, setCards] = useState<QuantStrategyAcademyCard[]>([]);
@@ -225,11 +226,15 @@ export function StrategyCatalogPanel({ datasets, addToast, onPaper }: { datasets
 
       {selected && <article className="strategy-academy-dossier">
         <header>
-          {onPaper && <button type="button" className="quant-action" onClick={()=>onPaper({hypothesis:selected.title+' · '+selected.earningLogic, academyVersionId:selected.strategyVersionId})}>创建盘中衍生实验</button>}
+
           <div><span>{evidenceCopy[selected.evidenceLevel]} · {selected.datasetName ?? '等待本地数据'}</span><h4>{selected.title}</h4><p>{selected.evidenceSummary}</p></div>
           <div className="strategy-academy-score" data-tone={cardTone(selected)}><strong>{selected.evidenceScore || '—'}</strong><small>证据分 / 100</small></div>
         </header>
 
+        <div className="quant-strategy-tools"><div className="quant-catalog-filters">{selected.mappedFactors.map(code =>
+          onFactor && factorCodes.includes(code) ? <button key={code} onClick={() => onFactor(code)}>{code} ↗</button> : <code key={code}>{code}</code>)}</div>
+          {onPaper && <button type="button" className="quant-action" onClick={()=>onPaper({hypothesis:selected.title+' · '+selected.earningLogic, academyVersionId:selected.strategyVersionId})}>用此策略做实验</button>}
+        </div>
         <section className="strategy-academy-questions">
           <article><span>它赚的是什么钱？</span><p>{selected.earningLogic}</p></article>
           <article><span>为什么可能有效？</span><p>{selected.rationale}</p></article>

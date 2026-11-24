@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
-import { PaperLab } from './PaperLab';
+import { useState } from 'react';
+import { PaperLab, usePaperCatalog } from './PaperLab';
 
 test('research freezes the requested pool and leaves deployment to the user', async () => {
   const endpoint = '/api/quant/paper/versions';
@@ -26,7 +27,13 @@ test('research freezes the requested pool and leaves deployment to the user', as
   }));
 
   const user = userEvent.setup();
-  render(<PaperLab seed={{ hypothesis: '', factorCode: 'MOMENTUM' }} />);
+  function Lab() {
+    const catalog = usePaperCatalog();
+    const [id, setId] = useState<number>();
+    return <PaperLab key={id ?? 'new'} seed={{hypothesis: '', factorCode: 'MOMENTUM'}} initialId={id}
+      catalog={catalog} onExperiment={setId} onAccount={vi.fn()} onBrowse={vi.fn()} onCompare={vi.fn()} />;
+  }
+  render(<Lab />);
   await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '24000');
   await user.selectOptions(screen.getByLabelText('实验股票池'), 'WATCHLIST');
   await user.click(screen.getByRole('button', { name: 'AI 编写规则并回测' }));

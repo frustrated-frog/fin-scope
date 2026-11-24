@@ -148,7 +148,7 @@ export function FactorGuide({
             onClick={() => onAnalyze(selected.identity.code)}
           >{busy ? '正在计算…' : '用当前数据集验证'}</button>
         </header>
-        {!selectedDataset && <p className="quant-factor-blocker">先在策略实验室选择一份数据集。</p>}
+        {!selectedDataset && <p className="quant-factor-blocker">请在「实验室 → 新建实验 → 日频策略」选择研究数据集。</p>}
         {selectedDataset && !isDatasetReady && <p className="quant-factor-blocker">当前数据集尚未通过质量门禁。</p>}
         {selectedDataset && isDatasetReady && !isAvailable && <p className="quant-factor-blocker">当前数据集没有可计算输入；资金因子需要先冻结资金分区并通过质量门禁。</p>}
         {selectedDataset && <p className="quant-factor-dataset-note">{datasetEvidenceNotice(selectedDataset.dataKind)}</p>}

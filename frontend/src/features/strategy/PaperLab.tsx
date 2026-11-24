@@ -44,7 +44,8 @@ interface Book {
   control?: Book;
   last?: string;
 }
-interface Version {
+export interface PaperVersion {
+  created?: string;
   id: number;
   spec: Spec;
   started?: string;
@@ -98,7 +99,7 @@ const features: Record<string, string> = {
   closeLocation: '收盘区间位置',
 };
 async function loadVersions() {
-  const rows = await api<Version[]>(endpoint);
+  const rows = await api<PaperVersion[]>(endpoint);
   if (!Array.isArray(rows)) {
     throw new Error('盘中实验服务响应格式无效，请确认行情服务和后端版本一致');
   }
@@ -120,7 +121,7 @@ function Trace({
   selected?: string;
 }) {
   if (!points.length) {
-    return <div className="paper-chart-blank">等待首个完整的盘中行情截面</div>;
+    return <div className="quant-empty compact">等待首个完整的盘中行情截面</div>;
   }
   const values = [
     capital,
@@ -136,7 +137,7 @@ function Trace({
       .join(' ');
   const last = points.length - 1;
   return (
-    <div className="paper-trace">
+    <div className="quant-chart">
       <div className="paper-chart-key">
         <span>策略净值</span>
         <span>股票池等权基准</span>
@@ -152,14 +153,14 @@ function Trace({
             <text className="paper-axis-label" x="1" y={29 + index * 50}>
               {(value / capital).toFixed(3)}
             </text>
-            <path d={`M46 ${26 + index * 50} H600`} className="paper-grid" />
+            <path d={`M46 ${26 + index * 50} H600`} className="quant-gridline" />
           </g>
         ))}
         {points[0].control !== undefined && (
           <path d={line('control')} className="paper-control" />
         )}
-        <path d={line('benchmark')} className="paper-benchmark" />
-        <path d={line('equity')} className="paper-line" />
+        <path d={line('benchmark')} className="quant-benchmark-path" />
+        <path d={line('equity')} className="quant-strategy-path" />
         {onDay && selected && (
           <path
             d={`M${x(
@@ -175,7 +176,7 @@ function Trace({
           cx={x(last)}
           cy={y(points[last].equity)}
           r="4"
-          fill="var(--ph-mint)"
+          fill="var(--quant-cyan)"
         />
         {onDay &&
           points.map((p, i) => (
@@ -210,7 +211,7 @@ function Decisions({
   selectDay: (day: string) => void;
 }) {
   return (
-    <section className="paper-card">
+    <section className="quant-readout">
       <header>
         <h4>盘中决策回放</h4>
         {detail.days.length > 0 && (
@@ -277,39 +278,48 @@ function Decisions({
   );
 }
 
-export function PaperLibrary({
-  factors,
-  onOpen,
-}: {
-  factors?: boolean;
-  onOpen: (id: number) => void;
-}) {
-  const [rows, setRows] = useState<Version[]>([]);
+export function usePaperCatalog() {
+  const [rows, setRows] = useState<PaperVersion[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     let alive = true;
-    loadVersions()
-      .then((v) => {
+    let timer: number;
+    async function read() {
+      try {
+        const result = await loadVersions();
+        if (alive) { setRows(result); setError(''); }
+      } catch (e) {
+        if (alive) { setError(errText(e)); }
+      } finally {
         if (alive) {
-          setRows(v);
+          setLoading(false);
+          timer = window.setTimeout(read, 30000);
         }
-      })
-      .catch((e) => {
-        if (alive) {
-          setError(errText(e));
-        }
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+      }
+    }
+    void read();
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [revision]);
+  return { rows, loading, error, refresh: () => setRevision(n => n + 1) };
+}
+
+type PaperCatalog = ReturnType<typeof usePaperCatalog>;
+
+export function PaperLibrary({ factors, onOpen, catalog }: {
+  factors?: boolean;
+  onOpen: (id: number) => void;
+  catalog: PaperCatalog;
+}) {
+  const { rows, error } = catalog;
   return (
     <details className="paper-library">
       <summary>
         {factors ? 'AI 盘中因子库' : 'AI 盘中策略库'} · {rows.length} 个版本
       </summary>
       {error && <p role="alert">{error}</p>}
-      {!error && !rows.length && (
+      {!catalog.loading && !error && !rows.length && (
         <p>完成首次盘中策略回测后，已验证的规则与因子公式会出现在这里。</p>
       )}
       {rows.map((v) => (
@@ -337,55 +347,34 @@ export function PaperLibrary({
   );
 }
 
-export function PaperLab({
-  seed,
-  initialId,
-}: {
+export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = false,
+  onAccount, onExperiment, onCompare, onBrowse }: {
   seed?: PaperSeed;
   initialId?: number;
+  comparison?: PaperVersion;
+  catalog: PaperCatalog;
+  accountsOnly?: boolean;
+  onAccount: (id: number) => void;
+  onExperiment: (id: number) => void;
+  onCompare: (base: PaperVersion) => void;
+  onBrowse: () => void;
 }) {
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [id, setId] = useState<number | undefined>(initialId);
+  const versions = accountsOnly ? catalog.rows.filter(v => v.started) : catalog.rows;
+  const [selectedId, setId] = useState(initialId);
+  const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
   const [day, setDay] = useState('');
-  const [editing, setEditing] = useState(Boolean(seed));
-  const [hypothesis, setHypothesis] = useState(seed?.hypothesis ?? '');
-  const [capital, setCapital] = useState('');
-  const [pool, setPool] = useState('DISCOVERY');
-  const [parent, setParent] = useState<Version>();
+  const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
+  const [hypothesis, setHypothesis] = useState(comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : seed?.hypothesis ?? '');
+  const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
+  const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
+  const parent = comparison;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
   const active = versions.find((v) => v.id === id);
   const spec = active?.spec;
   const book = active?.book;
-  useEffect(() => {
-    let alive = true;
-    async function read() {
-      try {
-        const rows = await loadVersions();
-        if (alive) {
-          setVersions(rows);
-          setId((old) => old ?? rows[0]?.id);
-        }
-      } catch (e) {
-        if (alive) {
-          setError(errText(e));
-        }
-      } finally {
-        if (alive) {
-          setLoading(false);
-        }
-      }
-    }
-    void read();
-    const timer = window.setInterval(read, 30000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [refresh]);
   useEffect(() => {
     let alive = true;
     setDetail(undefined);
@@ -429,10 +418,8 @@ export function PaperLab({
           factorCode: seed?.factorCode,
         }),
       });
-      setDay('');
-      setId(item.id);
-      setEditing(false);
-      setRefresh((n) => n + 1);
+      catalog.refresh();
+      onExperiment(item.id);
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -443,8 +430,10 @@ export function PaperLab({
     setBusy(true);
     setError('');
     try {
+      if (!id) { return; }
       await api(endpoint + '/' + id + '/deploy', { method: 'POST' });
-      setRefresh((n) => n + 1);
+      catalog.refresh();
+      onAccount(id);
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -463,64 +452,24 @@ export function PaperLab({
       setBusy(false);
     }
   }
-  function compose(base?: Version) {
-    setParent(base);
-    setEditing(true);
-    setError('');
-    setHypothesis(
-      base
-        ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。'
-        : (seed?.hypothesis ?? ''),
-    );
-    if (base) {
-      setCapital(String(base.spec.capital));
-      setPool(base.spec.pool);
-    }
-  }
   const equity = book?.equity ?? spec?.capital ?? 0;
   const latest = detail?.daily[detail.daily.length - 1];
   const prior = detail?.daily[detail.daily.length - 2]?.equity ?? spec?.capital;
   const control = book?.control;
   return (
-    <section className="paper-lab" aria-label="模拟实盘">
-      <div className="paper-banner">
-        <div>
-          <span className="paper-kicker">PAPER TRADING / 沪深 A 股</span>
-          <h3>模拟实盘</h3>
-          <p>五分钟行情驱动 · 独立虚拟账户 · 盘中决策回放</p>
-        </div>
-        <button
-          type="button"
-          className="paper-primary"
-          onClick={() => compose()}
-          disabled={busy}
-        >
-          ＋ 新建策略实验
-        </button>
-      </div>
-      {error && (
-        <div className="paper-error" role="alert">
-          {error}{' '}
-          <button
-            onClick={() => {
-              setError('');
-              setRefresh((n) => n + 1);
-            }}
-          >
-            重新读取
-          </button>
-        </div>
-      )}
+    <section className="quant-results paper-lab" aria-label={accountsOnly ? '模拟实盘' : '盘中实验'}>
+      {(error || catalog.error) && <div className="quant-catalog-error" role="alert"><span>{error || catalog.error}</span>
+        <button onClick={() => { setError(''); catalog.refresh(); setRefresh(n => n + 1); }}>重新读取</button></div>}
       {editing && (
-        <form className="paper-card paper-form" onSubmit={generate}>
+        <form className="quant-readout paper-form" onSubmit={generate}>
           <header>
             <h4>{parent ? '因子对照实验' : '新建盘中规则'}</h4>
             <button
               type="button"
-              disabled={busy}
-              onClick={() => setEditing(false)}
+              className="quant-record-link" disabled={busy}
+              onClick={onBrowse}
             >
-              收起
+              取消
             </button>
           </header>
           <label>
@@ -563,49 +512,31 @@ export function PaperLab({
               ? '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
               : '冻结创建时名单中的前 24 只沪深 A 股，使用最近可取得的五分钟行情回测。'}
           </p>
-          <button className="paper-primary" disabled={busy}>
+          <button className="quant-action" disabled={busy}>
             {busy ? '正在生成规则并回测…' : 'AI 编写规则并回测'}
           </button>
         </form>
       )}
-      <div className="paper-layout">
-        <aside className="paper-list">
-          <header>
-            <h4>策略版本</h4>
-            <span>{versions.length}</span>
-          </header>
-          {!versions.length && <p>{loading ? '正在读取…' : '尚无策略版本'}</p>}
-          {versions.map((v) => (
-            <button
-              key={v.id}
-              aria-pressed={v.id === id}
-              onClick={() => {
-                setDay('');
-                setId(v.id);
-              }}
-            >
-              <small>
-                实验 #{v.id} · {v.started ? '已启动' : '已回测'}
-              </small>
-              <strong>{v.spec.rule.name}</strong>
-              <em>
-                {v.book ? pct(v.book.equity / v.spec.capital - 1) : '等待启动'}
-              </em>
-            </button>
-          ))}
-        </aside>
-        <main className="paper-main">
+      {!editing && <div className={accountsOnly && versions.length ? 'quant-experiment-grid' : 'quant-results'}>
+        {accountsOnly && versions.length > 0 && <aside className="quant-run-list quant-panel">
+          <div className="quant-panel-title"><h4>模拟账户</h4></div>
+          {versions.map(v => <button key={v.id} className={v.id === id ? 'active' : ''} aria-pressed={v.id === id}
+            onClick={() => { setDay(''); setId(v.id); }}>
+            <i data-status="SUCCEEDED"/><span><b>{v.spec.rule.name}</b><small>实验 #{v.id}</small></span>
+            <em>{v.book && pct(v.book.equity / v.spec.capital - 1)}</em>
+          </button>)}
+        </aside>}
+        <div className="quant-results">
           {!active || !spec ? (
-            <div className="paper-empty">
-              <div className="paper-orbit" aria-hidden="true">
-                <i />
-              </div>
-              <h4>{loading ? '正在读取模拟账户' : '创建你的第一个模拟账户'}</h4>
-              <p>填写模拟本金并选择股票池，AI 会提出假设、编写规则并回测。</p>
+            <div className="quant-catalog-empty">
+              <strong>{catalog.loading ? '正在读取…' : accountsOnly ? '暂无运行中的模拟账户' : '正在读取实验版本'}</strong>
+              {accountsOnly && !catalog.loading && <><p>在实验室查看回测结果，启动模拟后可在这里跟踪账户。</p>
+                <button onClick={catalog.rows.length ? () => onExperiment(catalog.rows[0].id) : onBrowse}>
+                  {catalog.rows.length ? '查看最近的回测' : '前往实验室'}</button></>}
             </div>
           ) : (
             <>
-              <section className="paper-card paper-account">
+              <section className="quant-readout paper-account">
                 <header>
                   <div>
                     <small>
@@ -613,36 +544,27 @@ export function PaperLab({
                     </small>
                     <h4>{spec.rule.name}</h4>
                   </div>
+                  {accountsOnly && <button className="quant-action" onClick={() => onExperiment(active.id)}>查看原实验</button>}
+                  {!accountsOnly && active.started && <button className="quant-action" onClick={() => onAccount(active.id)}>查看模拟账户</button>}
                   {!active.started && (
                     <button
                       disabled={busy}
-                      className="paper-primary"
+                      className="quant-action"
                       onClick={deploy}
                     >
                       {spec.parent ? '启动对照模拟' : '启动模拟'}
                     </button>
                   )}
                 </header>
-                <p>{spec.rule.hypothesis}</p>
-                <div className="paper-metrics">
-                  <div>
-                    <small>{book ? '账户总资产' : '初始本金'} / CNY</small>
-                    <strong>{currency(equity)}</strong>
-                  </div>
-                  <div>
-                    <small>累计收益</small>
-                    <b>{book ? pct(equity / spec.capital - 1) : '—'}</b>
-                  </div>
-                  <div>
-                    <small>当日盈亏</small>
-                    <b>
-                      {latest && prior !== undefined
-                        ? currency(latest.equity - prior)
-                        : '—'}
-                    </b>
-                  </div>
-                </div>
-                {active.started && (
+                {accountsOnly ? <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details> : <p>{spec.rule.hypothesis}</p>}
+                {accountsOnly && book && <div className="quant-metrics paper-metrics">
+                  <div><span>账户总资产（元）</span><strong>{currency(equity)}</strong></div>
+                  <div><span>累计收益</span><strong>{pct(equity / spec.capital - 1)}</strong></div>
+                  <div><span>当日盈亏（元）</span><strong>{latest && prior !== undefined ? currency(latest.equity-prior) : '—'}</strong></div>
+                  <div><span>相对等权基准</span><strong>{latest ? pct((latest.equity-latest.benchmark)/spec.capital) : '—'}</strong></div>
+                </div>}
+                {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟 · {spec.codes.length} 只股票</p>}
+                {accountsOnly && active.started && (
                   <>
                     <Trace
                       points={detail?.daily ?? []}
@@ -657,7 +579,7 @@ export function PaperLab({
                     </p>
                   </>
                 )}
-                {control && (
+                {accountsOnly && control && (
                   <p>
                     同期原因子账户 #{spec.parent} · 净值 ¥
                     {currency(control.equity)} · 因子版本收益差{' '}
@@ -666,10 +588,10 @@ export function PaperLab({
                   </p>
                 )}
               </section>
-              <section className="paper-card">
+              {!accountsOnly && <section className="quant-readout">
                 <header>
                   <h4>策略与因子</h4>
-                  <button onClick={() => compose(active)}>新建因子对照</button>
+                  <button className="quant-action" onClick={() => onCompare(active)}>新建因子对照</button>
                 </header>
                 <p>{spec.origin}</p>
                 <div className="paper-formula">
@@ -690,9 +612,9 @@ export function PaperLab({
                   </summary>
                   <p>{spec.codes.join(' · ')}</p>
                 </details>
-              </section>
-              {detail && (
-                <section className="paper-card">
+              </section>}
+              {!accountsOnly && detail && (
+                <section className="quant-readout">
                   <header>
                     <h4>历史回测</h4>
                     <small>
@@ -723,8 +645,8 @@ export function PaperLab({
                   <Trace points={detail.history.curve} capital={spec.capital} />
                 </section>
               )}
-              {book && (
-                <section className="paper-card">
+              {accountsOnly && book && (
+                <section className="quant-readout">
                   <header>
                     <h4>持仓与现金</h4>
                     <small>
@@ -746,11 +668,11 @@ export function PaperLab({
                   ))}
                 </section>
               )}
-              {active.started && detail && (
-                <section className="paper-card">
+              {accountsOnly && detail && (
+                <section className="quant-readout">
                   <header>
                     <h4>AI 收益复盘</h4>
-                    <button
+                    <button className="quant-action"
                       onClick={review}
                       disabled={busy || !detail.daily.length}
                     >
@@ -774,13 +696,13 @@ export function PaperLab({
                   )}
                 </section>
               )}
-              {active.started && detail && (
+              {accountsOnly && detail && (
                 <Decisions detail={detail} selectDay={setDay} />
               )}
             </>
           )}
-        </main>
-      </div>
+        </div>
+      </div>}
     </section>
   );
 }

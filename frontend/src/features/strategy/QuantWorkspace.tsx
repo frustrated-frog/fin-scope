@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
-import { PaperLab, PaperLibrary, type PaperSeed } from './PaperLab';
+import { PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
 import { StrategyCatalogPanel } from './StrategyCatalogPanel';
@@ -10,7 +10,7 @@ import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { OvernightStrategyPanel } from './OvernightStrategyPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'paper';
+type Pane = 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -47,14 +47,22 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   const [pane, setPane] = useState<Pane>('discovery');
   const [paperSeed,setPaperSeed] = useState<PaperSeed>();
   const [paperId, setPaperId] = useState<number>();
+  const paperCatalog = usePaperCatalog();
+  const [comparison, setComparison] = useState<PaperVersion>();
   function showPaperVersion(id: number) {
+    setComparison(undefined);
     setPaperId(id);
     setPaperSeed(undefined);
-    setPane('paper');
+    setPane('intraday');
   }
-  function openPaper(seed: PaperSeed) {
+  function openPaper(seed: PaperSeed, base?: PaperVersion) {
+    setComparison(base);
     setPaperId(undefined);
     setPaperSeed(seed);
+    setPane('intraday');
+  }
+  function showAccount(id: number) {
+    setPaperId(id);
     setPane('paper');
   }
   const [forecastCode, setForecastCode] = useState<string>();
@@ -115,6 +123,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   useEffect(() => {
     if (!selectedExperimentId) { setExperimentDetail(undefined); return; }
     let cancelled = false;
+    setExperimentDetail(undefined);
     const refresh = async () => {
       try {
         const value = await api<QuantExperiment>(`/api/quant/experiments/${selectedExperimentId}`);
@@ -150,7 +159,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
 
   async function runExperiment(strategyVersionId: number) {
     setBusy(`run-${strategyVersionId}`);
-    try { const value = await api<QuantExperiment>('/api/quant/experiments', { method: 'POST', body: JSON.stringify({ strategyVersionId }) }); await load(); setSelectedExperimentId(value.id); setPane('experiments'); addToast('实验已进入受控计算队列', 'success'); }
+    try { const value = await api<QuantExperiment>('/api/quant/experiments', { method: 'POST', body: JSON.stringify({ strategyVersionId }) }); await load(); setSelectedExperimentId(value.id); setPane('dailyResult'); addToast('实验已进入受控计算队列', 'success'); }
     catch (error) { addToast(error instanceof Error ? error.message : '实验启动失败', 'error'); }
     finally { setBusy(undefined); }
   }
@@ -180,27 +189,75 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     ? factorAnalyses[`${selectedDatasetId}:${selectedFactorCode}`]
     : undefined;
 
+  const inLibrary = pane === 'catalog' || pane === 'factors';
+  const inLab = ['experiments', 'intraday', 'dailyResult', 'laboratory'].includes(pane);
+  const primary = inLibrary ? 'catalog' : inLab ? 'experiments' : pane;
+  const running = paperCatalog.rows.filter(item => item.started).length;
+  const linkedStrategies = pane === 'factors' && selectedFactorCode
+    ? strategies.filter(v => parseSpec(v)?.factors?.some(factor => factor.code === selectedFactorCode)) : [];
+  const archive = [
+    ...paperCatalog.rows.map(v => ({ key: 'paper-' + v.id, name: v.spec.rule.name, type: '盘中 · 五分钟',
+      status: v.started ? '模拟中' : '已回测', date: v.created, open: () => showPaperVersion(v.id) })),
+    ...experiments.map(v => ({ key: 'daily-' + v.id,
+      name: strategies.find(strategy => strategy.id === v.strategyVersionId)?.name ?? `日频实验 #${v.id}`,
+      type: '日频 · 历史回测', status: statusText[v.status], date: v.createdAt,
+      open: () => { setSelectedExperimentId(v.id); setPane('dailyResult'); } }))
+  ].sort((a, b) => (Date.parse(b.date ?? '') || 0) - (Date.parse(a.date ?? '') || 0));
+
   return <section className="quant-workspace">
-    {pane !== 'discovery' && pane !== 'overnight' && pane !== 'paper' && <header className="quant-hero">
+    {pane === 'forecast' && <header className="quant-hero">
       <div className="quant-hero-copy"><p className="quant-eyebrow">FinScope Quant · Research protocol</p><h3>把想法压进一条<br/><em>可复现的实验链</em></h3><p>数据快照、因子假设、T+1 执行与结果解读各自留痕。Agent 可以起草，但不会替你确认或偷偷运行。</p></div>
       <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
     </header>}
 
     <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['discovery','股票发现'],['overnight','尾盘与盘后'],['forecast','单股预测'],['laboratory','策略实验室'],['catalog','策略学院'],['factors','因子观测站'],['experiments','实验档案'],['paper','模拟实盘']] as Array<[Pane,string]>).map(([id,label]) => <button type="button" aria-current={pane === id ? 'page' : undefined} key={id} className={pane === id ? 'active' : ''} onClick={() => { setPaperSeed(undefined); setPane(id); }}>{label}<small>{id === 'discovery' ? 'AUTO' : id === 'overnight' ? 'T+1' : id === 'forecast' ? '5D' : id === 'laboratory' ? strategies.length : id === 'catalog' ? 'LEARN' : id === 'factors' ? researchFactors.length : id === 'paper' ? '5m' : experiments.length}</small></button>)}
+      {([['discovery','股票发现'],['overnight','尾盘与盘后'],['forecast','单股预测'],['catalog','策略与因子'],['experiments','实验室'],['paper','模拟实盘']] as Array<[Pane,string]>).map(([id,label]) =>
+        <button type="button" aria-current={primary === id ? 'page' : undefined} key={id}
+          className={primary === id ? 'active' : ''} onClick={() => setPane(id)}>
+          {label}{id === 'paper' && running > 0 && <small>{running} 个运行中</small>}
+        </button>)}
     </nav>
 
+    {inLibrary && <nav className="quant-catalog-filters" aria-label="学习内容">
+      <button className={pane === 'catalog' ? 'active' : ''} aria-pressed={pane === 'catalog'} onClick={() => setPane('catalog')}>策略</button>
+      <button className={pane === 'factors' ? 'active' : ''} aria-pressed={pane === 'factors'} onClick={() => setPane('factors')}>因子</button>
+    </nav>}
+
+    {pane === 'experiments' && <section className="quant-panel quant-archive">
+      <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4><p>查看盘中规则与日频策略的历史回测。</p></div>
+        <button className="quant-action" onClick={() => openPaper({hypothesis: ''})}>新建实验</button></header>
+      {paperCatalog.error && <p className="quant-error" role="alert">{paperCatalog.error} <button onClick={paperCatalog.refresh}>重试</button></p>}
+      {archive.length ? <div className="quant-table-wrap"><table><thead><tr><th>策略</th><th>实验类型</th><th>状态</th><th>创建时间</th></tr></thead>
+        <tbody>{archive.map(record => <tr key={record.key}><td><button className="quant-record-link" onClick={record.open}>{record.name}</button></td>
+          <td>{record.type}</td><td>{record.status}</td><td>{record.date?.slice(0,16).replace('T',' ') ?? '—'}</td></tr>)}</tbody></table></div>
+        : <div className="quant-empty"><strong>{paperCatalog.loading ? '正在读取实验' : '暂无实验记录'}</strong><p>新建实验后，可在这里查看规则、数据和回测结果。</p></div>}
+    </section>}
+
+    {inLab && pane !== 'experiments' && <div className="quant-catalog-toolbar">
+      <button className="quant-record-link" onClick={() => setPane('experiments')}>← 实验列表</button>
+      {(pane === 'laboratory' || (pane === 'intraday' && paperSeed && !comparison)) &&
+        <nav className="quant-catalog-filters" aria-label="实验类型">
+          <button className={pane === 'intraday' ? 'active' : ''} aria-pressed={pane === 'intraday'} onClick={() => openPaper(paperSeed ?? {hypothesis: ''})}>盘中规则</button>
+          <button className={pane === 'laboratory' ? 'active' : ''} aria-pressed={pane === 'laboratory'} onClick={() => setPane('laboratory')}>日频策略</button>
+        </nav>}
+    </div>}
     {pane === 'discovery' && <StockDiscoveryPanel addToast={addToast} setMessage={setMessage} marketContext={marketContext}
       onOpenResearch={code => { setForecastCode(code); setPane('forecast'); }} />}
 
-    {pane === 'paper' && <PaperLab seed={paperSeed} initialId={paperId} />}
+    {(pane === 'paper' || pane === 'intraday') && <PaperLab
+      key={`${pane}-${paperId ?? 'new'}-${comparison?.id ?? ''}`}
+      seed={pane === 'intraday' ? paperSeed : undefined} initialId={paperId}
+      comparison={pane === 'intraday' ? comparison : undefined} accountsOnly={pane === 'paper'} catalog={paperCatalog}
+      onBrowse={() => setPane('experiments')} onExperiment={showPaperVersion} onAccount={showAccount}
+      onCompare={base => openPaper({ hypothesis: '' }, base)} />}
 
     {pane === 'overnight' && <OvernightStrategyPanel />}
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
-    {pane === 'catalog' && <PaperLibrary onOpen={showPaperVersion} />}
-    {pane === 'catalog' && <StrategyCatalogPanel onPaper={openPaper} datasets={datasets} addToast={addToast} />}
+    {pane === 'catalog' && <PaperLibrary catalog={paperCatalog} onOpen={showPaperVersion} />}
+    {pane === 'catalog' && <StrategyCatalogPanel factorCodes={researchFactors.map(f => f.identity.code)}
+      onFactor={code => { setSelectedFactorCode(code); setPane('factors'); }} onPaper={openPaper} datasets={datasets} addToast={addToast} />}
 
     {pane === 'laboratory' && <div className="quant-lab-grid">
       <aside className="quant-dataset-panel quant-panel"><div className="quant-panel-title"><span>01 / DATASET</span><h4>研究样本</h4></div>
@@ -224,10 +281,12 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
         <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
       </section>}
-      <PaperLibrary factors onOpen={showPaperVersion} />
+      <PaperLibrary catalog={paperCatalog} factors onOpen={showPaperVersion} />
       <button type="button" className="quant-action" onClick={()=>openPaper({hypothesis:'提出一个可用五分钟价量验证的新因子，解释它可能有效的市场条件。'})}>AI 寻找盘中因子</button>
       {selectedFactorCode && <button className="quant-action" type="button" onClick={() => openPaper({factorCode:selectedFactorCode,
         hypothesis:researchFactors.find(item=>item.identity.code===selectedFactorCode)?.hypothesis ?? selectedFactorCode})}>用此因子创建盘中实验</button>}
+      {linkedStrategies.length > 0 && <div className="quant-readout"><header><h4>使用此因子的策略</h4></header>
+        <p>{linkedStrategies.map(v => v.name + ' v' + v.version).join(' · ')}</p></div>}
       <FactorGuide
         definitions={researchFactors}
         selectedCode={selectedFactorCode}
@@ -242,7 +301,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
       />
     </div>}
 
-    {pane === 'experiments' && <div className="quant-experiment-grid"><aside className="quant-run-list quant-panel"><div className="quant-panel-title"><span>RUN ARCHIVE</span><h4>实验批次</h4></div>{experiments.length === 0 ? <div className="quant-empty compact"><strong>暂无实验</strong><p>从已确认的策略版本启动第一轮回测。</p></div> : experiments.map(item => <button type="button" className={selectedExperimentId === item.id ? 'active' : ''} onClick={() => setSelectedExperimentId(item.id)} key={item.id}><i data-status={item.status}/><span><b>实验 #{item.id}</b><small>策略版本 #{item.strategyVersionId}</small></span><em>{statusText[item.status]}</em></button>)}</aside>
+    {pane === 'dailyResult' && <div>
       <main className="quant-results">{experimentDetail && <section className="quant-readout"><header><div><span>DATA PROVENANCE</span><h4>{experimentDetail.datasetName ?? `数据集 #${experimentDetail.datasetId ?? '—'}`}</h4></div><b>{experimentDetail.dataKind === 'LEARNING_SAMPLE' ? '虚拟学习数据 · 不可用于实盘结论' : '真实研究数据'}</b></header><p>数据指纹 {experimentDetail.datasetFingerprint.slice(0, 16)} · 引擎 {experimentDetail.engineVersion}{selectedSpec ? ` · Top ${selectedSpec.portfolio.topN} · 每 ${selectedSpec.portfolio.rebalanceEvery} 日调仓` : ''}</p></section>}<div className="quant-metrics">{[['年化收益', selectedMetrics ? percent(selectedMetrics.annualizedReturn) : '—'],['最大回撤', selectedMetrics ? percent(selectedMetrics.maxDrawdown) : '—'],['Sharpe', selectedMetrics ? selectedMetrics.sharpeRatio.toFixed(2) : '—'],['超额收益', selectedMetrics ? percent(selectedMetrics.excessReturn) : '—']].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><EquityChart experiment={experimentDetail}/>
         {experimentDetail?.result && <section className="quant-readout"><header><div><span>EXECUTION EVIDENCE</span><h4>年度表现、交易与异常留痕</h4></div><b>{experimentDetail.result.trades.length} 笔成交</b></header>{experimentDetail.result.warnings.length > 0 && <ul>{experimentDetail.result.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul>}<div className="quant-table-wrap"><table><caption>年度表现</caption><thead><tr><th>年度</th><th>策略</th><th>等权基准</th><th>超额</th><th>最大回撤</th></tr></thead><tbody>{experimentDetail.result.annualPerformance.map(year => <tr key={year.year}><td>{year.year}</td><td>{percent(year.portfolioReturn)}</td><td>{percent(year.benchmarkReturn)}</td><td>{percent(year.excessReturn)}</td><td>{percent(year.maxDrawdown)}</td></tr>)}</tbody></table></div><div className="quant-table-wrap"><table><caption>最近成交记录</caption><thead><tr><th>信号日</th><th>成交日</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>费用</th></tr></thead><tbody>{experimentDetail.result.trades.slice(-20).reverse().map((trade, index) => <tr key={`${trade.tradeDate}-${trade.instrumentCode}-${index}`}><td>{trade.signalDate}</td><td>{trade.tradeDate}</td><td>{trade.instrumentCode}</td><td>{trade.side}</td><td>{trade.quantity}</td><td>{trade.price.toFixed(2)}</td><td>{trade.fee.toFixed(2)}</td></tr>)}</tbody></table></div></section>}
         {latestPositions.length > 0 && <section className="quant-readout"><header><div><span>POSITION SNAPSHOT</span><h4>期末持仓 · {latestPositionDate}</h4></div><b>{latestPositions.length} 个标的</b></header><div className="quant-table-wrap"><table><caption>回测期末可复现持仓快照</caption><thead><tr><th>标的</th><th>数量</th><th>价格</th><th>市值</th><th>权重</th></tr></thead><tbody>{latestPositions.map(position => <tr key={position.instrumentCode}><td>{position.instrumentCode}</td><td>{position.quantity}</td><td>{position.price.toFixed(2)}</td><td>{position.marketValue.toFixed(2)}</td><td>{percent(position.weight)}</td></tr>)}</tbody></table></div></section>}
