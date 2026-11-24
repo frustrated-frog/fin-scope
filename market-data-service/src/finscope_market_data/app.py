@@ -91,6 +91,7 @@ from finscope_market_data.sector_history import TonghuashunSectorHistoryService
 from finscope_market_data.snapshot_store import SnapshotStore
 from finscope_market_data.daily_research import DailyResearchService
 from finscope_market_data.research_members import ResearchMemberService
+from finscope_market_data.paper.lab import PaperLab
 from finscope_market_data.breadth import MarketBreadthService
 
 
@@ -167,6 +168,8 @@ def create_app(
     history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),
         SnapshotStore(config.data_dir / "market-data-snapshots.db"))
 
+    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router)
+
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if application.state.router is None:
@@ -227,6 +230,7 @@ def create_app(
                 )
             )
         capture_stop = asyncio.Event()
+        paper_task = asyncio.create_task(paper.run(capture_stop))
         capture_task = asyncio.create_task(capture.run(capture_stop))
         automation_task = asyncio.create_task(automation.run(capture_stop))
         history_task = asyncio.create_task(history_backfill.run(capture_stop))
@@ -242,6 +246,7 @@ def create_app(
             yield
         finally:
             capture_stop.set()
+            await paper_task
             await capture_task
             await automation_task
             await history_task
@@ -277,6 +282,7 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+    application.include_router(paper.routes())
     application.state.router = router
     application.state.discovery = discovery
     application.state.sectors = sectors

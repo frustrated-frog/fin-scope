@@ -1,0 +1,201 @@
+"""Persist immutable research versions and independently funded forward accounts."""
+import asyncio
+from bisect import bisect_right
+from contextlib import closing, contextmanager
+from datetime import datetime, timedelta
+import hashlib
+import json
+import logging
+import sqlite3
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
+
+log = logging.getLogger(__name__)
+
+
+class Research(BaseModel):
+    rule: Rule
+    pool: Literal["DISCOVERY", "WATCHLIST"]
+    source: str = Field(max_length=500)
+    capital: float = Field(gt=0, le=1e10, allow_inf_nan=False)
+    codes: list[str] = Field(min_length=1, max_length=24)
+    origin: str = Field(max_length=2000)
+    parent: int | None = None
+
+
+def stamp():
+    return datetime.now(SHANGHAI)
+
+
+def dumps(value):
+    return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
+
+class PaperLab:
+    def __init__(self, path, router):
+        self.path = path
+        self.router = router
+        self.limit = asyncio.Semaphore(4)
+
+    @contextmanager
+    def db(self):
+        with closing(sqlite3.connect(self.path, timeout=10)) as db, db:
+            db.row_factory = sqlite3.Row
+            db.executescript("""
+              CREATE TABLE IF NOT EXISTS paper_version (
+                id INTEGER PRIMARY KEY, fingerprint TEXT UNIQUE NOT NULL, spec TEXT NOT NULL,
+                history TEXT NOT NULL, created TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS paper_account (
+                id INTEGER PRIMARY KEY REFERENCES paper_version(id), started TEXT NOT NULL,
+                book TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS paper_point (
+                id INTEGER NOT NULL, at TEXT NOT NULL, point TEXT NOT NULL, PRIMARY KEY(id,at));
+            """)
+            yield db
+
+    async def bars(self, code):
+        symbol = StockSymbol(market="SH" if code.startswith("6") else "SZ", code=code)
+        async with self.limit:
+            envelope = await self.router().fetch(DataCapability.MINUTE_BARS, symbol, frequency=5, limit=320)
+        bars = [MinutePriceBar.model_validate(b) for b in envelope.data or []]
+        return sorted((b for b in bars if b.symbol == symbol and valid_bar(b)), key=lambda b: b.observed_at)
+
+    async def panel(self, codes):
+        result = await asyncio.gather(*(self.bars(c) for c in codes))
+        return dict(zip(codes, result))
+
+    @staticmethod
+    def frames(panel, cutoff):
+        # Restrict all comparisons to timestamps actually present for every member.
+        times = {c: [b.observed_at.astimezone(SHANGHAI) for b in bars] for c, bars in panel.items()}
+        common = set.intersection(*(set(t) for t in times.values()))
+        for end in sorted(t for t in common if t <= cutoff):
+            yield end, {c: bars[max(0, (n := bisect_right(times[c], end)) - 49):n] for c, bars in panel.items()}
+
+    async def research(self, spec):
+        spec.codes = list(dict.fromkeys(spec.codes))
+        if any(len(c) != 6 or not c.isdigit() or not c.startswith(("00","30","60","68")) for c in spec.codes):
+            raise HTTPException(422, "股票池仅支持有五分钟行情的沪深 A 股")
+        spec.capital = money(spec.capital)
+        if spec.capital <= 0:
+            raise HTTPException(422, "本金至少一分钱")
+        payload = spec.model_dump(mode="json")
+        fingerprint = hashlib.sha256(dumps([ENGINE, payload]).encode()).hexdigest()
+        with self.db() as db:
+            row = db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()
+            if row:
+                return {"id":row[0]}
+            if spec.parent:
+                parent = self.spec(db, spec.parent)
+                if (spec.codes, spec.pool, spec.capital) != (parent.codes, parent.pool, parent.capital):
+                    raise HTTPException(422, "因子对照须沿用原版本股票池和本金")
+        now = stamp()
+        panel = await self.panel(spec.codes)
+        book = new_book(spec.capital)
+        curve = []
+        for end, history in self.frames(panel, now - timedelta(seconds=5)):
+            point = advance(book, spec.rule, history, end, end, spec.capital)
+            curve.append(dict(at=point["at"], equity=point["equity"], benchmark=point["benchmark"]))
+        if len(curve) <= max(t.window for t in spec.rule.terms):
+            raise HTTPException(422, "股票池共同的历史五分钟行情不足，无法验证此版本")
+        summary = dict(curve=curve, fills=book["fills"], fees=book["fees"], engine=ENGINE)
+        with self.db() as db:
+            db.execute("INSERT INTO paper_version(fingerprint,spec,history,created) VALUES(?,?,?,?) ON CONFLICT(fingerprint) DO NOTHING",
+                       (fingerprint, dumps(payload), dumps(summary), now.isoformat()))
+            return {"id":db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()[0]}
+
+    @staticmethod
+    def spec(db, version):
+        row = db.execute("SELECT spec FROM paper_version WHERE id=?", (version,)).fetchone()
+        if not row:
+            raise HTTPException(404, "实验版本不存在")
+        return Research.model_validate_json(row[0])
+
+    def deploy(self, version):
+        with self.db() as db:
+            spec = self.spec(db, version)
+            db.execute("INSERT OR IGNORE INTO paper_account(id,started,book,status) VALUES(?,?,?,?)",
+                       (version, stamp().isoformat(), dumps(new_book(spec.capital)), "等待盘中行情"))
+        return {"id":version}
+
+    def catalog(self):
+        with self.db() as db:
+            rows = db.execute("""SELECT v.id,v.spec,v.created,a.started,a.status,a.book FROM paper_version v
+                LEFT JOIN paper_account a ON v.id=a.id ORDER BY v.id DESC LIMIT 200""").fetchall()
+        return [dict(id=r["id"], spec=json.loads(r["spec"]), created=r["created"], started=r["started"],
+                     status=r["status"], book=json.loads(r["book"]) if r["book"] else None) for r in rows]
+
+    def detail(self, version, day):
+        with self.db() as db:
+            spec = self.spec(db, version)
+            history = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (version,)).fetchone()[0])
+            days = [r[0] for r in db.execute("SELECT DISTINCT substr(at,1,10) FROM paper_point WHERE id=? ORDER BY 1 DESC LIMIT 365", (version,))]
+            selected = day or (days[0] if days else "")
+            points = [json.loads(r[0]) for r in db.execute(
+                "SELECT point FROM paper_point WHERE id=? AND at>=? AND at<? ORDER BY at LIMIT 256",
+                (version, selected, selected+"Z"))]
+        return dict(history=history, days=days, day=selected, points=points, spec=spec.model_dump())
+
+    async def tick(self):
+        now = stamp()
+        if now.weekday() >= 5 or not ("09:35" <= now.strftime("%H:%M") <= "11:36"
+                                      or "13:05" <= now.strftime("%H:%M") <= "15:06"):
+            return
+        with self.db() as db:
+            rows = db.execute("SELECT a.*,v.spec FROM paper_account a JOIN paper_version v ON a.id=v.id").fetchall()
+        codes = sorted({c for row in rows for c in json.loads(row["spec"])["codes"]})
+        data = dict(zip(codes, await asyncio.gather(*(self.bars(c) for c in codes), return_exceptions=True)))
+        for row in rows:
+            spec = Research.model_validate_json(row["spec"])
+            panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
+            frames = list(self.frames(panel, now - timedelta(seconds=3)))
+            seen = stamp()
+            if not frames or seen - frames[-1][0] > INTERVAL:
+                with self.db() as db:
+                    db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
+                               ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
+                continue
+            end, history = frames[-1]
+            book = json.loads(row["book"])
+            if end.isoformat() <= (book["last"] or row["started"]):
+                continue
+            point = advance(book, spec.rule, history, end, seen, spec.capital)
+            with self.db() as db:
+                changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
+                                     (dumps(book), "已同步盘中行情", row["id"], row["revision"]))
+                if changed.rowcount == 1:
+                    db.execute("INSERT INTO paper_point VALUES(?,?,?)", (row["id"], point["at"], dumps(point)))
+
+    async def run(self, stop):
+        while not stop.is_set():
+            try:
+                await self.tick()
+            except Exception:
+                log.exception("paper account update failed")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=25)
+            except TimeoutError:
+                pass
+
+    def routes(self):
+        router = APIRouter(prefix="/v1/paper")
+        router.get("/versions")(self.catalog)
+
+        @router.post("/versions")
+        async def create(spec: Research):
+            return await self.research(spec)
+
+        @router.get("/versions/{version}")
+        def read(version: int, day: str = ""):
+            return self.detail(version, day)
+
+        @router.post("/versions/{version}/deploy")
+        def deploy(version: int):
+            return self.deploy(version)
+        return router
+
