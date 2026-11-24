@@ -11,7 +11,7 @@ import com.finscope.dao.quant.QuantStrategyRepository;
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
-import com.finscope.rpc.llm.LlmChatClient;
+import com.finscope.rpc.llm.LunaResponsesClient;
 import com.finscope.rpc.quant.PythonPaperClient;
 import com.finscope.service.quant.discovery.StockDiscoveryService;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ public class PaperResearchService {
     @Resource
     private PythonPaperClient paper;
     @Resource
-    private LlmChatClient llm;
+    private LunaResponsesClient llm;
     @Resource
     private ObjectMapper json;
 
@@ -61,7 +61,7 @@ public class PaperResearchService {
             return detail.get("review");
         }
         if (!llm.isConfigured()) {
-            throw invalid("请先配置本地 LLM");
+            throw invalid("请先配置本地 Luna API Key");
         }
         ObjectNode evidence = json.createObjectNode();
         evidence.set("spec", detail.path("spec"));
@@ -78,9 +78,9 @@ public class PaperResearchService {
         evidence.set("historicalFills", history.get("fills"));
         String report;
         try {
-            report = llm.complete("作为量化学习助教，用中文基于给定数据复盘。分别描述历史回测与实时模拟，"
+            report = llm.completeText("作为量化学习助教，用中文基于给定数据复盘。分别描述历史回测与实时模拟，"
                     + "说明观察天数、成交、成本、相对基准或同期对照的结果和下一条可检验假设。"
-                    + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。最多800字，纯文本。", evidence.toString());
+                    + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。最多800字，纯文本。", evidence.toString(), 2400);
         } catch (Exception error) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "模拟账户复盘生成失败", error);
         }
@@ -89,7 +89,7 @@ public class PaperResearchService {
         }
         ObjectNode review = json.createObjectNode();
         review.put("at", at);
-        review.put("model", llm.modelName());
+        review.put("model", llm.model());
         review.put("text", report);
         return paper.saveReview(id, review);
     }
@@ -139,7 +139,7 @@ public class PaperResearchService {
 
     private ObjectNode generateRule(String origin, JsonNode parent) {
         if (!llm.isConfigured()) {
-            throw invalid("请先配置本地 LLM，再生成盘中策略");
+            throw invalid("请先配置本地 Luna API Key，再生成盘中策略");
         }
         String contract = "生成可执行的沪深 A 股五分钟实验规则，仅返回 JSON 对象。"
                 + "字段严格为 name,hypothesis,terms,entry,exit,slots。中文写明可检验假设。"
@@ -149,7 +149,7 @@ public class PaperResearchService {
                 + "entry 和 exit 取值 -20至20，entry>exit，使用小数尺度，slots 为1到10的持股数。"
                 + "排名靠前且达entry买入，持仓低于或等于exit退出。如源策略需要无法获得的数据，说明代理指标与局限。";
         try {
-            String raw = llm.complete(contract, origin + (parent == null ? "" : "\n对照版本，仅改变因子组合：" + parent.path("rule")));
+            String raw = llm.completeText(contract, origin + (parent == null ? "" : "\n对照版本，仅改变因子组合：" + parent.path("rule")), 2400);
             return json.readValue(raw.trim().replaceFirst("^\u0060\u0060\u0060(?:json)?\\s*", "").replaceFirst("\\s*\u0060\u0060\u0060$", ""), ObjectNode.class);
         } catch (Exception error) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "未取得有效的策略 JSON，请重试", error);
