@@ -54,8 +54,8 @@ export function LiveNewsPanel({
         const before = pageRef.current;
         const changed =
           before.total !== next.total ||
-          before.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}`).join('|') !==
-            next.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}`).join('|');
+          before.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}:${item.coverageSources}:${item.coverageBonus}`).join('|') !==
+            next.items.map((item) => `${item.id}:${item.contentVersion}:${item.categoryCode}:${item.mergedReportCount}:${item.coverageSources}:${item.coverageBonus}`).join('|');
         if (changed) {
           setPending(next);
         }
@@ -205,6 +205,8 @@ export function LiveNewsPanel({
     const content = <>
       <div className={depth ? 'news-card-meta' : 'news-flash-meta'}>
         <span>{item.sourceName}</span><small>{item.sourceTier}</small>
+        {item.eventPriority != null && <small title="综合内容重要性、多家报道和进展时效">优先级 {item.eventPriority}</small>}
+        {(item.coverageSources ?? 0) > 1 && <em title={`多来源加分 +${item.coverageBonus ?? 0}，总分上限 100`}>{item.coverageSources} 家媒体报道</em>}
         {item.unread ? <em>未读</em> : null}
         {(item.mergedReportCount ?? 1) > 1 ? <em>合并 {item.mergedReportCount} 条报道</em> : null}
         {item.contentVersion > 1 ? <em>原文更新 · v{item.contentVersion}</em> : null}
@@ -229,7 +231,7 @@ export function LiveNewsPanel({
     </>;
     return depth
       ? <article key={item.id} className="news-depth-card" data-flow-surface={item.categoryCode || 'review'}>{body}</article>
-      : <article key={item.id} className={index === 0 ? 'news-flash-item is-latest' : 'news-flash-item'}>
+      : <article key={item.id} className={index === 0 && !query.priorityOrder ? 'news-flash-item is-latest' : 'news-flash-item'}>
           <time dateTime={item.publishedAt}>{dateTime(item.publishedAt).slice(-5)}<small>{dateTime(item.publishedAt).slice(5, 10)}</small></time>
           <span className="news-pulse-dot" aria-hidden="true" />
           <div className="news-flash-content" data-flow-surface={item.categoryCode || 'active'}>{body}</div>
@@ -307,6 +309,10 @@ export function LiveNewsPanel({
         </div>
         <details className="news-advanced-filters"><summary>更多筛选</summary>
           <div>
+            <label>排序<select aria-label="资讯排序" value={draft.priorityOrder ? 'priority' : 'time'}
+              onChange={(event) => apply({ ...draft, priorityOrder: event.target.value === 'priority' })}>
+              <option value="priority">优先级从高到低</option><option value="time">最新发布在前</option>
+            </select></label>
             <label>排除词<input value={draft.exclude} placeholder="不包含的关键词" maxLength={100} onChange={(event) => setDraft({ ...draft, exclude: event.target.value })} /></label>
             <label>类型<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value })}>
               <option value="ALL">全部内容</option><option value="FLASH">实时快讯</option><option value="ARTICLE">要闻文章</option>

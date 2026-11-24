@@ -96,6 +96,16 @@ test('queries the server beyond the rendered page and keeps the pagination water
   );
 });
 
+test('shows market-wide coverage and can switch back to publication order', async () => {
+  latest = { ...page, items: [{ ...report, coverageSources: 3, eventPriority: 87, coverageBonus: 22 }] };
+  setup();
+  expect(await screen.findByText('3 家媒体报道')).toBeVisible();
+  expect(screen.getByText('优先级 87')).toBeVisible();
+  expect(api).toHaveBeenCalledWith(expect.stringContaining('priorityOrder=true'));
+  fireEvent.change(screen.getByLabelText('资讯排序'), { target: { value: 'time' } });
+  await waitFor(() => expect(api).toHaveBeenCalledWith(expect.stringContaining('priorityOrder=false')));
+});
+
 test('defers background changes until the reader accepts them', async () => {
   setup();
   await screen.findByRole('heading', { name: report.title });

@@ -1,5 +1,6 @@
 package com.finscope.service.radar;
 
+import com.finscope.domain.news.NewsContentImportance;
 import com.finscope.domain.radar.NewsworthinessAssessment;
 import com.finscope.domain.radar.RadarSignal;
 import org.springframework.stereotype.Service;
@@ -25,13 +26,7 @@ import java.util.regex.Pattern;
 public class RadarNewsworthinessService {
     public static final String VERSION = "NEWS_VALUE_V1";
     private static final int MAX_REMEMBERED_FACTS = 64;
-    private static final Pattern POLICY = Pattern.compile("(央行|人民银行|美联储|国务院|证监会|政府|国会).{0,30}(降准|降息|加息|下调.*准备金率|维持.*利率|出口管制|批准|通过|实施|禁止|取消限制)");
-    private static final Pattern EARNINGS = Pattern.compile("业绩预告|季度业绩|季度.*(收入|营收|净利润)|净利润.*同比|营收.*同比|预增|预亏|扭亏");
-    private static final Pattern PUBLIC_POLICY = Pattern.compile("(财政部|商务部|国务院|发改委|全国|央行|人民银行).*(发布|公布|出台|实施|调整|批准|取消|修订)|停火|重大事故|立案调查|留置|终止.*合资");
     private static final Pattern COMPANY_PREFIX = Pattern.compile("^([^:：]{2,16})[:：]");
-    private static final Pattern DEVELOPMENT = Pattern.compile("降准|降息|加息|出口管制|正式实施|获批|业绩预告|重大资产重组|收购|中标|新一代|新模型|新款|量产|突破|投产");
-    private static final Pattern ROUTINE = Pattern.compile("^预告[:：]|(定于|将于).*新闻发布会|投资日历|大事提醒|(召开|举行|召开情况).{0,20}业绩说明会|业绩说明会.{0,15}(召开|通知|公告|纪要)|董事会.*(会议|决议)|股东.*(通知|决议)|融资余额|融资买入|龙虎榜|前十名.*持股|前十名股东|律师事务所|法律意见|核查意见|投资者关系活动记录表|授予.*(结果|登记)|归属名单|收购报告书摘要|闲置募集资金");
-    private static final Pattern UNCERTAIN = Pattern.compile("传闻|网传|未经证实|据传|有望|或将|可能会|考虑|研究是否|拟议|否认|尚未|不会|未宣布|是否|还.*吗|[？?]");
     @Resource
     private NewswireRankingProperties properties;
 
@@ -121,26 +116,7 @@ public class RadarNewsworthinessService {
         for (RadarSourceIndependenceService.Observation observation : facts) {
             RadarSignal signal = observation.getSignal();
             String title = safe(signal.getTitle());
-            int score = 35;
-            if (DEVELOPMENT.matcher(title).find()) {
-                score = 70;
-            }
-            if (EARNINGS.matcher(title).find()) {
-                score = Math.max(score, 75);
-            }
-            if (PUBLIC_POLICY.matcher(title).find()) {
-                score = Math.max(score, 80);
-            }
-            if (POLICY.matcher(title).find()) {
-                score = 95;
-            }
-            if (ROUTINE.matcher(title).find()) {
-                score = Math.min(score, 10);
-            }
-            if (UNCERTAIN.matcher(title).find()) {
-                score = Math.min(score, 40);
-            }
-            best = Math.max(best, score);
+            best = Math.max(best, NewsContentImportance.score(title));
         }
         return best;
     }
@@ -157,7 +133,7 @@ public class RadarNewsworthinessService {
             if (!features.getNumericFacts().isEmpty() || !features.getActions().isEmpty()) {
                 value += 25;
             }
-            if (UNCERTAIN.matcher(safe(signal.getTitle())).find()) {
+            if (NewsContentImportance.uncertain(safe(signal.getTitle()))) {
                 value = Math.min(value, 30);
             }
             best = Math.max(best, value);

@@ -32,6 +32,7 @@ class NewsReportRepositoryTest {
         repository = new NewsReportRepository();
         ReflectionTestUtils.setField(repository, "jdbc", jdbc);
         ReflectionTestUtils.setField(repository, "mapper", new ObjectMapper());
+        ReflectionTestUtils.setField(repository, "ranking", new NewsWindowRankingProperties());
         jdbc.execute("CREATE TABLE investment_reaction_source(origin_type TEXT,origin_key TEXT,event_key TEXT)");
         jdbc.execute("CREATE TABLE major_event(origin_type TEXT,origin_key TEXT)");
     }
@@ -247,6 +248,103 @@ class NewsReportRepositoryTest {
         repository.ingest(List.of(two));
         assertEquals(3, repository.count(query, now.minusHours(1), now));
         assertTrue(repository.related("a").isEmpty());
+    }
+
+    @Test
+    void ranksEventsBeforePaginationAndKeepsMarketWideCoverageUnderSourceFilters() {
+        var original = report("origin", "厂商正式投产");
+        var digest = report("digest", "厂商正式投产");
+        digest.setProviderCode("CLS_DIGEST");
+        var second = report("syndicated", "转载投产消息");
+        second.setSourceName("同花顺");
+        var third = report("follow-up", "披露了投产后的交付时间");
+        third.setSourceName("东方财富");
+        var independent = report("solo", "厂商业绩预告");
+        repository.ingest(List.of(original, digest, independent));
+        link("origin", "production", "NEW_EVENT");
+        link("digest", "production", "DUPLICATE");
+        var earlier = query();
+        earlier.setPriorityOrder(true);
+        assertEquals("solo", repository.query(earlier, now.minusHours(6), now).getItems().getFirst().getId());
+        repository.ingest(List.of(second));
+        link("syndicated", "production", "DUPLICATE");
+        var query = query();
+        query.setPriorityOrder(true);
+        query.setSize(1);
+        var first = repository.query(query, now.minusHours(6), now).getItems().getFirst();
+        assertEquals("origin", first.getId());
+        assertEquals(2, first.getCoverageSources());
+        int twoSources = first.getEventPriority();
+        repository.ingest(List.of(third));
+        link("follow-up", "production", "PROGRESS");
+        assertEquals(twoSources, repository.query(query, now.minusHours(6), now).getItems().getFirst().getEventPriority());
+        query.setAsOfSequence(repository.latestSequence());
+        query.setSource("同花顺");
+        var filtered = repository.query(query, now.minusHours(6), now).getItems().getFirst();
+        assertEquals(1, filtered.getMergedReportCount());
+        assertEquals(3, filtered.getCoverageSources());
+        assertTrue(filtered.getEventPriority() > twoSources);
+        query.setGroupEvents(false);
+        assertEquals(filtered.getEventPriority(), repository.query(query, now.minusHours(6), now).getItems().getFirst().getEventPriority());
+        query.setGroupEvents(true);
+        jdbc.update("UPDATE news_ai_report SET relation='DUPLICATE' WHERE report_id='follow-up'");
+        assertTrue(repository.query(query, now.minusHours(6), now).getItems().getFirst().getEventPriority() < filtered.getEventPriority());
+        jdbc.update("UPDATE news_ai_report SET event_key='other' WHERE report_id='follow-up'");
+        assertEquals(twoSources, repository.query(query, now.minusHours(6), now).getItems().getFirst().getEventPriority());
+        second.setContent("更正为另一条新闻");
+        repository.ingest(List.of(second));
+        query.setSource("财联社");
+        var origin = repository.query(query, now.minusHours(6), now).getItems();
+        assertEquals("solo", origin.getFirst().getId());
+        query.setSource("同花顺");
+        assertEquals(1, repository.query(query, now.minusHours(6), now).getItems().getFirst().getCoverageSources());
+    }
+
+    @Test
+    void officialContractTerminationOutranksThreeCopiesOfARoutineNotice() {
+        var exclusive = report("exclusive", "公司终止重大供货合同");
+        var routine = report("first", "董事会会议公告");
+        var second = report("second", routine.getTitle());
+        second.setSourceName("东方财富");
+        var third = report("third", routine.getTitle());
+        third.setSourceName("同花顺");
+        repository.ingest(List.of(exclusive, routine, second, third));
+        link("first", "routine", "NEW_EVENT");
+        link("second", "routine", "DUPLICATE");
+        link("third", "routine", "DUPLICATE");
+        var query = query();
+        query.setPriorityOrder(true);
+        var items = repository.query(query, now.minusHours(1), now).getItems();
+        assertEquals("exclusive", items.getFirst().getId());
+        assertEquals(85, items.getFirst().getEventPriority());
+        assertEquals(15, items.getLast().getEventPriority());
+    }
+
+    @Test
+    void oldReprintsEarnLessThanRapidPickupAndCannotRefreshAnOldEvent() {
+        var old = report("old", "原创投产新闻");
+        old.setPublishedAt(now.minusDays(3));
+        old.setFirstSeenAt(now.minusDays(3));
+        var recent = report("recent", "另一条投产新闻");
+        var late = report("late", "今天转载的旧新闻");
+        late.setSourceName("同花顺");
+        var fast = report("fast", "同小时的报道");
+        fast.setSourceName("同花顺");
+        repository.ingest(List.of(old, recent, late, fast));
+        link("old", "old-event", "NEW_EVENT");
+        link("late", "old-event", "DUPLICATE");
+        link("recent", "recent-event", "NEW_EVENT");
+        link("fast", "recent-event", "DUPLICATE");
+        var query = query();
+        query.setPriorityOrder(true);
+        query.setSource("同花顺");
+        var ranked = repository.query(query, now.minusHours(1), now).getItems();
+        assertEquals(List.of("fast", "late"), ranked.stream().map(NewsReport::getId).toList());
+        assertTrue(ranked.getFirst().getCoverageBonus() > ranked.getLast().getCoverageBonus());
+        assertTrue(ranked.getLast().getEventPriority() < 70);
+        jdbc.update("DELETE FROM news_report WHERE id='old'");
+        var after = repository.query(query, now.minusHours(1), now).getItems();
+        assertEquals(1, after.getLast().getCoverageSources());
     }
 
     private void link(String id, String event, String relation) {

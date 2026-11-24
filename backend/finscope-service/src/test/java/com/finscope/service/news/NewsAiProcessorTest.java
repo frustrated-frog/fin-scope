@@ -62,7 +62,7 @@ class NewsAiProcessorTest {
                 new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
         repository = (NewsAiRepository) factory.getProxy();
         reports = new NewsReportRepository();
-        inject(reports, "jdbc", jdbc, "mapper", mapper);
+        inject(reports, "jdbc", jdbc, "mapper", mapper, "ranking", new NewsWindowRankingProperties());
         properties = new NewsAiProperties();
         properties.setEnabled(true);
         properties.setBackfillExisting(true);

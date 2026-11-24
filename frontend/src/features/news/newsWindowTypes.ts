@@ -23,6 +23,9 @@ export interface NewsReport {
   manualReason?: string;
   eventKey?: string;
   mergedReportCount?: number;
+  coverageSources?: number;
+  coverageBonus?: number;
+  eventPriority?: number;
 }
 export interface NewsQuery {
   query: string;
@@ -32,6 +35,7 @@ export interface NewsQuery {
   kind: string;
   unreadOnly: boolean;
   groupEvents?: boolean;
+  priorityOrder?: boolean;
   hours: number;
   page: number;
   size: number;
@@ -80,6 +84,7 @@ export const initialQuery: NewsQuery = {
   kind: 'ALL',
   unreadOnly: false,
   groupEvents: true,
+  priorityOrder: true,
   hours: 36,
   page: 0,
   size: 50,

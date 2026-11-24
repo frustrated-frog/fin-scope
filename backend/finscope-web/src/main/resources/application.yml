@@ -169,6 +169,13 @@ finscope:
     refresh-cron: 0 30 15 * * MON-FRI
     recovery-initial-delay-ms: 30000
     recovery-interval-ms: 3600000
+  news-window-ranking:
+    second-source: 12
+    third-source: 6
+    fourth-source: 3
+    rapid-minutes: 60
+    rapid-bonus: 4
+    progress-bonus: 4
   newswire-ranking:
     importance-weight: 0.45
     novelty-weight: 0.20

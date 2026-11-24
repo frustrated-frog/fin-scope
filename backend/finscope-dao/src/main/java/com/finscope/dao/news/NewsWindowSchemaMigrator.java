@@ -63,6 +63,7 @@ public class NewsWindowSchemaMigrator implements InitializingBean {
                         unchanged INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(batch_id,provider_code))
                     """);
             jdbc.execute("CREATE INDEX IF NOT EXISTS idx_news_fetch_batch_time ON news_fetch_batch(started_at)");
+            NewsEventRanking.initialize(jdbc);
             jdbc.execute("CREATE TABLE IF NOT EXISTS news_saved_filter (id TEXT PRIMARY KEY,name TEXT NOT NULL,query_json TEXT NOT NULL)");
         });
     }

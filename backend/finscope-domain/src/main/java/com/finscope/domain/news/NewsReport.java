@@ -29,6 +29,10 @@ public class NewsReport {
     private String eventKey;
     private int mergedReportCount = 1;
 
+    private Integer eventPriority;
+    private Integer coverageSources;
+    private Integer coverageBonus;
+
     public boolean isUnread() {
         return readVersion < contentVersion;
     }

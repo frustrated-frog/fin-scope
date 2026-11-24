@@ -21,6 +21,8 @@ public class NewsReportRepository {
     private JdbcTemplate jdbc;
     @Resource
     private ObjectMapper mapper;
+    @Resource
+    private NewsWindowRankingProperties ranking;
 
     /** 一个批次的正文与版本原子保存；重复抓取不增加内容版本。 */
     @Transactional(rollbackFor = Exception.class)
@@ -40,8 +42,8 @@ public class NewsReportRepository {
         Map<String, VersionCounts> counts = new LinkedHashMap<>();
         for (NewsReport report : reports) {
             int changed = jdbc.update("INSERT INTO news_report(id,provider_code,source_name,source_tier,kind,title,content,url,"
-                            + "published_at,first_seen_at,last_seen_at,category_code,category_name,classification_reason,rule_version) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                            + "published_at,first_seen_at,last_seen_at,category_code,category_name,classification_reason,rule_version,content_importance) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET content_importance=excluded.content_importance,"
                             + "content_version=news_report.content_version+CASE WHEN news_report.title<>excluded.title OR "
                             + "news_report.content<>excluded.content THEN 1 ELSE 0 END,title=excluded.title,content=excluded.content,"
                             + "url=excluded.url,published_at=COALESCE(news_report.published_at,excluded.published_at),last_seen_at=excluded.last_seen_at,"
@@ -51,7 +53,7 @@ public class NewsReportRepository {
                             + "rule_version=CASE WHEN news_report.title=excluded.title AND news_report.content=excluded.content AND news_report.rule_version LIKE 'news-understanding-%' THEN news_report.rule_version ELSE excluded.rule_version END",
                     report.getId(), report.getProviderCode(), report.getSourceName(), report.getSourceTier(), report.getKind(),
                     report.getTitle(), report.getContent(), report.getUrl(), time(report.getPublishedAt()), time(report.getFirstSeenAt()),
-                    time(report.getLastSeenAt()), report.getCategoryCode(), report.getCategoryName(), report.getClassificationReason(), report.getRuleVersion());
+                    time(report.getLastSeenAt()), report.getCategoryCode(), report.getCategoryName(), report.getClassificationReason(), report.getRuleVersion(), NewsContentImportance.score(report.getTitle()));
             if (changed != 1) {
                 throw new IllegalStateException("新闻保存影响行数异常");
             }
@@ -159,12 +161,20 @@ public class NewsReportRepository {
         String where = where(query, since, until, args);
         NewsWindowPage page = new NewsWindowPage();
         page.setTotal(count(query, since, until));
+        String candidates = query.isGroupEvents() ? ranked(where) + "SELECT * FROM ranked WHERE event_rank=1" : SELECT + where;
+        args.add(query.getAsOfSequence());
+        args.add(time(until));
+        args.addAll(ranking.parameters());
         args.add(query.getSize());
         args.add((long) query.getPage() * query.getSize());
-        String sql = query.isGroupEvents() ? ranked(where) + "SELECT * FROM ranked WHERE event_rank=1 "
-                + "ORDER BY COALESCE(published_at,first_seen_at) DESC,arrival_sequence DESC LIMIT ? OFFSET ?"
-                : SELECT + where + " ORDER BY COALESCE(n.published_at,n.first_seen_at) DESC,n.arrival_sequence DESC LIMIT ? OFFSET ?";
-        page.setItems(jdbc.query(sql, row(), args.toArray()));
+        var reportRow = row();
+        page.setItems(jdbc.query(NewsEventRanking.page(candidates, query.isPriorityOrder()), (rs, index) -> {
+            NewsReport report = reportRow.mapRow(rs, index);
+            report.setEventPriority(rs.getInt("event_priority"));
+            report.setCoverageBonus(rs.getInt("coverage_bonus"));
+            report.setCoverageSources(rs.getInt("coverage_sources"));
+            return report;
+        }, args.toArray()));
         page.setAsOfSequence(query.getAsOfSequence());
         page.setPage(query.getPage());
         page.setSize(query.getSize());
