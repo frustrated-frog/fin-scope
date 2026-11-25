@@ -96,7 +96,7 @@ def execute(book, order, bar, end):
         while quantity and money(quantity * price + max(5, quantity * price * 0.0003)) > budget:
             quantity -= lot
     else:
-        quantity = min(capacity, sum(q for day, q in pos.get("lots", []) if day < end.date().isoformat()))
+        quantity = min(capacity, order.get("maxShares", capacity), sum(q for day, q in pos.get("lots", []) if day < end.date().isoformat()))
     if quantity <= 0:
         reason = "可用资金不足一个交易单位" if side == "BUY" else "T+1 限制，可卖股数为零"
         if capacity <= 0:
@@ -106,7 +106,9 @@ def execute(book, order, bar, end):
     fee = money(max(5, gross * 0.0003) + (gross * 0.0005 if side == "SELL" else 0))
     if side == "BUY":
         book["cash"] = money(book["cash"] - gross - fee)
-        book["positions"][code] = dict(lots=[[end.date().isoformat(), quantity]], cost=money(gross + fee))
+        position = book["positions"].setdefault(code, dict(lots=[], cost=0))
+        position["lots"].append([end.date().isoformat(), quantity])
+        position["cost"] = money(position["cost"] + gross + fee)
     else:
         total = sum(q for _, q in pos["lots"])
         cost = money(pos["cost"] * quantity / total)
@@ -115,43 +117,66 @@ def execute(book, order, bar, end):
         if quantity == total:
             del book["positions"][code]
         else:
-            # Positions are opened once, with no averaging into existing holdings.
-            pos["lots"][0][1] -= quantity
+            remaining = quantity
+            for entry in pos["lots"]:
+                sold = min(remaining, entry[1])
+                entry[1] -= sold
+                remaining -= sold
+            pos["lots"] = [entry for entry in pos["lots"] if entry[1]]
             pos["cost"] = money(pos["cost"] - cost)
     book["fills"] += 1
     book["fees"] = money(book["fees"] + fee)
     return dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
 
 
-def advance(book, rule, histories, end, available, capital):
-    """All members have a closed bar at end. Never fill a new signal on that bar."""
+def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None):
+    """Only histories with a fresh closed bar may signal or fill."""
+    universe = universe or list(histories)
     waiting = []
     events = []
     for order in book["pending"]:
         if end - INTERVAL < datetime.fromisoformat(order["available"]):
             waiting.append(order)
+        elif order["code"] not in histories:
+            events.append(dict(order, action="未成交", reason="该股票行情缺失"))
         else:
             events.append(execute(book, order, histories[order["code"]][-1], end))
     book["pending"] = waiting
-    values = {}
+    marks = book.setdefault("marks", {})
     for code, bars in histories.items():
         price = bars[-1].close
         book["anchors"].setdefault(code, price)
+        marks[code] = price
         if code in book["positions"]:
-            pos = book["positions"][code]
-            pos["price"] = price
-            values[code] = sum(q for _, q in pos["lots"]) * price
+            book["positions"][code].update(price=price, pricedAt=end.isoformat())
+    values = {code: pos["price"] * sum(q for _, q in pos["lots"]) for code,pos in book["positions"].items()}
     equity = money(book["cash"] + sum(values.values()))
-    benchmark = fmean(bars[-1].close / book["anchors"][code] for code, bars in histories.items())
-    scores = {c: score(rule, bars) for c, bars in histories.items()}
+    # Each original member keeps its benchmark weight during outages.
+    benchmark = fmean(marks.get(c, book["anchors"].get(c, 1)) / book["anchors"].get(c, 1) for c in universe)
+    book["stale"] = [code for code in universe if code not in histories]
+    if decide is None:
+        targets = None
+        scores = {c: score(rule, histories[c]) if c in histories else None for c in universe}
+    else:
+        targets, scores = decide(histories, book, end, equity)
     ranking = sorted((c for c in scores if scores[c] is not None), key=lambda c: (-scores[c], c))
     pending_codes = {o["code"] for o in waiting}
-    free = rule.slots - len(values) - sum(o["side"] == "BUY" for o in waiting)
+    free = len(universe) if decide else rule.slots - len(values) - sum(o["side"] == "BUY" for o in waiting)
     for rank, code in enumerate(ranking, 1):
         if code in pending_codes:
             continue
         value = scores[code]
-        if code in values and value <= rule.exit:
+        if targets is not None:
+            if code not in targets:
+                continue
+            delta = equity * targets[code] - values.get(code, 0)
+            price = histories[code][-1].close
+            lot = 200 if code.startswith(("688","689")) else 100
+            if abs(delta) < price * lot and not (targets[code] == 0 and code in values):
+                continue
+            side = "BUY" if delta > 0 else "SELL"
+            reason = f"策略目标仓位 {targets[code]:.1%}"
+        elif code in values and value <= rule.exit:
             side, reason = "SELL", "得分降至退出阈值"
         elif code not in values and free > 0 and value >= rule.entry and rank <= rule.slots:
             side, reason = "BUY", "排名进入目标范围并达到买入阈值"
@@ -159,12 +184,14 @@ def advance(book, rule, histories, end, available, capital):
         else:
             continue
         order = dict(code=code, side=side, reason=reason, score=value, rank=rank,
-                     available=available.isoformat(), budget=money(equity / rule.slots))
+                     available=available.isoformat(), budget=money(abs(delta) if targets is not None else equity / rule.slots))
+        if targets is not None and side == "SELL" and targets[code] > 0:
+            order["maxShares"] = int(abs(delta) / price) // lot * lot
         book["pending"].append(order)
         events.append(dict(**order, action="信号"))
     book.update(equity=equity, last=end.isoformat())
     return dict(at=end.isoformat(), equity=equity, benchmark=money(benchmark * capital),
-                cash=book["cash"], scores=scores, events=events,
+                cash=book["cash"], scores=scores, events=events, stale=book["stale"],
                 holdings={c:sum(q for _,q in pos["lots"]) for c,pos in book["positions"].items()},
                 reason="已检查持仓和入场条件" if ranking else "因子窗口数据不足")
 

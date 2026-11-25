@@ -2,6 +2,7 @@ package com.finscope.web.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.common.api.ApiResponse;
+import com.finscope.common.enums.quant.PaperAccountState;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.service.quant.paper.PaperResearchService;
 import com.finscope.web.response.ApiResponses;
@@ -25,6 +26,32 @@ public class PaperResearchController {
     @PostMapping
     public ApiResponse<JsonNode> generate(@RequestBody PaperResearchInput input) {
         return ApiResponses.success(service.generate(input));
+    }
+
+    @GetMapping("/jobs")
+    public ApiResponse<JsonNode> jobs() {
+        return ApiResponses.success(service.jobs());
+    }
+
+    @PostMapping("/jobs")
+    public ApiResponse<JsonNode> submit(@RequestBody PaperResearchInput input,
+            @RequestParam(defaultValue = "false") boolean autoIterate) {
+        return ApiResponses.success(service.submitCoding(input, autoIterate));
+    }
+
+    @PostMapping("/jobs/{id}/retry")
+    public ApiResponse<JsonNode> retry(@PathVariable long id) {
+        return ApiResponses.success(service.retry(id));
+    }
+
+    @PostMapping("/{id}/replay")
+    public ApiResponse<JsonNode> replay(@PathVariable long id) {
+        return ApiResponses.success(service.replay(id));
+    }
+
+    @PostMapping("/{id}/state/{state}")
+    public ApiResponse<JsonNode> transition(@PathVariable long id, @PathVariable PaperAccountState state) {
+        return ApiResponses.success(service.transition(id, state));
     }
 
     @GetMapping("/{id}")

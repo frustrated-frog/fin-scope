@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
+from .research import JobRequest, PythonRule, ResearchJobs
+from .python_runtime import PythonStrategy
+
 log = logging.getLogger(__name__)
 
 
@@ -25,7 +28,7 @@ class Review(BaseModel):
 
 
 class Research(BaseModel):
-    rule: Rule
+    rule: Rule | PythonRule
     pool: Literal["DISCOVERY", "WATCHLIST"]
     source: str = Field(max_length=500)
     capital: float = Field(gt=0, le=1e10, allow_inf_nan=False)
@@ -43,9 +46,10 @@ def dumps(value):
 
 
 class PaperLab:
-    def __init__(self, path, router):
+    def __init__(self, path, router, archive=None):
         self.path = path
         self.router = router
+        self.jobs = ResearchJobs(self, archive)
         self.limit = asyncio.Semaphore(4)
 
     @contextmanager
@@ -65,6 +69,8 @@ class PaperLab:
               CREATE TABLE IF NOT EXISTS paper_point (
                 id INTEGER NOT NULL, at TEXT NOT NULL, point TEXT NOT NULL, PRIMARY KEY(id,at));
             """)
+            if "lifecycle" not in {r["name"] for r in db.execute("PRAGMA table_info(paper_account)")}:
+                db.execute("ALTER TABLE paper_account ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'RUNNING'")
             yield db
 
     async def bars(self, code):
@@ -87,6 +93,8 @@ class PaperLab:
             yield end, {c: bars[max(0, (n := bisect_right(times[c], end)) - 49):n] for c, bars in panel.items()}
 
     async def research(self, spec, auto_start=False):
+        if isinstance(spec.rule, PythonRule):
+            raise HTTPException(422, "Python 策略须经 Codex 任务验证")
         spec.codes = list(dict.fromkeys(spec.codes))
         if any(len(c) != 6 or not c.isdigit() or not c.startswith(("00","30","60","68")) for c in spec.codes):
             raise HTTPException(422, "股票池仅支持有五分钟行情的沪深 A 股")
@@ -104,6 +112,8 @@ class PaperLab:
                 return {"id":row[0]}
             if spec.parent:
                 parent = self.spec(db, spec.parent)
+                if isinstance(parent.rule, PythonRule):
+                    raise HTTPException(422, "请使用 Codex 创建 Python 策略对照")
                 if (spec.codes, spec.pool, spec.capital) != (parent.codes, parent.pool, parent.capital):
                     raise HTTPException(422, "因子对照须沿用原版本股票池和本金")
                 if (spec.rule.entry, spec.rule.exit, spec.rule.slots) != (parent.rule.entry, parent.rule.exit, parent.rule.slots):
@@ -154,10 +164,33 @@ class PaperLab:
 
     def catalog(self):
         with self.db() as db:
-            rows = db.execute("""SELECT v.id,v.spec,v.created,a.started,a.status,a.book FROM paper_version v
+            rows = db.execute("""SELECT v.id,v.spec,v.created,a.started,a.status,a.lifecycle,a.book FROM paper_version v
                 LEFT JOIN paper_account a ON v.id=a.id ORDER BY v.id DESC LIMIT 200""").fetchall()
         return [dict(id=r["id"], spec=json.loads(r["spec"]), created=r["created"], started=r["started"],
-                     status=r["status"], book=json.loads(r["book"]) if r["book"] else None) for r in rows]
+                     status=r["status"], lifecycle=r["lifecycle"], book=json.loads(r["book"]) if r["book"] else None) for r in rows]
+
+    def transition(self, version, state):
+        allowed = {"PAUSED": ("RUNNING",), "RUNNING": ("PAUSED",),
+                   "STOPPED": ("RUNNING","PAUSED"), "ARCHIVED": ("STOPPED",)}
+        labels = {"PAUSED":"已暂停","RUNNING":"等待新行情","STOPPED":"已停止","ARCHIVED":"已归档"}
+        with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT lifecycle,book FROM paper_account WHERE id=?", (version,)).fetchone()
+            if not row:
+                raise HTTPException(404, "账户不存在")
+            if row["lifecycle"] == state:
+                return {"id": version}
+            if row["lifecycle"] not in allowed[state]:
+                raise HTTPException(422, "账户状态不允许此操作")
+            book = json.loads(row["book"])
+            for account in [book, book.get("control")]:
+                if account:
+                    account["pending"] = []
+            if state == "RUNNING":
+                book["resumedAt"] = stamp().isoformat()
+            db.execute("UPDATE paper_account SET lifecycle=?,status=?,book=?,revision=revision+1 WHERE id=?",
+                       (state,labels[state],dumps(book),version))
+        return {"id": version}
 
     def pending_reviews(self):
         now = stamp()
@@ -232,6 +265,7 @@ class PaperLab:
                 raise HTTPException(422, "没有对应行情时点的前向记录")
             db.execute("INSERT OR IGNORE INTO paper_review(id,at,review) VALUES(?,?,?)",
                        (version, review.at, review.model_dump_json()))
+            self.jobs.after_review(db, version, review)
             return json.loads(db.execute("SELECT review FROM paper_review WHERE id=? AND at=?", (version,review.at)).fetchone()[0])
 
     async def tick(self):
@@ -240,33 +274,57 @@ class PaperLab:
                                       or "13:05" <= now.strftime("%H:%M") <= "15:06"):
             return
         with self.db() as db:
-            rows = db.execute("SELECT a.*,v.spec FROM paper_account a JOIN paper_version v ON a.id=v.id").fetchall()
+            rows = db.execute("SELECT a.*,v.spec FROM paper_account a JOIN paper_version v ON a.id=v.id WHERE lifecycle='RUNNING'").fetchall()
         codes = sorted({c for row in rows for c in json.loads(row["spec"])["codes"]})
         data = dict(zip(codes, await asyncio.gather(*(self.bars(c) for c in codes), return_exceptions=True)))
         for row in rows:
             spec = Research.model_validate_json(row["spec"])
             panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
-            frames = list(self.frames(panel, now - timedelta(seconds=3)))
+            cutoff = now - timedelta(seconds=3)
+            closed = {c: [b for b in bars if b.observed_at <= cutoff] for c, bars in panel.items()}
+            end = max((bars[-1].observed_at for bars in closed.values() if bars), default=None)
             seen = stamp()
-            if not frames or seen - frames[-1][0] > INTERVAL:
+            if not end or seen - end > INTERVAL:
                 with self.db() as db:
                     db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
                                ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
                 continue
-            end, history = frames[-1]
-            book = json.loads(row["book"])
-            if end.isoformat() <= (book["last"] or row["started"]):
+            end = end.astimezone(SHANGHAI)
+            history = {c: bars[-49:] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
+            if len(history) < len(panel) and seen - end < timedelta(seconds=45):
                 continue
-            point = advance(book, spec.rule, history, end, seen, spec.capital)
-            if "controlRule" in book:
-                control = advance(book["control"], Rule.model_validate(book["controlRule"]), history, end, seen, spec.capital)
-                point["control"] = control["equity"]
-                point["controlEvents"] = control["events"]
+            book = json.loads(row["book"])
+            last = max(book["last"] or row["started"], book.get("resumedAt", ""))
+            if end.isoformat() <= last:
+                continue
+            try:
+                point = await self.forward(book, spec.rule, spec, history, end, seen)
+                if "controlRule" in book:
+                    rule = book["controlRule"]
+                    control_rule = PythonRule.model_validate(rule) if rule.get("kind") == "python" else Rule.model_validate(rule)
+                    control = await self.forward(book["control"], control_rule, spec, history, end, seen)
+                    point["control"] = control["equity"]
+                    point["controlEvents"] = control["events"]
+            except Exception as error:
+                log.warning("策略 %s 运行失败: %s", row["id"], type(error).__name__)
+                with self.db() as db:
+                    db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
+                               ("策略运行失败，本时点未执行",row["id"],row["revision"]))
+                continue
+            point["previousAt"] = last
             with self.db() as db:
                 changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
-                                     (dumps(book), "已同步盘中行情", row["id"], row["revision"]))
+                                     (dumps(book), "部分行情缺失，沿用最近估值" if book["stale"] else "已同步盘中行情", row["id"], row["revision"]))
                 if changed.rowcount == 1:
                     db.execute("INSERT INTO paper_point VALUES(?,?,?)", (row["id"], point["at"], dumps(point)))
+
+    async def forward(self, book, rule, spec, history, end, seen):
+        if isinstance(rule, PythonRule):
+            def compute():
+                with PythonStrategy(rule.code, rule.image) as strategy:
+                    return advance(book, None, history, end, seen, spec.capital, universe=spec.codes, decide=strategy.decide)
+            return await asyncio.to_thread(compute)
+        return advance(book, rule, history, end, seen, spec.capital, universe=spec.codes)
 
     async def run(self, stop):
         while not stop.is_set():
@@ -289,6 +347,22 @@ class PaperLab:
 
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
+        router.get("/versions/jobs")(self.jobs.list)
+
+        @router.post("/versions/jobs")
+        def queue(value: JobRequest):
+            try:
+                return self.jobs.enqueue(value)
+            except ValueError as exc:
+                raise HTTPException(422,str(exc)) from exc
+
+        @router.post("/versions/jobs/{job}/retry")
+        def retry(job: int):
+            try:
+                return self.jobs.retry(job)
+            except ValueError as exc:
+                raise HTTPException(422,str(exc)) from exc
+
         @router.get("/versions/{version}")
         def read(version: int, day: str = ""):
             return self.detail(version, day)
@@ -296,6 +370,17 @@ class PaperLab:
         @router.post("/versions/{version}/review")
         def review(version: int, value: Review):
             return self.save_review(version, value)
+
+        @router.post("/versions/{version}/replay")
+        def replay(version: int):
+            try:
+                return self.jobs.replay(version)
+            except ValueError as exc:
+                raise HTTPException(422,str(exc)) from exc
+
+        @router.post("/versions/{version}/state/{state}")
+        def transition(version: int, state: Literal["RUNNING","PAUSED","STOPPED","ARCHIVED"]):
+            return self.transition(version, state)
 
         @router.post("/versions/{version}/deploy")
         def deploy(version: int):

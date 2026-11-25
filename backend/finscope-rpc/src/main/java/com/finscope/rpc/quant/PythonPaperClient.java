@@ -2,6 +2,7 @@ package com.finscope.rpc.quant;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finscope.common.enums.quant.PaperAccountState;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.common.exception.ExternalServiceException;
@@ -33,6 +34,26 @@ public class PythonPaperClient {
 
     public JsonNode detail(long id, LocalDate day) {
         return call("/" + id + (day == null ? "" : "?day=" + day), null);
+    }
+
+    public JsonNode jobs() {
+        return call("/jobs", null);
+    }
+
+    public JsonNode submitJob(JsonNode request) {
+        return call("/jobs", request);
+    }
+
+    public JsonNode retry(long id) {
+        return call("/jobs/" + id + "/retry", json.createObjectNode());
+    }
+
+    public JsonNode replay(long id) {
+        return call("/" + id + "/replay", json.createObjectNode());
+    }
+
+    public JsonNode transition(long id, PaperAccountState state) {
+        return call("/" + id + "/state/" + state.name(), json.createObjectNode());
     }
 
     public JsonNode pendingReviews() {

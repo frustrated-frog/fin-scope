@@ -3,6 +3,7 @@ package com.finscope.service.quant.paper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.finscope.common.enums.quant.PaperAccountState;
 import com.finscope.common.enums.quant.PaperUniverse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
@@ -74,7 +75,11 @@ public class PaperResearchService {
             throw invalid("请先配置本地 Luna API Key");
         }
         ObjectNode evidence = json.createObjectNode();
-        evidence.set("spec", detail.path("spec"));
+        ObjectNode spec = ((ObjectNode) detail.path("spec")).deepCopy();
+        if (spec.get("rule") instanceof ObjectNode rule) {
+            rule.remove(List.of("code", "image", "snapshot"));
+        }
+        evidence.set("spec", spec);
         evidence.set("stockNames", detail.path("stockNames"));
         evidence.set("session", summary);
         evidence.put("day", detail.path("day").asText());
@@ -103,13 +108,44 @@ public class PaperResearchService {
     }
 
     public JsonNode generate(PaperResearchInput input) {
+        return create(input, false, false);
+    }
+
+    public JsonNode submitCoding(PaperResearchInput input, boolean autoIterate) {
+        return create(input, true, autoIterate);
+    }
+
+    public JsonNode jobs() {
+        return paper.jobs();
+    }
+
+    public JsonNode retry(long job) {
+        return paper.retry(job);
+    }
+
+    public JsonNode replay(long version) {
+        return paper.replay(version);
+    }
+
+    public JsonNode transition(long version, PaperAccountState state) {
+        return paper.transition(version, state);
+    }
+
+    private JsonNode create(PaperResearchInput input, boolean coding, boolean autoIterate) {
         if (input.hypothesis() != null && input.hypothesis().length() > 1200) {
             throw invalid("研究方向最多 1200 字");
         }
         ObjectNode spec = json.createObjectNode();
         JsonNode parent = null;
         if (input.parent() != null) {
-            parent = paper.detail(input.parent(), null).path("spec");
+            JsonNode detail = paper.detail(input.parent(), null);
+            parent = detail.path("spec");
+            if (coding != "python".equals(parent.path("rule").path("kind").asText())) {
+                throw invalid("对照实验须使用原版本的策略引擎");
+            }
+            if (coding) {
+                spec.put("feedback", detail.path("review").path("text").asText(""));
+            }
             spec.setAll((ObjectNode) parent);
             spec.put("parent", input.parent());
         } else {
@@ -131,6 +167,16 @@ public class PaperResearchService {
                 origin = "因子 " + input.factorCode() + " 的盘中研究 · " + origin;
             }
             spec.put("origin", origin);
+        }
+        if (coding) {
+            spec.remove("rule");
+            spec.put("autoStart", input.autoStart());
+            spec.put("autoIterate", autoIterate);
+            if (input.academyVersionId() != null) {
+                String feedback = spec.path("feedback").asText("") + "\n" + origin;
+                spec.put("feedback", feedback.substring(0, Math.min(feedback.length(), 12000)));
+            }
+            return paper.submitJob(spec);
         }
         ObjectNode rule = generateRule(origin, parent);
         if (parent != null) {
