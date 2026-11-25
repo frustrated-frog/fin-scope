@@ -60,10 +60,10 @@ public class PaperResearchService {
         return paper.deploy(id);
     }
 
-    public JsonNode review(long id) {
-        JsonNode detail = detail(id, null);
-        JsonNode book = detail.path("book");
-        String at = book.path("last").asText("");
+    public synchronized JsonNode review(long id, LocalDate day) {
+        JsonNode detail = detail(id, day);
+        JsonNode summary = detail.path("daySummary");
+        String at = summary.path("at").asText("");
         if (at.isEmpty() || at.equals("null")) {
             throw invalid("至少需要一个前向行情时点才能复盘");
         }
@@ -76,11 +76,8 @@ public class PaperResearchService {
         ObjectNode evidence = json.createObjectNode();
         evidence.set("spec", detail.path("spec"));
         evidence.set("stockNames", detail.path("stockNames"));
-        evidence.set("book", book);
-        evidence.put("observedDays", detail.path("days").size());
-        evidence.set("recentCloses", json.valueToTree(
-                java.util.stream.StreamSupport.stream(detail.path("daily").spliterator(), false)
-                        .skip(Math.max(0, detail.path("daily").size() - 20)).toList()));
+        evidence.set("session", summary);
+        evidence.put("day", detail.path("day").asText());
         JsonNode history = detail.path("history");
         JsonNode curve = history.path("curve");
         if (!curve.isEmpty()) {
@@ -89,8 +86,8 @@ public class PaperResearchService {
         evidence.set("historicalFills", history.get("fills"));
         String report;
         try {
-            report = llm.completeText("作为量化学习助教，用中文基于给定数据复盘。分别描述历史回测与实时模拟，"
-                    + "说明观察天数、成交、成本、相对基准或同期对照的结果和下一条可检验假设。"
+            report = llm.completeText("作为量化学习助教，用中文基于给定数据复盘。以所选交易日的前向模拟为主，说明取样截止时刻，历史回测仅作背景。"
+                    + "解释当天有哪些买卖信号、为何成交或未成交、费用和相对基准表现。区分信号与成交，缺行情不能猜测。保留原规则。"
                     + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。提到个股时使用 stockNames 中的名称，名称缺失则仅描述其仓位。最多800字，纯文本。", evidence.toString(), 2400);
         } catch (Exception error) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "模拟账户复盘生成失败", error);

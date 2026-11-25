@@ -35,6 +35,10 @@ public class PythonPaperClient {
         return call("/" + id + (day == null ? "" : "?day=" + day), null);
     }
 
+    public JsonNode pendingReviews() {
+        return call("/pending-reviews", null);
+    }
+
     public JsonNode deploy(long id) {
         return call("/" + id + "/deploy", json.createObjectNode());
     }

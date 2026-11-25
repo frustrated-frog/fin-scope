@@ -146,6 +146,7 @@ finscope:
     warmup-enabled: false
     warmup-interval-ms: 60000
   quant:
+    paper-review-cron: "0 10/15 * * * *"
     market-data-sync-cron: 0 30 18 * * MON-FRI
   next-session-prediction:
     retry-delay-minutes: 15

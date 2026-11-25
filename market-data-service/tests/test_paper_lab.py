@@ -100,3 +100,28 @@ async def test_replay_manual_deployment_and_paired_forward_evidence(tmp_path, mo
     now += timedelta(minutes=10)
     await lab.tick()
     assert lab.catalog()[0]["status"] == "行情缺失或延迟，等待同步"
+
+
+def test_reviews_use_observed_day_and_retry_missing_closes(tmp_path, monkeypatch):
+    from finscope_market_data.paper import lab as module
+
+    lab = PaperLab(tmp_path/"review.db", lambda:None)
+    spec = Research(rule=RULE,pool="WATCHLIST",source="snapshot",capital=10000,codes=["600000"],origin="test")
+    day1 = START.replace(hour=15)
+    day2 = day1 + timedelta(days=1)
+    with lab.db() as db:
+        db.execute("INSERT INTO paper_version VALUES(1,'v',?,'{}','now')",(spec.model_dump_json(),))
+        for t, equity in [(day1, 10100), (day2, 10000)]:
+            point = dict(at=t.isoformat(),equity=equity,benchmark=10005,cash=100,holdings={"600000":100},
+                         events=[dict(code="600000",side="SELL",action="未成交",reason="T+1"),
+                                 dict(code="600000",side="BUY",action="成交",reason="入场",quantity=100,fee=5)])
+            db.execute("INSERT INTO paper_point VALUES(1,?,?)",(point["at"],module.dumps(point)))
+    monkeypatch.setattr(module, "stamp", lambda:day2)
+    assert lab.pending_reviews() == [{"id":1,"day":day1.date().isoformat()}]
+    monkeypatch.setattr(module, "stamp", lambda:day2+timedelta(minutes=10))
+    assert len(lab.pending_reviews()) == 2
+    summary = lab.detail(1,day2.date().isoformat())["daySummary"]
+    assert (summary["pnl"],summary["fills"],summary["fees"]) == (-100,1,5)
+    lab.save_review(1,module.Review(at=day2.isoformat(),text="收盘复盘",model="test"))
+    assert lab.detail(1,day1.date().isoformat())["review"] is None
+    assert lab.pending_reviews() == [{"id":1,"day":day1.date().isoformat()}]

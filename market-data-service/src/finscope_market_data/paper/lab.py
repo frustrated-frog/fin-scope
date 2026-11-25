@@ -159,6 +159,48 @@ class PaperLab:
         return [dict(id=r["id"], spec=json.loads(r["spec"]), created=r["created"], started=r["started"],
                      status=r["status"], book=json.loads(r["book"]) if r["book"] else None) for r in rows]
 
+    def pending_reviews(self):
+        now = stamp()
+        through = now.date()
+        if now.strftime("%H:%M") < "15:10":
+            through -= timedelta(days=1)
+        with self.db() as db:
+            rows = db.execute("""
+                WITH closes AS (
+                    SELECT id, substr(at,1,10) AS day, max(at) AS at FROM paper_point
+                    WHERE at < ? GROUP BY id, substr(at,1,10)
+                )
+                SELECT c.id, c.day FROM closes c LEFT JOIN paper_review r ON r.id=c.id AND r.at=c.at
+                WHERE r.id IS NULL ORDER BY c.day DESC,c.id
+            """, ((through + timedelta(days=1)).isoformat(),)).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def day_summary(points, prior, capital):
+        if not points:
+            return None
+        close = points[-1]
+        events = {}
+        fees = 0.0
+        fills = 0
+        for point in points:
+            for event in point["events"]:
+                key = (event["code"], event["side"], event["action"], event["reason"])
+                group = events.setdefault(key, dict(code=key[0], side=key[1], action=key[2],
+                                                    reason=key[3], count=0, shares=0))
+                group["count"] += 1
+                if event["action"] == "成交":
+                    group["shares"] += event["quantity"]
+                    fills += 1
+                    fees += event["fee"]
+        opening_equity = prior["equity"] if prior else capital
+        opening_benchmark = prior["benchmark"] if prior else capital
+        return dict(at=close["at"], firstAt=points[0]["at"], observations=len(points),
+                    equity=close["equity"], openingEquity=opening_equity, pnl=money(close["equity"]-opening_equity),
+                    benchmark=close["benchmark"], openingBenchmark=opening_benchmark,
+                    cash=close.get("cash"), holdings=close.get("holdings"), control=close.get("control"),
+                    fills=fills, fees=money(fees), decisions=list(events.values()))
+
     def detail(self, version, day):
         with self.db() as db:
             db.execute("BEGIN")
@@ -174,9 +216,13 @@ class PaperLab:
                 (SELECT max(at) AS at FROM paper_point WHERE id=? GROUP BY substr(at,1,10)
                  ORDER BY at DESC LIMIT 365) d ON p.at=d.at WHERE p.id=? ORDER BY p.at""", (version,version))]
             daily = [{k:p[k] for k in ("at","equity","benchmark","control") if k in p} for p in closes]
-            row = db.execute("SELECT review FROM paper_review WHERE id=? ORDER BY at DESC LIMIT 1",(version,)).fetchone()
+            prior = db.execute("SELECT point FROM paper_point WHERE id=? AND at<? ORDER BY at DESC LIMIT 1",
+                               (version, selected)).fetchone()
+            row = db.execute("SELECT review FROM paper_review WHERE id=? AND at>=? AND at<? ORDER BY at DESC LIMIT 1",
+                             (version, selected, selected+"Z")).fetchone()
             account = db.execute("SELECT book FROM paper_account WHERE id=?", (version,)).fetchone()
         return dict(history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
+                    daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
                     book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
 
     def save_review(self, version, review):
@@ -240,6 +286,8 @@ class PaperLab:
         @router.post("/versions")
         async def create(spec: Research, auto_start: bool = False):
             return await self.research(spec, auto_start)
+
+        router.get("/versions/pending-reviews")(self.pending_reviews)
 
         @router.get("/versions/{version}")
         def read(version: int, day: str = ""):

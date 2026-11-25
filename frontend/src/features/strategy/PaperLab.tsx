@@ -78,6 +78,7 @@ interface Point extends Tick {
   reason: string;
 }
 interface Detail {
+  daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
   stockNames?: Record<string, string>;
   review?: { at: string; model: string; text: string };
   daily: Tick[];
@@ -499,7 +500,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setBusy(true);
     setError('');
     try {
-      await api(endpoint + '/' + id + '/review', { method: 'POST' });
+      await api(endpoint + '/' + id + '/review?day=' + encodeURIComponent(detail?.day ?? ''), { method: 'POST' });
       setRefresh((n) => n + 1);
     } catch (e) {
       setError(errText(e));
@@ -716,17 +717,22 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {accountsOnly && detail && (
                 <section className="quant-readout">
                   <header>
-                    <h4>AI 收益复盘</h4>
+                    <div><h4>AI 收益复盘</h4>
+                      {detail.days.length > 0 && <select aria-label="复盘交易日" value={detail.day} onChange={e => setDay(e.target.value)}>
+                        {detail.days.map(date => <option key={date}>{date}</option>)}
+                      </select>}
+                    </div>
                     <button className="quant-action"
                       onClick={review}
-                      disabled={busy || !detail.daily.length}
+                      disabled={busy || !detail.points.length}
                     >
-                      {busy ? '处理中…' : '复盘当前表现'}
+                      {busy ? '正在复盘…' : '复盘所选交易日'}
                     </button>
                   </header>
                   <p>
-                    {detail.days.length} 个观察日 · {book?.fills ?? 0}{' '}
-                    笔模拟成交{!detail.daily.length && '。记录首个交易日的行情后，即可生成复盘。'}
+                    {detail.daySummary && <>截至 {detail.daySummary.at.slice(11, 16)} · 当日盈亏 ¥{currency(detail.daySummary.pnl)}
+                      {' · '}{detail.daySummary.fills} 笔成交 · 费用 ¥{currency(detail.daySummary.fees)}。</>}
+                    {' '}有行情记录的交易日，系统从 15:10 起自动生成复盘。
                   </p>
                   {detail.review && (
                     <>

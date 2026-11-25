@@ -34,8 +34,9 @@ public class PaperResearchController {
     }
 
     @PostMapping("/{id}/review")
-    public ApiResponse<JsonNode> review(@PathVariable long id) {
-        return ApiResponses.success(service.review(id));
+    public ApiResponse<JsonNode> review(@PathVariable long id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate day) {
+        return ApiResponses.success(service.review(id, day));
     }
 
     @PostMapping("/{id}/deploy")

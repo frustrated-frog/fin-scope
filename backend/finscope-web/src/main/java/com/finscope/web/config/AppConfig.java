@@ -220,6 +220,16 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "paperReviewExecutor")
+    public ThreadPoolTaskExecutor paperReviewExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("paper-review-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        return executor;
+    }
+
     @Bean(name = "researchTaskExecutor")
     public Executor researchTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
