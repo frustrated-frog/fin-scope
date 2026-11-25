@@ -9,7 +9,7 @@ interface Horizon {
 export interface Trial {
   candidate: number; name: string; hypothesis: string; factor: string;
   decision?: { action: 'FREEZE' | 'REVISE' | 'STOP'; candidate: number; reason: string; direction: string };
-  metrics: { netReturn: number; benchmarkReturn: number; maxDrawdown: number; fills: number; feeRate: number;
+  metrics: { information?: {dataThrough:string;feedbackThrough:string | null;knowledgeThrough:string;createdAt:string}; netReturn: number; benchmarkReturn: number; maxDrawdown: number; fills: number; feeRate: number;
     tradedNotionalRate: number; unfilled: Record<string, number>;
     factors: Record<string, { horizons: Record<string, Horizon>; correlations: Record<string, number | null> }> };
 }
@@ -56,6 +56,10 @@ export function PaperResearchEvidence({ trials }: { trials: Trial[] }) {
     }).map(([k,v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
     {Object.entries(t.metrics.unfilled).map(([reason,count]) => <small key={reason}>{reason} · {count} 笔　</small>)}
     {Object.entries(t.metrics.factors).map(([name,report]) => <FactorStudy key={name} name={name} {...report}/>)}
+    {t.metrics.information && <details><summary>研究使用的信息时点</summary><dl className="paper-evidence-metrics">
+      {Object.entries({'行情截至':t.metrics.information.dataThrough,'模拟反馈截至':t.metrics.information.feedbackThrough,
+        '知识截至':t.metrics.information.knowledgeThrough,'记录生成':t.metrics.information.createdAt}).map(([label,value]) =>
+        <div key={label}><dt>{label}</dt><dd>{value?.slice(0,16).replace('T',' ') ?? '未使用'}</dd></div>)}</dl></details>}
     {t.decision && <p><strong>评议依据　</strong>{t.decision.reason}{t.decision.action === 'REVISE' && ' '+t.decision.direction}</p>}
   </details>)}</div>;
 }
