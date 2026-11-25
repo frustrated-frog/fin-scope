@@ -31,3 +31,15 @@ async def test_ex_date_window_survives_next_bar_and_restart(tmp_path, monkeypatc
     history.append(bar(24,45))
     second=await restored.forward_actions({"600000":history},json.loads(json.dumps(book)),"2026-11-23",history[-1].observed_at)
     assert second["600000"]==history[1:] and len(queries)==1
+
+
+def test_research_memory_requires_latest_information_date(tmp_path):
+    lab=PaperLab(tmp_path/"lab.db",lambda:None)
+    j=lab.jobs.submit({"origin":"test"})["jobId"]
+    dates=lab.jobs.information_dates(j,{"generatedDirection":True,"forwardEvidence":{"lastDay":"2026-11-12"}},"2026-10-30T15:00:00+08:00")
+    assert dates["knowledgeThrough"]==dates["feedbackThrough"]=="2026-11-12T15:00:00+08:00"
+    with lab.db() as db:
+        for i,metrics in enumerate([{"information":dates}, {"developmentThrough":"2026-10-01"}]):
+            db.execute("insert into paper_candidate values(?,?,?,?,?,?)",(j,i+1,'{"name":"候选"}',json.dumps(metrics),'{"action":"STOP"}',"test"))
+    assert not lab.jobs.memory("2026-11-12T14:55:00+08:00")
+    assert len(lab.jobs.memory("2026-11-12T15:00:00+08:00"))==1

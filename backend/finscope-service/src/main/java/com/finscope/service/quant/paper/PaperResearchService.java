@@ -148,9 +148,6 @@ public class PaperResearchService {
             if (coding != "python".equals(parent.path("rule").path("kind").asText())) {
                 throw invalid("对照实验须使用原版本的策略引擎");
             }
-            if (coding) {
-                spec.put("feedback", detail.path("review").path("text").asText(""));
-            }
             spec.setAll((ObjectNode) parent);
             spec.put("parent", input.parent());
         } else {
@@ -175,6 +172,8 @@ public class PaperResearchService {
         }
         if (coding) {
             spec.remove("rule");
+            spec.put("generatedDirection", (input.hypothesis() == null || input.hypothesis().isBlank())
+                    && input.academyVersionId() == null && input.factorCode() == null);
             if (requestId != null) {
                 spec.put("requestId", requestId.toString());
             }

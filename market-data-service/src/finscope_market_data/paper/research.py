@@ -57,6 +57,7 @@ class JobRequest(BaseModel):
     requestId: uuid.UUID | None = None
     autoStart: bool = True
     autoIterate: bool = False
+    generatedDirection: bool = False
 
 
 class Decision(BaseModel):
@@ -758,13 +759,35 @@ class ResearchJobs:
             decision=trial["decision"].model_dump() if trial["decision"] else None,
         )
 
+    def information_dates(self, job, request, data_through):
+        """Use exchange-local ISO timestamps for every comparison, including intraday feedback."""
+        with self.lab.db() as db:
+            submitted = db.execute("SELECT created FROM paper_job WHERE id=?", (job,)).fetchone()[0]
+            parent = None
+            if request.get("parent"):
+                parent = db.execute("""SELECT COALESCE(json_extract(history,'$.information.knowledgeThrough'),created)
+                    FROM paper_version WHERE id=?""",(request["parent"],)).fetchone()
+        observed = request.get("forwardEvidence", {}).get("lastDay")
+        feedback = observed + "T15:00:00+08:00" if observed else None
+        if request.get("feedback") and not observed:
+            feedback = submitted
+        dependencies = [data_through]
+        if feedback:
+            dependencies.append(feedback)
+        if parent:
+            dependencies.append(parent[0])
+        if not request.get("generatedDirection"):
+            dependencies.append(submitted)
+        return dict(dataThrough=data_through, feedbackThrough=feedback,
+                    knowledgeThrough=max(dependencies), createdAt=datetime.now(SHANGHAI).isoformat())
+
     def memory(self, through):
         with self.lab.db() as db:
             rows = db.execute(
                 """SELECT json_extract(spec,'$.rule.name') AS name,
                 json_extract(spec,'$.rule.hypothesis') AS hypothesis,json_extract(spec,'$.rule.factor') AS factor,
                 json_extract(history,'$.developmentReturn') AS developmentReturn FROM paper_version
-                WHERE json_extract(history,'$.validationStart')<=date(?,'+1 day')
+                WHERE json_extract(history,'$.information.knowledgeThrough')<=?
                 ORDER BY id DESC LIMIT 20""",
                 (through,),
             ).fetchall()
@@ -774,7 +797,7 @@ class ResearchJobs:
                 json_extract(c.metrics,'$.netReturn') AS developmentReturn,
                 json_extract(c.decision,'$.action') AS decision,json_extract(c.decision,'$.reason') AS reason
                 FROM paper_candidate c WHERE c.decision IS NOT NULL
-                AND json_extract(c.metrics,'$.developmentThrough')<=? ORDER BY c.job DESC,c.ordinal DESC LIMIT 16""",
+                AND json_extract(c.metrics,'$.information.knowledgeThrough')<=? ORDER BY c.job DESC,c.ordinal DESC LIMIT 16""",
                 (through,),
             )
             return [dict(row) for row in candidates] + [dict(row) for row in rows]
@@ -814,11 +837,10 @@ class ResearchJobs:
             forwardDirection=request.get("forwardDecision"),
             coverage=coverage(dev),
         )
+        through=max(b.observed_at for bars in dev.values() for b in bars).astimezone(SHANGHAI).isoformat()
         context = dict(
             developmentFile=str(path),
-            memory=self.memory(
-                max(x["last"] for x in prompt["coverage"].values() if x["last"])
-            ),
+            memory=self.memory(through),
             image=image,
             capital=request["capital"],
         )
@@ -892,6 +914,7 @@ class ResearchJobs:
                     metrics = await asyncio.to_thread(
                         evaluate, dev, program.code, image, request["capital"]
                     )
+                    metrics["information"] = self.information_dates(job,request,through)
                     metrics["developmentThrough"] = max(
                         x["last"] for x in prompt["coverage"].values() if x["last"]
                     )
@@ -1017,6 +1040,7 @@ class ResearchJobs:
             validationMode="NEW_AFTER_FORWARD"
             if forward
             else ("SHARED_WITH_PARENT" if parent else "TEMPORAL"),
+            information=selected["metrics"].get("information"),
             selectedCandidate=selected["ordinal"],
             developmentTrials=[self.trial_view(t) for t in trials],
             symbolCoverage=coverage(panel),
