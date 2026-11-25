@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
-import { PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
+import { PaperCodingJobs } from './PaperCodingJobs';
+import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
@@ -51,6 +52,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   const paperCatalog = usePaperCatalog();
   const [comparison, setComparison] = useState<PaperVersion>();
   function showPaperVersion(id: number) {
+    paperCatalog.refresh();
     setComparison(undefined);
     setPaperId(id);
     setPaperSeed(undefined);
@@ -193,12 +195,12 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   const inLibrary = pane === 'catalog' || pane === 'factors';
   const inLab = ['experiments', 'intraday', 'dailyResult', 'laboratory'].includes(pane);
   const primary = inLibrary ? 'catalog' : inLab ? 'experiments' : pane;
-  const running = paperCatalog.rows.filter(item => item.started).length;
+  const running = paperCatalog.rows.filter(item => lifecycleLabel(item) === '模拟中').length;
   const linkedStrategies = pane === 'factors' && selectedFactorCode
     ? strategies.filter(v => parseSpec(v)?.factors?.some(factor => factor.code === selectedFactorCode)) : [];
   const archive = [
     ...paperCatalog.rows.map(v => ({ key: 'paper-' + v.id, name: v.spec.rule.name, type: '盘中 · 五分钟',
-      status: v.started ? '模拟中' : '已回测', date: v.created, open: () => showPaperVersion(v.id) })),
+      status: lifecycleLabel(v), date: v.created, open: () => showPaperVersion(v.id) })),
     ...experiments.map(v => ({ key: 'daily-' + v.id,
       name: strategies.find(strategy => strategy.id === v.strategyVersionId)?.name ?? `日频实验 #${v.id}`,
       type: '日频 · 历史回测', status: statusText[v.status], date: v.createdAt,
@@ -228,6 +230,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </nav>}
     </ResearchHeader>}
 
+    {pane === 'experiments' && <PaperCodingJobs onOpen={showPaperVersion}/>}
     {pane === 'experiments' && <section className="quant-panel quant-archive">
       <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4></div></header>
       {paperCatalog.error && <p className="quant-error" role="alert">{paperCatalog.error} <button onClick={paperCatalog.refresh}>重试</button></p>}

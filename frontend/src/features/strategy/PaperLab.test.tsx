@@ -34,6 +34,7 @@ test('research freezes the requested pool and leaves deployment to the user', as
       catalog={catalog} onExperiment={setId} onAccount={vi.fn()} onBrowse={vi.fn()} onCompare={vi.fn()} />;
   }
   render(<Lab />);
+  await user.selectOptions(screen.getByLabelText('策略引擎'), 'luna');
   await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '24000');
   await user.selectOptions(screen.getByLabelText('实验股票池'), 'WATCHLIST');
   const option = screen.getByRole('checkbox', { name: '回测完成后自动启动模拟账户' });
@@ -67,4 +68,23 @@ test('account holdings, replay and a saved review display names for an existing 
   expect(container.querySelector('.paper-position b')).toHaveTextContent('超声电子');
   expect(container.querySelector('.paper-scores')).toHaveTextContent('超声电子');
   expect(container).not.toHaveTextContent(code);
+});
+
+test('queues a Codex strategy without a handwritten hypothesis and returns to its task list', async () => {
+  const requests: { url: string; body: Record<string, unknown> }[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    requests.push({ url: String(url), body: JSON.parse(options.body) });
+    return apiResponse({ jobId: 42 });
+  }));
+  const browse = vi.fn();
+  const user = userEvent.setup();
+  render(<PaperLab seed={{ hypothesis: '' }} catalog={{rows: [], loading: false, error: '', refresh: vi.fn()}}
+    onBrowse={browse} onExperiment={vi.fn()} onAccount={vi.fn()} onCompare={vi.fn()}/>);
+  expect(screen.getByLabelText('策略引擎')).toHaveValue('codex');
+  await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '25000');
+  await user.click(screen.getByLabelText(/满五个模拟交易日/));
+  await user.click(screen.getByRole('button', {name: '提交 Codex 研究'}));
+  expect(requests).toEqual([{url: '/api/quant/paper/versions/jobs?autoIterate=true',
+    body: {hypothesis: '', capital: 25000, pool: 'DISCOVERY', autoStart: true}}]);
+  expect(browse).toHaveBeenCalledOnce();
 });

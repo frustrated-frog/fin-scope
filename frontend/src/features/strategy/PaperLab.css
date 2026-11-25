@@ -197,3 +197,27 @@
 
 .paper-form label.paper-start-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .paper-start-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--research-accent); }
+
+.paper-source pre {
+  overflow: auto;
+  max-height: 30rem;
+  padding: 1rem;
+  border-inline-start: 2px solid var(--quant-cyan);
+  color: var(--quant-cyan);
+  background: rgb(5 20 29 / 40%);
+  font: .82rem/1.65 ui-monospace, monospace;
+  tab-size: 4;
+}
+.paper-validation, .paper-account-actions { display: flex; gap: .75rem 1.5rem; flex-wrap: wrap; margin-block: .8rem; }
+.paper-validation div { display: grid; gap: .35rem; }
+.paper-validation b { color: var(--quant-cyan); font-variant-numeric: tabular-nums; }
+.paper-job { display: flex; align-items: baseline; flex-wrap: wrap; gap: .6rem; padding-block: .6rem; border-top: 1px solid #68aab333; }
+.paper-job details { flex: 1 1 19rem; min-width: 0; }
+.paper-job summary { cursor: pointer; }
+.paper-job summary strong { overflow-wrap: anywhere; }
+.paper-job time, .paper-job-state { font-size: .78rem; }
+.paper-job time { margin-inline-start: .65rem; color: var(--text-muted); }
+.paper-job-state { margin-inline-end: .6rem; color: var(--quant-cyan); }
+.paper-job-state[data-state="FAILED"] { color: #ef997c; }
+.paper-job ol { padding-inline-start: 1.6rem; }
+.paper-job li { white-space: pre-wrap; overflow-wrap: anywhere; margin-block: .45rem; }

@@ -12,7 +12,8 @@ interface Term {
   window: number;
   weight: number;
 }
-interface Rule {
+interface BasicRule {
+  kind?: undefined;
   name: string;
   hypothesis: string;
   terms: Term[];
@@ -20,6 +21,15 @@ interface Rule {
   exit: number;
   slots: number;
 }
+interface PythonRule {
+  kind: 'python';
+  name: string;
+  hypothesis: string;
+  factor: string;
+  code: string;
+  snapshot: string;
+}
+type Rule = BasicRule | PythonRule;
 interface Spec {
   rule: Rule;
   capital: number;
@@ -30,6 +40,7 @@ interface Spec {
   parent?: number;
 }
 interface Position {
+  pricedAt?: string;
   lots: [string, number][];
   cost: number;
   price: number;
@@ -40,6 +51,7 @@ interface Book {
   fills: number;
   fees: number;
   realized: number;
+  stale?: string[];
   positions: Record<string, Position>;
   control?: Book;
   last?: string;
@@ -48,6 +60,7 @@ export interface PaperVersion {
   created?: string;
   id: number;
   spec: Spec;
+  lifecycle?: 'RUNNING' | 'PAUSED' | 'STOPPED' | 'ARCHIVED';
   started?: string;
   status?: string;
   book?: Book;
@@ -76,6 +89,9 @@ interface Point extends Tick {
   events: Decision[];
   scores: Record<string, number | null>;
   reason: string;
+  previousAt?: string;
+  missedBars?: number;
+  stale?: string[];
 }
 interface Detail {
   daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
@@ -85,7 +101,9 @@ interface Detail {
   points: Point[];
   days: string[];
   day: string;
-  history: { curve: Tick[]; fills: number; fees: number };
+  history: { curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
+    days?: number; validationStart?: string; developmentReturn?: number; validationReturn?: number;
+    validationBenchmark?: number; controlReturn?: number; estimatedVolumeBars?: number; coverage?: Record<string, number> };
 }
 const endpoint = '/api/quant/paper/versions';
 const currency = (n: number) =>
@@ -235,7 +253,7 @@ function Holdings({ book, capital, stockName }: {
       <tbody>{positions.map(([code, pos]) => <tr className="paper-position" key={code}>
         <th scope="row"><b>{stockName(code)}</b></th>
         <td>{pos.lots.reduce((total, lot) => total + lot[1], 0)} 股</td>
-        <td>¥{pos.price}</td><td>¥{currency(pos.cost)}</td>
+        <td>¥{pos.price}{book.stale?.includes(code) && <small> · 最近估值 {pos.pricedAt?.slice(5,16).replace('T',' ')}</small>}</td><td>¥{currency(pos.cost)}</td>
       </tr>)}</tbody>
     </table> : <p>当前空仓</p>}
   </section>;
@@ -317,6 +335,8 @@ function Decisions({
                 {Object.entries(p.holdings).map(([code, q]) => <span key={code}>{stockName(code)} {q} 股</span>)}
                 {!Object.keys(p.holdings).length && <span>空仓</span>}
               </div>}
+              {p.stale?.length ? <p>缺少本根行情 · {p.stale.map(stockName).join('、')}</p> : null}
+              {p.missedBars ? <p>此前有 {p.missedBars} 根盘中行情未执行。</p> : null}
               <FactorScores scores={p.scores} stockName={stockName}/>
             </div>
           </details>
@@ -324,6 +344,11 @@ function Decisions({
       </div>
     </section>
   );
+}
+
+export function lifecycleLabel(v: PaperVersion) {
+  if (!v.started) { return '已回测'; }
+  return ({ RUNNING: '模拟中', PAUSED: '已暂停', STOPPED: '已停止', ARCHIVED: '已归档' })[v.lifecycle ?? 'RUNNING'];
 }
 
 export function usePaperCatalog() {
@@ -377,7 +402,7 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
           <strong>{v.spec.rule.name}</strong>
           <span>
             {factors
-              ? v.spec.rule.terms
+              ? v.spec.rule.kind === 'python' ? v.spec.rule.factor : v.spec.rule.terms
                   .map(
                     (t) =>
                       t.weight +
@@ -409,7 +434,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   onCompare: (base: PaperVersion) => void;
   onBrowse: () => void;
 }) {
-  const versions = accountsOnly ? catalog.rows.filter(v => v.started) : catalog.rows;
+  const versions = accountsOnly ? catalog.rows.filter(v => v.started && (v.lifecycle !== 'ARCHIVED' || v.id === initialId)) : catalog.rows;
   const [selectedId, setId] = useState(initialId);
   const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
@@ -420,6 +445,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const [autoStart, setAutoStart] = useState(true);
   const parent = comparison;
+  const [engine, setEngine] = useState(comparison && comparison.spec.rule.kind !== 'python' ? 'luna' : 'codex');
+  const [autoIterate, setAutoIterate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -458,7 +485,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setBusy(true);
     setError('');
     try {
-      const item = await api<{ id: number }>(endpoint, {
+      const coding = engine === 'codex';
+      const item = await api<{ id: number }>(coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
         method: 'POST',
         body: JSON.stringify({
           hypothesis,
@@ -471,7 +499,9 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
         }),
       });
       catalog.refresh();
-      if (autoStart) {
+      if (coding) {
+        onBrowse();
+      } else if (autoStart) {
         onAccount(item.id);
       } else {
         onExperiment(item.id);
@@ -490,6 +520,24 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
       await api(endpoint + '/' + id + '/deploy', { method: 'POST' });
       catalog.refresh();
       onAccount(id);
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function operate(action: string) {
+    if (action === 'state/STOPPED' && !window.confirm('停止后将冻结账户并结束调仓，仍可查看历史记录。确认停止？')) {
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api(endpoint + '/' + id + '/' + action, { method: 'POST' });
+      catalog.refresh();
+      if (action === 'replay' || action === 'state/ARCHIVED') {
+        onBrowse();
+      }
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -526,7 +574,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
       {editing && (
         <form className="quant-readout paper-form" onSubmit={generate}>
           <header>
-            <h4>{parent ? '因子对照实验' : '新建盘中规则'}</h4>
+            <h4>{parent ? '策略对照实验' : '新建盘中实验'}</h4>
             <button
               type="button"
               className="quant-record-link" disabled={busy}
@@ -535,6 +583,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               取消
             </button>
           </header>
+          <label>策略引擎
+            <select value={engine} disabled={!!parent || busy} onChange={e => setEngine(e.target.value)}>
+              <option value="codex">Codex · Python 策略</option><option value="luna">Luna · 因子规则</option>
+            </select>
+          </label>
           <label>
             研究方向（选填）
             <textarea
@@ -572,15 +625,19 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           </div>
           <p className="research-method-note">
             {parent
-              ? '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
-              : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
+              ? engine === 'codex' ? '沿用原版本的行情快照和本金。新旧策略在同一时间窗口独立执行。' : '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
+              : engine === 'codex' ? 'Codex 编写因子、仓位和调仓逻辑，在隔离环境试跑。按交易日留出最后一段行情验证。' : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
           </p>
           <label className="paper-start-option">
             <input type="checkbox" checked={autoStart} disabled={busy} onChange={e => setAutoStart(e.target.checked)}/>
             回测完成后自动启动模拟账户
           </label>
+          {engine === 'codex' && autoStart && <label className="paper-start-option">
+            <input type="checkbox" checked={autoIterate} disabled={busy} onChange={e => setAutoIterate(e.target.checked)}/>
+            满五个模拟交易日后，根据复盘生成一版对照策略
+          </label>}
           <button className="quant-action" disabled={busy}>
-            {busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
+            {engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
           </button>
         </form>
       )}
@@ -589,7 +646,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           <div className="quant-panel-title"><h4>模拟账户</h4></div>
           {versions.map(v => <button key={v.id} className={v.id === id ? 'active' : ''} aria-pressed={v.id === id}
             onClick={() => { setDay(''); setId(v.id); }}>
-            <i data-status="SUCCEEDED"/><span><b>{v.spec.rule.name}</b><small>实验 #{v.id}</small></span>
+            <i data-status="SUCCEEDED"/><span><b>{v.spec.rule.name}</b><small>实验 #{v.id} · {lifecycleLabel(v)}</small></span>
             <em>{v.book && pct(v.book.equity / v.spec.capital - 1)}</em>
           </button>)}
         </aside>}
@@ -623,6 +680,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     </button>
                   )}
                 </header>
+                {accountsOnly && active.started && <div className="paper-account-actions">
+                  {(!active.lifecycle || active.lifecycle === 'RUNNING') &&
+                    <button disabled={busy} onClick={() => operate('state/PAUSED')}>暂停模拟</button>}
+                  {active.lifecycle === 'PAUSED' && <button disabled={busy} onClick={() => operate('state/RUNNING')}>恢复模拟</button>}
+                  {(!active.lifecycle || ['RUNNING','PAUSED'].includes(active.lifecycle)) &&
+                    <button disabled={busy} onClick={() => operate('state/STOPPED')}>停止账户</button>}
+                  {active.lifecycle === 'STOPPED' && <button disabled={busy} onClick={() => operate('state/ARCHIVED')}>归档账户</button>}
+                </div>}
                 {!accountsOnly && <p>{spec.rule.hypothesis}</p>}
                 {accountsOnly && book && <div className="quant-metrics paper-metrics">
                   <div><span>账户总资产（元）</span><strong>{currency(equity)}</strong></div>
@@ -659,10 +724,15 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {!accountsOnly && <section className="quant-readout">
                 <header>
                   <h4>策略与因子</h4>
-                  <button className="quant-action" onClick={() => onCompare(active)}>新建因子对照</button>
+                  <button className="quant-action" onClick={() => onCompare(active)}>{spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
                 </header>
                 <p>{spec.origin}</p>
-                <div className="paper-formula">
+                {spec.rule.kind === 'python' ? <>
+                  <p>{spec.rule.factor}</p>
+                  <details className="paper-source"><summary>查看 Python 策略源码</summary>
+                    <pre tabIndex={0}><code>{spec.rule.code}</code></pre>
+                  </details>
+                </> : <><div className="paper-formula">
                   {spec.rule.terms.map((t, i) => (
                     <span key={i}>
                       {i > 0 ? ' + ' : ''}
@@ -674,6 +744,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   以五分钟为一根 K 线。买入得分 ≥ {spec.rule.entry}，卖出得分 ≤{' '}
                   {spec.rule.exit}，最多持有 {spec.rule.slots} 只。
                 </p>
+                </>}
                 <details>
                   <summary>
                     {spec.source} · {spec.codes.length} 只
@@ -690,8 +761,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {currency(detail.history.fees)}
                     </small>
                   </header>
+                  {spec.rule.kind === 'python' && <div className="paper-validation">
+                    <div><small>开发段收益</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
+                    <div><small>留出段收益</small><b>{pct(detail.history.validationReturn ?? 0)}</b></div>
+                    <div><small>留出段等权基准</small><b>{pct(detail.history.validationBenchmark ?? 0)}</b></div>
+                    {detail.history.controlReturn !== undefined && <div><small>父版本同期收益</small><b>{pct(detail.history.controlReturn)}</b></div>}
+                  </div>}
                   <p>
-                    固定当前股票池回放，含事后选样影响。区间收益{' '}
+                    固定当前股票池回放，含事后选样影响。{spec.rule.kind === 'python' ? '留出段收益' : '区间收益'}{' '}
                     {pct(
                       (detail.history.curve[detail.history.curve.length - 1]
                         ?.equity ?? spec.capital) /
@@ -700,6 +777,13 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     )}
                     。
                   </p>
+                  {spec.rule.kind === 'python' && <details><summary>行情快照与复验 · {detail.history.days} 个交易日</summary>
+                    <p>{detail.history.firstDay} 至 {detail.history.lastDay}，从 {detail.history.validationStart} 起独立记账。图中展示留出段净值。
+                      历史档案中仅含成交额的 K 线，按成交额除以最高价保守估算可成交量。</p>
+                    <p>快照指纹 <code>{spec.rule.snapshot.slice(0,16)}</code></p>
+                    {detail.history.coverage && <p>{Object.entries(detail.history.coverage).map(([code,n]) => stockName(code) + ' ' + n + ' 根').join(' · ')}</p>}
+                    <button className="quant-record-link" disabled={busy} onClick={() => operate('replay')}>用原始源码和快照复验</button>
+                  </details>}
                   <details>
                     <summary>成交与费用假设</summary>
                     <p>
