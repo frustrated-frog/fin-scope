@@ -221,3 +221,15 @@
 .paper-job-state[data-state="FAILED"] { color: #ef997c; }
 .paper-job ol { padding-inline-start: 1.6rem; }
 .paper-job li { white-space: pre-wrap; overflow-wrap: anywhere; margin-block: .45rem; }
+
+.paper-trials { display: grid; gap: .6rem; }
+.paper-trial { border-inline-start: 2px solid #3f9399; padding: .5rem .85rem; background: linear-gradient(100deg, #278c8820, transparent 78%); }
+.paper-trial summary { cursor: pointer; padding: .35rem 0; }
+.paper-trial summary small { margin-inline-start: .8rem; color: #80cfba; }
+.paper-factor-study { padding: .7rem 0; border-top: 1px solid #5498a240; }
+.paper-factor-study header { display: flex; align-items: baseline; justify-content: space-between; gap: .55rem; flex-wrap: wrap; }
+.paper-factor-study select { color: inherit; background: var(--panel, #172536); border: 1px solid #46747d; border-radius: .35rem; padding: .25rem; }
+.paper-evidence-metrics, .paper-factor-groups { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; margin: .65rem 0; }
+.paper-evidence-metrics dt, .paper-factor-groups span { color: #99afbd; font-size: .8rem; }
+.paper-evidence-metrics dd, .paper-factor-groups b { margin: .25rem 0 0; color: #92decb; font-variant-numeric: tabular-nums; }
+.paper-coverage-scroll { overflow-x: auto; }

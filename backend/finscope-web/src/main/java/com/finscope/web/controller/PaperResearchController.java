@@ -34,6 +34,11 @@ public class PaperResearchController {
         return ApiResponses.success(service.jobs());
     }
 
+    @GetMapping("/jobs/{id}/evidence")
+    public ApiResponse<JsonNode> evidence(@PathVariable long id) {
+        return ApiResponses.success(service.evidence(id));
+    }
+
     @PostMapping("/jobs")
     public ApiResponse<JsonNode> submit(@RequestBody PaperResearchInput input,
             @RequestParam(defaultValue = "false") boolean autoIterate,

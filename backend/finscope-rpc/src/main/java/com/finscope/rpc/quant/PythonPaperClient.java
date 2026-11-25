@@ -44,6 +44,10 @@ public class PythonPaperClient {
         return call("/jobs", request);
     }
 
+    public JsonNode evidence(long job) {
+        return call("/jobs/" + job + "/evidence", null);
+    }
+
     public JsonNode retry(long id) {
         return call("/jobs/" + id + "/retry", json.createObjectNode());
     }

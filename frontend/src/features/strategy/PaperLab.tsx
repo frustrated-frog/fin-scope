@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
+import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import './PaperLab.css';
 
 export interface PaperSeed {
@@ -23,6 +24,7 @@ interface BasicRule {
 }
 interface PythonRule {
   kind: 'python';
+  exDateAccounting?: boolean;
   name: string;
   hypothesis: string;
   factor: string;
@@ -51,6 +53,7 @@ interface Book {
   fills: number;
   fees: number;
   realized: number;
+  dividendReceivable?: number;
   stale?: string[];
   positions: Record<string, Position>;
   control?: Book;
@@ -101,7 +104,8 @@ interface Detail {
   points: Point[];
   days: string[];
   day: string;
-  history: { curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
+  forwardEvidence?: { sessions: number; fills: number; status: string; reasons: string[]; maxDrawdown: number; feeRate: number; relativeReturn: number } | null;
+  history: { developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
     days?: number; validationStart?: string; developmentReturn?: number; validationReturn?: number;
     validationBenchmark?: number; controlReturn?: number; estimatedVolumeBars?: number; coverage?: Record<string, number> };
 }
@@ -245,6 +249,7 @@ function Holdings({ book, capital, stockName }: {
     <header><h4>持仓与现金</h4><small>{book.fills} 笔成交 · 累计费用 ¥{currency(book.fees)}</small></header>
     <dl className="paper-cash-ledger">
       <div><dt>可用现金</dt><dd key={book.cash}>¥{currency(book.cash)}</dd></div>
+      {!!book.dividendReceivable && <div><dt>应收股息</dt><dd>¥{currency(book.dividendReceivable)}</dd></div>}
       <div><dt>已实现盈亏</dt><dd key={book.realized} data-tone={valueTone(book.realized)}>¥{currency(book.realized)}</dd></div>
       <div><dt>未实现盈亏</dt><dd key={unrealized} data-tone={valueTone(unrealized)}>¥{currency(unrealized)}</dd></div>
     </dl>
@@ -632,7 +637,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           </label>
           {engine === 'codex' && autoStart && <label className="paper-start-option">
             <input type="checkbox" checked={autoIterate} disabled={busy} onChange={e => setAutoIterate(e.target.checked)}/>
-            满五个模拟交易日后，根据复盘生成一版对照策略
+            满五个模拟交易日后，结合成交和风险决定是否研究对照策略
           </label>}
           <button className="quant-action" disabled={busy}>
             {engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
@@ -775,11 +780,16 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     )}
                     。
                   </p>
+                  {detail.history.developmentTrials && <><h5>开发段候选与因子评价</h5><PaperResearchEvidence trials={detail.history.developmentTrials}/></>}
                   {spec.rule.kind === 'python' && <details><summary>行情快照与复验 · {detail.history.days} 个交易日</summary>
                     <p>{detail.history.firstDay} 至 {detail.history.lastDay}，从 {detail.history.validationStart} 起独立记账。图中展示留出段净值。
-                      历史档案中仅含成交额的 K 线，按成交额除以最高价保守估算可成交量。</p>
+                      {detail.history.engine?.startsWith('cn-paper-5m-v1') ? '旧版撮合使用估算成交量。' : '缺少真实成交量的行情仅用于估值和计算因子。'}
+                      {detail.history.validationMode === 'SHARED_WITH_PARENT' && '手动对照复用父策略的历史窗口。'}
+                      {detail.history.validationMode === 'NEW_AFTER_FORWARD' && '留出行情采自触发本次研究的复盘之后。'}</p>
                     <p>快照指纹 <code>{spec.rule.snapshot.slice(0,16)}</code></p>
-                    {detail.history.coverage && <p>{Object.entries(detail.history.coverage).map(([code,n]) => stockName(code) + ' ' + n + ' 根').join(' · ')}</p>}
+                    {detail.history.symbolCoverage && <div className="paper-coverage-scroll"><table className="paper-position-table"><thead><tr><th>股票</th><th>有行情 / 池内日期</th><th>完整日</th><th>真实量 / 总根数</th><th>除权核验</th></tr></thead>
+                      <tbody>{Object.entries(detail.history.symbolCoverage).map(([c,v]) => <tr key={c}><th>{stockName(c)}</th><td>{v.days} / {v.poolDays}</td><td>{v.completeDays}</td><td>{v.measuredVolumeBars} / {v.bars}</td><td>{v.actionsVerified ? (v.exDates?.length ?? 0)+' 个日期' : '缺资料'}{v.unsupportedActions ? ' · 含配股或未分类事件' : ''}</td></tr>)}</tbody></table></div>}
+                    {!detail.history.symbolCoverage && detail.history.coverage && <p>{Object.entries(detail.history.coverage).map(([code,n]) => stockName(code) + ' ' + n + ' 根').join(' · ')}</p>}
                     <button className="quant-record-link" disabled={busy} onClick={() => operate('replay')}>用原始源码和快照复验</button>
                   </details>}
                   <details>
@@ -789,12 +799,15 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       线按开盘价模拟成交，单笔最多使用该根成交量的
                       5%。买卖滑点各 5 个基点，佣金万三、最低 5
                       元，卖出另计万五印花税。执行
-                      T+1；一字线跳过。当前账本未计分红送转。
+                      T+1，一字线跳过。{spec.rule.kind === 'python' && spec.rule.exDateAccounting ? '已核验的现金分红计入应收，送股计入持仓。来源仅提供除权日，到账及上市日未知的权益保持锁定。配股按不认购处理。' : '此版本账本未计分红送转。'}
                     </p>
                   </details>
                   <Trace points={detail.history.curve} capital={spec.capital} />
                 </section>
               )}
+              {accountsOnly && detail?.forwardEvidence && <section className="quant-readout paper-glass"><header><h4>前向研究观察</h4><small>{detail.forwardEvidence.status}</small></header>
+                <p>已观察 {detail.forwardEvidence.sessions} 个交易日 · {detail.forwardEvidence.fills} 笔成交 · 最大回撤 {pct(detail.forwardEvidence.maxDrawdown)} · 费用占本金 {pct(detail.forwardEvidence.feeRate)} · 相对基准 {pct(detail.forwardEvidence.relativeReturn)}</p>
+                {detail.forwardEvidence.reasons.length > 0 && <p>{detail.forwardEvidence.reasons.join(' · ')}</p>}</section>}
               {accountsOnly && book && <Holdings book={book} capital={spec.capital} stockName={stockName}/>}
               {accountsOnly && detail && (
                 <section className="quant-readout">

@@ -120,6 +120,10 @@ public class PaperResearchService {
         return paper.jobs();
     }
 
+    public JsonNode evidence(long job) {
+        return paper.evidence(job);
+    }
+
     public JsonNode retry(long job) {
         return paper.retry(job);
     }
