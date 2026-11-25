@@ -182,7 +182,7 @@ class PythonStrategy:
                     low=b.low,
                     close=b.close,
                     amount=b.amount,
-                    **({"exDate": True} if getattr(b, "actions", []) else {}),
+                    **({"exDate": True} if getattr(b, "actions", []) and not getattr(b, "windowClipped", False) else {}),
                     volume=None if getattr(b, "estimated_volume", False) else b.volume,
                 )
                 for b in series
