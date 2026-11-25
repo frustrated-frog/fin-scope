@@ -86,7 +86,7 @@ class PaperLab:
         for end in sorted(t for t in common if t <= cutoff):
             yield end, {c: bars[max(0, (n := bisect_right(times[c], end)) - 49):n] for c, bars in panel.items()}
 
-    async def research(self, spec):
+    async def research(self, spec, auto_start=False):
         spec.codes = list(dict.fromkeys(spec.codes))
         if any(len(c) != 6 or not c.isdigit() or not c.startswith(("00","30","60","68")) for c in spec.codes):
             raise HTTPException(422, "股票池仅支持有五分钟行情的沪深 A 股")
@@ -99,6 +99,8 @@ class PaperLab:
         with self.db() as db:
             row = db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()
             if row:
+                if auto_start:
+                    self.open_account(db, row[0], spec)
                 return {"id":row[0]}
             if spec.parent:
                 parent = self.spec(db, spec.parent)
@@ -125,7 +127,10 @@ class PaperLab:
         with self.db() as db:
             db.execute("INSERT INTO paper_version(fingerprint,spec,history,created) VALUES(?,?,?,?) ON CONFLICT(fingerprint) DO NOTHING",
                        (fingerprint, dumps(payload), dumps(summary), now.isoformat()))
-            return {"id":db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()[0]}
+            version = db.execute("SELECT id FROM paper_version WHERE fingerprint=?", (fingerprint,)).fetchone()[0]
+            if auto_start:
+                self.open_account(db, version, spec)
+            return {"id": version}
 
     @staticmethod
     def spec(db, version):
@@ -134,16 +139,17 @@ class PaperLab:
             raise HTTPException(404, "实验版本不存在")
         return Research.model_validate_json(row[0])
 
+    def open_account(self, db, version, spec):
+        book = new_book(spec.capital)
+        if spec.parent:
+            book["control"] = new_book(spec.capital)
+            book["controlRule"] = self.spec(db, spec.parent).rule.model_dump()
+        db.execute("INSERT OR IGNORE INTO paper_account(id,started,book,status) VALUES(?,?,?,?)",
+                   (version, stamp().isoformat(), dumps(book), "等待盘中行情"))
+
     def deploy(self, version):
         with self.db() as db:
-            spec = self.spec(db, version)
-            started = stamp().isoformat()
-            book = new_book(spec.capital)
-            if spec.parent:
-                book["control"] = new_book(spec.capital)
-                book["controlRule"] = self.spec(db, spec.parent).rule.model_dump()
-            db.execute("INSERT OR IGNORE INTO paper_account(id,started,book,status) VALUES(?,?,?,?)",
-                       (version, started, dumps(book), "等待盘中行情"))
+            self.open_account(db, version, self.spec(db, version))
         return {"id":version}
 
     def catalog(self):
@@ -232,8 +238,8 @@ class PaperLab:
         router.get("/versions")(self.catalog)
 
         @router.post("/versions")
-        async def create(spec: Research):
-            return await self.research(spec)
+        async def create(spec: Research, auto_start: bool = False):
+            return await self.research(spec, auto_start)
 
         @router.get("/versions/{version}")
         def read(version: int, day: str = ""):

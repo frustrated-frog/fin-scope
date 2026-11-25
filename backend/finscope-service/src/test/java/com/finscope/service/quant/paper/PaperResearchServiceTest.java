@@ -39,9 +39,9 @@ class PaperResearchServiceTest {
         when(watchlist.findByTypes(List.of("STOCK"))).thenReturn(List.of(stock, stock));
         when(llm.isConfigured()).thenReturn(true);
         when(llm.completeText(anyString(), anyString(), org.mockito.ArgumentMatchers.eq(2400))).thenReturn("{\"name\":\"动量\"}");
-        service.generate(new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null));
+        service.generate(new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null, true));
         ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
-        verify(paper).research(payload.capture());
+        verify(paper).research(payload.capture(), eq(true));
         assertEquals(1, payload.getValue().path("codes").size());
         assertEquals("动量", payload.getValue().path("rule").path("name").asText());
         verify(paper, never()).deploy(anyLong());
@@ -50,7 +50,7 @@ class PaperResearchServiceTest {
     @Test
     void refusesEmptyPoolBeforeGenerating() {
         assertThrows(BusinessException.class, () -> service.generate(
-                new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null)));
+                new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null, true)));
         verifyNoInteractions(llm, paper);
     }
 }

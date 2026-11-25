@@ -43,8 +43,8 @@ public class PythonPaperClient {
         return call("/" + id + "/review", review);
     }
 
-    public JsonNode research(JsonNode spec) {
-        return call("", spec);
+    public JsonNode research(JsonNode spec, boolean autoStart) {
+        return call(autoStart ? "?auto_start=true" : "", spec);
     }
 
     private JsonNode call(String suffix, JsonNode payload) {

@@ -36,9 +36,12 @@ test('research freezes the requested pool and leaves deployment to the user', as
   render(<Lab />);
   await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '24000');
   await user.selectOptions(screen.getByLabelText('实验股票池'), 'WATCHLIST');
+  const option = screen.getByRole('checkbox', { name: '回测完成后自动启动模拟账户' });
+  expect(option).toBeChecked();
+  await user.click(option);
   await user.click(screen.getByRole('button', { name: 'AI 编写规则并回测' }));
   expect(await screen.findByRole('button', { name: '启动模拟' })).toBeEnabled();
-  expect(creates).toEqual([{ hypothesis: '', factorCode: 'MOMENTUM', capital: 24000, pool: 'WATCHLIST' }]);
+  expect(creates).toEqual([{ hypothesis: '', autoStart: false, factorCode: 'MOMENTUM', capital: 24000, pool: 'WATCHLIST' }]);
   expect(posts).toEqual([endpoint]);
 });
 

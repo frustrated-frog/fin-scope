@@ -79,8 +79,10 @@ async def test_replay_manual_deployment_and_paired_forward_evidence(tmp_path, mo
     child = base.model_copy(deep=True)
     child.parent = parent
     child.rule.terms[0].weight = -1
-    version = (await lab.research(child))["id"]
-    lab.deploy(version)
+    version = (await lab.research(child, auto_start=True))["id"]
+    started = lab.catalog()[0]["started"]
+    assert started and await lab.research(child, auto_start=True) == {"id": version}
+    assert lab.catalog()[0]["started"] == started
     for i in range(1,5):
         end = START+timedelta(minutes=i*5)
         now = end+timedelta(seconds=10)

@@ -417,6 +417,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [hypothesis, setHypothesis] = useState(comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : seed?.hypothesis ?? '');
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
+  const [autoStart, setAutoStart] = useState(true);
   const parent = comparison;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -460,6 +461,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
         method: 'POST',
         body: JSON.stringify({
           hypothesis,
+          autoStart,
           capital: Number(capital),
           pool,
           parent: parent?.id,
@@ -468,7 +470,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
         }),
       });
       catalog.refresh();
-      onExperiment(item.id);
+      if (autoStart) {
+        onAccount(item.id);
+      } else {
+        onExperiment(item.id);
+      }
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -568,8 +574,12 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               ? '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
               : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
           </p>
+          <label className="paper-start-option">
+            <input type="checkbox" checked={autoStart} disabled={busy} onChange={e => setAutoStart(e.target.checked)}/>
+            回测完成后自动启动模拟账户
+          </label>
           <button className="quant-action" disabled={busy}>
-            {busy ? '正在生成规则并回测…' : 'AI 编写规则并回测'}
+            {busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
           </button>
         </form>
       )}

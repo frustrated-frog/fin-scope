@@ -145,7 +145,7 @@ public class PaperResearchService {
             }
         }
         spec.set("rule", rule);
-        return paper.research(spec);
+        return paper.research(spec, input.autoStart());
     }
 
     private ObjectNode generateRule(String origin, JsonNode parent) {
@@ -200,7 +200,11 @@ public class PaperResearchService {
     }
 
     private void addCode(Set<String> codes, String code) {
-        if (code != null && code.matches("(00|30|60|68)[0-9]{4}")) {
+        if (code == null) {
+            return;
+        }
+        code = code.strip().replaceFirst("\\.(?:SH|SZ)$", "");
+        if (code.matches("(00|30|60|68)[0-9]{4}")) {
             codes.add(code);
         }
     }
