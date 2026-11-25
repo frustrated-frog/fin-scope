@@ -1,5 +1,6 @@
 """Job-scoped MCP tools. Only the development sample is shared with Codex."""
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
@@ -24,6 +25,18 @@ def serve(path):
     def audit(message):
         with path.with_name("tools.jsonl").open("a") as stream:
             stream.write(message + "\n")
+
+    @contextmanager
+    def capture_diagnostic():
+        try:
+            yield
+        except (ValueError, TypeError, KeyError, ArithmeticError, OSError) as error:
+            lines = str(error).strip().splitlines()
+            audit(
+                "工具 · 候选试跑失败 · "
+                + (lines[-1] if lines else type(error).__name__)[:240]
+            )
+            raise
 
     @tools.tool()
     def market_sample(symbol: str, count: int = 24) -> list:
@@ -64,7 +77,7 @@ def serve(path):
             for c, rows in panels.items()
             if rows
         }
-        with PythonStrategy(code, context["image"]) as strategy:
+        with capture_diagnostic(), PythonStrategy(code, context["image"]) as strategy:
             for end, history in frames(panel):
                 if time.monotonic() > deadline:
                     raise ValueError("开发样本试跑超时")

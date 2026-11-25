@@ -13,7 +13,7 @@ IMAGE = "python:3.12-slim"
 SDK = """Implement decide(ctx) using Python 3.12 standard library. At each completed five-minute bar,
 ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), state (your prior JSON object),
 bars (available code -> chronological list of up to 49 dicts with open,high,low,close,amount,volume,at).
-volume can be null for archived data. Be robust to short windows and missing symbols. Use deterministic
+Volume can be null for archived data and amount can be null for recent quotes. Be robust to short windows and missing symbols. Use deterministic
 logic and only ctx. Return a dict weights (available code -> absolute desired portfolio weight, 0 exits,
 omitted holds, nonnegative sum <= 1), scores (finite numeric scores for available codes including all
 weight keys), state (small JSON dict). Execution, fees and T+1 belong to the simulator.
@@ -204,6 +204,8 @@ class PythonStrategy:
         if "error" in reply:
             raise ValueError(str(reply["error"])[:1600])
         result = reply["result"]
+        if not isinstance(result, dict) or not {"weights", "scores"}.issubset(result):
+            raise ValueError("decide(ctx) 须返回含 weights 与 scores 的对象")
         weights, scores, state = (
             result["weights"],
             result["scores"],
