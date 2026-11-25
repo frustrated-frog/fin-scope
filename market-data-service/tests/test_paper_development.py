@@ -233,3 +233,26 @@ def test_forward_factor_observations_match_consecutive_closes_only():
             },
         )
     assert state["dailyFactorRankIC"]["strength"] == [pytest.approx(1)]
+
+
+def test_factor_diagnostics_do_not_change_trading_state():
+    from finscope_market_data.paper.python_runtime import image_id, PythonStrategy
+    from finscope_market_data.paper.engine import new_book
+
+    try:
+        image = image_id()
+    except (ValueError, OSError):
+        pytest.skip("requires local strategy runtime image")
+    code = """
+seen=False
+def factors(bars):
+    global seen
+    seen=True
+    return {"factor":{c:1 for c in bars}}
+def decide(ctx):
+    return {"weights":{}, "scores":{c:int(seen) for c in ctx["bars"]}, "state":{}}
+"""
+    data = panel(days=1, count=1, minutes=1)
+    with PythonStrategy(code, image, collect_factors=True) as strategy:
+        _, scores = strategy.decide(data, new_book(1000), START, 1000)
+        assert scores == {"0": 0} and strategy.factor_values == {"factor": {"0": 1}}

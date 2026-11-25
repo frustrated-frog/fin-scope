@@ -50,9 +50,12 @@ for line in sys.stdin:
                     history[c]=rows[last_ex:]
             ctx['bars']={c:[dict(b) for b in rows] for c,rows in history.items()}
             signals={}
-            if ctx.pop('_factorReport',False):
-                signals=ns['factors']({c:[dict(b) for b in rows] for c,rows in history.items()})
+            report=ctx.pop('_factorReport',False)
             result=ns['decide'](ctx)
+            if report:
+                factor_ns={}
+                exec(source,factor_ns)
+                signals=factor_ns['factors']({c:[dict(b) for b in rows] for c,rows in history.items()})
         emit({'result':result,'factors':signals})
     except Exception:
         emit({'error':traceback.format_exc(limit=4)[-1600:]})

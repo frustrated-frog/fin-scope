@@ -198,7 +198,15 @@ def invoke(output_type, message, context=None):
 
 
 def simulate(
-    panel, program, image, capital, control=None, *, legacy=False, validation_start=None
+    panel,
+    program,
+    image,
+    capital,
+    control=None,
+    *,
+    legacy=False,
+    validation_start=None,
+    expected_development=None,
 ):
     days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
     if len(days) < 3:
@@ -226,6 +234,12 @@ def simulate(
                 metrics["developmentReturn"] = book["equity"] / capital - 1
                 metrics["developmentFills"] = book["fills"]
                 metrics["developmentFees"] = book["fees"]
+                if expected_development is not None and (
+                    metrics["developmentReturn"] != expected_development["netReturn"]
+                    or book["fills"] != expected_development["fills"]
+                    or book["fees"] != expected_development["fees"]
+                ):
+                    raise ValueError("冻结源码的开发段复算与候选记录不一致，已停止验证")
                 # Validation starts in cash with fresh strategy state, retaining only past price windows.
                 book, baseline = new_book(capital), new_book(capital)
                 valid = True
@@ -996,6 +1010,7 @@ class ResearchJobs:
             image,
             request["capital"],
             parent["rule"] if parent else None,
+            expected_development=selected["metrics"],
             validation_start=str(split),
         )
         summary.update(
