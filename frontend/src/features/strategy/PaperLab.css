@@ -233,3 +233,6 @@
 .paper-evidence-metrics dt, .paper-factor-groups span { color: #99afbd; font-size: .8rem; }
 .paper-evidence-metrics dd, .paper-factor-groups b { margin: .25rem 0 0; color: #92decb; font-variant-numeric: tabular-nums; }
 .paper-coverage-scroll { overflow-x: auto; }
+.paper-asset-picker { display: flex; flex-wrap: wrap; gap: .5rem; }
+.paper-asset-picker [aria-pressed=true] { border-color: #69bdaf; }
+.paper-factor-study pre { white-space: pre-wrap; overflow-wrap: anywhere; }

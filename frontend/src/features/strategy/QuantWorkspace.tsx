@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
+import { FactorAssets, DatasetArchive } from './PaperArchive';
 import { PaperCodingJobs } from './PaperCodingJobs';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { ResearchHeader } from './ResearchHeader';
@@ -230,6 +231,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </nav>}
     </ResearchHeader>}
 
+    {pane === 'experiments' && <DatasetArchive/>}
     {pane === 'experiments' && <PaperCodingJobs onOpen={showPaperVersion}/>}
     {pane === 'experiments' && <section className="quant-panel quant-archive">
       <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4></div></header>
@@ -288,6 +290,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         <div><span>CAPITAL HAND-OFF</span><strong>{entryDraft ? `来源于资金行为研究草稿 #${entryDraft.id}` : '来源于资金行为观察'}</strong><p>{entryDraft ? `${entryDraft.instrumentName} · ${entryDraft.observedAt} · ${entryDraft.signalCode}` : entrySourceLabel}</p></div>
         <div><b>尚未运行诊断或回测</b>{entryDraft && <small>{entryDraft.requiredNextSteps.join(' → ')}</small>}</div>
       </section>}
+      <FactorAssets onUse={(asset,name) => openPaper({factorCode:"paper:"+asset,hypothesis:"检验 "+name+" 在次日可卖时点的表现。"})}/>
       <PaperLibrary catalog={paperCatalog} factors onOpen={showPaperVersion} />
       <div className="research-factor-actions"><button type="button" className="quant-action" onClick={()=>openPaper({hypothesis:'提出一个可用五分钟价量验证的新因子，解释它可能有效的市场条件。'})}>AI 寻找盘中因子</button>
       {selectedFactorCode && <button className="quant-action" type="button" onClick={() => openPaper({factorCode:selectedFactorCode,

@@ -172,6 +172,13 @@ public class PaperResearchService {
         }
         if (coding) {
             spec.remove("rule");
+            if (input.factorCode() != null && input.factorCode().startsWith("paper:")) {
+                String id = input.factorCode().substring(6);
+                if (!id.matches("[a-f0-9]{64}")) {
+                    throw invalid("独立因子版本标识无效");
+                }
+                spec.put("requiredFactor", id);
+            }
             spec.put("generatedDirection", (input.hypothesis() == null || input.hypothesis().isBlank())
                     && input.academyVersionId() == null && input.factorCode() == null);
             if (requestId != null) {
@@ -231,8 +238,25 @@ public class PaperResearchService {
         spec.set("codes", json.valueToTree(codes.stream().limit(24).toList()));
     }
 
+    public JsonNode factors() {
+        return paper.factors();
+    }
+
+    public JsonNode factor(String id) {
+        return paper.factor(id);
+    }
+
     public JsonNode datasets() {
-        return paper.datasets();
+        JsonNode rows = paper.datasets();
+        List<String> codes = new ArrayList<>();
+        for (JsonNode row : rows) {
+            codes.add(row.path("code").asText());
+        }
+        var names = stockNames.findNames(codes);
+        for (JsonNode row : rows) {
+            ((ObjectNode) row).put("name", names.getOrDefault(row.path("code").asText(), "名称待补"));
+        }
+        return rows;
     }
 
     public void syncDatasetPools() {

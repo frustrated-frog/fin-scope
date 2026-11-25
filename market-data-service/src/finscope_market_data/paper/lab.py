@@ -431,6 +431,17 @@ class PaperLab:
 
         router.get("/versions/jobs")(self.jobs.list)
 
+        @router.get("/versions/factors")
+        def factors():
+            return self.jobs.factor_assets()
+
+        @router.get("/versions/factors/{asset}")
+        def factor(asset: str):
+            result=self.jobs.factor_assets(asset)
+            if result is None:
+                raise HTTPException(404,"因子版本不存在")
+            return result
+
         router.get("/versions/datasets")(self.datasets.list)
 
         @router.post("/versions/datasets/pools")

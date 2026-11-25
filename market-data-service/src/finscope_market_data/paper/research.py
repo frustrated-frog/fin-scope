@@ -22,6 +22,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
+from . import factor_library
 from .actions import annotate, read_actions
 from .analysis import coverage, evaluate, frames, observe_close
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
@@ -57,6 +58,7 @@ class JobRequest(BaseModel):
     autoStart: bool = True
     autoIterate: bool = False
     generatedDirection: bool = False
+    requiredFactor: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class Decision(BaseModel):
@@ -146,11 +148,11 @@ def invoke(output_type, message, context=None):
                 "-c",
                 'mcp_servers.quant.default_tools_approval_mode="approve"',
                 "-c",
-                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor"]',
+                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","search_factors","read_factor"]',
                 "-c",
                 "mcp_servers.quant.tool_timeout_sec=525",
             ]
-            message += "\nUse quant MCP to inspect describe_dataset and query_bars. You may evaluate_factor or run_development_backtest on the full development segment. Fix errors before returning."
+            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. You may evaluate_factor or run_development_backtest on the full development segment. Fix errors before returning."
         result = subprocess.run(
             [
                 executable,
@@ -607,7 +609,7 @@ class ResearchJobs:
 
     async def snapshot(self, codes, job=None):
         cutoff = datetime.now(SHANGHAI)
-        await self.lab.datasets.ensure(codes,cutoff)
+        await self.lab.datasets.ensure(codes, cutoff)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
         )
@@ -733,11 +735,16 @@ class ResearchJobs:
     def information_dates(self, job, request, data_through):
         """Use exchange-local ISO timestamps for every comparison, including intraday feedback."""
         with self.lab.db() as db:
-            submitted = db.execute("SELECT created FROM paper_job WHERE id=?", (job,)).fetchone()[0]
+            submitted = db.execute(
+                "SELECT created FROM paper_job WHERE id=?", (job,)
+            ).fetchone()[0]
             parent = None
             if request.get("parent"):
-                parent = db.execute("""SELECT COALESCE(json_extract(history,'$.information.knowledgeThrough'),created)
-                    FROM paper_version WHERE id=?""",(request["parent"],)).fetchone()
+                parent = db.execute(
+                    """SELECT COALESCE(json_extract(history,'$.information.knowledgeThrough'),created)
+                    FROM paper_version WHERE id=?""",
+                    (request["parent"],),
+                ).fetchone()
         observed = request.get("forwardEvidence", {}).get("lastDay")
         feedback = observed + "T15:00:00+08:00" if observed else None
         if request.get("feedback") and not observed:
@@ -749,8 +756,19 @@ class ResearchJobs:
             dependencies.append(parent[0])
         if not request.get("generatedDirection"):
             dependencies.append(submitted)
-        return dict(dataThrough=data_through, feedbackThrough=feedback,
-                    knowledgeThrough=max(dependencies), createdAt=datetime.now(SHANGHAI).isoformat())
+        return dict(
+            dataThrough=data_through,
+            feedbackThrough=feedback,
+            knowledgeThrough=max(dependencies),
+            createdAt=datetime.now(SHANGHAI).isoformat(),
+        )
+
+    def factor_assets(self, asset=None):
+        with self.lab.db() as db:
+            self.schema(db)
+            if asset is None:
+                return factor_library.catalog(db)
+            return factor_library.assets(db, asset=asset).get(asset)
 
     def memory(self, through):
         with self.lab.db() as db:
@@ -808,8 +826,21 @@ class ResearchJobs:
             forwardDirection=request.get("forwardDecision"),
             coverage=coverage(dev),
         )
-        through=max(b.observed_at for bars in dev.values() for b in bars).astimezone(SHANGHAI).isoformat()
+        through = (
+            max(b.observed_at for bars in dev.values() for b in bars)
+            .astimezone(SHANGHAI)
+            .isoformat()
+        )
+        with self.lab.db() as db:
+            available = factor_library.assets(db, through)
+        required = request.get("requiredFactor")
+        if required and required not in available:
+            raise ValueError(
+                "所选因子的知识截止时间晚于开发段或无法核验，请使用更新的行情"
+            )
+        prompt["requiredFactor"] = required
         context = dict(
+            factorLibrary=available,
             developmentFile=str(path),
             memory=self.memory(through),
             image=image,
@@ -872,6 +903,12 @@ class ResearchJobs:
                     for line in context.pop("toolLog", []):
                         self.update(job, "CODING", line[:300])
                     previous = program.code
+                    bound, refs = factor_library.bind(program.code, available)
+                    if required and required not in refs:
+                        raise ValueError(
+                            "策略须通过 library_factor 引用指定的冻结因子版本"
+                        )
+                    program = program.model_copy(update={"code": bound})
                     sources = [t["program"].code for t in trials]
                     if parent:
                         sources.append(parent["rule"]["code"])
@@ -885,7 +922,10 @@ class ResearchJobs:
                     metrics = await asyncio.to_thread(
                         evaluate, dev, program.code, image, request["capital"]
                     )
-                    metrics["information"] = self.information_dates(job,request,through)
+                    metrics["factorRefs"] = refs
+                    metrics["information"] = self.information_dates(
+                        job, request, through
+                    )
                     metrics["developmentThrough"] = max(
                         x["last"] for x in prompt["coverage"].values() if x["last"]
                     )
@@ -912,6 +952,8 @@ class ResearchJobs:
                         image,
                     ),
                 )
+                factor_library.schema(db)
+                factor_library.record(db, job, ordinal, program.model_dump(), metrics)
             trials = self.trials(job)
 
     async def process(self, job, request):
@@ -954,8 +996,21 @@ class ResearchJobs:
                 )
             raise ValueError("行情快照不足三个交易日，请待历史补齐后重试")
         split = days[min(len(days) - 1, max(1, int(0.8 * len(days))))]
-        if forward:
-            fresh = [d for d in days if str(d) > forward["lastDay"]]
+        boundary = forward["lastDay"] if forward else None
+        if request.get("requiredFactor"):
+            asset = self.factor_assets(request["requiredFactor"])
+            known = [
+                r["knowledgeThrough"]
+                for r in (asset or {}).get("studies", [])
+                if r["knowledgeThrough"]
+            ]
+            if not known:
+                raise ValueError("该因子版本缺少可核验的研究时间，无法发起独立验证")
+            first_known = min(known)[:10]
+            if first_known >= str(split):
+                boundary = max(boundary or "", first_known)
+        if boundary:
+            fresh = [d for d in days if str(d) > boundary]
             complete = any(
                 row["completeDays"]
                 for row in coverage(
@@ -972,7 +1027,7 @@ class ResearchJobs:
                                log=json_insert(log,'$[#]',?) WHERE id=?""",
                         (
                             str(datetime.now(SHANGHAI).date()),
-                            "等待复盘日期之后的新收盘行情作为留出段",
+                            "等待研究信息截止日之后的新收盘行情作为留出段",
                             job,
                         ),
                     )

@@ -36,6 +36,14 @@ public class PythonPaperClient {
         return call("/" + id + (day == null ? "" : "?day=" + day), null);
     }
 
+    public JsonNode factors() {
+        return call("/factors", null);
+    }
+
+    public JsonNode factor(String id) {
+        return call("/factors/" + id, null);
+    }
+
     public JsonNode datasets() {
         return call("/datasets", null);
     }

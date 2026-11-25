@@ -29,6 +29,16 @@ public class PaperResearchController {
         return ApiResponses.success(service.generate(input));
     }
 
+    @GetMapping("/factors")
+    public ApiResponse<JsonNode> factors() {
+        return ApiResponses.success(service.factors());
+    }
+
+    @GetMapping("/factors/{id:[a-f0-9]{64}}")
+    public ApiResponse<JsonNode> factor(@PathVariable String id) {
+        return ApiResponses.success(service.factor(id));
+    }
+
     @GetMapping("/datasets")
     public ApiResponse<JsonNode> datasets() {
         return ApiResponses.success(service.datasets());

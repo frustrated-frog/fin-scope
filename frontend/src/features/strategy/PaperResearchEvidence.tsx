@@ -22,7 +22,7 @@ const number = (value: number | null, percent = false) => value == null ? '—' 
 const horizonNames: Record<string,string> = { '5m':'5 分钟','30m':'30 分钟','1d':'1 日','3d':'3 日','5d':'5 日', tail_next_open:'尾盘 → 次日开盘', tail_next_close:'尾盘 → 次日收盘', intraday_first_sell:'盘中 → 次日首次可卖', next_day_mfe:'次日最高价', next_day_mae:'次日最低价' };
 const decisions = { FREEZE:'冻结', REVISE:'修订', STOP:'结束研究' };
 
-function FactorStudy({ name, horizons, correlations }: {
+export function FactorStudy({ name, horizons, correlations }: {
   name: string; horizons: Record<string,Horizon>; correlations: Record<string,number | null>;
 }) {
   const [horizon,setHorizon] = useState('1d');

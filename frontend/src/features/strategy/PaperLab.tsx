@@ -394,7 +394,7 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
   return (
     <details className="paper-library">
       <summary>
-        <span className="research-library-title">{factors ? 'AI 盘中因子库' : 'AI 盘中策略库'}
+        <span className="research-library-title">{factors ? '策略附带的因子说明' : 'AI 盘中策略库'}
           <small>{factors ? '查看每项因子的计算窗口与权重' : '查看已回测的盘中规则与研究假设'}</small></span>
         <span className="research-library-count">{catalog.loading || error ? '—' : rows.length} 个版本</span>
       </summary>
@@ -587,7 +587,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
             </button>
           </header>
           <label>策略引擎
-            <select value={engine} disabled={!!parent || busy} onChange={e => setEngine(e.target.value)}>
+            <select value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => setEngine(e.target.value)}>
               <option value="codex">Codex · Python 策略</option><option value="luna">Luna · 因子规则</option>
             </select>
           </label>

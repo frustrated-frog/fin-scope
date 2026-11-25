@@ -151,3 +151,60 @@ def test_return_targets_use_timed_entry_and_distinguish_next_open_close(tmp_path
     )
     bars[2].estimated_volume = True
     assert np.isnan(results()["intraday_first_sell"][0, 0])
+
+
+def test_factor_assets_deduplicate_replay_and_isolate_research_evidence(tmp_path):
+    from finscope_market_data.paper import factor_library
+    from finscope_market_data.paper.python_runtime import PythonStrategy, image_id
+    from finscope_market_data.paper.engine import new_book
+    from types import SimpleNamespace
+
+    lab = PaperLab(tmp_path / "paper.db", lambda: None)
+    source = "def factors(bars):\n    return {'strength':{c:series[-1]['close']*2 for c,series in bars.items()}}\n"
+    decide = "def decide(ctx):\n    return {'weights':{},'scores':{},'state':{}}"
+    for day, multiplier in [("2026-10-01", 2), ("2026-11-01", 2), ("2026-11-11", 3)]:
+        job = lab.jobs.submit({"origin": "test"})["jobId"]
+        program = {
+            "code": source.replace("*2", "*" + str(multiplier)) + decide + "\n# " + day,
+            "name": "候选",
+            "factor": "收盘强度",
+        }
+        metrics = {
+            "factors": {"strength": {"horizons": {}, "correlations": {}}},
+            "information": {"knowledgeThrough": day + "T15:00:00+08:00"},
+        }
+        with lab.db() as db:
+            db.execute(
+                "insert into paper_candidate values(?,?,?,?,?,?)",
+                (job, 1, json.dumps(program), json.dumps(metrics), None, "img"),
+            )
+    assets = lab.jobs.factor_assets()
+    assert len(assets) == 2 and sorted(a["studies"] for a in assets) == [1, 2]
+    with lab.db() as db:
+        allowed = factor_library.assets(db, "2026-10-10T15:00:00+08:00")
+    assert len(allowed) == 1
+    key, asset = next(iter(allowed.items()))
+    assert len(asset["studies"]) == 1 and "def decide" not in asset["source"]
+    frozen, refs = factor_library.bind(
+        "def factors(bars):\n    return {'linked':library_factor("
+        + repr(key)
+        + ",bars)}\n"
+        + decide,
+        allowed,
+    )
+    assert refs == [key] and factor_library.bind(frozen, allowed)[0] == frozen
+    with pytest.raises(ValueError, match="当前开发时点"):
+        factor_library.bind(
+            "def factors(bars):\n    return library_factor('unknown',bars)", allowed
+        )
+    try:
+        image = image_id()
+    except (ValueError, OSError):
+        pytest.skip("requires local runtime image")
+    at = datetime(2026, 10, 2, 10, tzinfo=SHANGHAI)
+    bar = SimpleNamespace(
+        observed_at=at, open=10, high=11, low=9, close=10, amount=10000, volume=1000
+    )
+    with PythonStrategy(frozen, image, collect_factors=True) as strategy:
+        strategy.decide({"600000": [bar]}, new_book(10000), at, 10000)
+        assert strategy.factor_values == {"linked": {"600000": 20}}
