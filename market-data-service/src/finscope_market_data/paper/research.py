@@ -1003,14 +1003,18 @@ class ResearchJobs:
             if not known:
                 raise ValueError("该因子版本缺少可核验的研究时间，无法发起独立验证")
             first_known = datetime.fromisoformat(min(known)).astimezone(SHANGHAI)
-            timestamps = sorted(
-                {b.observed_at for bars in panel.values() for b in bars}
+            first_usable = min(
+                (
+                    b.observed_at
+                    for bars in panel.values()
+                    for b in bars
+                    if b.observed_at >= first_known
+                ),
+                default=first_known,
             )
-            if not any(t >= first_known and t.date() < split for t in timestamps):
-                first_usable = next(
-                    (t for t in timestamps if t >= first_known), first_known
-                )
-                boundary = max(boundary or "", str(first_usable.date()))
+            boundary = max(
+                boundary or str(days[days.index(split) - 1]), str(first_usable.date())
+            )
         if boundary:
             fresh = [d for d in days if str(d) > boundary]
             complete = any(
@@ -1023,12 +1027,16 @@ class ResearchJobs:
                 ).values()
             )
             if not complete:
+                checked = datetime.now(SHANGHAI)
+                checked_day = checked.date()
+                if checked.strftime("%H:%M") < "15:10":
+                    checked_day -= timedelta(days=1)
                 with self.lab.db() as db:
                     db.execute(
                         """UPDATE paper_job SET state='WAITING_DATA',request=json_set(json_remove(request,'$.snapshot'),'$.checkedDay',?),
                                log=json_insert(log,'$[#]',?) WHERE id=?""",
                         (
-                            str(datetime.now(SHANGHAI).date()),
+                            str(checked_day),
                             "等待研究信息截止日之后的新收盘行情作为留出段",
                             job,
                         ),

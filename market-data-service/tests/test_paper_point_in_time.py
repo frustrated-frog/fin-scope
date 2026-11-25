@@ -344,3 +344,41 @@ def test_requested_return_targets_are_validated_and_filter_reports():
     panel = {"600000": [SimpleNamespace(observed_at=at, close=10)]}
     report = factor_report(panel, [(at, {"momentum": {"600000": 1}})], ["30m"])
     assert list(report["momentum"]["horizons"]) == ["30m"]
+
+
+@pytest.mark.asyncio
+async def test_factor_holdout_waits_for_close_and_retries_same_day(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from finscope_market_data.paper import research
+
+    lab = PaperLab(tmp_path / "paper.db", lambda: None)
+    key = "a" * 64
+    request = {"snapshot": "frozen", "requiredFactor": key}
+    job = lab.jobs.submit(request)["jobId"]
+    now = datetime(2026, 11, 25, 10, tzinfo=SHANGHAI)
+    observations = [
+        SimpleNamespace(observed_at=now.replace(day=d), volume=100)
+        for d in (23, 24, 25)
+    ]
+    monkeypatch.setattr(research, "image_id", lambda: "test-image")
+    monkeypatch.setattr(
+        research,
+        "datetime",
+        type("Clock", (datetime,), {"now": classmethod(lambda cls, tz: now)}),
+    )
+    monkeypatch.setattr(lab.jobs, "read_panel", lambda digest: {"600000": observations})
+    monkeypatch.setattr(
+        lab.jobs,
+        "factor_assets",
+        lambda asset: {"studies": [{"knowledgeThrough": "2026-11-23T18:00:00+08:00"}]},
+    )
+    await lab.jobs.process(job, request)
+    with lab.db() as db:
+        row = db.execute(
+            "SELECT state,request FROM paper_job WHERE id=?", (job,)
+        ).fetchone()
+        assert row["state"] == "WAITING_DATA"
+        saved = json.loads(row["request"])
+        assert saved["checkedDay"] == "2026-11-24" and "snapshot" not in saved
