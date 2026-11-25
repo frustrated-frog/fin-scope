@@ -202,9 +202,6 @@
 }
 .paper-trace-pending strong { font-size: 14px; }
 .paper-trace-pending p { margin: 4px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
-.paper-cash-ledger { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 16px 0 0; }
-.paper-cash-ledger dt { margin: 0 0 5px; color: var(--muted); font-size: 12px; }
-.paper-cash-ledger dd { margin: 0; font: 600 15px/1.5 ui-monospace, Menlo, monospace; }
 .quant-workspace[data-research] .paper-metrics { overflow: visible; }
 .quant-workspace[data-research] :is(.strategy-academy-questions article, .strategy-academy-provenance, .strategy-academy-shelf header, .quant-factor-plain, .quant-factor-why) p,
 .quant-workspace[data-research] .strategy-academy-provenance ul {

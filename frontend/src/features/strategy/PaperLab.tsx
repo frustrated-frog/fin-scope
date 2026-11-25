@@ -208,6 +208,55 @@ function Trace({
   );
 }
 
+function valueTone(value: number) {
+  if (value > 0) {
+    return 'positive';
+  }
+  return value < 0 ? 'negative' : 'neutral';
+}
+
+function Holdings({ book, capital, stockName }: {
+  book: Book;
+  capital: number;
+  stockName: (code: string) => string;
+}) {
+  const unrealized = Math.round((book.equity - capital - book.realized) * 100) / 100;
+  const positions = Object.entries(book.positions);
+  return <section className="quant-readout paper-glass paper-holdings">
+    <header><h4>持仓与现金</h4><small>{book.fills} 笔成交 · 累计费用 ¥{currency(book.fees)}</small></header>
+    <dl className="paper-cash-ledger">
+      <div><dt>可用现金</dt><dd key={book.cash}>¥{currency(book.cash)}</dd></div>
+      <div><dt>已实现盈亏</dt><dd key={book.realized} data-tone={valueTone(book.realized)}>¥{currency(book.realized)}</dd></div>
+      <div><dt>未实现盈亏</dt><dd key={unrealized} data-tone={valueTone(unrealized)}>¥{currency(unrealized)}</dd></div>
+    </dl>
+    {positions.length > 0 ? <table className="paper-position-table" aria-label="当前持仓">
+      <thead><tr><th>股票</th><th>持股数</th><th>现价</th><th>持仓成本</th></tr></thead>
+      <tbody>{positions.map(([code, pos]) => <tr className="paper-position" key={code}>
+        <th scope="row"><b>{stockName(code)}</b></th>
+        <td>{pos.lots.reduce((total, lot) => total + lot[1], 0)} 股</td>
+        <td>¥{pos.price}</td><td>¥{currency(pos.cost)}</td>
+      </tr>)}</tbody>
+    </table> : <p>当前空仓</p>}
+  </section>;
+}
+
+function FactorScores({ scores, stockName }: { scores: Point['scores']; stockName: (code: string) => string }) {
+  const ranked = Object.entries(scores).sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity));
+  const extent = Math.max(0, ...ranked.map(([, score]) => Math.abs(score ?? 0)));
+  return <section className="paper-factor-board" aria-label="当时的因子得分">
+    <h5>当时的因子得分</h5>
+    <ol className="paper-scores">
+      {ranked.map(([code, score]) => <li key={code}>
+        <span>{stockName(code)}</span><b>{score?.toFixed(4) ?? '缺数'}</b>
+        <i className="paper-score-axis" aria-hidden="true">
+          {score !== null && extent > 0 && <i data-direction={valueTone(score)}
+            style={{ width: Math.abs(score) / extent * 50 + '%' }}/>}
+        </i>
+      </li>)}
+    </ol>
+  </section>;
+}
+
 function Decisions({
   detail,
   selectDay,
@@ -218,7 +267,7 @@ function Decisions({
   selectDay: (day: string) => void;
 }) {
   return (
-    <section className="quant-readout">
+    <section className="quant-readout paper-glass paper-replay">
       <header>
         <h4>盘中决策回放</h4>
         {detail.days.length > 0 && (
@@ -248,35 +297,26 @@ function Decisions({
               </b>
               <span>¥{currency(p.equity)}</span>
             </summary>
-            {p.events.map((e, i) => (
-              <p key={i}>
-                <strong>
-                  {e.side === 'BUY' ? '买入' : '卖出'} {stockName(e.code)}
-                </strong>{' '}
-                · {e.reason} · 排名 {e.rank} · 得分 {e.score.toFixed(4)}
-                {e.quantity
-                  ? ` · ${e.quantity} 股 × ¥${e.price?.toFixed(3)} · 费用 ¥${e.fee}`
-                  : ''}{' '}
-                · 信号 {e.available.slice(11, 19)}
-              </p>
-            ))}
-            <p>{p.reason} · 当时的因子得分</p>
-            {p.holdings && (
-              <p>
-                现金 ¥{currency(p.cash ?? 0)} ·{' '}
-                {Object.entries(p.holdings)
-                  .map(([code, q]) => stockName(code) + ' ' + q + ' 股')
-                  .join(' / ') || '空仓'}
-              </p>
-            )}
-            <div className="paper-scores">
-              {Object.entries(p.scores)
-                .sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity))
-                .map(([code, score]) => (
-                  <span key={code}>
-                    {stockName(code)} <b>{score?.toFixed(4) ?? '缺数'}</b>
-                  </span>
-                ))}
+            <div className="paper-replay-body">
+              <div className="paper-decision-list">{p.events.map((e, i) => <div className="paper-decision" key={i} data-side={e.side}>
+                <div className="paper-decision-title">
+                  <strong>{e.side === 'BUY' ? '买入' : '卖出'} {stockName(e.code)}</strong>
+                  <span data-blocked={e.action === '未成交'}>{e.action}</span>
+                  <time>信号 {e.available.slice(11, 19)}</time>
+                </div>
+                <p>{e.reason}</p>
+                <div className="paper-decision-values">
+                  <span>排名 <b>{e.rank}</b></span><span>得分 <b>{e.score.toFixed(4)}</b></span>
+                  {e.quantity ? <span>{e.quantity} 股 × ¥{e.price?.toFixed(3)} · 费用 ¥{e.fee}</span> : null}
+                </div>
+              </div>)}</div>
+              <p className="paper-point-reason">{p.reason}</p>
+              {p.holdings && <div className="paper-point-book">
+                <strong>现金 ¥{currency(p.cash ?? 0)}</strong>
+                {Object.entries(p.holdings).map(([code, q]) => <span key={code}>{stockName(code)} {q} 股</span>)}
+                {!Object.keys(p.holdings).length && <span>空仓</span>}
+              </div>}
+              <FactorScores scores={p.scores} stockName={stockName}/>
             </div>
           </details>
         ))}
@@ -662,29 +702,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   <Trace points={detail.history.curve} capital={spec.capital} />
                 </section>
               )}
-              {accountsOnly && book && (
-                <section className="quant-readout">
-                  <header>
-                    <h4>持仓与现金</h4>
-                    <small>
-                      {book.fills} 笔成交 · 累计费用 ¥{currency(book.fees)}
-                    </small>
-                  </header>
-                  <dl className="paper-cash-ledger">
-                    <div><dt>可用现金</dt><dd>¥{currency(book.cash)}</dd></div>
-                    <div><dt>已实现盈亏</dt><dd>¥{currency(book.realized)}</dd></div>
-                    <div><dt>未实现盈亏</dt><dd>¥{currency(book.equity - spec.capital - book.realized)}</dd></div>
-                  </dl>
-                  {Object.entries(book.positions).map(([code, pos]) => (
-                    <div className="paper-position" key={code}>
-                      <b>{stockName(code)}</b>
-                      <span>{pos.lots.reduce((a, l) => a + l[1], 0)} 股</span>
-                      <span>现价 ¥{pos.price}</span>
-                      <span>持仓成本 ¥{currency(pos.cost)}</span>
-                    </div>
-                  ))}
-                </section>
-              )}
+              {accountsOnly && book && <Holdings book={book} capital={spec.capital} stockName={stockName}/>}
               {accountsOnly && detail && (
                 <section className="quant-readout">
                   <header>
