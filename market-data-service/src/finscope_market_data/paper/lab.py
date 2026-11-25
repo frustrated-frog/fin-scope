@@ -7,12 +7,13 @@ import hashlib
 import json
 import logging
 import sqlite3
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from .datasets import ResearchDatasets
 from .actions import read_actions
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
@@ -47,9 +48,10 @@ def dumps(value):
 
 
 class PaperLab:
-    def __init__(self, path, router, archive=None, history_provider=None):
+    def __init__(self, path, router, archive=None, history_provider=None, fallback_provider=None):
         self.path = path
         self.router = router
+        self.datasets = ResearchDatasets(self,archive,history_provider,fallback_provider)
         self.jobs = ResearchJobs(self, archive, history_provider)
         self.limit = asyncio.Semaphore(4)
         self.action_queries = {}
@@ -428,6 +430,13 @@ class PaperLab:
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
         router.get("/versions/jobs")(self.jobs.list)
+
+        router.get("/versions/datasets")(self.datasets.list)
+
+        @router.post("/versions/datasets/pools")
+        def sync_pool(codes: Annotated[list[Annotated[str,Field(pattern=r"^(00|30|60|68)[0-9]{4}$")]],Field(max_length=48)]):
+            self.datasets.register(codes,current_pool=True)
+            return {"registered":len(set(codes))}
 
         @router.get("/versions/jobs/{job}/evidence")
         def evidence(job: int):

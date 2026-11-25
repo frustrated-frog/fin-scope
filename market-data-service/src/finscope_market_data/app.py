@@ -168,7 +168,7 @@ def create_app(
     history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),
         SnapshotStore(config.data_dir / "market-data-snapshots.db"))
 
-    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store, history_backfill.provider)
+    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store, history_backfill.provider, overnight.provider)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -230,6 +230,7 @@ def create_app(
                 )
             )
         capture_stop = asyncio.Event()
+        dataset_task = asyncio.create_task(paper.datasets.run(capture_stop))
         coding_task = asyncio.create_task(paper.jobs.run(capture_stop))
         paper_task = asyncio.create_task(paper.run(capture_stop))
         capture_task = asyncio.create_task(capture.run(capture_stop))
@@ -247,6 +248,7 @@ def create_app(
             yield
         finally:
             capture_stop.set()
+            await dataset_task
             await coding_task
             await paper_task
             await capture_task

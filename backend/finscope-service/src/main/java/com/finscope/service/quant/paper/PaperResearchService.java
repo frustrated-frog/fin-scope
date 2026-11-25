@@ -222,14 +222,36 @@ public class PaperResearchService {
                 || input.capital().scale() > 2 || input.capital().compareTo(new BigDecimal("10000000000")) > 0) {
             throw invalid("请选择股票池并填写有效本金，最多两位小数");
         }
+        Set<String> codes = poolCodes(input.pool(), spec);
+        if (codes.isEmpty()) {
+            throw invalid("所选股票池中暂无支持的沪深 A 股");
+        }
+        spec.put("pool", input.pool().name());
+        spec.put("capital", input.capital());
+        spec.set("codes", json.valueToTree(codes.stream().limit(24).toList()));
+    }
+
+    public JsonNode datasets() {
+        return paper.datasets();
+    }
+
+    public void syncDatasetPools() {
+        Set<String> union = new LinkedHashSet<>();
+        for (PaperUniverse pool : PaperUniverse.values()) {
+            union.addAll(poolCodes(pool, json.createObjectNode()).stream().limit(24).toList());
+        }
+        paper.syncDatasetPools(json.valueToTree(union));
+    }
+
+    private Set<String> poolCodes(PaperUniverse pool, ObjectNode spec) {
         Set<String> codes = new LinkedHashSet<>();
-        if (input.pool() == PaperUniverse.WATCHLIST) {
+        if (pool == PaperUniverse.WATCHLIST) {
             watchlist.findByTypes(List.of("STOCK")).forEach(item -> addCode(codes, item.getCode()));
             spec.put("source", "自选股 · 创建时快照");
         } else {
-            StockDiscoveryRun run = discoveries.latest().orElseThrow(() -> invalid("暂无已完成的股票发现报告"));
-            if (run.getReportJson() == null || run.getCompletedAt() == null) {
-                throw invalid("股票发现报告尚未完成");
+            StockDiscoveryRun run = discoveries.latest().orElse(null);
+            if (run == null || run.getReportJson() == null || run.getCompletedAt() == null) {
+                return codes;
             }
             try {
                 JsonNode candidates = json.readTree(run.getReportJson()).path("candidates");
@@ -241,12 +263,7 @@ public class PaperResearchService {
             }
             spec.put("source", "股票发现 #" + run.getId() + " · " + run.getCompletedAt());
         }
-        if (codes.isEmpty()) {
-            throw invalid("所选股票池中暂无支持的沪深 A 股");
-        }
-        spec.put("pool", input.pool().name());
-        spec.put("capital", input.capital());
-        spec.set("codes", json.valueToTree(codes.stream().limit(24).toList()));
+        return codes;
     }
 
     private void addCode(Set<String> codes, String code) {

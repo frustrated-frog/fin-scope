@@ -29,6 +29,11 @@ public class PaperResearchController {
         return ApiResponses.success(service.generate(input));
     }
 
+    @GetMapping("/datasets")
+    public ApiResponse<JsonNode> datasets() {
+        return ApiResponses.success(service.datasets());
+    }
+
     @GetMapping("/jobs")
     public ApiResponse<JsonNode> jobs() {
         return ApiResponses.success(service.jobs());

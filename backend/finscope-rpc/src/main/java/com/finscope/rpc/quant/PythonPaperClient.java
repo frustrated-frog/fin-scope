@@ -36,6 +36,14 @@ public class PythonPaperClient {
         return call("/" + id + (day == null ? "" : "?day=" + day), null);
     }
 
+    public JsonNode datasets() {
+        return call("/datasets", null);
+    }
+
+    public JsonNode syncDatasetPools(JsonNode codes) {
+        return call("/datasets/pools", codes);
+    }
+
     public JsonNode jobs() {
         return call("/jobs", null);
     }

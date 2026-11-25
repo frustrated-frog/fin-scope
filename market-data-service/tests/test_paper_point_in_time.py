@@ -11,35 +11,110 @@ from finscope_market_data.paper.lab import PaperLab
 @pytest.mark.asyncio
 async def test_ex_date_window_survives_next_bar_and_restart(tmp_path, monkeypatch):
     symbol = StockSymbol(code="600000", market="SH")
+
     def bar(day, minute):
         at = datetime(2026, 11, day, 9, minute, tzinfo=SHANGHAI)
-        return MinutePriceBar(symbol=symbol, observed_at=at, frequency_minutes=5,
-                              open=10, high=11, low=9, close=10, volume=100)
+        return MinutePriceBar(
+            symbol=symbol,
+            observed_at=at,
+            frequency_minutes=5,
+            open=10,
+            high=11,
+            low=9,
+            close=10,
+            volume=100,
+        )
+
     queries = []
+
     async def actions(router, limit, code, start, end):
         queries.append((start, end))
-        return [{"ex_date":"2026-11-24"}]
+        return [{"ex_date": "2026-11-24"}]
+
     monkeypatch.setattr("finscope_market_data.paper.lab.read_actions", actions)
-    lab=PaperLab(tmp_path/"paper.db",lambda:None)
-    book={}
-    history=[bar(23,35),bar(24,35),bar(24,40)]
-    first=await lab.forward_actions({"600000":history},book,"2026-11-23",history[-1].observed_at)
-    assert first["600000"]==[history[1],first["600000"][-1]]
+    lab = PaperLab(tmp_path / "paper.db", lambda: None)
+    book = {}
+    history = [bar(23, 35), bar(24, 35), bar(24, 40)]
+    first = await lab.forward_actions(
+        {"600000": history}, book, "2026-11-23", history[-1].observed_at
+    )
+    assert first["600000"] == [history[1], first["600000"][-1]]
     assert first["600000"][-1].actions and first["600000"][-1].windowClipped
-    book["lastObserved"]={"600000":history[-1].observed_at.isoformat()}
-    restored=PaperLab(tmp_path/"paper.db",lambda:None)
-    history.append(bar(24,45))
-    second=await restored.forward_actions({"600000":history},json.loads(json.dumps(book)),"2026-11-23",history[-1].observed_at)
-    assert second["600000"]==history[1:] and len(queries)==1
+    book["lastObserved"] = {"600000": history[-1].observed_at.isoformat()}
+    restored = PaperLab(tmp_path / "paper.db", lambda: None)
+    history.append(bar(24, 45))
+    second = await restored.forward_actions(
+        {"600000": history},
+        json.loads(json.dumps(book)),
+        "2026-11-23",
+        history[-1].observed_at,
+    )
+    assert second["600000"] == history[1:] and len(queries) == 1
 
 
 def test_research_memory_requires_latest_information_date(tmp_path):
-    lab=PaperLab(tmp_path/"lab.db",lambda:None)
-    j=lab.jobs.submit({"origin":"test"})["jobId"]
-    dates=lab.jobs.information_dates(j,{"generatedDirection":True,"forwardEvidence":{"lastDay":"2026-11-12"}},"2026-10-30T15:00:00+08:00")
-    assert dates["knowledgeThrough"]==dates["feedbackThrough"]=="2026-11-12T15:00:00+08:00"
+    lab = PaperLab(tmp_path / "lab.db", lambda: None)
+    j = lab.jobs.submit({"origin": "test"})["jobId"]
+    dates = lab.jobs.information_dates(
+        j,
+        {"generatedDirection": True, "forwardEvidence": {"lastDay": "2026-11-12"}},
+        "2026-10-30T15:00:00+08:00",
+    )
+    assert (
+        dates["knowledgeThrough"]
+        == dates["feedbackThrough"]
+        == "2026-11-12T15:00:00+08:00"
+    )
     with lab.db() as db:
-        for i,metrics in enumerate([{"information":dates}, {"developmentThrough":"2026-10-01"}]):
-            db.execute("insert into paper_candidate values(?,?,?,?,?,?)",(j,i+1,'{"name":"候选"}',json.dumps(metrics),'{"action":"STOP"}',"test"))
+        for i, metrics in enumerate(
+            [{"information": dates}, {"developmentThrough": "2026-10-01"}]
+        ):
+            db.execute(
+                "insert into paper_candidate values(?,?,?,?,?,?)",
+                (
+                    j,
+                    i + 1,
+                    '{"name":"候选"}',
+                    json.dumps(metrics),
+                    '{"action":"STOP"}',
+                    "test",
+                ),
+            )
     assert not lab.jobs.memory("2026-11-12T14:55:00+08:00")
-    assert len(lab.jobs.memory("2026-11-12T15:00:00+08:00"))==1
+    assert len(lab.jobs.memory("2026-11-12T15:00:00+08:00")) == 1
+
+
+@pytest.mark.asyncio
+async def test_dataset_failure_isolated_and_backoff_persisted(tmp_path):
+    from finscope_market_data.overnight.store import OvernightStore, compatible_volume
+    from finscope_market_data.overnight.models import MinuteBar
+    from finscope_market_data.providers.base import ProviderError
+
+    end = datetime(2026, 11, 24, 15)
+    original = MinuteBar(
+        ended_at=end, open=10, high=10.1, low=9.9, close=10, amount=10000.2
+    )
+    measured = original.model_copy(update={"volume": 1000, "amount": 10000})
+    assert compatible_volume(original, measured)
+    assert not compatible_volume(original, measured.model_copy(update={"close": 10.01}))
+    store = OvernightStore(tmp_path / "archive.db")
+    store.import_history("600001.SH", [original], "old", end)
+    calls = []
+
+    class Provider:
+        source = "fixture"
+
+        def fetch(self, code, through):
+            calls.append(code)
+            if code == "600000.SH":
+                raise ProviderError("TIMEOUT", "timeout")
+            return [measured]
+
+    lab = PaperLab(tmp_path / "paper.db", lambda: None, store, Provider())
+    now = datetime(2026, 11, 24, 16, tzinfo=SHANGHAI)
+    for _ in range(2):
+        await lab.datasets.ensure(["600000", "600001"], now)
+    assert sorted(calls) == ["600000.SH", "600001.SH"]
+    assert [r["status"] for r in lab.datasets.list()] == ["RETRY", "PARTIAL"]
+    updated = store.research_bars("600001.SH", end)[0]
+    assert updated.volume == 1000 and updated.amount == original.amount

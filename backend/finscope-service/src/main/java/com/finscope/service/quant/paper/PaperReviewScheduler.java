@@ -25,6 +25,11 @@ public class PaperReviewScheduler {
     private Executor executor;
     private final AtomicBoolean running = new AtomicBoolean();
 
+    @Scheduled(fixedDelayString = "${finscope.quant.paper-pool-sync-ms}", initialDelay = 20000)
+    public void syncDatasets() {
+        research.syncDatasetPools();
+    }
+
     @Scheduled(cron = "${finscope.quant.paper-review-cron}", zone = "Asia/Shanghai")
     public void refresh() {
         if (!llm.isConfigured() || !running.compareAndSet(false, true)) {

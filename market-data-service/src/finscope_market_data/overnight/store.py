@@ -9,6 +9,17 @@ from finscope_market_data.overnight.models import MinuteBar
 from finscope_market_data.overnight.history_quality import compare_history, validated_history
 
 
+def compatible_volume(old, new):
+    """Only round-off of source prices (sub-tick) and amount (half a yuan) is tolerated."""
+    if old.ended_at != new.ended_at or old.volume is not None or new.volume is None:
+        return False
+    if abs(old.amount-new.amount)>0.501 or any(abs(getattr(old,k)-getattr(new,k))>0.000101 for k in ("open","high","low","close")):
+        return False
+    if old.amount==new.amount and all(getattr(old,k)==getattr(new,k) for k in ("open","high","low","close")):
+        return True
+    return new.volume>0 and old.low-0.005<=old.amount/new.volume<=old.high+0.005
+
+
 class OvernightStore:
     def __init__(self, path: Path):
         self.path = path
@@ -91,7 +102,7 @@ class OvernightStore:
                 measured = {b.ended_at:b for b in bars if b.volume is not None}
                 for bar in days[day]:
                     other = measured.get(bar.ended_at)
-                    if other and bar.volume is None and all(getattr(bar,k)==getattr(other,k) for k in ('open','high','low','close','amount')):
+                    if other and compatible_volume(bar, other):
                         bar.volume = other.volume
             elif len(bars) == 48:
                 try:
@@ -127,18 +138,21 @@ class OvernightStore:
                 'SELECT ended_at,payload FROM overnight_minute WHERE code=?', (code,))}
             days = {stamp[:10] for stamp in existing}
             bars, quality = validated_history(existing, bars)
-            previous_stamps = {row[0] for row in db.execute(
-                'SELECT ended_at FROM overnight_historical_minute WHERE code=?', (code,))}
+            previous = dict(db.execute("SELECT ended_at,payload FROM overnight_historical_minute WHERE code=?",(code,)))
             additions = [bar for bar in bars if str(bar.ended_at.date()) not in days
-                         and bar.ended_at.isoformat() not in previous_stamps]
+                         and bar.ended_at.isoformat() not in previous]
             before = db.total_changes
-            # Enrich legacy rows only when the provider's original OHLC and amount agree.
-            db.executemany('''INSERT INTO overnight_historical_minute VALUES(?,?,?) ON CONFLICT(code,ended_at)
-                DO UPDATE SET payload=excluded.payload WHERE json_extract(payload,'$.volume') IS NULL
-                AND json_extract(excluded.payload,'$.volume') IS NOT NULL
-                AND json_extract(payload,'$.open','$.high','$.low','$.close','$.amount')
-                    =json_extract(excluded.payload,'$.open','$.high','$.low','$.close','$.amount')''',
-                [(code, bar.ended_at.isoformat(), bar.model_dump_json()) for bar in bars])
+            inserts, updates = [], []
+            for bar in bars:
+                stamp=bar.ended_at.isoformat()
+                if stamp not in previous:
+                    inserts.append((code,stamp,bar.model_dump_json()))
+                elif bar.volume is not None:
+                    original=MinuteBar.model_validate_json(previous[stamp])
+                    if compatible_volume(original,bar):
+                        updates.append((bar.volume,code,stamp))
+            db.executemany("INSERT INTO overnight_historical_minute VALUES(?,?,?)",inserts)
+            db.executemany("UPDATE overnight_historical_minute SET payload=json_set(payload,'$.volume',?) WHERE code=? AND ended_at=?",updates)
             if db.total_changes > before:
                 self.advance_revision(db)
             result = {'sourceCode': source, 'importedAt': now.isoformat(), 'addedBars': len(additions),

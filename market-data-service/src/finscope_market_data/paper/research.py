@@ -21,7 +21,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from finscope_market_data.providers.base import ProviderError
 
 from .actions import annotate, read_actions
 from .analysis import coverage, evaluate, frames, observe_close
@@ -608,15 +607,13 @@ class ResearchJobs:
 
     async def snapshot(self, codes, job=None):
         cutoff = datetime.now(SHANGHAI)
+        await self.lab.datasets.ensure(codes,cutoff)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
         )
 
         def collect():
             panel = {}
-            provider_ready = (
-                self.history_provider is not None and self.archive is not None
-            )
             for code, live in zip(codes, recent):
                 symbol = code + (".SH" if code.startswith("6") else ".SZ")
                 archived = (
@@ -624,32 +621,6 @@ class ResearchJobs:
                     if self.archive
                     else []
                 )
-                if provider_ready and (
-                    len(archived) < 120 * 48
-                    or sum(b.volume is not None for b in archived)
-                    < 0.95 * len(archived)
-                ):
-                    through = cutoff.replace(
-                        tzinfo=None, hour=15, minute=0, second=0, microsecond=0
-                    ) - timedelta(days=1)
-                    try:
-                        history = self.history_provider.fetch(symbol, through)
-                        self.archive.import_history(
-                            symbol,
-                            history,
-                            self.history_provider.source,
-                            cutoff.replace(tzinfo=None),
-                        )
-                        archived = self.archive.research_bars(
-                            symbol, cutoff.replace(tzinfo=None)
-                        )
-                    except (ProviderError, ValueError) as exc:
-                        if getattr(exc, "retryable", False):
-                            provider_ready = False
-                        if job:
-                            self.update(
-                                job, "DATA", "部分历史补数不可用，本轮使用已有覆盖"
-                            )
                 records = {}
                 for b in archived:
                     at = b.ended_at.replace(tzinfo=SHANGHAI)
