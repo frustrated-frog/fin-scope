@@ -156,3 +156,28 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
             "SELECT request FROM paper_job WHERE state='QUEUED'"
         ).fetchall()
     assert len(jobs) == 1 and json.loads(jobs[0][0])["parent"] == v
+
+
+@pytest.mark.asyncio
+async def test_job_can_refresh_an_insufficient_snapshot_on_retry(tmp_path, monkeypatch):
+    lab = PaperLab(tmp_path / "lab.db", lambda: None)
+    req = research.JobRequest(
+        codes=["600000"], capital=10000, pool="WATCHLIST", source="test", origin="test"
+    )
+    job = lab.jobs.enqueue(req)["jobId"]
+    monkeypatch.setattr(research, "image_id", lambda: "sha256:" + "0" * 64)
+    monkeypatch.setattr(
+        lab.jobs,
+        "read_panel",
+        lambda digest: {"600000": [SimpleNamespace(observed_at=START)]},
+    )
+    with lab.db() as db:
+        db.execute(
+            "UPDATE paper_job SET request=json_set(request,'$.snapshot','old') WHERE id=?",
+            (job,),
+        )
+    with pytest.raises(ValueError, match="不足三个交易日"):
+        await lab.jobs.process(job, {**req.model_dump(), "snapshot": "old"})
+    with lab.db() as db:
+        row = db.execute("SELECT request FROM paper_job WHERE id=?", (job,)).fetchone()
+    assert "snapshot" not in json.loads(row[0])

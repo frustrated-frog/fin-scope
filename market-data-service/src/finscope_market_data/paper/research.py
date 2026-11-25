@@ -571,21 +571,27 @@ class ResearchJobs:
         digest = parent["rule"]["snapshot"] if parent else request.get("snapshot")
         if not digest:
             digest = await self.snapshot(request["codes"], job)
+        panel = await asyncio.to_thread(self.read_panel, digest)
+        days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
+        if len(days) < 3:
+            with self.lab.db() as db:
+                db.execute(
+                    "UPDATE paper_job SET request=json_remove(request,'$.snapshot') WHERE id=?",
+                    (job,),
+                )
+            raise ValueError("行情快照不足三个交易日，请待历史补齐后重试")
+        if not parent and not request.get("snapshot"):
             with self.lab.db() as db:
                 db.execute(
                     "UPDATE paper_job SET request=json_set(request,'$.snapshot',?) WHERE id=?",
                     (digest, job),
                 )
-        panel = await asyncio.to_thread(self.read_panel, digest)
-        if len({b.observed_at.date() for bars in panel.values() for b in bars}) < 3:
-            raise ValueError("行情快照不足三个交易日，请待历史补齐后重试")
         prompt = dict(
             hypothesis=request["origin"],
             feedback=request.get("feedback"),
             universeSize=len(panel),
             coverage={code: len(bars) for code, bars in panel.items()},
         )
-        days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
         split = days[min(len(days) - 1, max(1, int(0.8 * len(days))))]
         sample = {
             c: [
