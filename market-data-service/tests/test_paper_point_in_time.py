@@ -208,3 +208,43 @@ def test_factor_assets_deduplicate_replay_and_isolate_research_evidence(tmp_path
     with PythonStrategy(frozen, image, collect_factors=True) as strategy:
         strategy.decide({"600000": [bar]}, new_book(10000), at, 10000)
         assert strategy.factor_values == {"linked": {"600000": 20}}
+
+
+def test_measured_bars_keep_missing_turnover_and_avoid_conflicting_prices(tmp_path):
+    from finscope_market_data.overnight.store import OvernightStore
+    from finscope_market_data.overnight.models import MinuteBar
+    from datetime import timedelta
+
+    archive = OvernightStore(tmp_path / "archive.db")
+    lab = PaperLab(tmp_path / "research.db", lambda: None, archive)
+    at = datetime(2026, 11, 24, 15, tzinfo=SHANGHAI)
+    first = MinutePriceBar(
+        symbol=StockSymbol(market="SH", code="600000"),
+        observed_at=at,
+        frequency_minutes=5,
+        open=10,
+        high=11,
+        low=9,
+        close=10,
+        volume=2000,
+    )
+    second = first.model_copy(update={"observed_at": at + timedelta(days=1)})
+    archive.import_history(
+        "600000.SH",
+        [
+            MinuteBar(
+                ended_at=at.replace(tzinfo=None),
+                open=9.99,
+                high=11,
+                low=9,
+                close=10,
+                amount=18000,
+            )
+        ],
+        "old",
+        at.replace(tzinfo=None),
+    )
+    lab.datasets.save_quotes("600000", [first, second], second.observed_at)
+    bars = lab.datasets.bars("600000", second.observed_at.replace(tzinfo=None))
+    assert bars[0].volume is None and bars[0].open == 9.99
+    assert bars[1].volume == 2000 and bars[1].amount is None

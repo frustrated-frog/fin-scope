@@ -517,6 +517,7 @@ class ResearchJobs:
             parent=version,
             autoIterate=False,
             autoStart=True,
+            feedbackThrough=review.at,
             forwardEvidence={k: v for k, v in evidence.items() if k != "factorClose"},
             feedback=json.dumps(
                 dict(
@@ -609,7 +610,7 @@ class ResearchJobs:
 
     async def snapshot(self, codes, job=None):
         cutoff = datetime.now(SHANGHAI)
-        await self.lab.datasets.ensure(codes, cutoff)
+        self.lab.datasets.register(codes)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
         )
@@ -617,12 +618,9 @@ class ResearchJobs:
         def collect():
             panel = {}
             for code, live in zip(codes, recent):
-                symbol = code + (".SH" if code.startswith("6") else ".SZ")
-                archived = (
-                    self.archive.research_bars(symbol, cutoff.replace(tzinfo=None))
-                    if self.archive
-                    else []
-                )
+                if isinstance(live, list):
+                    self.lab.datasets.save_quotes(code, live, cutoff)
+                archived = self.lab.datasets.bars(code, cutoff.replace(tzinfo=None))
                 records = {}
                 for b in archived:
                     at = b.ended_at.replace(tzinfo=SHANGHAI)
@@ -636,25 +634,21 @@ class ResearchJobs:
                         b.amount,
                         b.volume is None,
                     ]
-                for b in live if isinstance(live, list) else []:
-                    at = b.observed_at.astimezone(SHANGHAI)
-                    if at <= cutoff:
-                        records[at] = [
-                            at.isoformat(),
-                            b.open,
-                            b.high,
-                            b.low,
-                            b.close,
-                            b.volume,
-                            b.amount,
-                            False,
-                        ]
-                if not records:
-                    raise ValueError(f"{code} 没有可用于回测的行情")
                 panel[code] = [records[t] for t in sorted(records)[-12000:]]
             return panel
 
         panel = await asyncio.to_thread(collect)
+        cold = [
+            c
+            for c, rows in panel.items()
+            if len({r[0][:10] for r in rows}) < 3 or not any(not r[7] for r in rows)
+        ]
+        if cold:
+            await self.lab.datasets.ensure(cold, cutoff)
+            panel = await asyncio.to_thread(collect)
+        for code, rows in panel.items():
+            if not rows:
+                raise ValueError(f"{code} 没有可用于回测的行情，请待补数后重试")
         router = self.lab.router()
 
         async def attach(code, rows):
@@ -746,7 +740,9 @@ class ResearchJobs:
                     (request["parent"],),
                 ).fetchone()
         observed = request.get("forwardEvidence", {}).get("lastDay")
-        feedback = observed + "T15:00:00+08:00" if observed else None
+        feedback = request.get("feedbackThrough") or (
+            observed + "T15:00:00+08:00" if observed else None
+        )
         if request.get("feedback") and not observed:
             feedback = submitted
         dependencies = [data_through]
@@ -981,7 +977,7 @@ class ResearchJobs:
                 parent = self.lab.spec(db, request["parent"]).model_dump()
         digest = (
             parent["rule"]["snapshot"]
-            if parent and not forward
+            if parent and not forward and not request.get("requiredFactor")
             else request.get("snapshot")
         )
         if not digest:
@@ -1006,9 +1002,15 @@ class ResearchJobs:
             ]
             if not known:
                 raise ValueError("该因子版本缺少可核验的研究时间，无法发起独立验证")
-            first_known = min(known)[:10]
-            if first_known >= str(split):
-                boundary = max(boundary or "", first_known)
+            first_known = datetime.fromisoformat(min(known)).astimezone(SHANGHAI)
+            timestamps = sorted(
+                {b.observed_at for bars in panel.values() for b in bars}
+            )
+            if not any(t >= first_known and t.date() < split for t in timestamps):
+                first_usable = next(
+                    (t for t in timestamps if t >= first_known), first_known
+                )
+                boundary = max(boundary or "", str(first_usable.date()))
         if boundary:
             fresh = [d for d in days if str(d) > boundary]
             complete = any(
@@ -1023,7 +1025,7 @@ class ResearchJobs:
             if not complete:
                 with self.lab.db() as db:
                     db.execute(
-                        """UPDATE paper_job SET state='WAITING_DATA',request=json_set(request,'$.checkedDay',?),
+                        """UPDATE paper_job SET state='WAITING_DATA',request=json_set(json_remove(request,'$.snapshot'),'$.checkedDay',?),
                                log=json_insert(log,'$[#]',?) WHERE id=?""",
                         (
                             str(datetime.now(SHANGHAI).date()),
@@ -1063,7 +1065,9 @@ class ResearchJobs:
             validation_start=str(split),
         )
         summary.update(
-            validationMode="NEW_AFTER_FORWARD"
+            validationMode="NEW_AFTER_FACTOR"
+            if request.get("requiredFactor")
+            else "NEW_AFTER_FORWARD"
             if forward
             else ("SHARED_WITH_PARENT" if parent else "TEMPORAL"),
             information=selected["metrics"].get("information"),

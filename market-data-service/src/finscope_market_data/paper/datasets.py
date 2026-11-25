@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime, time, timedelta
+from types import SimpleNamespace
 import logging
 import uuid
 
@@ -29,6 +30,67 @@ class ResearchDatasets:
              measured INTEGER DEFAULT 0, complete INTEGER DEFAULT 0, lastDay TEXT, source TEXT, error TEXT,
              poolActive INTEGER DEFAULT 0)""")
 
+        db.execute("""CREATE TABLE IF NOT EXISTS paper_measured_bar(code TEXT,at TEXT,open REAL,high REAL,
+                   low REAL,close REAL,volume REAL,amount REAL, PRIMARY KEY(code,at))""")
+
+    def save_quotes(self, code, rows, now):
+        with self.lab.db() as db:
+            self.schema(db)
+            db.executemany(
+                """INSERT INTO paper_measured_bar VALUES(?,?,?,?,?,?,?,?)
+                      ON CONFLICT(code,at) DO NOTHING""",
+                [
+                    (
+                        code,
+                        b.observed_at.astimezone(SHANGHAI)
+                        .replace(tzinfo=None)
+                        .isoformat(),
+                        b.open,
+                        b.high,
+                        b.low,
+                        b.close,
+                        b.volume,
+                        b.amount,
+                    )
+                    for b in rows
+                    if b.observed_at <= now and b.volume is not None
+                ],
+            )
+            db.execute(
+                """DELETE FROM paper_measured_bar WHERE code=? AND at <
+                      (SELECT at FROM paper_measured_bar WHERE code=? ORDER BY at DESC LIMIT 1 OFFSET 11999)""",
+                (code, code),
+            )
+
+    def bars(self, code, end):
+        symbol = code + (".SH" if code.startswith("6") else ".SZ")
+        historical = self.archive.research_bars(symbol, end) if self.archive else []
+        combined = {b.ended_at: b for b in historical}
+        with self.lab.db() as db:
+            self.schema(db)
+            for r in db.execute(
+                "SELECT * FROM paper_measured_bar WHERE code=? AND at<=? ORDER BY at",
+                (code, end.isoformat()),
+            ):
+                at = datetime.fromisoformat(r["at"])
+                original = combined.get(at)
+                if original and (
+                    original.volume is not None
+                    or any(
+                        abs(getattr(original, k) - r[k]) > 0.000101
+                        for k in ("open", "high", "low", "close")
+                    )
+                ):
+                    continue
+                item = {
+                    k: r[k]
+                    for k in ("open", "high", "low", "close", "volume", "amount")
+                }
+                if original:
+                    item["amount"] = original.amount
+                combined[at] = SimpleNamespace(ended_at=at, **item)
+        return [combined[t] for t in sorted(combined)[-12000:]]
+
     def register(self, codes, *, current_pool=False):
         with self.lab.db() as db:
             self.schema(db)
@@ -50,7 +112,7 @@ class ResearchDatasets:
                 )
             ]
 
-    def refresh(self, code, now):
+    def claim(self, code, now):
         token = uuid.uuid4().hex
         with self.lab.db() as db:
             claimed = db.execute(
@@ -64,6 +126,9 @@ class ResearchDatasets:
             )
             if not claimed.rowcount:
                 return
+        return token
+
+    def refresh(self, code, now, token):
         symbol = code + (".SH" if code.startswith("6") else ".SZ")
         naive = now.replace(tzinfo=None)
         day = previous_session(
@@ -75,7 +140,7 @@ class ResearchDatasets:
         status, source, error = "PARTIAL", None, None
         bars = []
         try:
-            bars = self.archive.research_bars(symbol, end)[-12000:]
+            bars = self.bars(code, end)
             healthy = len(bars) >= 120 * 48 and sum(
                 b.volume is not None for b in bars
             ) >= 0.95 * len(bars)
@@ -102,7 +167,7 @@ class ResearchDatasets:
                     incoming = self.fallback.fetch(symbol, end)
                     source = incoming.source
                 self.archive.import_history(symbol, incoming, source, naive)
-                bars = self.archive.research_bars(symbol, end)[-12000:]
+                bars = self.bars(code, end)
             if (
                 bars
                 and bars[-1].ended_at == end
@@ -149,7 +214,16 @@ class ResearchDatasets:
 
         async def run(code):
             async with self.slots:
-                await asyncio.to_thread(self.refresh, code, now)
+                token = await asyncio.to_thread(self.claim, code, now)
+                if token is None:
+                    return
+                if self.lab.router() is not None:
+                    try:
+                        quotes = await self.lab.bars(code)
+                        await asyncio.to_thread(self.save_quotes, code, quotes, now)
+                    except (ProviderError, ValueError, OSError) as exc:
+                        log.info("分钟快照暂不可用 %s %s", code, type(exc).__name__)
+                await asyncio.to_thread(self.refresh, code, now, token)
 
         await asyncio.gather(*(run(c) for c in codes))
 
