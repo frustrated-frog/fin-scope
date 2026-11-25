@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from .actions import read_actions
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
 from .research import JobRequest, PythonRule, ResearchJobs
@@ -51,6 +52,8 @@ class PaperLab:
         self.router = router
         self.jobs = ResearchJobs(self, archive, history_provider)
         self.limit = asyncio.Semaphore(4)
+        self.action_queries = {}
+        self.action_day = None
 
     @contextmanager
     def db(self):
@@ -295,6 +298,33 @@ class PaperLab:
                 await self.update_account(row, data, now)
         await asyncio.gather(*(update(row) for row in rows))
 
+    async def forward_actions(self, histories, last_seen, started, end):
+        today=end.date().isoformat()
+        if self.action_day != today:
+            self.action_queries.clear()
+            self.action_day=today
+        # A resumed account can span multiple ex-dates. Use the last actual ledger point.
+        async def attach(code, bars):
+            start=last_seen.get(code,started)[:10]
+            if start>=today:
+                return bars
+            key=(code,start,today)
+            pending=self.action_queries.get(key)
+            if pending is None:
+                pending=asyncio.create_task(read_actions(self.router(),self.limit,code,start,today))
+                self.action_queries[key]=pending
+            events=await pending
+            if events is None:
+                self.action_queries.pop(key,None)
+                raise ValueError("等待核验公司行为")
+            relevant=sorted((e for e in events if start<e["ex_date"]<=today),key=lambda e:e["ex_date"])
+            if not relevant:
+                return bars
+            # Keep only post-event prices for today's strategy input. Apply entitlements once on the fresh bar.
+            after=[b for b in bars if str(b.observed_at.date())>=relevant[-1]["ex_date"]]
+            return [*after[:-1],after[-1].model_copy(update={"actions":relevant})]
+        return dict(zip(histories,await asyncio.gather(*(attach(c,b) for c,b in histories.items()))))
+
     async def update_account(self, row, data, now):
         spec = Research.model_validate_json(row["spec"])
         panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
@@ -315,6 +345,15 @@ class PaperLab:
         last = max(book["last"] or row["started"], book.get("resumedAt", ""))
         if end.isoformat() <= last:
             return
+        if isinstance(spec.rule,PythonRule) and spec.rule.exDateAccounting:
+            try:
+                history=await self.forward_actions(history,book.get("lastObserved",{}),row["started"],end)
+                book.setdefault("lastObserved",{}).update({c:end.isoformat() for c in history})
+            except ValueError:
+                with self.db() as db:
+                    db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
+                               ("等待核验公司行为",row["id"],row["revision"]))
+                return
         try:
             point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
             if "controlRule" in book:

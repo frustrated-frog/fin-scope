@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .actions import apply_entitlements
+
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 INTERVAL = timedelta(minutes=5)
 LEGACY_ENGINE = "cn-paper-5m-v1"
@@ -120,6 +122,8 @@ def execute(book, order, bar, end):
         else:
             remaining = quantity
             for entry in pos["lots"]:
+                if entry[0] >= end.date().isoformat():
+                    continue
                 sold = min(remaining, entry[1])
                 entry[1] -= sold
                 remaining -= sold
@@ -136,6 +140,8 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
     waiting = []
     events = []
     # Stable ordering retains the strategy's priority within each side.
+    for code, bars in histories.items():
+        apply_entitlements(book, code, getattr(bars[-1], "actions", []))
     orders = book["pending"] if legacy else sorted(book["pending"], key=lambda o: o["side"] != "SELL")
     for order in orders:
         if end - INTERVAL < datetime.fromisoformat(order["available"]):
@@ -155,9 +161,12 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
         if code in book["positions"]:
             book["positions"][code].update(price=price, pricedAt=end.isoformat())
     values = {code: pos["price"] * sum(q for _, q in pos["lots"]) for code,pos in book["positions"].items()}
-    equity = money(book["cash"] + sum(values.values()))
+    equity = money(book["cash"] + book.get("dividendReceivable", 0) + sum(values.values()))
     # Each original member keeps its benchmark weight during outages.
     benchmark = fmean(marks.get(c, book["anchors"].get(c, 1)) / book["anchors"].get(c, 1) for c in universe)
+    distributions = book.get("benchmarkDistributions")
+    if distributions:
+        benchmark = fmean((marks.get(c,1)*distributions.get(c,{}).get("shares",1) + distributions.get(c,{}).get("cash",0)) / book["anchors"].get(c,1) for c in universe)
     book["stale"] = [code for code in universe if code not in histories]
     if decide is None:
         targets = None

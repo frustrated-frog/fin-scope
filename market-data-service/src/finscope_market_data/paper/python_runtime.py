@@ -44,6 +44,10 @@ for line in sys.stdin:
             exec(source,ns)
             ctx=json.loads(line)
             history={c:(history.get(c,[])+rows)[-49:] for c,rows in ctx['bars'].items()}
+            for c,rows in history.items():
+                last_ex=next((i for i in range(len(rows)-1,-1,-1) if rows[i].get('exDate')),None)
+                if last_ex is not None:
+                    history[c]=rows[last_ex:]
             ctx['bars']={c:[dict(b) for b in rows] for c,rows in history.items()}
             signals={}
             if ctx.pop('_factorReport',False):
@@ -175,6 +179,7 @@ class PythonStrategy:
                     low=b.low,
                     close=b.close,
                     amount=b.amount,
+                    **({"exDate": True} if getattr(b, "actions", []) else {}),
                     volume=None if getattr(b, "estimated_volume", False) else b.volume,
                 )
                 for b in series

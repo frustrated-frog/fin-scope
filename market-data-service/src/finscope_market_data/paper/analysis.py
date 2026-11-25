@@ -33,6 +33,14 @@ def coverage(panel):
         for bar in rows:
             days[bar.observed_at.date()].add(bar.observed_at.strftime("%H:%M"))
         report[code] = dict(
+            actionsVerified=bool(rows)
+            and all(getattr(b, "actionsVerified", False) for b in rows),
+            exDates=[e["ex_date"] for b in rows for e in getattr(b, "actions", [])],
+            unsupportedActions=sum(
+                "UNKNOWN" in e["event_types"] or e["allotment_ratio"] > 0
+                for b in rows
+                for e in getattr(b, "actions", [])
+            ),
             bars=len(rows),
             days=len(days),
             completeDays=sum(clocks <= times for times in days.values()),
@@ -67,7 +75,7 @@ def correlations(x, y):
     y = np.where(mask, y, 0.0)
     a = np.where(mask, x - (x.sum(axis=1) / np.maximum(n, 1))[:, None], 0.0)
     b = np.where(mask, y - (y.sum(axis=1) / np.maximum(n, 1))[:, None], 0.0)
-    denom = np.sqrt((a * a).sum(axis=1) * (b * b).sum(axis=1))
+    denom = np.sqrt((a * a).sum(axis=1)) * np.sqrt((b * b).sum(axis=1))
     return np.divide(
         (a * b).sum(axis=1),
         denom,
@@ -92,11 +100,14 @@ def factor_report(panel, observations):
     clock_index = {v: i for i, v in enumerate(clock)}
     index = {t: i for i, t in enumerate(times)}
     prices = np.full((len(times), len(codes)), np.nan)
+    jumps = np.zeros(prices.shape, dtype=int)
     matrices = {}
     col = {code: i for i, code in enumerate(codes)}
     for c, rows in panel.items():
         for b in rows:
             prices[index[b.observed_at], col[c]] = b.close
+            jumps[index[b.observed_at], col[c]] = bool(getattr(b, "actions", []))
+    jumps = np.cumsum(jumps, axis=0)
     for end, factors in observations:
         for name, scores in factors.items():
             if name not in matrices:
@@ -129,7 +140,9 @@ def factor_report(panel, observations):
             )
             target = index.get(at)
             if target is not None:
-                targets[i] = prices[target] / prices[i] - 1
+                targets[i] = np.where(
+                    jumps[target] == jumps[i], prices[target] / prices[i] - 1, np.nan
+                )
         for name, x in matrices.items():
             mask = np.isfinite(x) & np.isfinite(targets)
             rx, ry = (

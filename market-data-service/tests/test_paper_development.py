@@ -123,3 +123,42 @@ async def test_review_sees_only_development_and_persists_selected_candidate(
     else:
         assert holdouts == ["program0", "program0"]
         assert lab.detail(row["version"], "")["history"]["selectedCandidate"] == 1
+
+
+def test_ex_date_entitlements_cannot_fund_orders_and_skip_crossing_labels():
+    from finscope_market_data.paper.engine import advance, new_book
+    from finscope_market_data.paper.actions import annotate
+    from test_paper_lab import RULE
+
+    data = panel(days=2, minutes=3)
+    event = dict(
+        ex_date="2026-11-17",
+        dividend_per_share=1.0,
+        per_share_bonus=0.1,
+        allotment_ratio=0,
+        event_types=["CASH_DIVIDEND"],
+    )
+    rows = [[b.observed_at.isoformat()] for b in data["0"]]
+    annotate(rows, [event])
+    assert [i for i, r in enumerate(rows) if r[-1]] == [3]
+    reports = []
+    book = new_book(1000)
+    book.update(
+        cash=0,
+        anchors={"0": 10},
+        positions={"0": dict(price=10, cost=1000, lots=[["2026-11-15", 100]])},
+    )
+    for i, b in enumerate(data["0"]):
+        b.actions = rows[i][-1]
+        b.actionsVerified = True
+        if i >= 3:
+            b.close = 9 / 1.1
+        advance(book, RULE, {"0": [b]}, b.observed_at, b.observed_at, 1000)
+        reports.append((b.observed_at, {"x": {c: float(c) for c in data}}))
+    assert book["dividendReceivable"] == 100 and book["cash"] == 0
+    assert (
+        book["positions"]["0"]["lots"][-1] == ["9999-12-31", 10]
+        and book["equity"] == 1000
+    )
+    outcome = analysis.factor_report(data, reports)["x"]["horizons"]["1d"]
+    assert outcome["pairs"] == 3 * 5  # 3 same-clock pairs for each unaffected stock

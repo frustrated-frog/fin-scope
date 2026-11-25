@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from finscope_market_data.providers.base import ProviderError
 
+from .actions import annotate, read_actions
 from .analysis import coverage, evaluate, frames
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, SDK, image_id
@@ -37,6 +38,7 @@ class Program(BaseModel):
 
 class PythonRule(Program):
     kind: Literal["python"]
+    exDateAccounting: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     snapshot: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -570,7 +572,7 @@ class ResearchJobs:
             *(self.lab.bars(c) for c in codes), return_exceptions=True
         )
 
-        def build():
+        def collect():
             panel = {}
             provider_ready = (
                 self.history_provider is not None and self.archive is not None
@@ -584,7 +586,8 @@ class ResearchJobs:
                 )
                 if provider_ready and (
                     len(archived) < 120 * 48
-                    or not any(b.volume is not None for b in archived)
+                    or sum(b.volume is not None for b in archived)
+                    < 0.95 * len(archived)
                 ):
                     through = cutoff.replace(
                         tzinfo=None, hour=15, minute=0, second=0, microsecond=0
@@ -636,6 +639,20 @@ class ResearchJobs:
                 if not records:
                     raise ValueError(f"{code} 没有可用于回测的行情")
                 panel[code] = [records[t] for t in sorted(records)[-12000:]]
+            return panel
+
+        panel = await asyncio.to_thread(collect)
+        router = self.lab.router()
+
+        async def attach(code, rows):
+            events = await read_actions(
+                router, self.lab.limit, code, rows[0][0][:10], rows[-1][0][:10]
+            )
+            annotate(rows, events)
+
+        await asyncio.gather(*(attach(c, rows) for c, rows in panel.items()))
+
+        def freeze():
             raw = json.dumps(
                 panel, sort_keys=True, separators=(",", ":"), allow_nan=False
             ).encode()
@@ -648,7 +665,7 @@ class ResearchJobs:
                 temp.replace(path)
             return digest
 
-        return await asyncio.to_thread(build)
+        return await asyncio.to_thread(freeze)
 
     def read_panel(self, digest):
         raw = gzip.decompress(self.snapshot_path(digest).read_bytes())
@@ -665,8 +682,10 @@ class ResearchJobs:
                     volume=v,
                     amount=a,
                     estimated_volume=estimated,
+                    actionsVerified=bool(extra and extra[0]),
+                    actions=extra[1] if extra else [],
                 )
-                for at, o, h, l, p, v, a, estimated in rows
+                for at, o, h, l, p, v, a, estimated, *extra in rows
             ]
             for c, rows in json.loads(raw).items()
         }
@@ -730,6 +749,8 @@ class ResearchJobs:
                                 volume=b.volume,
                                 amount=b.amount,
                                 estimated_volume=b.estimated_volume,
+                                actions=getattr(b, "actions", []),
+                                actionsVerified=getattr(b, "actionsVerified", False),
                             )
                             for b in bars
                         ]
@@ -957,7 +978,13 @@ class ResearchJobs:
         summary["estimatedVolumeBars"] = sum(
             b.estimated_volume for rows in panel.values() for b in rows
         )
-        rule = dict(kind="python", **program.model_dump(), image=image, snapshot=digest)
+        rule = dict(
+            kind="python",
+            exDateAccounting=True,
+            **program.model_dump(),
+            image=image,
+            snapshot=digest,
+        )
         spec = {
             k: request[k]
             for k in ("pool", "source", "capital", "codes", "origin", "parent")

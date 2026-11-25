@@ -77,7 +77,7 @@ class OvernightMinuteProvider:
         if not isinstance(data, list) or not data:
             raise ValueError('备用分钟数据结构无效')
         rows = [{'时间': row['day'], '开盘': row['open'], '收盘': row['close'],
-                 '最高': row['high'], '最低': row['low'], '成交额': row['amount']} for row in data]
+                 '最高': row['high'], '最低': row['low'], '成交额': row['amount'], '成交量': row.get('volume')} for row in data]
         return self.parse(rows, through)
 
     @staticmethod
@@ -103,6 +103,16 @@ class OvernightMinuteProvider:
                 raise ValueError('分钟时间不在完整五分钟交易区间')
             bar = MinuteBar(ended_at=stamp, open=row['开盘'], close=row['收盘'],
                 high=row['最高'], low=row['最低'], amount=row['成交额'])
+            raw = row.get("成交量")
+            if raw is not None:
+                volume=float(raw)
+                if volume==0 and bar.amount==0:
+                    bar.volume=0.0
+                elif volume>0:
+                    # Verify the published count's unit against the observed OHLC price interval.
+                    matches=[v for v in (volume,volume*100) if bar.low-0.005 <= bar.amount/v <= bar.high+0.005]
+                    if len(matches)==1:
+                        bar.volume=matches[0]
             if bar.ended_at in bars and bars[bar.ended_at] != bar:
                 raise ValueError('同一时点存在冲突分钟线')
             bars[bar.ended_at] = bar
