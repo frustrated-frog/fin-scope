@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 import logging
+import sqlite3
 import uuid
 
 from finscope_market_data.forecast.trading_calendar import (
@@ -15,6 +16,18 @@ from finscope_market_data.providers.base import ProviderError
 from .engine import SHANGHAI
 
 log = logging.getLogger(__name__)
+
+
+def coverage_counts(bars):
+    clocks = set(expected_times("15:00"))
+    sessions = {}
+    measured = 0
+    for bar in bars:
+        sessions.setdefault(bar.ended_at.date(), set()).add(
+            bar.ended_at.strftime("%H:%M")
+        )
+        measured += bar.volume is not None
+    return sum(clocks <= observed for observed in sessions.values()), measured
 
 
 class ResearchDatasets:
@@ -87,6 +100,17 @@ class ResearchDatasets:
                     for k in ("open", "high", "low", "close", "volume", "amount")
                 }
                 if original:
+                    # A feed that omits turnover still needs a plausible share count
+                    # against the retained archive amount, including rounding to yuan.
+                    amount = original.amount
+                    volume = r["volume"]
+                    if (
+                        r["amount"] is not None
+                        and abs(amount - r["amount"]) > 0.501
+                        or amount + 0.501 < (original.low - 0.005) * volume
+                        or amount - 0.501 > (original.high + 0.005) * volume
+                    ):
+                        continue
                     item["amount"] = original.amount
                 combined[at] = SimpleNamespace(ended_at=at, **item)
         return [combined[t] for t in sorted(combined)[-12000:]]
@@ -139,11 +163,11 @@ class ResearchDatasets:
         end = datetime.combine(day, time(15))
         status, source, error = "PARTIAL", None, None
         bars = []
+        complete = measured = 0
         try:
             bars = self.bars(code, end)
-            healthy = len(bars) >= 120 * 48 and sum(
-                b.volume is not None for b in bars
-            ) >= 0.95 * len(bars)
+            complete, measured = coverage_counts(bars)
+            healthy = complete >= 120 and measured >= 0.95 * len(bars)
             if not healthy or bars[-1].ended_at < end:
                 try:
                     start = (
@@ -168,22 +192,29 @@ class ResearchDatasets:
                     source = incoming.source
                 self.archive.import_history(symbol, incoming, source, naive)
                 bars = self.bars(code, end)
+                complete, measured = coverage_counts(bars)
             if (
                 bars
                 and bars[-1].ended_at == end
-                and sum(b.volume is not None for b in bars) >= 0.95 * len(bars)
-                and len(bars) >= 120 * 48
+                and measured >= 0.95 * len(bars)
+                and complete >= 120
             ):
                 status = "READY"
-        except (ProviderError, ValueError, OSError) as problem:
+        except (
+            ProviderError,
+            ValueError,
+            OSError,
+            sqlite3.OperationalError,
+        ) as problem:
+            if isinstance(
+                problem, sqlite3.OperationalError
+            ) and problem.sqlite_errorcode not in (
+                sqlite3.SQLITE_BUSY,
+                sqlite3.SQLITE_LOCKED,
+            ):
+                raise
             error = getattr(problem, "error_type", type(problem).__name__)
             status = "RETRY"
-        clocks = set(expected_times("15:00"))
-        sessions = {}
-        for b in bars:
-            sessions.setdefault(b.ended_at.date(), set()).add(
-                b.ended_at.strftime("%H:%M")
-            )
         next_day = next_session(day)
         due = now + timedelta(minutes=15 if status == "RETRY" else 180)
         if status == "READY" and next_day:
@@ -197,9 +228,9 @@ class ResearchDatasets:
                     now.isoformat(),
                     status,
                     len(bars),
-                    sum(b.volume is not None for b in bars),
-                    sum(clocks <= s for s in sessions.values()),
-                    str(max(sessions)) if sessions else None,
+                    measured,
+                    complete,
+                    str(bars[-1].ended_at.date()) if bars else None,
                     source,
                     error,
                     code,
@@ -207,7 +238,17 @@ class ResearchDatasets:
                 ),
             )
 
-    async def ensure(self, codes, now):
+    def syncing(self, codes):
+        with self.lab.db() as db:
+            return any(
+                db.execute(
+                    "SELECT 1 FROM paper_dataset WHERE code=? AND status='SYNCING'",
+                    (c,),
+                ).fetchone()
+                for c in codes
+            )
+
+    async def ensure(self, codes, now, *, wait=False):
         if self.archive is None or self.provider is None:
             return
         self.register(codes)
@@ -226,6 +267,13 @@ class ResearchDatasets:
                 await asyncio.to_thread(self.refresh, code, now, token)
 
         await asyncio.gather(*(run(c) for c in codes))
+        if wait and codes:
+            # Another worker can already own the claim. Reuse its results on a cold start.
+            deadline = asyncio.get_running_loop().time() + 90
+            while await asyncio.to_thread(self.syncing, codes):
+                if asyncio.get_running_loop().time() >= deadline:
+                    break
+                await asyncio.sleep(0.5)
 
     async def run(self, stop):
         if not self.archive or not self.provider:

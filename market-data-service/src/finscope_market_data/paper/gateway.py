@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .factor_library import bind
 from .analysis import coverage, evaluate
+from .return_targets import selected_targets
 
 
 def development_tools(config):
@@ -88,7 +89,12 @@ def development_tools(config):
         v = library[asset_id]
         return dict(name=v["name"], source=v["source"], study=v["studies"][0])
 
-    def run(code):
+    @tools.tool()
+    def list_return_targets() -> dict:
+        """Available factor evaluation target IDs and their signal, entry and exit definitions."""
+        return selected_targets(None)
+
+    def run(code, targets=None):
         nonlocal runs
         if runs >= 4 or len(code) > 32000:
             raise ValueError("每次编写最多四次试跑，源码最多 32000 字")
@@ -96,7 +102,9 @@ def development_tools(config):
         audit(f"第 {runs} 次全开发段试跑")
         try:
             source, _ = bind(code, library)
-            return evaluate(panel, source, context["image"], context["capital"])
+            return evaluate(
+                panel, source, context["image"], context["capital"], targets=targets
+            )
         except (ValueError, TypeError, KeyError, ArithmeticError, OSError) as exc:
             audit("试跑失败 · " + str(exc).splitlines()[-1][:220])
             raise
@@ -107,11 +115,13 @@ def development_tools(config):
         return run(code)
 
     @tools.tool()
-    def evaluate_factor(code: str) -> dict:
-        """Evaluate standalone factors(bars) across five forward horizons, independently of portfolio decisions."""
+    def evaluate_factor(code: str, targets: list[str] | None = None) -> dict:
+        """Evaluate factors(bars) for the requested list_return_targets IDs, or all targets when omitted."""
+        selected_targets(targets)
         return run(
             code
-            + "\ndef decide(ctx):\n    return {'weights':{},'scores':{},'state':{}}"
+            + "\ndef decide(ctx):\n    return {'weights':{},'scores':{},'state':{}}",
+            targets,
         )["factors"]
 
     return tools

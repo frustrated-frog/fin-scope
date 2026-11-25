@@ -148,11 +148,11 @@ def invoke(output_type, message, context=None):
                 "-c",
                 'mcp_servers.quant.default_tools_approval_mode="approve"',
                 "-c",
-                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","search_factors","read_factor"]',
+                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","list_return_targets","search_factors","read_factor"]',
                 "-c",
                 "mcp_servers.quant.tool_timeout_sec=525",
             ]
-            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. You may evaluate_factor or run_development_backtest on the full development segment. Fix errors before returning."
+            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. Use list_return_targets and evaluate_factor(code, targets) to test the entry and exit horizon relevant to your hypothesis. You may run_development_backtest on the full development segment. Fix errors before returning."
         result = subprocess.run(
             [
                 executable,
@@ -644,7 +644,7 @@ class ResearchJobs:
             if len({r[0][:10] for r in rows}) < 3 or not any(not r[7] for r in rows)
         ]
         if cold:
-            await self.lab.datasets.ensure(cold, cutoff)
+            await self.lab.datasets.ensure(cold, cutoff, wait=True)
             panel = await asyncio.to_thread(collect)
         for code, rows in panel.items():
             if not rows:

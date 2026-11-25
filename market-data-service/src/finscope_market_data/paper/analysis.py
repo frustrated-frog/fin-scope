@@ -9,7 +9,12 @@ import numpy as np
 
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 from finscope_market_data.overnight.engine import expected_times
-from .return_targets import trading_targets
+from .return_targets import (
+    FIXED_SLOTS,
+    TRADE_TARGETS,
+    selected_targets,
+    trading_targets,
+)
 from .engine import advance, new_book
 from .python_runtime import PythonStrategy
 
@@ -91,7 +96,8 @@ def finite_mean(x):
     return float(sample.mean()) if len(sample) else None
 
 
-def factor_report(panel, observations):
+def factor_report(panel, observations, targets=None):
+    requested = selected_targets(targets)
     if not observations:
         return {}
     codes = list(panel)
@@ -136,13 +142,9 @@ def factor_report(panel, observations):
 
     def fixed_horizons():
         # Horizon means exact trading slots, never the next available quote after a gap.
-        for label, slots in (
-            ("5m", 1),
-            ("30m", 6),
-            ("1d", 48),
-            ("3d", 144),
-            ("5d", 240),
-        ):
+        for label, slots in FIXED_SLOTS.items():
+            if label not in requested:
+                continue
             targets = np.full_like(prices, np.nan)
             for i, t in enumerate(times):
                 pos = clock_index.get(t.strftime("%H:%M"))
@@ -169,7 +171,14 @@ def factor_report(panel, observations):
                     )
             yield label, targets
 
-    for label, targets in chain(fixed_horizons(), trading_targets(panel, times, codes)):
+    trade = (
+        trading_targets(panel, times, codes)
+        if requested.keys() & TRADE_TARGETS.keys()
+        else ()
+    )
+    for label, targets in chain(fixed_horizons(), trade):
+        if label not in requested:
+            continue
         for name, x in matrices.items():
             mask = np.isfinite(x) & np.isfinite(targets)
             rx, ry = (
@@ -237,7 +246,7 @@ def factor_report(panel, observations):
     return reports
 
 
-def evaluate(panel, code, image, capital, *, factors=True):
+def evaluate(panel, code, image, capital, *, factors=True, targets=None):
     """Only callers holding a development dataset may expose this result to the agent."""
     book = new_book(capital)
     peak = capital
@@ -277,7 +286,7 @@ def evaluate(panel, code, image, capital, *, factors=True):
         feeRate=book["fees"] / capital,
         tradedNotionalRate=gross / capital,
         unfilled=dict(reasons),
-        factors=factor_report(panel, observations),
+        factors=factor_report(panel, observations, targets),
     )
 
 

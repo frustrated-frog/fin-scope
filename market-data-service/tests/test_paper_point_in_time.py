@@ -248,3 +248,99 @@ def test_measured_bars_keep_missing_turnover_and_avoid_conflicting_prices(tmp_pa
     bars = lab.datasets.bars("600000", second.observed_at.replace(tzinfo=None))
     assert bars[0].volume is None and bars[0].open == 9.99
     assert bars[1].volume == 2000 and bars[1].amount is None
+
+
+@pytest.mark.asyncio
+async def test_cold_reader_reuses_concurrent_pool_refresh(tmp_path):
+    import asyncio
+    import threading
+    from finscope_market_data.overnight.store import OvernightStore
+
+    entered = threading.Event()
+    finish = threading.Event()
+    calls = []
+
+    class Provider:
+        source = "fixture"
+
+        def fetch(self, *args):
+            calls.append(args)
+            entered.set()
+            assert finish.wait(5)
+            return []
+
+    lab = PaperLab(
+        tmp_path / "paper.db",
+        lambda: None,
+        OvernightStore(tmp_path / "archive.db"),
+        Provider(),
+    )
+    now = datetime(2026, 11, 24, 16, tzinfo=SHANGHAI)
+    background = asyncio.create_task(lab.datasets.ensure(["600000"], now))
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        reader = asyncio.create_task(lab.datasets.ensure(["600000"], now, wait=True))
+        await asyncio.sleep(0.1)
+        assert not reader.done()
+    finally:
+        finish.set()
+        await background
+    await reader
+    assert len(calls) == 1 and lab.datasets.list()[0]["status"] == "RETRY"
+
+
+def test_archive_counts_complete_clocks_and_validates_volume(tmp_path):
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from finscope_market_data.paper.datasets import coverage_counts
+    from finscope_market_data.overnight.engine import expected_times
+    from finscope_market_data.overnight.store import OvernightStore
+    from finscope_market_data.overnight.models import MinuteBar
+
+    day = datetime(2026, 11, 24)
+    rows = [
+        SimpleNamespace(
+            ended_at=datetime.combine(
+                day.date() - timedelta(days=i), datetime.strptime(clock, "%H:%M").time()
+            ),
+            volume=100,
+        )
+        for i in range(123)
+        for clock in expected_times("15:00")[1:]
+    ]
+    assert len(rows) > 120 * 48 and coverage_counts(rows) == (0, len(rows))
+    archive = OvernightStore(tmp_path / "archive.db")
+    lab = PaperLab(tmp_path / "paper.db", lambda: None, archive)
+    at = day.replace(hour=15)
+    archive.import_history(
+        "600000.SH",
+        [MinuteBar(ended_at=at, open=10, high=11, low=9, close=10, amount=20000)],
+        "old",
+        at,
+    )
+    quote = MinutePriceBar(
+        symbol=StockSymbol(code="600000", market="SH"),
+        observed_at=at.replace(tzinfo=SHANGHAI),
+        frequency_minutes=5,
+        open=10,
+        high=11,
+        low=9,
+        close=10,
+        volume=20,
+    )
+    lab.datasets.save_quotes("600000", [quote], quote.observed_at)
+    assert lab.datasets.bars("600000", at)[0].volume is None
+
+
+def test_requested_return_targets_are_validated_and_filter_reports():
+    from types import SimpleNamespace
+    from finscope_market_data.paper.analysis import factor_report
+    from finscope_market_data.paper.return_targets import selected_targets
+
+    assert len(selected_targets(None)) == 10
+    with pytest.raises(ValueError, match="收益目标"):
+        selected_targets(["tomorrow"])
+    at = datetime(2026, 11, 24, 14, 45, tzinfo=SHANGHAI)
+    panel = {"600000": [SimpleNamespace(observed_at=at, close=10)]}
+    report = factor_report(panel, [(at, {"momentum": {"600000": 1}})], ["30m"])
+    assert list(report["momentum"]["horizons"]) == ["30m"]

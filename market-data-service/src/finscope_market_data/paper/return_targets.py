@@ -8,6 +8,30 @@ import numpy as np
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 from finscope_market_data.overnight.engine import expected_times
 
+FIXED_SLOTS = {"5m": 1, "30m": 6, "1d": 48, "3d": 144, "5d": 240}
+TRADE_TARGETS = {
+    "tail_next_open": "14:45 信号入场至次日开盘",
+    "tail_next_close": "14:45 信号入场至次日收盘",
+    "intraday_first_sell": "盘中入场至次日首个可卖区间",
+    "next_day_mfe": "盘中入场至次日最高价",
+    "next_day_mae": "盘中入场至次日最低价",
+}
+
+
+def selected_targets(names):
+    registry = {
+        **{
+            name: f"信号收盘起 {slots} 个五分钟交易区间"
+            for name, slots in FIXED_SLOTS.items()
+        },
+        **TRADE_TARGETS,
+    }
+    if names is None:
+        return registry
+    if not names or any(name not in registry for name in names):
+        raise ValueError("请选择已登记的收益目标：" + "、".join(registry))
+    return {name: registry[name] for name in names}
+
 
 def has_capacity(bar, lot):
     return (
@@ -22,16 +46,7 @@ def has_capacity(bar, lot):
 def trading_targets(panel, times, codes):
     clock = expected_times("15:00")
     idx = {t: i for i, t in enumerate(times)}
-    output = {
-        k: np.full((len(times), len(codes)), np.nan)
-        for k in (
-            "tail_next_open",
-            "tail_next_close",
-            "intraday_first_sell",
-            "next_day_mfe",
-            "next_day_mae",
-        )
-    }
+    output = {k: np.full((len(times), len(codes)), np.nan) for k in TRADE_TARGETS}
     for col, code in enumerate(codes):
         lot = 200 if code.startswith(("688", "689")) else 100
         days = defaultdict(dict)
