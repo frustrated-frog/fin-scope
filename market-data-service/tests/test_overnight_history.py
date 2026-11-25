@@ -23,7 +23,7 @@ def test_sdk_contract_enforces_raw_identity_cutoff_and_conflicts():
     def payload(rows):
         return {'fields': list(FIELDS), 'rows': rows}
     through = datetime(2026, 9, 21, 15)
-    assert BaostockMinuteHistoryProvider.parse(payload([row, row]), '605058.SH', through) == [bar('2026-09-21T09:35:00')]
+    assert BaostockMinuteHistoryProvider.parse(payload([row, row]), '605058.SH', through) == [bar('2026-09-21T09:35:00').model_copy(update={'volume': 1000})]
     for column, value in [(2, 'sh.600000'), (9, '2'), (0, '2026-09-20'), (1, '20260921120000000')]:
         invalid = row.copy()
         invalid[column] = value

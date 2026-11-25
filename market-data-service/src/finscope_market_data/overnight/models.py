@@ -36,6 +36,7 @@ class MinuteBar(BaseModel):
     low: float = Field(gt=0)
     close: float = Field(gt=0)
     amount: float = Field(ge=0)
+    volume: float | None = Field(default=None, ge=0)
 
     @model_validator(mode='after')
     def price_bounds(self):

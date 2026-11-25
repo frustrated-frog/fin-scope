@@ -181,3 +181,17 @@ async def test_job_can_refresh_an_insufficient_snapshot_on_retry(tmp_path, monke
     with lab.db() as db:
         row = db.execute("SELECT request FROM paper_job WHERE id=?", (job,)).fetchone()
     assert "snapshot" not in json.loads(row[0])
+
+
+def test_rebalance_uses_only_actual_sale_proceeds():
+    from finscope_market_data.paper.engine import INTERVAL
+    prices = bars([10,10,10])["600000"]
+    history = {"600000": prices, "000001": prices}
+    for bought, expected in [("2026-11-20", 2), (str(START.date()), 0)]:
+        book = new_book(0)
+        book["positions"]["600000"] = {"price":10,"cost":10000,"lots":[[bought,1000]]}
+        for code,side in [("000001","BUY"),("600000","SELL")]:
+            book["pending"].append(dict(code=code,side=side,budget=9000,available=(START-INTERVAL).isoformat()))
+        point = advance(book,RULE,history,START,START,10000)
+        assert [event["side"] for event in point["events"][:2]] == ["SELL","BUY"]
+        assert book["fills"] == expected and book["cash"] >= 0

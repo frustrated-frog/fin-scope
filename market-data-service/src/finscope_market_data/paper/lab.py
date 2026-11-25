@@ -287,62 +287,68 @@ class PaperLab:
             rows = db.execute("SELECT a.*,v.spec FROM paper_account a JOIN paper_version v ON a.id=v.id WHERE lifecycle='RUNNING'").fetchall()
         codes = sorted({c for row in rows for c in json.loads(row["spec"])["codes"]})
         data = dict(zip(codes, await asyncio.gather(*(self.bars(c) for c in codes), return_exceptions=True)))
-        for row in rows:
-            spec = Research.model_validate_json(row["spec"])
-            panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
-            cutoff = now - timedelta(seconds=3)
-            closed = {c: [b for b in bars if b.observed_at <= cutoff] for c, bars in panel.items()}
-            end = max((bars[-1].observed_at for bars in closed.values() if bars), default=None)
-            seen = stamp()
-            if not end or seen - end > INTERVAL:
-                with self.db() as db:
-                    db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
-                               ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
-                continue
-            end = end.astimezone(SHANGHAI)
-            history = {c: bars[-49:] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
-            if len(history) < len(panel) and seen - end < timedelta(seconds=45):
-                continue
-            book = json.loads(row["book"])
-            last = max(book["last"] or row["started"], book.get("resumedAt", ""))
-            if end.isoformat() <= last:
-                continue
-            try:
-                point = await self.forward(book, spec.rule, spec, history, end, seen)
-                if "controlRule" in book:
-                    rule = book["controlRule"]
-                    control_rule = PythonRule.model_validate(rule) if rule.get("kind") == "python" else Rule.model_validate(rule)
-                    control = await self.forward(book["control"], control_rule, spec, history, end, seen)
-                    point["control"] = control["equity"]
-                    point["controlEvents"] = control["events"]
-            except Exception as error:
-                log.warning("策略 %s 运行失败: %s", row["id"], type(error).__name__)
-                with self.db() as db:
-                    db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
-                               ("策略运行失败，本时点未执行",row["id"],row["revision"]))
-                continue
-            point["previousAt"] = last
-            previous = datetime.fromisoformat(last).astimezone(SHANGHAI)
-            # Count missing observations within today's two sessions, excluding the lunch break.
-            morning = end.replace(hour=9, minute=35, second=0, microsecond=0)
-            afternoon = morning.replace(hour=13, minute=5)
-            point["missedBars"] = sum(
-                previous < start + i * INTERVAL < end
-                for start in (morning, afternoon) for i in range(24)
-            )
-            with self.db() as db:
-                changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
-                                     (dumps(book), "部分行情缺失，沿用最近估值" if book["stale"] else "已同步盘中行情", row["id"], row["revision"]))
-                if changed.rowcount == 1:
-                    db.execute("INSERT INTO paper_point VALUES(?,?,?)", (row["id"], point["at"], dumps(point)))
+        slots = asyncio.Semaphore(3)
+        async def update(row):
+            async with slots:
+                await self.update_account(row, data, now)
+        await asyncio.gather(*(update(row) for row in rows))
 
-    async def forward(self, book, rule, spec, history, end, seen):
+    async def update_account(self, row, data, now):
+        spec = Research.model_validate_json(row["spec"])
+        panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
+        cutoff = now - timedelta(seconds=3)
+        closed = {c: [b for b in bars if b.observed_at <= cutoff] for c, bars in panel.items()}
+        end = max((bars[-1].observed_at for bars in closed.values() if bars), default=None)
+        seen = stamp()
+        if not end or seen - end > INTERVAL:
+            with self.db() as db:
+                db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
+                           ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
+            return
+        end = end.astimezone(SHANGHAI)
+        history = {c: bars[-49:] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
+        if len(history) < len(panel) and seen - end < timedelta(seconds=45):
+            return
+        book = json.loads(row["book"])
+        last = max(book["last"] or row["started"], book.get("resumedAt", ""))
+        if end.isoformat() <= last:
+            return
+        try:
+            point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
+            if "controlRule" in book:
+                rule = book["controlRule"]
+                control_rule = PythonRule.model_validate(rule) if rule.get("kind") == "python" else Rule.model_validate(rule)
+                control = await self.forward(book["control"], control_rule, spec, history, end, seen, decision_clock=stamp)
+                point["control"] = control["equity"]
+                point["controlEvents"] = control["events"]
+        except Exception as error:
+            log.warning("策略 %s 运行失败: %s", row["id"], type(error).__name__)
+            with self.db() as db:
+                db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
+                           ("策略运行失败，本时点未执行",row["id"],row["revision"]))
+            return
+        point["previousAt"] = last
+        previous = datetime.fromisoformat(last).astimezone(SHANGHAI)
+        # Count missing observations within today's two sessions, excluding the lunch break.
+        morning = end.replace(hour=9, minute=35, second=0, microsecond=0)
+        afternoon = morning.replace(hour=13, minute=5)
+        point["missedBars"] = sum(
+            previous < start + i * INTERVAL < end
+            for start in (morning, afternoon) for i in range(24)
+        )
+        with self.db() as db:
+            changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
+                                 (dumps(book), "部分行情缺失，沿用最近估值" if book["stale"] else "已同步盘中行情", row["id"], row["revision"]))
+            if changed.rowcount == 1:
+                db.execute("INSERT INTO paper_point VALUES(?,?,?)", (row["id"], point["at"], dumps(point)))
+
+    async def forward(self, book, rule, spec, history, end, seen, decision_clock=None):
         if isinstance(rule, PythonRule):
             def compute():
                 with PythonStrategy(rule.code, rule.image) as strategy:
-                    return advance(book, None, history, end, seen, spec.capital, universe=spec.codes, decide=strategy.decide)
+                    return advance(book, None, history, end, seen, spec.capital, universe=spec.codes, decide=strategy.decide, decision_clock=decision_clock)
             return await asyncio.to_thread(compute)
-        return advance(book, rule, history, end, seen, spec.capital, universe=spec.codes)
+        return advance(book, rule, history, end, seen, spec.capital, universe=spec.codes, decision_clock=decision_clock)
 
     async def run(self, stop):
         while not stop.is_set():

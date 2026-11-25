@@ -87,7 +87,13 @@ class OvernightStore:
         for day, bars in archived.items():
             if not days[day]:
                 days[day] = bars
-            elif len(days[day]) < 48 and len(bars) == 48:
+            elif len(days[day]) == 48:
+                measured = {b.ended_at:b for b in bars if b.volume is not None}
+                for bar in days[day]:
+                    other = measured.get(bar.ended_at)
+                    if other and bar.volume is None and all(getattr(bar,k)==getattr(other,k) for k in ('open','high','low','close','amount')):
+                        bar.volume = other.volume
+            elif len(bars) == 48:
                 try:
                     compare_history({b.ended_at.isoformat(): b for b in days[day]}, bars)
                 except ValueError:
@@ -126,7 +132,12 @@ class OvernightStore:
             additions = [bar for bar in bars if str(bar.ended_at.date()) not in days
                          and bar.ended_at.isoformat() not in previous_stamps]
             before = db.total_changes
-            db.executemany('INSERT OR IGNORE INTO overnight_historical_minute VALUES(?,?,?)',
+            # Enrich legacy rows only when the provider's original OHLC and amount agree.
+            db.executemany('''INSERT INTO overnight_historical_minute VALUES(?,?,?) ON CONFLICT(code,ended_at)
+                DO UPDATE SET payload=excluded.payload WHERE json_extract(payload,'$.volume') IS NULL
+                AND json_extract(excluded.payload,'$.volume') IS NOT NULL
+                AND json_extract(payload,'$.open','$.high','$.low','$.close','$.amount')
+                    =json_extract(excluded.payload,'$.open','$.high','$.low','$.close','$.amount')''',
                 [(code, bar.ended_at.isoformat(), bar.model_dump_json()) for bar in bars])
             if db.total_changes > before:
                 self.advance_revision(db)

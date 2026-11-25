@@ -17,7 +17,7 @@ class BaostockMinuteHistoryProvider:
     source = SOURCE
 
     def fetch(self, code: str, through: datetime, *, start=None):
-        if not re.fullmatch(r'(?:60\d{4}\.SH|(?:00|30)\d{4}\.SZ)', code):
+        if not re.fullmatch(r'(?:(?:60|68)\d{4}\.SH|(?:00|30)\d{4}\.SZ)', code):
             raise ValueError('不支持的分钟历史代码')
         start = max(start or (through - timedelta(days=365)).date(), (through - timedelta(days=365)).date())
         if start > through.date():
@@ -63,7 +63,7 @@ class BaostockMinuteHistoryProvider:
             # Some non-trading intervals are all-zero placeholders, not prices.
             if all(float(row[key]) == 0 for key in ('open', 'high', 'low', 'close', 'volume', 'amount')):
                 continue
-            bar = MinuteBar(ended_at=stamp, **{key: row[key] for key in ('open', 'high', 'low', 'close', 'amount')})
+            bar = MinuteBar(ended_at=stamp, **{key: row[key] for key in ('open', 'high', 'low', 'close', 'volume', 'amount')})
             if stamp in bars and bars[stamp] != bar:
                 raise ValueError('历史分钟数据冲突')
             bars[stamp] = bar

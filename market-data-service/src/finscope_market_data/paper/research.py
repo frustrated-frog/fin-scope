@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from finscope_market_data.providers.base import ProviderError
 
-from .engine import ENGINE, SHANGHAI, advance, new_book
+from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, SDK, image_id
 
 
@@ -171,7 +171,7 @@ def frames(panel):
         yield end, {code: list(series[code]) for code in fresh}
 
 
-def simulate(panel, program, image, capital, control=None):
+def simulate(panel, program, image, capital, control=None, *, legacy=False):
     days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
     if len(days) < 3:
         raise ValueError("独立验证至少需要三个交易日的行情")
@@ -205,7 +205,7 @@ def simulate(panel, program, image, capital, control=None):
                 end + timedelta(seconds=3),
                 capital,
                 universe=list(panel),
-                decide=runtime.decide,
+                decide=runtime.decide, legacy=legacy,
             )
             sample = {key: point[key] for key in ("at", "equity", "benchmark")}
             if other:
@@ -217,7 +217,7 @@ def simulate(panel, program, image, capital, control=None):
                     end + timedelta(seconds=3),
                     capital,
                     universe=list(panel),
-                    decide=other.decide,
+                    decide=other.decide, legacy=legacy,
                 )
                 sample["control"] = baseline["equity"]
             if valid:
@@ -236,7 +236,7 @@ def simulate(panel, program, image, capital, control=None):
         curve=curve,
         fills=book["fills"],
         fees=book["fees"],
-        engine=ENGINE + "-python-v1",
+        engine=(LEGACY_ENGINE if legacy else ENGINE) + "-python-v1",
         **metrics,
     )
 
@@ -313,7 +313,7 @@ class ResearchJobs:
         self.update(job, "BACKTEST", "按原始源码、运行镜像和冻结行情复验")
         panel = await asyncio.to_thread(self.read_panel, spec.rule.snapshot)
         actual = await asyncio.to_thread(
-            simulate, panel, spec.rule, spec.rule.image, spec.capital, parent
+            simulate, panel, spec.rule, spec.rule.image, spec.capital, parent, legacy=saved.get("engine") == LEGACY_ENGINE+"-python-v1"
         )
         if any(saved.get(k) != v for k, v in actual.items()):
             raise ValueError("复验结果与保存的回测记录不一致")
@@ -470,8 +470,7 @@ class ResearchJobs:
                 )
                 if (
                     provider_ready
-                    and len(archived) < 120 * 48
-                    and not symbol.startswith("68")
+                    and (len(archived) < 120 * 48 or not any(b.volume is not None for b in archived))
                 ):
                     through = cutoff.replace(
                         tzinfo=None, hour=15, minute=0, second=0, microsecond=0
@@ -503,9 +502,9 @@ class ResearchJobs:
                         b.high,
                         b.low,
                         b.close,
-                        b.amount / b.high,
+                        b.volume if b.volume is not None else 0,
                         b.amount,
-                        True,
+                        b.volume is None,
                     ]
                 for b in live if isinstance(live, list) else []:
                     at = b.observed_at.astimezone(SHANGHAI)

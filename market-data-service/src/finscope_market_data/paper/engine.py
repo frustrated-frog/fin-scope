@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 INTERVAL = timedelta(minutes=5)
-ENGINE = "cn-paper-5m-v1"
+LEGACY_ENGINE = "cn-paper-5m-v1"
+ENGINE = "cn-paper-5m-v2"
 
 
 class Term(BaseModel):
@@ -129,16 +130,20 @@ def execute(book, order, bar, end):
     return dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
 
 
-def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None):
+def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None, legacy=False, decision_clock=None):
     """Only histories with a fresh closed bar may signal or fill."""
     universe = universe or list(histories)
     waiting = []
     events = []
-    for order in book["pending"]:
+    # Stable ordering retains the strategy's priority within each side.
+    orders = book["pending"] if legacy else sorted(book["pending"], key=lambda o: o["side"] != "SELL")
+    for order in orders:
         if end - INTERVAL < datetime.fromisoformat(order["available"]):
             waiting.append(order)
         elif order["code"] not in histories:
             events.append(dict(order, action="未成交", reason="该股票行情缺失"))
+        elif not legacy and getattr(histories[order["code"]][-1], "estimated_volume", False):
+            events.append(dict(order, action="未成交", reason="缺少真实成交量"))
         else:
             events.append(execute(book, order, histories[order["code"]][-1], end))
     book["pending"] = waiting
@@ -160,6 +165,8 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
     else:
         targets, scores = decide(histories, book, end, equity)
     ranking = sorted((c for c in scores if scores[c] is not None), key=lambda c: (-scores[c], c))
+    if decision_clock:
+        available = decision_clock()
     pending_codes = {o["code"] for o in waiting}
     free = 0 if targets is not None else rule.slots - len(values) - sum(o["side"] == "BUY" for o in waiting)
     for rank, code in enumerate(ranking, 1):
