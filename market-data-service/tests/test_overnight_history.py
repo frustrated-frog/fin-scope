@@ -36,7 +36,7 @@ def test_sdk_contract_enforces_raw_identity_cutoff_and_conflicts():
     with pytest.raises(ValueError, match='冲突'):
         BaostockMinuteHistoryProvider.parse(payload([row, changed]), '605058.SH', through)
     placeholder = row[:3] + ['0'] * 6 + ['3']
-    assert BaostockMinuteHistoryProvider.parse(payload([row, placeholder]), '605058.SH', through) == [bar('2026-09-21T09:35:00')]
+    assert BaostockMinuteHistoryProvider.parse(payload([row, placeholder]), '605058.SH', through) == [bar('2026-09-21T09:35:00').model_copy(update={'volume': 1000})]
     placeholder[8] = '100'
     with pytest.raises(ValueError):
         BaostockMinuteHistoryProvider.parse(payload([placeholder]), '605058.SH', through)
