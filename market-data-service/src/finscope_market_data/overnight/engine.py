@@ -91,7 +91,7 @@ def build_samples(grouped, request, through):
 def predict(request, bars, now):
     cutoff = datetime.fromisoformat(f'{request.signal_date}T{request.cutoff}:00')
     usable = [bar for bar in bars if bar.ended_at <= cutoff]
-    fingerprint = hashlib.sha256(json.dumps([b.model_dump(mode='json') for b in usable], sort_keys=True).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps([b.model_dump(mode='json', exclude={'volume'}) for b in usable], sort_keys=True).encode()).hexdigest()
     grouped = group_bars(usable)
     current = features(grouped.get(request.signal_date, {}), request.cutoff)
     following = next_session(request.signal_date)

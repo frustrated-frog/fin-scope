@@ -71,7 +71,7 @@ class OvernightService:
                 report['warnings'].append('暂无完整重叠日可核验跨源一致性；历史补数只供研究。')
         report['warnings'].extend(warnings)
         if report['status'] == 'WATCH' or freeze_all or report.get('closeDirection', {}).get('upProbability') is not None:
-            report = self.store.freeze(request, report, [b.model_dump(mode='json') for b in bars])
+            report = self.store.freeze(request, report, [b.model_dump(mode='json', exclude={'volume'}) for b in bars])
         if settle_cached:
             self._settle_cached(now)
         return report
