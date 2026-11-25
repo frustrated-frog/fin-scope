@@ -386,8 +386,13 @@ class PaperLab:
     async def forward(self, book, rule, spec, history, end, seen, decision_clock=None):
         if isinstance(rule, PythonRule):
             def compute():
-                with PythonStrategy(rule.code, rule.image) as strategy:
-                    return advance(book, None, history, end, seen, spec.capital, universe=spec.codes, decide=strategy.decide, decision_clock=decision_clock)
+                closing=rule.factorDiagnostics and end.strftime("%H:%M")=="15:00"
+                with PythonStrategy(rule.code,rule.image,collect_factors=closing) as strategy:
+                    point=advance(book,None,history,end,seen,spec.capital,universe=spec.codes,decide=strategy.decide,decision_clock=decision_clock)
+                    if closing:
+                        point["factorClose"]=dict(prices={c:rows[-1].close for c,rows in history.items()},
+                                                  factors=strategy.factor_values,lastEx=dict(book.get("lastAction",{})))
+                    return point
             return await asyncio.to_thread(compute)
         return advance(book, rule, history, end, seen, spec.capital, universe=spec.codes, decision_clock=decision_clock)
 
@@ -413,6 +418,14 @@ class PaperLab:
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
         router.get("/versions/jobs")(self.jobs.list)
+
+        @router.get("/versions/jobs/{job}/evidence")
+        def evidence(job: int):
+            with self.db() as db:
+                self.jobs.schema(db)
+                if not db.execute("SELECT 1 FROM paper_job WHERE id=?",(job,)).fetchone():
+                    raise HTTPException(404,"研究任务不存在")
+            return [self.jobs.trial_view(t) for t in self.jobs.trials(job)]
 
         @router.post("/versions/jobs")
         def queue(value: JobRequest):

@@ -115,6 +115,18 @@ def factor_report(panel, observations):
             for c, value in scores.items():
                 matrices[name][index[end], col[c]] = value
     reports = {name: {"horizons": {}, "correlations": {}} for name in matrices}
+    regime = np.full(len(times), np.nan)
+    for i, t in enumerate(times):
+        d = day_index[t.date()]
+        if d and consecutive_observed_sessions(dates[d - 1], t.date()):
+            prior = index.get(datetime.combine(dates[d - 1], t.timetz()))
+            if prior is not None:
+                trailing = np.where(
+                    jumps[i] == jumps[prior], prices[i] / prices[prior] - 1, np.nan
+                )
+                if np.isfinite(trailing).sum() >= 3:
+                    regime[i] = np.sign(np.nanmean(trailing))
+    at_close = np.array([t.strftime("%H:%M") == "15:00" for t in times])
     for name, x in matrices.items():
         for other, y in matrices.items():
             if other != name:
@@ -155,6 +167,7 @@ def factor_report(panel, observations):
             n = mask.sum(axis=1)
             group = np.floor((rx - 1) * 5 / np.maximum(n, 1)[:, None])
             groups = []
+            group_series = []
             for g in range(5):
                 select = (group == g) & (n >= 5)[:, None]
                 count = select.sum(axis=1)
@@ -164,12 +177,30 @@ def factor_report(panel, observations):
                     out=np.full(len(n), np.nan),
                     where=count > 0,
                 )
+                group_series.append(daily)
                 groups.append(finite_mean(daily))
             by_day = defaultdict(list)
             for idx in np.flatnonzero(valid):
                 by_day[times[idx].date()].append(float(ric[idx]))
             daily_ic = [float(np.mean(vals)) for vals in by_day.values()]
             std = np.std(daily_ic, ddof=1) if len(daily_ic) > 1 else 0.0
+            conditional = {}
+            for other, z in matrices.items():
+                if name == other:
+                    continue
+                mask3 = mask & np.isfinite(z)
+                a, b, c = (
+                    ranks(np.where(mask3, values, np.nan)) for values in (x, targets, z)
+                )
+                ab, ac, bc = correlations(a, b), correlations(a, c), correlations(b, c)
+                denom = np.sqrt(np.maximum(0, 1 - ac * ac) * np.maximum(0, 1 - bc * bc))
+                partial = np.divide(
+                    ab - ac * bc,
+                    denom,
+                    out=np.full(len(n), np.nan),
+                    where=(mask3.sum(axis=1) >= 4) & (denom > 1e-7),
+                )
+                conditional[other] = finite_mean(partial)
             reports[name]["horizons"][label] = dict(
                 observations=int(valid.sum()),
                 pairs=int(mask.sum()),
@@ -180,10 +211,13 @@ def factor_report(panel, observations):
                 if valid.any()
                 else None,
                 recent20DayRankIC=float(np.mean(daily_ic[-20:])) if daily_ic else None,
+                closeRankIC=finite_mean(ric[at_close]),
+                closeSamples=int(np.isfinite(ric[at_close]).sum()),
+                upMarketRankIC=finite_mean(ric[regime > 0]),
+                downMarketRankIC=finite_mean(ric[regime < 0]),
+                partialRankIC=conditional,
                 groups=groups,
-                spread=groups[-1] - groups[0]
-                if groups[-1] is not None and groups[0] is not None
-                else None,
+                spread=finite_mean(group_series[-1] - group_series[0]),
             )
     return reports
 
@@ -230,3 +264,35 @@ def evaluate(panel, code, image, capital, *, factors=True):
         unfilled=dict(reasons),
         factors=factor_report(panel, observations),
     )
+
+
+def observe_close(evidence, point):
+    """Match consecutive observed closing cross-sections for the forward one-session Rank IC."""
+    latest = point.get("factorClose")
+    if not latest:
+        return
+    day = point["at"][:10]
+    previous = evidence.get("factorClose")
+    if previous and consecutive_observed_sessions(
+        datetime.fromisoformat(previous["day"]).date(),
+        datetime.fromisoformat(day).date(),
+    ):
+        for name, values in previous["factors"].items():
+            pairs = [
+                (score, latest["prices"][c] / previous["prices"][c] - 1)
+                for c, score in values.items()
+                if c in latest["prices"]
+                and c in previous["prices"]
+                and latest["lastEx"].get(c, "") <= previous["day"]
+            ]
+            if len(pairs) < 3:
+                continue
+            x, y = np.array(pairs, dtype=float).T
+            ric = finite_mean(correlations(ranks(x[None, :]), ranks(y[None, :])))
+            if ric is not None:
+                series = evidence.setdefault("dailyFactorRankIC", {}).setdefault(
+                    name, []
+                )
+                series.append(ric)
+                del series[:-20]
+    evidence["factorClose"] = {**latest, "day": day}

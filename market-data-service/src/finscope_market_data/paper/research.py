@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from finscope_market_data.providers.base import ProviderError
 
 from .actions import annotate, read_actions
-from .analysis import coverage, evaluate, frames
+from .analysis import coverage, evaluate, frames, observe_close
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, SDK, image_id
 
@@ -39,6 +39,7 @@ class Program(BaseModel):
 class PythonRule(Program):
     kind: Literal["python"]
     exDateAccounting: bool = False
+    factorDiagnostics: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     snapshot: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -410,12 +411,28 @@ class ResearchJobs:
                 maxDrawdown=0.0,
             )
         )
+        if "developmentCloseRankIC" not in evidence:
+            row = db.execute(
+                """SELECT c.metrics FROM paper_version v JOIN paper_job j ON j.version=v.id
+                            JOIN paper_candidate c ON c.job=j.id AND c.ordinal=json_extract(v.history,'$.selectedCandidate')
+                            WHERE v.id=? LIMIT 1""",
+                (version,),
+            ).fetchone()
+            factors = json.loads(row[0]).get("factors", {}) if row else {}
+            evidence["developmentCloseRankIC"] = {
+                n: h["closeRankIC"]
+                for n, r in factors.items()
+                if (h := r.get("horizons", {}).get("1d", {})).get("closeSamples", 0)
+                >= 5
+                and h.get("closeRankIC") is not None
+            }
         points = db.execute(
             "SELECT at,point FROM paper_point WHERE id=? AND at>? AND at<=? ORDER BY at",
             (version, previous["at"] if previous else "", review.at),
         )
         for at, raw in points:
             point = json.loads(raw)
+            observe_close(evidence, point)
             day = at[:10]
             if day != evidence.get("lastDay"):
                 evidence.update(sessions=evidence["sessions"] + 1, lastDay=day)
@@ -449,6 +466,10 @@ class ResearchJobs:
             reasons.append("与等权基准相差至少 5 个百分点")
         if evidence["blocked"] >= 10:
             reasons.append("累计至少十笔委托未成交")
+        for name, baseline in evidence["developmentCloseRankIC"].items():
+            values = evidence.get("dailyFactorRankIC", {}).get(name, [])[-5:]
+            if len(values) == 5 and baseline > 0 and sum(values) / 5 <= baseline - 0.10:
+                reasons.append(name + " 的近五日收盘 Rank IC 较开发段下降至少 0.10")
         evidence["reasons"] = reasons
         ready = evidence["sessions"] >= 5 and bool(reasons)
         evidence["status"] = "可发起评议" if ready else "继续观察"
@@ -480,9 +501,13 @@ class ResearchJobs:
             parent=version,
             autoIterate=False,
             autoStart=True,
-            forwardEvidence=evidence,
+            forwardEvidence={k: v for k, v in evidence.items() if k != "factorClose"},
             feedback=json.dumps(
-                dict(observedThrough=review.at, evidence=evidence, review=review.text),
+                dict(
+                    observedThrough=review.at,
+                    evidence={k: v for k, v in evidence.items() if k != "factorClose"},
+                    review=review.text,
+                ),
                 ensure_ascii=False,
             ),
         )
@@ -719,17 +744,25 @@ class ResearchJobs:
             decision=trial["decision"].model_dump() if trial["decision"] else None,
         )
 
-    def memory(self):
+    def memory(self, through):
         with self.lab.db() as db:
-            rows = db.execute("""SELECT json_extract(spec,'$.rule.name') AS name,
+            rows = db.execute(
+                """SELECT json_extract(spec,'$.rule.name') AS name,
                 json_extract(spec,'$.rule.hypothesis') AS hypothesis,json_extract(spec,'$.rule.factor') AS factor,
                 json_extract(history,'$.developmentReturn') AS developmentReturn FROM paper_version
-                ORDER BY id DESC LIMIT 20""").fetchall()
-            candidates = db.execute("""SELECT c.ordinal,json_extract(c.program,'$.name') AS name,
+                WHERE json_extract(history,'$.validationStart')<=date(?,'+1 day')
+                ORDER BY id DESC LIMIT 20""",
+                (through,),
+            ).fetchall()
+            candidates = db.execute(
+                """SELECT c.ordinal,json_extract(c.program,'$.name') AS name,
                 json_extract(c.program,'$.hypothesis') AS hypothesis,json_extract(c.program,'$.factor') AS factor,
                 json_extract(c.metrics,'$.netReturn') AS developmentReturn,
                 json_extract(c.decision,'$.action') AS decision,json_extract(c.decision,'$.reason') AS reason
-                FROM paper_candidate c WHERE c.decision IS NOT NULL ORDER BY c.job DESC,c.ordinal DESC LIMIT 16""")
+                FROM paper_candidate c WHERE c.decision IS NOT NULL
+                AND json_extract(c.metrics,'$.developmentThrough')<=? ORDER BY c.job DESC,c.ordinal DESC LIMIT 16""",
+                (through,),
+            )
             return [dict(row) for row in candidates] + [dict(row) for row in rows]
 
     async def develop(self, job, request, dev, image, parent, directory):
@@ -769,7 +802,9 @@ class ResearchJobs:
         )
         context = dict(
             developmentFile=str(path),
-            memory=self.memory(),
+            memory=self.memory(
+                max(x["last"] for x in prompt["coverage"].values() if x["last"])
+            ),
             image=image,
             capital=request["capital"],
         )
@@ -843,6 +878,9 @@ class ResearchJobs:
                     metrics = await asyncio.to_thread(
                         evaluate, dev, program.code, image, request["capital"]
                     )
+                    metrics["developmentThrough"] = max(
+                        x["last"] for x in prompt["coverage"].values() if x["last"]
+                    )
                     break
                 except (
                     ValueError,
@@ -911,12 +949,13 @@ class ResearchJobs:
         if forward:
             fresh = [d for d in days if str(d) > forward["lastDay"]]
             complete = any(
-                (
-                    b.observed_at.strftime("%H:%M") == "15:00"
-                    and b.observed_at.date() in fresh
-                )
-                for bars in panel.values()
-                for b in bars
+                row["completeDays"]
+                for row in coverage(
+                    {
+                        c: [b for b in bars if b.observed_at.date() in fresh]
+                        for c, bars in panel.items()
+                    }
+                ).values()
             )
             if not complete:
                 with self.lab.db() as db:
@@ -981,6 +1020,7 @@ class ResearchJobs:
         rule = dict(
             kind="python",
             exDateAccounting=True,
+            factorDiagnostics=True,
             **program.model_dump(),
             image=image,
             snapshot=digest,

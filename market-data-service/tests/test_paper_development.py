@@ -162,3 +162,74 @@ def test_ex_date_entitlements_cannot_fund_orders_and_skip_crossing_labels():
     )
     outcome = analysis.factor_report(data, reports)["x"]["horizons"]["1d"]
     assert outcome["pairs"] == 3 * 5  # 3 same-clock pairs for each unaffected stock
+
+
+@pytest.mark.asyncio
+async def test_forward_holdout_waits_for_new_closing_data(tmp_path, monkeypatch):
+    lab = PaperLab(tmp_path / "lab.db", lambda: None)
+    data = panel(days=4, count=1, minutes=8)
+    req = dict(
+        codes=["600000"],
+        capital=10000,
+        pool="WATCHLIST",
+        source="test",
+        origin="例",
+        forwardDecision="检验近期费用",
+        forwardEvidence={"lastDay": "2026-11-18"},
+        autoStart=False,
+    )
+    job = lab.jobs.submit(req)["jobId"]
+
+    async def snapshot(codes, job):
+        return "a" * 64
+
+    monkeypatch.setattr(lab.jobs, "snapshot", snapshot)
+    monkeypatch.setattr(lab.jobs, "read_panel", lambda digest: data)
+    monkeypatch.setattr(research, "image_id", lambda: "sha256:" + "0" * 64)
+    await lab.jobs.process(job, req)
+    assert lab.jobs.list()[0]["state"] == "WAITING_DATA"
+    target = data["0"][-1].observed_at.replace(hour=15, minute=0)
+    from finscope_market_data.overnight.engine import expected_times
+    from copy import copy
+
+    for clock in expected_times("15:00")[8:]:
+        bar = copy(data["0"][-1])
+        bar.observed_at = target.replace(hour=int(clock[:2]), minute=int(clock[3:]))
+        data["0"].append(bar)
+
+    async def develop(job, request, dev, image, parent, directory):
+        assert all(b.observed_at.date().isoformat() < "2026-11-19" for b in dev["0"])
+        return None
+
+    monkeypatch.setattr(lab.jobs, "develop", develop)
+    await lab.jobs.process(job, req)
+    with lab.db() as db:
+        assert (
+            json.loads(
+                db.execute(
+                    "select request from paper_job where id=?", (job,)
+                ).fetchone()[0]
+            )["snapshot"]
+            == "a" * 64
+        )
+
+
+def test_forward_factor_observations_match_consecutive_closes_only():
+    state = {}
+    for day, prices, actions in [
+        ("2026-11-16", [10, 10, 10, 10], {}),
+        ("2026-11-17", [10, 11, 12, 8], {"3": "2026-11-17"}),
+        ("2026-11-19", [10, 13, 16, 9], {}),
+    ]:
+        analysis.observe_close(
+            state,
+            {
+                "at": day + "T15:00:00+08:00",
+                "factorClose": {
+                    "prices": dict(zip("0123", prices)),
+                    "factors": {"strength": dict(zip("0123", range(4)))},
+                    "lastEx": actions,
+                },
+            },
+        )
+    assert state["dailyFactorRankIC"]["strength"] == [pytest.approx(1)]
