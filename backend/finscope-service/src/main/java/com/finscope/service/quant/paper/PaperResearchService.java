@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class PaperResearchService {
@@ -108,11 +109,11 @@ public class PaperResearchService {
     }
 
     public JsonNode generate(PaperResearchInput input) {
-        return create(input, false, false);
+        return create(input, false, false, null);
     }
 
-    public JsonNode submitCoding(PaperResearchInput input, boolean autoIterate) {
-        return create(input, true, autoIterate);
+    public JsonNode submitCoding(PaperResearchInput input, boolean autoIterate, UUID requestId) {
+        return create(input, true, autoIterate, requestId);
     }
 
     public JsonNode jobs() {
@@ -131,7 +132,7 @@ public class PaperResearchService {
         return paper.transition(version, state);
     }
 
-    private JsonNode create(PaperResearchInput input, boolean coding, boolean autoIterate) {
+    private JsonNode create(PaperResearchInput input, boolean coding, boolean autoIterate, UUID requestId) {
         if (input.hypothesis() != null && input.hypothesis().length() > 1200) {
             throw invalid("研究方向最多 1200 字");
         }
@@ -170,6 +171,9 @@ public class PaperResearchService {
         }
         if (coding) {
             spec.remove("rule");
+            if (requestId != null) {
+                spec.put("requestId", requestId.toString());
+            }
             spec.put("autoStart", input.autoStart());
             spec.put("autoIterate", autoIterate);
             if (input.academyVersionId() != null) {

@@ -46,10 +46,10 @@ def dumps(value):
 
 
 class PaperLab:
-    def __init__(self, path, router, archive=None):
+    def __init__(self, path, router, archive=None, history_provider=None):
         self.path = path
         self.router = router
-        self.jobs = ResearchJobs(self, archive)
+        self.jobs = ResearchJobs(self, archive, history_provider)
         self.limit = asyncio.Semaphore(4)
 
     @contextmanager
@@ -198,6 +198,14 @@ class PaperLab:
         if now.strftime("%H:%M") < "15:10":
             through -= timedelta(days=1)
         with self.db() as db:
+            self.jobs.schema(db)
+            for row in db.execute("""SELECT r.id,r.review FROM paper_review r JOIN paper_job j ON j.version=r.id
+                    JOIN paper_account a ON a.id=r.id WHERE j.state='DONE' AND a.lifecycle='RUNNING'
+                    AND json_extract(j.request,'$.autoIterate')=1 AND r.at<?
+                    AND NOT EXISTS (SELECT 1 FROM paper_job child WHERE child.auto_key='forward:'||r.id)
+                    AND r.at=(SELECT max(at) FROM paper_review WHERE id=r.id AND at<?)""",
+                    ((through + timedelta(days=1)).isoformat(),)*2).fetchall():
+                self.jobs.after_review(db,row["id"],Review.model_validate_json(row["review"]))
             rows = db.execute("""
                 WITH closes AS (
                     SELECT id, substr(at,1,10) AS day, max(at) AS at FROM paper_point
@@ -265,7 +273,9 @@ class PaperLab:
                 raise HTTPException(422, "没有对应行情时点的前向记录")
             db.execute("INSERT OR IGNORE INTO paper_review(id,at,review) VALUES(?,?,?)",
                        (version, review.at, review.model_dump_json()))
-            self.jobs.after_review(db, version, review)
+            now = stamp()
+            if review.at[:10] < str(now.date()) or (review.at[:10] == str(now.date()) and now.strftime("%H:%M") >= "15:10"):
+                self.jobs.after_review(db, version, review)
             return json.loads(db.execute("SELECT review FROM paper_review WHERE id=? AND at=?", (version,review.at)).fetchone()[0])
 
     async def tick(self):
@@ -312,6 +322,14 @@ class PaperLab:
                                ("策略运行失败，本时点未执行",row["id"],row["revision"]))
                 continue
             point["previousAt"] = last
+            previous = datetime.fromisoformat(last).astimezone(SHANGHAI)
+            # Count missing observations within today's two sessions, excluding the lunch break.
+            morning = end.replace(hour=9, minute=35, second=0, microsecond=0)
+            afternoon = morning.replace(hour=13, minute=5)
+            point["missedBars"] = sum(
+                previous < start + i * INTERVAL < end
+                for start in (morning, afternoon) for i in range(24)
+            )
             with self.db() as db:
                 changed = db.execute("UPDATE paper_account SET book=?,revision=revision+1,status=? WHERE id=? AND revision=?",
                                      (dumps(book), "部分行情缺失，沿用最近估值" if book["stale"] else "已同步盘中行情", row["id"], row["revision"]))

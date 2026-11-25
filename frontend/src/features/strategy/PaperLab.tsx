@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import './PaperLab.css';
 
@@ -444,6 +444,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const [autoStart, setAutoStart] = useState(true);
+  const submission = useRef<{ body: string; token: string }>();
   const parent = comparison;
   const [engine, setEngine] = useState(comparison && comparison.spec.rule.kind !== 'python' ? 'luna' : 'codex');
   const [autoIterate, setAutoIterate] = useState(false);
@@ -486,17 +487,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setError('');
     try {
       const coding = engine === 'codex';
+      const body = JSON.stringify({ hypothesis, autoStart, capital: Number(capital), pool, parent: parent?.id,
+        academyVersionId: seed?.academyVersionId, factorCode: seed?.factorCode });
+      const key = body + autoIterate;
+      if (coding && submission.current?.body !== key) {
+        submission.current = {body: key, token: crypto.randomUUID()};
+      }
       const item = await api<{ id: number }>(coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
-        method: 'POST',
-        body: JSON.stringify({
-          hypothesis,
-          autoStart,
-          capital: Number(capital),
-          pool,
-          parent: parent?.id,
-          academyVersionId: seed?.academyVersionId,
-          factorCode: seed?.factorCode,
-        }),
+        method: 'POST', body, headers: coding ? { 'Idempotency-Key': submission.current!.token } : undefined,
       });
       catalog.refresh();
       if (coding) {

@@ -48,6 +48,24 @@ class PaperResearchServiceTest {
     }
 
     @Test
+    void codingJobFreezesTheUniverseAndUsesTheRequestedAgent() {
+        WatchlistItem stock = new WatchlistItem();
+        stock.setCode("000001");
+        when(watchlist.findByTypes(List.of("STOCK"))).thenReturn(List.of(stock));
+        var token = java.util.UUID.randomUUID();
+        service.submitCoding(new PaperResearchInput("", PaperUniverse.WATCHLIST,
+                BigDecimal.TEN, null, null, null, true), true, token);
+        ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
+        verify(paper).submitJob(payload.capture());
+        JsonNode job = payload.getValue();
+        assertEquals(token.toString(), job.path("requestId").asText());
+        assertEquals("000001", job.path("codes").get(0).asText());
+        assertTrue(job.path("autoIterate").asBoolean());
+        assertTrue(job.path("autoStart").asBoolean());
+        verifyNoInteractions(llm);
+    }
+
+    @Test
     void refusesEmptyPoolBeforeGenerating() {
         assertThrows(BusinessException.class, () -> service.generate(
                 new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null, true)));

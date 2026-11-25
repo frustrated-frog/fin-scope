@@ -168,7 +168,7 @@ def create_app(
     history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),
         SnapshotStore(config.data_dir / "market-data-snapshots.db"))
 
-    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store)
+    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store, history_backfill.provider)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):

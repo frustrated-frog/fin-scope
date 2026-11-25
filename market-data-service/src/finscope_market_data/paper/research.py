@@ -4,6 +4,7 @@ import asyncio
 from collections import deque
 from contextlib import ExitStack
 from datetime import datetime, timedelta
+import fcntl
 import gzip
 import hashlib
 import json
@@ -20,6 +21,8 @@ import uuid
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
+
+from finscope_market_data.providers.base import ProviderError
 
 from .engine import ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, SDK, image_id
@@ -48,6 +51,7 @@ class JobRequest(BaseModel):
     origin: str = Field(min_length=1, max_length=2000)
     feedback: str = Field(default="", max_length=12000)
     parent: int | None = None
+    requestId: uuid.UUID | None = None
     autoStart: bool = True
     autoIterate: bool = False
 
@@ -102,6 +106,10 @@ def author(prompt, previous=None, error=None, context=None):
                 "-c",
                 "mcp_servers.quant.required=true",
                 "-c",
+                'mcp_servers.quant.default_tools_approval_mode="approve"',
+                "-c",
+                'mcp_servers.quant.enabled_tools=["market_sample","experiment_memory","run_strategy"]',
+                "-c",
                 "mcp_servers.quant.tool_timeout_sec=75",
             ]
             message += "\nUse FinScope quant MCP to examine market_sample and run_strategy on the development sample. Fix any error before returning."
@@ -143,6 +151,9 @@ def author(prompt, previous=None, error=None, context=None):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        audit = path / "tools.jsonl"
+        if context and audit.is_file():
+            context["toolLog"] = audit.read_text().splitlines()[:32]
         if result.returncode or not (path / "answer").exists():
             raise RuntimeError("Codex CLI 未完成代码生成，请检查登录和连接")
         return Program.model_validate_json((path / "answer").read_text())
@@ -231,9 +242,10 @@ def simulate(panel, program, image, capital, control=None):
 
 
 class ResearchJobs:
-    def __init__(self, lab, archive):
+    def __init__(self, lab, archive, history_provider=None):
         self.lab = lab
         self.archive = archive
+        self.history_provider = history_provider
         self.root = lab.path.parent / "paper-snapshots"
 
     def schema(self, db):
@@ -252,10 +264,16 @@ class ResearchJobs:
                     auto_key,
                 ),
             )
+            if cursor.rowcount == 0:
+                return {
+                    "jobId": db.execute(
+                        "SELECT id FROM paper_job WHERE auto_key=?", (auto_key,)
+                    ).fetchone()[0]
+                }
             return {"jobId": cursor.lastrowid}
 
     def enqueue(self, value):
-        request = value.model_dump()
+        request = value.model_dump(mode="json")
         request["codes"] = list(dict.fromkeys(request["codes"]))
         if value.parent:
             with self.lab.db() as db:
@@ -268,7 +286,9 @@ class ResearchJobs:
                 codes=spec.codes,
                 capital=spec.capital,
             )
-        return self.submit(request)
+        return self.submit(
+            request, "manual:" + str(value.requestId) if value.requestId else None
+        )
 
     def replay(self, version):
         with self.lab.db() as db:
@@ -389,6 +409,21 @@ class ResearchJobs:
             )
 
     async def run(self, stop):
+        self.lab.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.lab.path.with_suffix(".worker.lock").open("a") as lock:
+            while not stop.is_set():
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    try:
+                        await asyncio.wait_for(stop.wait(), 2)
+                    except TimeoutError:
+                        pass
+                    continue
+                await self.work(stop)
+                return
+
+    async def work(self, stop):
         with self.lab.db() as db:
             self.schema(db)
             db.execute(
@@ -415,7 +450,7 @@ class ResearchJobs:
             raise ValueError("无效行情快照")
         return self.root / (digest + ".json.gz")
 
-    async def snapshot(self, codes):
+    async def snapshot(self, codes, job=None):
         cutoff = datetime.now(SHANGHAI)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
@@ -423,6 +458,9 @@ class ResearchJobs:
 
         def build():
             panel = {}
+            provider_ready = (
+                self.history_provider is not None and self.archive is not None
+            )
             for code, live in zip(codes, recent):
                 symbol = code + (".SH" if code.startswith("6") else ".SZ")
                 archived = (
@@ -430,6 +468,32 @@ class ResearchJobs:
                     if self.archive
                     else []
                 )
+                if (
+                    provider_ready
+                    and len(archived) < 120 * 48
+                    and not symbol.startswith("68")
+                ):
+                    through = cutoff.replace(
+                        tzinfo=None, hour=15, minute=0, second=0, microsecond=0
+                    ) - timedelta(days=1)
+                    try:
+                        history = self.history_provider.fetch(symbol, through)
+                        self.archive.import_history(
+                            symbol,
+                            history,
+                            self.history_provider.source,
+                            cutoff.replace(tzinfo=None),
+                        )
+                        archived = self.archive.research_bars(
+                            symbol, cutoff.replace(tzinfo=None)
+                        )
+                    except (ProviderError, ValueError) as exc:
+                        if getattr(exc, "retryable", False):
+                            provider_ready = False
+                        if job:
+                            self.update(
+                                job, "DATA", "部分历史补数不可用，本轮使用已有覆盖"
+                            )
                 records = {}
                 for b in archived:
                     at = b.ended_at.replace(tzinfo=SHANGHAI)
@@ -444,9 +508,10 @@ class ResearchJobs:
                         True,
                     ]
                 for b in live if isinstance(live, list) else []:
-                    if b.observed_at <= cutoff:
-                        records[b.observed_at] = [
-                            b.observed_at.isoformat(),
+                    at = b.observed_at.astimezone(SHANGHAI)
+                    if at <= cutoff:
+                        records[at] = [
+                            at.isoformat(),
                             b.open,
                             b.high,
                             b.low,
@@ -503,11 +568,14 @@ class ResearchJobs:
         if request.get("parent"):
             with self.lab.db() as db:
                 parent = self.lab.spec(db, request["parent"]).model_dump()
-        digest = (
-            parent["rule"]["snapshot"]
-            if parent
-            else await self.snapshot(request["codes"])
-        )
+        digest = parent["rule"]["snapshot"] if parent else request.get("snapshot")
+        if not digest:
+            digest = await self.snapshot(request["codes"], job)
+            with self.lab.db() as db:
+                db.execute(
+                    "UPDATE paper_job SET request=json_set(request,'$.snapshot',?) WHERE id=?",
+                    (digest, job),
+                )
         panel = await asyncio.to_thread(self.read_panel, digest)
         if len({b.observed_at.date() for bars in panel.values() for b in bars}) < 3:
             raise ValueError("行情快照不足三个交易日，请待历史补齐后重试")
@@ -562,8 +630,14 @@ class ResearchJobs:
                 error = "生成的策略文件未通过格式校验：" + str(exc)[:900]
                 self.update(job, "DEBUG", error)
                 continue
+            for entry in context.pop("toolLog", []):
+                self.update(job, "CODING", entry[:300])
             self.update(job, "BACKTEST", "在隔离容器中回放并验证")
             try:
+                if parent and program.code.strip() == parent["rule"]["code"].strip():
+                    raise ValueError(
+                        "候选源码与父版本相同，请按研究目标做出可检验的变更"
+                    )
                 summary = await asyncio.to_thread(
                     simulate,
                     panel,

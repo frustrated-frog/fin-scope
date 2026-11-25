@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import sys
+import time
+from statistics import correlation, fmean, StatisticsError
 from types import SimpleNamespace
 
 from mcp.server.fastmcp import FastMCP
@@ -19,14 +21,23 @@ def serve(path):
     tools = FastMCP("FinScope 量化研究")
     runs = 0
 
+    def audit(message):
+        with path.with_name("tools.jsonl").open("a") as stream:
+            stream.write(message + "\n")
+
     @tools.tool()
     def market_sample(symbol: str, count: int = 24) -> list:
         """Read the latest 1–100 completed five-minute bars from the development sample."""
-        return panels.get(symbol, [])[-min(100, max(1, count)) :]
+        audit("工具 · 查阅开发段五分钟行情")
+        return [
+            {**row, "volume": None if row["estimated_volume"] else row["volume"]}
+            for row in panels.get(symbol, [])[-min(100, max(1, count)) :]
+        ]
 
     @tools.tool()
     def experiment_memory(query: str = "") -> list:
         """Search previous strategy hypotheses, factor descriptions and observed development results."""
+        audit("工具 · 检索历史实验")
         return [
             r
             for r in context["memory"]
@@ -40,6 +51,10 @@ def serve(path):
         if len(code) > 32000 or runs >= 4:
             raise ValueError("每次编写可试跑四个候选，每份代码最多 32000 字")
         runs += 1
+        audit(f"工具 · 第 {runs} 个候选进入开发段试跑")
+        deadline = time.monotonic() + 55
+        previous = {}
+        bar_correlations = []
         book = new_book(context["capital"])
         panel = {
             c: [
@@ -51,7 +66,20 @@ def serve(path):
         }
         with PythonStrategy(code, context["image"]) as strategy:
             for end, history in frames(panel):
-                advance(
+                if time.monotonic() > deadline:
+                    raise ValueError("开发样本试跑超时")
+                # Next-bar returns evaluate only scores already made on the previous bar.
+                pairs = [
+                    (score, history[c][-1].close / price - 1)
+                    for c, (at, price, score) in previous.items()
+                    if c in history and end - at == timedelta(minutes=5)
+                ]
+                if len(pairs) >= 3:
+                    try:
+                        bar_correlations.append(correlation(*zip(*pairs)))
+                    except StatisticsError:
+                        pass
+                point = advance(
                     book,
                     None,
                     history,
@@ -61,7 +89,15 @@ def serve(path):
                     universe=list(panel),
                     decide=strategy.decide,
                 )
+                previous = {
+                    c: (end, history[c][-1].close, s)
+                    for c, s in point["scores"].items()
+                    if s is not None
+                }
+        audit(f"工具 · 开发样本试跑完成，成交 {book['fills']} 笔")
         return dict(
+            meanNextBarFactorIC=fmean(bar_correlations) if bar_correlations else None,
+            factorObservations=len(bar_correlations),
             bars=sum(map(len, panel.values())),
             fills=book["fills"],
             fees=book["fees"],

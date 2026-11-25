@@ -161,7 +161,7 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
         targets, scores = decide(histories, book, end, equity)
     ranking = sorted((c for c in scores if scores[c] is not None), key=lambda c: (-scores[c], c))
     pending_codes = {o["code"] for o in waiting}
-    free = len(universe) if decide else rule.slots - len(values) - sum(o["side"] == "BUY" for o in waiting)
+    free = 0 if targets is not None else rule.slots - len(values) - sum(o["side"] == "BUY" for o in waiting)
     for rank, code in enumerate(ranking, 1):
         if code in pending_codes:
             continue

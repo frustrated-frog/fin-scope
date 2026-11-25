@@ -93,6 +93,9 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
             {"now": classmethod(lambda cls, tz: START + timedelta(days=5))},
         ),
     )
+    monkeypatch.setattr(
+        "finscope_market_data.paper.lab.stamp", lambda: START + timedelta(days=5)
+    )
     calls = []
 
     def write(prompt, previous, error, context):
@@ -113,9 +116,11 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
         source="test",
         origin="test",
         autoIterate=True,
+        requestId="a783f4cc-aa4b-49df-8d12-6912ea054c74",
     )
     job = lab.jobs.enqueue(req)["jobId"]
-    await lab.jobs.process(job, req.model_dump())
+    assert lab.jobs.enqueue(req)["jobId"] == job
+    await lab.jobs.process(job, req.model_dump(mode="json"))
     assert calls[0] is None and "SyntaxError" in calls[1]
     v = lab.jobs.list()[0]["version"]
     detail = lab.detail(v, "")
@@ -132,7 +137,7 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
             b.observed_at,
             b.observed_at + timedelta(seconds=3),
         )
-    assert book["fills"] == 1 and lab.detail(v,"")["book"]["equity"] == 10000
+    assert book["fills"] == 1 and lab.detail(v, "")["book"]["equity"] == 10000
     verify = lab.jobs.replay(v)["jobId"]
     await lab.jobs.process(verify, {"replay": v})
     assert lab.jobs.list()[0]["state"] == "DONE"

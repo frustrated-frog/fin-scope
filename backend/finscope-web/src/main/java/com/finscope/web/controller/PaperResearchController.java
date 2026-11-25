@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/quant/paper/versions")
@@ -35,8 +36,9 @@ public class PaperResearchController {
 
     @PostMapping("/jobs")
     public ApiResponse<JsonNode> submit(@RequestBody PaperResearchInput input,
-            @RequestParam(defaultValue = "false") boolean autoIterate) {
-        return ApiResponses.success(service.submitCoding(input, autoIterate));
+            @RequestParam(defaultValue = "false") boolean autoIterate,
+            @RequestHeader(value = "Idempotency-Key", required = false) UUID requestId) {
+        return ApiResponses.success(service.submitCoding(input, autoIterate, requestId));
     }
 
     @PostMapping("/jobs/{id}/retry")
