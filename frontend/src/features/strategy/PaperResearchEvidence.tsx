@@ -19,7 +19,7 @@ export interface SymbolCoverage {
 }
 const number = (value: number | null, percent = false) => value == null ? '—' :
   percent ? (value * 100).toFixed(2) + '%' : value.toFixed(3);
-const horizonNames: Record<string,string> = { '5m':'5 分钟','30m':'30 分钟','1d':'1 日','3d':'3 日','5d':'5 日' };
+const horizonNames: Record<string,string> = { '5m':'5 分钟','30m':'30 分钟','1d':'1 日','3d':'3 日','5d':'5 日', tail_next_open:'尾盘 → 次日开盘', tail_next_close:'尾盘 → 次日收盘', intraday_first_sell:'盘中 → 次日首次可卖', next_day_mfe:'次日最高价', next_day_mae:'次日最低价' };
 const decisions = { FREEZE:'冻结', REVISE:'修订', STOP:'结束研究' };
 
 function FactorStudy({ name, horizons, correlations }: {
@@ -31,6 +31,7 @@ function FactorStudy({ name, horizons, correlations }: {
   return <section className="paper-factor-study" aria-label={name + '的预测表现'}>
     <header><strong>{name}</strong><label>预测周期 <select aria-label={name + '的预测周期'} value={horizon} onChange={e => setHorizon(e.target.value)}>
       {Object.keys(horizons).map(k => <option key={k} value={k}>{horizonNames[k] ?? k}</option>)}</select></label></header>
+    {horizon.includes('_') && <small>{horizon.startsWith('tail_') ? '14:45 信号，按 14:50 开始的分钟区间开盘价入场。' : '按信号后首个符合时序及容量要求的五分钟区间开盘价入场。'}收益按价格变动计算，未扣费用。{horizon === 'intraday_first_sell' && '次日从开盘起检查，行情或成交量缺失时留空。'}</small>}
     <dl className="paper-evidence-metrics">
       {Object.entries({ '有效截面': h.observations, 'IC':number(h.ic), 'Rank IC':number(h.rankIC),
         '正 Rank IC 占比':number(h.positiveFraction,true), '日 Rank ICIR':number(h.dailyRankICIR),

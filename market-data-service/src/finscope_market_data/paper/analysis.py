@@ -1,5 +1,6 @@
 """Point-in-time development replay and independent cross-sectional factor diagnostics."""
 
+from itertools import chain
 from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta
 from time import monotonic
@@ -8,6 +9,7 @@ import numpy as np
 
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 from finscope_market_data.overnight.engine import expected_times
+from .return_targets import trading_targets
 from .engine import advance, new_book
 from .python_runtime import PythonStrategy
 
@@ -131,30 +133,43 @@ def factor_report(panel, observations):
         for other, y in matrices.items():
             if other != name:
                 reports[name]["correlations"][other] = finite_mean(correlations(x, y))
-    # Horizon means exact trading slots, never the next available quote after a gap.
-    for label, slots in (("5m", 1), ("30m", 6), ("1d", 48), ("3d", 144), ("5d", 240)):
-        targets = np.full_like(prices, np.nan)
-        for i, t in enumerate(times):
-            pos = clock_index.get(t.strftime("%H:%M"))
-            if pos is None:
-                continue
-            shift, end_slot = divmod(pos + slots, len(clock))
-            d = day_index[t.date()]
-            if d + shift >= len(dates) or not all(
-                consecutive_observed_sessions(dates[j], dates[j + 1])
-                for j in range(d, d + shift)
-            ):
-                continue
-            at = datetime.combine(
-                dates[d + shift],
-                datetime.strptime(clock[end_slot], "%H:%M").time(),
-                tzinfo=t.tzinfo,
-            )
-            target = index.get(at)
-            if target is not None:
-                targets[i] = np.where(
-                    jumps[target] == jumps[i], prices[target] / prices[i] - 1, np.nan
+
+    def fixed_horizons():
+        # Horizon means exact trading slots, never the next available quote after a gap.
+        for label, slots in (
+            ("5m", 1),
+            ("30m", 6),
+            ("1d", 48),
+            ("3d", 144),
+            ("5d", 240),
+        ):
+            targets = np.full_like(prices, np.nan)
+            for i, t in enumerate(times):
+                pos = clock_index.get(t.strftime("%H:%M"))
+                if pos is None:
+                    continue
+                shift, end_slot = divmod(pos + slots, len(clock))
+                d = day_index[t.date()]
+                if d + shift >= len(dates) or not all(
+                    consecutive_observed_sessions(dates[j], dates[j + 1])
+                    for j in range(d, d + shift)
+                ):
+                    continue
+                at = datetime.combine(
+                    dates[d + shift],
+                    datetime.strptime(clock[end_slot], "%H:%M").time(),
+                    tzinfo=t.tzinfo,
                 )
+                target = index.get(at)
+                if target is not None:
+                    targets[i] = np.where(
+                        jumps[target] == jumps[i],
+                        prices[target] / prices[i] - 1,
+                        np.nan,
+                    )
+            yield label, targets
+
+    for label, targets in chain(fixed_horizons(), trading_targets(panel, times, codes)):
         for name, x in matrices.items():
             mask = np.isfinite(x) & np.isfinite(targets)
             rx, ry = (

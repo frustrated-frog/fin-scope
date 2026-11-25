@@ -118,3 +118,36 @@ async def test_dataset_failure_isolated_and_backoff_persisted(tmp_path):
     assert [r["status"] for r in lab.datasets.list()] == ["RETRY", "PARTIAL"]
     updated = store.research_bars("600001.SH", end)[0]
     assert updated.volume == 1000 and updated.amount == original.amount
+
+
+def test_return_targets_use_timed_entry_and_distinguish_next_open_close(tmp_path):
+    from types import SimpleNamespace
+    from finscope_market_data.paper.return_targets import trading_targets
+
+    def bar(day, clock, o, h, l, c, v):
+        at = datetime.fromisoformat("2026-11-" + day + "T" + clock + ":00+08:00")
+        return SimpleNamespace(observed_at=at, open=o, high=h, low=l, close=c, volume=v)
+
+    bars = [
+        bar("23", "14:45", 9, 11, 8, 9, 50000),
+        bar("23", "14:55", 10, 11, 9, 10, 50000),
+        bar("24", "09:35", 11, 11, 11, 11, 50000),
+        bar("24", "09:40", 12, 13, 11, 12, 50000),
+        bar("24", "15:00", 13, 14, 12, 13, 50000),
+    ]
+    import numpy as np
+
+    def results():
+        return dict(
+            trading_targets({"600000": bars}, [b.observed_at for b in bars], ["600000"])
+        )
+
+    targets = results()
+    assert np.isnan(targets["tail_next_open"][0, 0]) and targets["tail_next_close"][
+        0, 0
+    ] == pytest.approx(0.3)
+    assert targets["intraday_first_sell"][0, 0] == pytest.approx(0.2) and np.isnan(
+        targets["next_day_mfe"][0, 0]
+    )
+    bars[2].estimated_volume = True
+    assert np.isnan(results()["intraday_first_sell"][0, 0])
