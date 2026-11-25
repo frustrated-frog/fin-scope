@@ -244,6 +244,7 @@ class PaperLab:
 
     def detail(self, version, day):
         with self.db() as db:
+            self.jobs.schema(db)
             db.execute("BEGIN")
             spec = self.spec(db, version)
             history = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (version,)).fetchone()[0])
@@ -261,8 +262,9 @@ class PaperLab:
                                (version, selected)).fetchone()
             row = db.execute("SELECT review FROM paper_review WHERE id=? AND at>=? AND at<? ORDER BY at DESC LIMIT 1",
                              (version, selected, selected+"Z")).fetchone()
+            evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
             account = db.execute("SELECT book FROM paper_account WHERE id=?", (version,)).fetchone()
-        return dict(history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
+        return dict(forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
                     book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
 

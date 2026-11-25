@@ -109,7 +109,13 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
         )
 
     monkeypatch.setattr(research, "author", write)
-    monkeypatch.setattr(research, "assess", lambda evidence: research.Decision(action="FREEZE", candidate=1, reason="检验运行", direction=""))
+    monkeypatch.setattr(
+        research,
+        "assess",
+        lambda evidence: research.Decision(
+            action="FREEZE", candidate=1, reason="检验运行", direction=""
+        ),
+    )
     req = research.JobRequest(
         codes=["600000"],
         capital=10000,
@@ -147,7 +153,7 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
         with lab.db() as db:
             db.execute(
                 "INSERT INTO paper_point VALUES(?,?,?)",
-                (v, t, json.dumps({"at": t, "equity": 10000, "benchmark": 9990})),
+                (v, t, json.dumps({"at": t, "equity": 10000, "benchmark": 9990, "events":[]})),
             )
         review = Review(at=t, text="样本待观察", model="test")
         lab.save_review(v, review)
@@ -156,7 +162,52 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
         jobs = db.execute(
             "SELECT request FROM paper_job WHERE state='QUEUED'"
         ).fetchall()
-    assert len(jobs) == 1 and json.loads(jobs[0][0])["parent"] == v
+    assert not jobs and lab.detail(v, "")["forwardEvidence"]["status"] == "继续观察"
+    for day in [5, 6]:
+        t = (START + timedelta(days=day)).replace(hour=15).isoformat()
+        point = dict(
+            at=t,
+            equity=9970,
+            benchmark=10000,
+            events=[
+                dict(
+                    action="成交",
+                    fee=5,
+                    quantity=100,
+                    code="600000",
+                    side="BUY",
+                    reason="test",
+                )
+            ]
+            * 2,
+        )
+        with lab.db() as db:
+            db.execute(
+                "INSERT INTO paper_point VALUES(?,?,?)", (v, t, json.dumps(point))
+            )
+            lab.jobs.after_review(db, v, Review(at=t, text="反馈", model="test"))
+    queued = [x for x in lab.jobs.list() if x["state"] == "QUEUED"]
+    assert len(queued) == 1
+    with lab.db() as db:
+        auto = json.loads(
+            db.execute(
+                "SELECT request FROM paper_job WHERE id=?", (queued[0]["id"],)
+            ).fetchone()[0]
+        )
+    assert (
+        auto["parent"] == v
+        and auto["forwardEvidence"]["fills"] == 4
+        and "snapshot" not in auto
+    )
+    monkeypatch.setattr(
+        research,
+        "review_forward",
+        lambda evidence: research.ForwardDecision(
+            action="OBSERVE", reason="等待更多独立交易"
+        ),
+    )
+    await lab.jobs.process(queued[0]["id"], auto)
+    assert lab.jobs.list()[0]["state"] == "CONCLUDED"
 
 
 @pytest.mark.asyncio
@@ -186,13 +237,25 @@ async def test_job_can_refresh_an_insufficient_snapshot_on_retry(tmp_path, monke
 
 def test_rebalance_uses_only_actual_sale_proceeds():
     from finscope_market_data.paper.engine import INTERVAL
-    prices = bars([10,10,10])["600000"]
+
+    prices = bars([10, 10, 10])["600000"]
     history = {"600000": prices, "000001": prices}
     for bought, expected in [("2026-11-20", 2), (str(START.date()), 0)]:
         book = new_book(0)
-        book["positions"]["600000"] = {"price":10,"cost":10000,"lots":[[bought,1000]]}
-        for code,side in [("000001","BUY"),("600000","SELL")]:
-            book["pending"].append(dict(code=code,side=side,budget=9000,available=(START-INTERVAL).isoformat()))
-        point = advance(book,RULE,history,START,START,10000)
-        assert [event["side"] for event in point["events"][:2]] == ["SELL","BUY"]
+        book["positions"]["600000"] = {
+            "price": 10,
+            "cost": 10000,
+            "lots": [[bought, 1000]],
+        }
+        for code, side in [("000001", "BUY"), ("600000", "SELL")]:
+            book["pending"].append(
+                dict(
+                    code=code,
+                    side=side,
+                    budget=9000,
+                    available=(START - INTERVAL).isoformat(),
+                )
+            )
+        point = advance(book, RULE, history, START, START, 10000)
+        assert [event["side"] for event in point["events"][:2]] == ["SELL", "BUY"]
         assert book["fills"] == expected and book["cash"] >= 0

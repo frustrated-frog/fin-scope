@@ -102,7 +102,7 @@ async def test_review_sees_only_development_and_persists_selected_candidate(
             direction="降低换手",
         )
 
-    def validate(data, program, *_):
+    def validate(data, program, *_, **kwargs):
         holdouts.append(program.code)
         if len(holdouts) == 1:
             raise ValueError("validation failure")
