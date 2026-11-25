@@ -8,6 +8,7 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.dao.quant.QuantStrategyRepository;
+import com.finscope.dao.quant.PaperStockNameRepository;
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +34,8 @@ public class PaperResearchService {
     @Resource
     private QuantStrategyRepository strategies;
     @Resource
+    private PaperStockNameRepository stockNames;
+    @Resource
     private PythonPaperClient paper;
     @Resource
     private LunaResponsesClient llm;
@@ -43,7 +47,13 @@ public class PaperResearchService {
     }
 
     public JsonNode detail(long id, LocalDate day) {
-        return paper.detail(id, day);
+        ObjectNode detail = (ObjectNode) paper.detail(id, day);
+        List<String> codes = new ArrayList<>();
+        for (JsonNode code : detail.path("spec").path("codes")) {
+            codes.add(code.asText());
+        }
+        detail.set("stockNames", json.valueToTree(stockNames.findNames(codes)));
+        return detail;
     }
 
     public JsonNode deploy(long id) {
@@ -51,7 +61,7 @@ public class PaperResearchService {
     }
 
     public JsonNode review(long id) {
-        JsonNode detail = paper.detail(id, null);
+        JsonNode detail = detail(id, null);
         JsonNode book = detail.path("book");
         String at = book.path("last").asText("");
         if (at.isEmpty() || at.equals("null")) {
@@ -65,6 +75,7 @@ public class PaperResearchService {
         }
         ObjectNode evidence = json.createObjectNode();
         evidence.set("spec", detail.path("spec"));
+        evidence.set("stockNames", detail.path("stockNames"));
         evidence.set("book", book);
         evidence.put("observedDays", detail.path("days").size());
         evidence.set("recentCloses", json.valueToTree(
@@ -80,7 +91,7 @@ public class PaperResearchService {
         try {
             report = llm.completeText("作为量化学习助教，用中文基于给定数据复盘。分别描述历史回测与实时模拟，"
                     + "说明观察天数、成交、成本、相对基准或同期对照的结果和下一条可检验假设。"
-                    + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。最多800字，纯文本。", evidence.toString(), 2400);
+                    + "观测不足要明确，禁止编造数据或据几天收益认定策略有效。提到个股时使用 stockNames 中的名称，名称缺失则仅描述其仓位。最多800字，纯文本。", evidence.toString(), 2400);
         } catch (Exception error) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "模拟账户复盘生成失败", error);
         }

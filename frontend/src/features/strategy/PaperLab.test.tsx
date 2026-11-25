@@ -41,3 +41,27 @@ test('research freezes the requested pool and leaves deployment to the user', as
   expect(creates).toEqual([{ hypothesis: '', factorCode: 'MOMENTUM', capital: 24000, pool: 'WATCHLIST' }]);
   expect(posts).toEqual([endpoint]);
 });
+
+test('account holdings, replay and a saved review display names for an existing experiment', async () => {
+  const code = '000823';
+  const at = '2026-11-25T10:30:00';
+  const rule = { name: '动量', hypothesis: '短窗动量', terms: [], entry: .01, exit: 0, slots: 1 };
+  const spec = { capital: 20000, codes: [code], source: '自选股', pool: 'WATCHLIST', origin: '', rule };
+  const book = { equity: 20000, cash: 19000, realized: 0, fees: 0, fills: 1,
+    positions: { [code]: { lots: [[at, 100] as [string, number]], cost: 1000, price: 10 } } };
+  const detail = { stockNames: { [code]: '超声电子' }, history: { curve: [], fills: 0, fees: 0 },
+    daily: [], days: [at.slice(0, 10)], day: at.slice(0, 10), review: { at, model: 'test', text: '持有000823.SZ。' },
+    points: [{ at, equity: 20000, reason: '已检查', holdings: { [code]: 100 }, scores: { [code]: .02 },
+      events: [{ action: '成交', side: 'BUY', code, score: .02, rank: 1, reason: '达到阈值', available: at }] }] };
+  vi.stubGlobal('fetch', vi.fn(async () => apiResponse(detail)));
+  const catalog = { rows: [{ id: 1, spec, book, started: at }], error: '', loading: false, refresh: vi.fn() };
+  const { container } = render(<PaperLab accountsOnly catalog={catalog} onExperiment={vi.fn()} onAccount={vi.fn()}
+    onBrowse={vi.fn()} onCompare={vi.fn()} />);
+  const event = await screen.findByText('成交 · 超声电子');
+  await userEvent.click(event);
+  expect(screen.getByText('买入 超声电子')).toBeVisible();
+  expect(screen.getByText('持有超声电子。')).toBeVisible();
+  expect(container.querySelector('.paper-position b')).toHaveTextContent('超声电子');
+  expect(container.querySelector('.paper-scores')).toHaveTextContent('超声电子');
+  expect(container).not.toHaveTextContent(code);
+});

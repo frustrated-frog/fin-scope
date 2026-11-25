@@ -78,6 +78,7 @@ interface Point extends Tick {
   reason: string;
 }
 interface Detail {
+  stockNames?: Record<string, string>;
   review?: { at: string; model: string; text: string };
   daily: Tick[];
   points: Point[];
@@ -210,7 +211,9 @@ function Trace({
 function Decisions({
   detail,
   selectDay,
+  stockName,
 }: {
+  stockName: (code: string) => string;
   detail: Detail;
   selectDay: (day: string) => void;
 }) {
@@ -240,7 +243,7 @@ function Decisions({
               <time>{p.at.slice(11, 16)}</time>
               <b>
                 {p.events.length
-                  ? p.events.map((e) => e.action + ' · ' + e.code).join(' / ')
+                  ? p.events.map((e) => e.action + ' · ' + stockName(e.code)).join(' / ')
                   : '继续观察'}
               </b>
               <span>¥{currency(p.equity)}</span>
@@ -248,7 +251,7 @@ function Decisions({
             {p.events.map((e, i) => (
               <p key={i}>
                 <strong>
-                  {e.side === 'BUY' ? '买入' : '卖出'} {e.code}
+                  {e.side === 'BUY' ? '买入' : '卖出'} {stockName(e.code)}
                 </strong>{' '}
                 · {e.reason} · 排名 {e.rank} · 得分 {e.score.toFixed(4)}
                 {e.quantity
@@ -262,7 +265,7 @@ function Decisions({
               <p>
                 现金 ¥{currency(p.cash ?? 0)} ·{' '}
                 {Object.entries(p.holdings)
-                  .map(([code, q]) => code + ' ' + q + ' 股')
+                  .map(([code, q]) => stockName(code) + ' ' + q + ' 股')
                   .join(' / ') || '空仓'}
               </p>
             )}
@@ -271,7 +274,7 @@ function Decisions({
                 .sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity))
                 .map(([code, score]) => (
                   <span key={code}>
-                    {code} <b>{score?.toFixed(4) ?? '缺数'}</b>
+                    {stockName(code)} <b>{score?.toFixed(4) ?? '缺数'}</b>
                   </span>
                 ))}
             </div>
@@ -462,6 +465,13 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const latest = detail?.daily[detail.daily.length - 1];
   const prior = detail?.daily[detail.daily.length - 2]?.equity ?? spec?.capital;
   const control = book?.control;
+  function stockName(code: string) {
+    if (!detail) {
+      return '正在读取名称';
+    }
+    const index = spec?.codes.indexOf(code) ?? -1;
+    return detail.stockNames?.[code] ?? (index >= 0 ? `待补名股票（${index + 1}）` : '待补名股票');
+  }
   return (
     <section className="quant-results paper-lab" aria-label={accountsOnly ? '模拟实盘' : '盘中实验'}>
       {(error || catalog.error) && <div className="quant-catalog-error" role="alert"><span>{error || catalog.error}</span>
@@ -617,7 +627,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   <summary>
                     {spec.source} · {spec.codes.length} 只
                   </summary>
-                  <p>{spec.codes.join(' · ')}</p>
+                  <p>{spec.codes.map(stockName).join(' · ')}</p>
                 </details>
               </section>}
               {!accountsOnly && detail && (
@@ -667,7 +677,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   </dl>
                   {Object.entries(book.positions).map(([code, pos]) => (
                     <div className="paper-position" key={code}>
-                      <b>{code}</b>
+                      <b>{stockName(code)}</b>
                       <span>{pos.lots.reduce((a, l) => a + l[1], 0)} 股</span>
                       <span>现价 ¥{pos.price}</span>
                       <span>持仓成本 ¥{currency(pos.cost)}</span>
@@ -697,14 +707,15 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                         {detail.review.model}
                       </small>
                       <p style={{ whiteSpace: 'pre-wrap' }}>
-                        {detail.review.text}
+                        {detail.review.text.replace(/(?<![\w.])(?:SH|SZ)?(\d{6})(?:\.(?:SH|SZ))?(?![\w]|\.\d)/gi,
+                          (match, code: string) => spec.codes.includes(code) ? stockName(code) : match)}
                       </p>
                     </>
                   )}
                 </section>
               )}
               {accountsOnly && detail && (
-                <Decisions detail={detail} selectDay={setDay} />
+                <Decisions detail={detail} selectDay={setDay} stockName={stockName} />
               )}
             </>
           )}
