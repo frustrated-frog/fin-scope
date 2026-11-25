@@ -100,7 +100,7 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
 
     def write(prompt, previous, error, context):
         calls.append(error)
-        code = "def decide(ctx):\n    return {'weights':{'600000':.5},'scores':{'600000':1},'state':{}}"
+        code = "def factors(bars):\n    return {'price':{c:v[-1]['close'] for c,v in bars.items()}}\ndef decide(ctx):\n    return {'weights':{'600000':.5},'scores':{'600000':1},'state':{}}"
         return research.Program(
             name="策略",
             hypothesis="试验",
@@ -109,6 +109,7 @@ async def test_agent_repairs_failure_replays_and_reuses_strategy_in_forward(
         )
 
     monkeypatch.setattr(research, "author", write)
+    monkeypatch.setattr(research, "assess", lambda evidence: research.Decision(action="FREEZE", candidate=1, reason="检验运行", direction=""))
     req = research.JobRequest(
         codes=["600000"],
         capital=10000,

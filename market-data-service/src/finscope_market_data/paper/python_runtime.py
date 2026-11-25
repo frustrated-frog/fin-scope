@@ -18,7 +18,10 @@ logic and only ctx. Return a dict weights (available code -> absolute desired po
 omitted holds, nonnegative sum <= 1), scores (finite numeric scores for available codes including all
 weight keys), state (small JSON dict). Execution, fees and T+1 belong to the simulator.
 Module globals do not persist. Write a complete runnable strategy with your own named factor function,
-position sizing, entry/exit and rebalance timing. Explain the hypothesis and factor in Chinese."""
+position sizing, entry/exit and rebalance timing. For new research implement factors(bars):
+return 1-4 named independent numeric factors, {factor_name:{available_code:finite_number}}.
+Use these same factor functions in decide(ctx); expose each raw factor before mixing/ranking.
+With short windows return the named factor mapped to {}. No portfolio inputs to factors(). Explain the hypothesis and factor in Chinese."""
 
 GUEST = """
 import sys,json,contextlib,traceback
@@ -42,8 +45,11 @@ for line in sys.stdin:
             ctx=json.loads(line)
             history={c:(history.get(c,[])+rows)[-49:] for c,rows in ctx['bars'].items()}
             ctx['bars']={c:[dict(b) for b in rows] for c,rows in history.items()}
+            signals={}
+            if ctx.pop('_factorReport',False):
+                signals=ns['factors']({c:[dict(b) for b in rows] for c,rows in history.items()})
             result=ns['decide'](ctx)
-        emit({'result':result})
+        emit({'result':result,'factors':signals})
     except Exception:
         emit({'error':traceback.format_exc(limit=4)[-1600:]})
 """
@@ -65,7 +71,10 @@ def image_id():
 
 
 class PythonStrategy:
-    def __init__(self, program, image):
+    def __init__(self, program, image, *, collect_factors=False):
+        self.collect_factors = collect_factors
+        self.factor_values = {}
+        self.factor_names = None
         self.program = program
         self.image = image
         self.name = "finscope-strategy-" + uuid.uuid4().hex
@@ -176,6 +185,7 @@ class PythonStrategy:
         self.last = {c: series[-1].observed_at for c, series in histories.items()}
         self.send(
             dict(
+                _factorReport=self.collect_factors,
                 at=end.isoformat(),
                 bars=bars,
                 equity=equity,
@@ -203,6 +213,27 @@ class PythonStrategy:
         reply = json.loads(raw)
         if "error" in reply:
             raise ValueError(str(reply["error"])[:1600])
+        if self.collect_factors:
+            values = reply.get("factors")
+            if not isinstance(values, dict) or not 1 <= len(values) <= 4:
+                raise ValueError("factors(bars) 须返回一至四个命名因子")
+            for name, scores in values.items():
+                if (
+                    not name.strip()
+                    or len(name) > 80
+                    or not isinstance(scores, dict)
+                    or not scores.keys() <= histories.keys()
+                ):
+                    raise ValueError("因子名称或标的无效")
+                if not all(
+                    type(v) in (int, float) and abs(v) <= 1e100 and math.isfinite(v)
+                    for v in scores.values()
+                ):
+                    raise ValueError("独立因子须返回有限数字，缺失标的可省略")
+            if self.factor_names is not None and self.factor_names != values.keys():
+                raise ValueError("同一版本的因子名称须保持一致")
+            self.factor_names = set(values)
+            self.factor_values = values
         result = reply["result"]
         if not isinstance(result, dict) or not {"weights", "scores"}.issubset(result):
             raise ValueError("decide(ctx) 须返回含 weights 与 scores 的对象")
