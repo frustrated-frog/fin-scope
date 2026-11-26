@@ -79,13 +79,13 @@ public class GlobalMarketService {
             throw new BusinessException(ErrorCode.MARKET_DATA_UNAVAILABLE, "暂未取得该标的行情，请稍后重试", error);
         }
         TreeMap<String, Double> history = new TreeMap<>();
-        if (saved != null) {
+        if (saved != null && saved.source().equals(fresh.source())) {
             history.putAll(saved.closes());
         }
         history.putAll(fresh.closes());
         // Keep a rolling year on disk; upstream snapshots can contain decades of daily bars.
         history.headMap(now.toLocalDate().minusYears(1).minusDays(7).toString()).clear();
-        GlobalMarketSeries series = new GlobalMarketSeries(fresh.symbol(), fresh.source(), fresh.asOf(),
+        GlobalMarketSeries series = new GlobalMarketSeries(fresh.symbol(), fresh.source(), fresh.marketStatus(), fresh.asOf(),
                 fresh.price(), fresh.reference(), history);
         String payload;
         try {

@@ -49,6 +49,7 @@ management:
 
 finscope:
   global-market:
+    tencent-url: https://web.ifzq.gtimg.cn/appstock/app/usfqkline/get?param=
     chart-url: https://query1.finance.yahoo.com/v8/finance/chart/
     coinbase-url: https://api.exchange.coinbase.com
     gold-history-url: https://quotes.sina.cn/futures/api/json.php/GlobalFuturesService.getGlobalFuturesDailyKLine?symbol=XAU

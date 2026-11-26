@@ -3,6 +3,7 @@ package com.finscope.rpc.globalmarket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.globalmarket.GlobalMarketSeries;
+import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.quote.QuoteHttpTransport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +32,8 @@ public class GlobalMarketSource {
     private QuoteHttpTransport transport;
     @Autowired
     private ObjectMapper json;
+    @Value("${finscope.global-market.tencent-url}")
+    private String tencentUrl;
     @Value("${finscope.global-market.chart-url}")
     private String chartUrl;
     @Value("${finscope.global-market.coinbase-url}")
@@ -47,11 +50,61 @@ public class GlobalMarketSource {
         if ("BTC".equals(id) || "ETH".equals(id)) {
             return crypto(id);
         }
-        return usMarket(id);
+        try {
+            return tencent(id);
+        } catch (ProviderContractException | IOException error) {
+            return usMarket(id);
+        }
     }
 
     private JsonNode read(String source, String url, Map<String, String> headers) throws IOException {
         return json.readTree(transport.get(source, URI.create(url), 8000, 2_000_000, headers, StandardCharsets.UTF_8));
+    }
+
+    private JsonNode tencentSnapshot(String key) throws IOException {
+        return read("TENCENT_GLOBAL", tencentUrl + key + ",day,,,250,qfq", Map.of())
+                .path("data").path(key);
+    }
+
+    private GlobalMarketSeries tencent(String id) throws IOException {
+        boolean index = INDEXES.containsKey(id);
+        String code = index ? Map.of("SPX", ".INX", "DJI", ".DJI", "IXIC", ".IXIC").get(id)
+                : id.substring(3).replace('-', '.');
+        String key = "us" + code;
+        JsonNode data = tencentSnapshot(key);
+        JsonNode quote = data.path("qt").path(key);
+        String listing = quote.path(2).asText();
+        if (!index && listing.startsWith(code + ".") && listing.matches("[A-Z.]{1,14}")) {
+            key = "us" + listing;
+            data = tencentSnapshot(key);
+            quote = data.path("qt").path(key);
+        }
+        String actual = quote.path(2).asText();
+        if (!(actual.equals(code) || (!index && actual.equals(listing) && actual.startsWith(code + ".")))
+                || !"USD".equals(quote.path(35).asText()) || !positive(quote.path(3))) {
+            throw new IOException("缺少对应的美股报价");
+        }
+        LocalDateTime local = LocalDateTime.parse(quote.get(30).asText().replace(' ', 'T'));
+        String status = "常规盘报价";
+        for (String item : data.at("/qt/market/0").asText().split("\\|")) {
+            if (item.startsWith("US_")) {
+                String[] parts = item.split("_", 3);
+                if (parts.length == 3 && parts[2].length() <= 20) {
+                    status = parts[2];
+                }
+            }
+        }
+        boolean adjusted = data.has("qfqday");
+        TreeMap<String, Double> history = new TreeMap<>();
+        for (JsonNode bar : data.path(adjusted ? "qfqday" : "day")) {
+            LocalDate day = LocalDate.parse(bar.path(0).asText());
+            if (positive(bar.path(2)) && (day.isBefore(local.toLocalDate())
+                    || (day.equals(local.toLocalDate()) && local.getHour() >= 16))) {
+                history.put(day.toString(), bar.path(2).asDouble());
+            }
+        }
+        return series(code, adjusted ? "腾讯行情 · 前复权日线" : "腾讯行情", status, local.atZone(NEW_YORK).toInstant(),
+                quote.get(3).asDouble(), quote.path(4).asDouble(), history);
     }
 
     private GlobalMarketSeries usMarket(String id) throws IOException {
@@ -85,7 +138,7 @@ public class GlobalMarketSource {
         if (prior == null) {
             throw new IOException("缺少前一交易日收盘价");
         }
-        return series(symbol, "Yahoo Finance", at, meta.path("regularMarketPrice").asDouble(), prior.getValue(), history);
+        return series(symbol, "Yahoo Finance", "常规盘报价", at, meta.path("regularMarketPrice").asDouble(), prior.getValue(), history);
     }
 
     private GlobalMarketSeries gold() throws IOException {
@@ -106,7 +159,7 @@ public class GlobalMarketSource {
                 history.put(day.toString(), bar.path("close").asDouble());
             }
         }
-        return series("XAU/USD", "新浪财经 · 伦敦金", local.atZone(BEIJING).toInstant(),
+        return series("XAU/USD", "新浪财经 · 伦敦金", "现货报价", local.atZone(BEIJING).toInstant(),
                 Double.parseDouble(fields[0]), Double.parseDouble(fields[7]), history);
     }
 
@@ -123,7 +176,7 @@ public class GlobalMarketSource {
                 history.put(day.toString(), bar.get(4).asDouble());
             }
         }
-        return series(product, "Coinbase Exchange", at, ticker.path("price").asDouble(), stats.path("open").asDouble(), history);
+        return series(product, "Coinbase Exchange", "全天交易", at, ticker.path("price").asDouble(), stats.path("open").asDouble(), history);
     }
 
     private static Instant time(JsonNode value) throws IOException {
@@ -137,12 +190,12 @@ public class GlobalMarketSource {
         return value.asDouble() > 0 && Double.isFinite(value.asDouble());
     }
 
-    private GlobalMarketSeries series(String symbol, String source, Instant at, double price, double reference,
+    private GlobalMarketSeries series(String symbol, String source, String status, Instant at, double price, double reference,
                                       TreeMap<String, Double> history) throws IOException {
         if (!Double.isFinite(price) || !Double.isFinite(reference) || price <= 0 || reference <= 0 || history.size() < 2
                 || at.isAfter(Instant.now().plusSeconds(300))) {
             throw new IOException("缺少可验证的报价或历史日线");
         }
-        return new GlobalMarketSeries(symbol, source, at.toString(), price, reference, history);
+        return new GlobalMarketSeries(symbol, source, status, at.toString(), price, reference, history);
     }
 }

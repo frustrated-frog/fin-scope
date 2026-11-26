@@ -24,7 +24,7 @@ class GlobalMarketSourceTest {
     void setup() {
         ReflectionTestUtils.setField(source, "transport", http);
         ReflectionTestUtils.setField(source, "json", new ObjectMapper());
-        for (String key : new String[]{"chartUrl", "coinbaseUrl", "goldHistoryUrl", "goldQuoteUrl"}) {
+        for (String key : new String[]{"tencentUrl", "chartUrl", "coinbaseUrl", "goldHistoryUrl", "goldQuoteUrl"}) {
             ReflectionTestUtils.setField(source, key, "https://fixture/" + key + "/");
         }
     }
@@ -35,6 +35,7 @@ class GlobalMarketSourceTest {
 
     @Test
     void indexUsesPreviousSessionNotRangeBaselineAndDropsUnfinishedSession() throws Exception {
+        response("https://fixture/tencentUrl/us.INX,day,,,250,qfq", "{}");
         String chart = """
                 {"chart":{"result":[{"meta":{"symbol":"^GSPC","instrumentType":"INDEX","currency":"USD",
                 "exchangeTimezoneName":"America/New_York","regularMarketTime":1704294000,
@@ -47,6 +48,28 @@ class GlobalMarketSourceTest {
         assertEquals(2, data.closes().size());
         response("https://fixture/chartUrl/%5EGSPC?interval=1d&range=1y", chart.replace("INDEX", "ETF"));
         assertThrows(IOException.class, () -> source.fetch("SPX"));
+    }
+
+    @Test
+    void tencentIndexRetainsMarketHolidayAndActualExchangeTimestamp() throws Exception {
+        var data = new ObjectMapper().createObjectNode();
+        var record = data.putObject("data").putObject("us.INX");
+        var quotes = record.putObject("qt");
+        var fields = quotes.putArray("us.INX");
+        for (int i = 0; i < 36; i++) {
+            fields.add("");
+        }
+        Map.of(2, ".INX", 3, "110", 4, "100", 30, "2024-07-03 16:32:00", 35, "USD")
+                .forEach((i, value) -> fields.set(i, new com.fasterxml.jackson.databind.node.TextNode(value)));
+        quotes.putArray("market").add("2024-07-04 12:00:00|HK_open_交易中|US_close_独立日休市");
+        var days = record.putArray("day");
+        days.addArray().add("2024-07-02").add("99").add("100");
+        days.addArray().add("2024-07-03").add("100").add("110");
+        response("https://fixture/tencentUrl/us.INX,day,,,250,qfq", data.toString());
+        GlobalMarketSeries series = source.fetch("SPX");
+        assertEquals("独立日休市", series.marketStatus());
+        assertEquals("2024-07-03T20:32:00Z", series.asOf());
+        assertEquals(110d, series.closes().get("2024-07-03"));
     }
 
     @Test
