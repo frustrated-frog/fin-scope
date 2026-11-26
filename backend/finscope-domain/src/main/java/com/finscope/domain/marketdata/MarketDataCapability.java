@@ -9,5 +9,6 @@ public enum MarketDataCapability {
     SECTOR_CATALOG,
     CAPITAL_FLOW_5M,
     CAPITAL_REPLAY_1M,
+    GLOBAL_MARKET_SERIES,
     DRAGON_TIGER
 }

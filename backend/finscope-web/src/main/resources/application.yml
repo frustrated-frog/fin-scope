@@ -48,6 +48,11 @@ management:
       enabled: false
 
 finscope:
+  global-market:
+    chart-url: https://query1.finance.yahoo.com/v8/finance/chart/
+    coinbase-url: https://api.exchange.coinbase.com
+    gold-history-url: https://quotes.sina.cn/futures/api/json.php/GlobalFuturesService.getGlobalFuturesDailyKLine?symbol=XAU
+    gold-quote-url: https://hq.sinajs.cn/list=hf_XAU
   research:
     pdf-ocr:
       enabled: true
