@@ -72,7 +72,7 @@ export function GlobalMarketsView({refreshRevision=0}:{refreshRevision?:number})
         {assets.filter(a=>a.group===group).map(a=>{
           const s=quotes[a.id]?.series, change=s ? (s.price/s.reference-1)*100 : undefined;
           return <button key={a.id} aria-pressed={a.id===asset.id} className="gm-item" style={{'--gm-accent':a.color} as CSSProperties} onClick={()=>{setSelected(a.id);setCompare(false);}}>
-            <span><b>{a.name}</b><small>{a.ticker}</small></span>
+            <span><b>{a.name}</b><small>{a.ticker}{(quotes[a.id]?.fallback || errors[a.id] && quotes[a.id]) && ' · 缓存'}</small></span>
             {s && <Spark values={Object.values(s.closes).slice(-20)}/>}
             <span className="gm-item-quote"><b>{s?price(s.price):'—'}</b><small className={change===undefined?'':change>=0?'gm-up':'gm-down'}>{change!==undefined?signed(change)+'%':errors[a.id]?'暂不可用':'读取中'}</small></span>
           </button>;
@@ -83,7 +83,7 @@ export function GlobalMarketsView({refreshRevision=0}:{refreshRevision?:number})
       <header className="gm-summary"><div className="gm-ticker"><i/>{asset.ticker}</div><h2>{asset.name}</h2>
         <div className="gm-price">{series?price(series.price):'—'} <small>{asset.unit}</small></div>
         <div className="gm-delta">{series && <strong className={series.price>=series.reference?'gm-up':'gm-down'}>{signed(series.price-series.reference)}　{signed(pct!)}%</strong>}
-          <span>{asset.group==='加密货币'?'近 24 小时':asset.id==='XAU'?'较昨结':'较前收盘'}</span></div>
+          <span>{asset.group==='加密货币'?'近 24 小时':asset.id==='XAU'?'较报价源参考价':'较前收盘'}{series && ' · '+price(series.reference)}</span></div>
         <div className="gm-provenance">{series && <><b>{series.marketStatus ?? '最近报价'}</b>
           <span>{series.source}</span><time>报价 {stamp(series.asOf)} 北京时间</time></>}
           {(q?.fallback || (errors[asset.id] && q)) && <em>刷新失败，显示上次快照</em>}
@@ -99,7 +99,7 @@ export function GlobalMarketsView({refreshRevision=0}:{refreshRevision?:number})
       {compare && plotted.some(a=>!quotes[a.id]) && <p className="gm-note" role="status">等待行情 · {plotted.filter(a=>!quotes[a.id]).map(a=>a.name).join('、')}{plotted.some(a=>errors[a.id])?'（部分数据暂不可用）':''}</p>}
       {lines.length ? <MarketChart key={asset.id+'-'+compare+'-'+days} lines={lines} percent={compare}/> :
         <p className="gm-nochart">{loading?'正在读取历史日线…':'当前区间暂无可用日线'}</p>}
-      <footer className="gm-foot">{compare?'从区间内首个共同交易日的收盘价起算涨跌幅。各市场按当地交易日期对齐，休市处留空。':'展示已结束交易日的收盘价，休市处留空。'}</footer>
+      <footer className="gm-foot">{compare?'从首个共同日期的收盘价起算。美股按纽约交易日、加密货币按 UTC 日线对齐，休市处留空。':asset.id==='XAU'?'日线取自伦敦金历史收盘序列，顶部涨跌使用报价源随行情提供的参考价。':asset.group==='加密货币'?'日线按 UTC 零点切分，顶部涨跌使用滚动 24 小时参考价。':'展示已结束交易日的收盘价，休市处留空。'}</footer>
     </article>
   </section>;
 }

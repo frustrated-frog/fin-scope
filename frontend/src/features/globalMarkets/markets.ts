@@ -14,7 +14,7 @@ export const core: Instrument[] = [
 ];
 export const price = (v: number) => v.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2});
 export const signed = (v: number) => (v > 0 ? '+' : '') + v.toFixed(2);
-export const stamp = (v: string) => new Intl.DateTimeFormat('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'Asia/Shanghai'}).format(new Date(v));
+export const stamp = (v: string) => new Intl.DateTimeFormat('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'Asia/Shanghai'}).format(new Date(v));
 export function stock(ticker: string, name: string): Instrument {
   return {id:'US-'+ticker,name,ticker,group:'美股自选',color:'#55b7cc',unit:'美元'};
 }

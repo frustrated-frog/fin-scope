@@ -74,5 +74,5 @@
 .gm-nochart {display:grid;min-height:235px;place-items:center;color:var(--gm-quiet);}
 @keyframes gm-reveal {from {opacity:.4;transform:translateY(3px);} to {opacity:1;transform:none;}}
 @media (max-width:1080px) {.gm {grid-template-columns:215px minmax(0,1fr);gap:12px;} .gm-spark {display:none;}}
-@media (max-width:760px) {.gm {display:flex;flex-direction:column;} .gm-main,.gm-rail {width:100%;box-sizing:border-box;} .gm-main {order:-1;} .gm-rail {padding:12px;} .gm-group {display:flex;flex-wrap:wrap;gap:4px;} .gm-group h4 {width:100%;} .gm button.gm-item {flex:1 1 150px;} .gm-chart-head {padding-top:12px;} .gm-plot svg {min-height:140px;} .gm-plot text {font-size:17px;}}
+@media (max-width:760px) {[data-view=globalMarkets] .workspace>.topbar {position:static;} .gm {display:flex;flex-direction:column;} .gm-main,.gm-rail {width:100%;box-sizing:border-box;} .gm-main {order:-1;} .gm-rail {padding:12px;} .gm-group {display:flex;flex-wrap:wrap;gap:4px;} .gm-group h4 {width:100%;} .gm button.gm-item {flex:1 1 150px;} .gm-chart-head {padding-top:12px;} .gm-plot svg {min-height:140px;} .gm-plot text {font-size:17px;}}
 @media (prefers-reduced-motion:reduce) {.gm *, .gm *::before {animation:none!important;transition:none!important;}}
