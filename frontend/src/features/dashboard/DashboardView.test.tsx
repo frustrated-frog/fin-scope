@@ -71,13 +71,15 @@ test('shares one hotspot canvas across three surfaces and keeps keyboard access 
   expect(within(group).getByRole('heading', { name: '科技' })).toBeInTheDocument();
 });
 
-test('frames the research pulse as a ready command surface while retaining metric navigation', () => {
+test('keeps the research focus and replaces the two counters with market indices', () => {
   renderDashboard();
 
   const focus = screen.getByText('当前焦点').parentElement;
   expect(focus).not.toBeNull();
   expect(within(focus as HTMLElement).getByRole('status')).toHaveTextContent('研究队列已就绪');
-  expect(screen.getByRole('button', { name: /运行中.*打开研究工作区/ })).toHaveClass('dashboard-pulse-item');
+  expect(screen.queryByRole('button', { name: /运行中.*打开研究工作区/ })).toBeNull();
+  expect(screen.getByRole('region', { name: 'A股指数' }).querySelectorAll('dt')).toHaveLength(3);
+  expect(screen.getByRole('region', { name: '美股指数' }).querySelectorAll('dt')).toHaveLength(3);
 });
 
 function renderDashboard(onOpenRadarEvent = vi.fn()) {

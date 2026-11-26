@@ -45,6 +45,7 @@ export function useWatchlistDashboardData(overviewPath = '/api/sector-market/ove
   const indicesRef = useRef(indices);
   const followsRef = useRef(followedSectors);
   const refreshSequence = useRef(0);
+  const indexSequence = useRef(0);
   const overviewSequence = useRef(0);
 
   useEffect(() => { investmentsRef.current = investments; }, [investments]);
@@ -70,15 +71,22 @@ export function useWatchlistDashboardData(overviewPath = '/api/sector-market/ove
   }, []);
 
   const loadIndices = useCallback(async (force = false): Promise<LoadResult> => {
+    const sequence = ++indexSequence.current;
     setIndices((current) => ({ ...current, phase: current.data.length ? 'refreshing' : 'loading', error: undefined }));
     try {
       const values = await api<MarketIndexQuote[]>(`/api/market-indices${force ? '?refresh=true' : ''}`);
+      if (sequence !== indexSequence.current) {
+        return { failed: false, degradedCount: 0 };
+      }
       const merged = preserveValidQuotes(values, indicesRef.current.data, (item) => item.code);
       const next = { data: merged.items, phase: 'ready' as const, updatedAt: new Date().toISOString() };
       indicesRef.current = next;
       setIndices(next);
       return { failed: false, degradedCount: merged.degradedCount };
     } catch (error) {
+      if (sequence !== indexSequence.current) {
+        return { failed: false, degradedCount: 0 };
+      }
       const next = { ...indicesRef.current, phase: 'error' as const, error: messageOf(error, '市场指数加载失败') };
       indicesRef.current = next;
       setIndices(next);
@@ -201,6 +209,7 @@ export function useWatchlistDashboardData(overviewPath = '/api/sector-market/ove
     sectorCategory,
     setSectorCategory,
     loadInvestments,
+    loadIndices,
     loadSectorOverview,
     loadFollowedSectors,
     refreshAll,

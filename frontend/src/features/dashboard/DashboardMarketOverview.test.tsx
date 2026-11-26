@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { api } from '../../shared/api/client';
-import { DashboardMarketOverview } from './DashboardMarketOverview';
+import { useWatchlistDashboardData } from '../watchlist/useWatchlistDashboardData';
+import { DashboardMarketOverview as Overview } from './DashboardMarketOverview';
 
 vi.mock('../../shared/api/client', () => ({ api: vi.fn() }));
 vi.mock('../watchlist/WatchlistKlineDrawer', () => ({
@@ -12,6 +13,11 @@ vi.mock('../watchlist/WatchlistKlineDrawer', () => ({
 vi.mock('../watchlist/AttributionReaderView', () => ({
   AttributionReaderView: ({ reportId, onBack }: { reportId: number; onBack: () => void }) => <div>归因报告 {reportId}<button onClick={onBack}>返回速览</button></div>
 }));
+
+function DashboardMarketOverview(props: Omit<Parameters<typeof Overview>[0], 'market'>) {
+  const market = useWatchlistDashboardData('/api/sector-market/movements');
+  return <Overview {...props} market={market} />;
+}
 
 let responses: Record<string, unknown>;
 

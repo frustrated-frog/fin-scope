@@ -60,7 +60,7 @@ test('loads intraday points for the selected instrument and switches the chart w
   }));
   const user=userEvent.setup();
   render(<GlobalMarketsView/>);
-  await user.click(screen.getByRole('button',{name:'分时',exact:true}));
+  await user.click(screen.getByRole('button',{name:'分时'}));
   expect(await screen.findByText(/指数分时源/)).toBeVisible();
   await user.click(screen.getByRole('button',{name:/现货黄金 XAU/}));
   expect(await screen.findByText(/黄金分时源/)).toBeVisible();

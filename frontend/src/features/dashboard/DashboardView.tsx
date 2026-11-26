@@ -1,3 +1,5 @@
+import { DashboardIndexBoard } from './DashboardIndexBoard';
+import { useWatchlistDashboardData } from '../watchlist/useWatchlistDashboardData';
 import { DashboardMarketOverview } from './DashboardMarketOverview';
 import { FlowField } from '../../shared/visuals/fluid/FlowField';
 import {
@@ -24,17 +26,8 @@ type DashboardViewProps = {
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
 const ACTIVE_AGENT_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING']);
 
-export function DashboardView({
-  dashboard,
-  hotspotRankings,
-  researchRuns,
-  agentRuns,
-  knowledgeOverview,
-  marketRefreshRevision = 0,
-  onChangeView,
-  onOpenRadarEvent
-}: DashboardViewProps) {
-  if (!dashboard) {
+export function DashboardView(props: DashboardViewProps) {
+  if (!props.dashboard) {
     return (
       <section className="content-grid" aria-label="首页加载中">
         <div className="dashboard-loading-grid">
@@ -49,7 +42,19 @@ export function DashboardView({
       </section>
     );
   }
+  return <DashboardContent {...props} />;
+}
 
+function DashboardContent({
+  hotspotRankings,
+  researchRuns,
+  agentRuns,
+  knowledgeOverview,
+  marketRefreshRevision = 0,
+  onChangeView,
+  onOpenRadarEvent
+}: DashboardViewProps) {
+  const market = useWatchlistDashboardData('/api/sector-market/movements');
   const dueReviewCount = knowledgeOverview?.dueReviewCount ?? 0;
   const activeRuns = researchRuns.filter((run) => ACTIVE_RUN_STATUSES.has(run.status));
   const activeAgentCount = agentRuns.filter((run) => ACTIVE_AGENT_STATUSES.has(run.status)).length;
@@ -58,16 +63,12 @@ export function DashboardView({
     {
       label: '到期复习',
       value: dueReviewCount,
-      detail: dueReviewCount ? '已有知识结论需要复核' : '没有到期的知识复习',
-      tone: 'review',
-      view: 'knowledge' as View
+      detail: dueReviewCount ? '已有知识结论需要复核' : '没有到期的知识复习'
     },
     {
       label: '运行中',
       value: activeRuns.length + activeAgentCount,
-      detail: activeRuns.length || activeAgentCount ? '研究或 Agent 正在处理资料' : '没有正在运行的自动化任务',
-      tone: 'active',
-      view: 'research' as View
+      detail: activeRuns.length || activeAgentCount ? '研究或 Agent 正在处理资料' : '没有正在运行的自动化任务'
     }
   ];
   const priorityPulseItem = pulseItems.find((item) => item.value > 0);
@@ -96,26 +97,7 @@ export function DashboardView({
             </span>
           </div>
         </div>
-        <FlowField mode="cards" className="dashboard-pulse-items">
-          {pulseItems.map((item) => (
-            <button
-              key={item.label}
-              className={`dashboard-pulse-item is-${item.tone}`}
-              data-flow-surface={item.tone}
-              type="button"
-              aria-label={`${item.label} ${item.value}，${item.detail}。打开${pulseWorkspaceName(item.view)}`}
-              onClick={() => onChangeView(item.view)}
-            >
-              <span className="dashboard-pulse-item-label"><i aria-hidden="true"></i>{item.label}</span>
-              <span className="dashboard-pulse-value">
-                <strong>{item.value}</strong>
-                <small aria-hidden="true">ITEMS</small>
-              </span>
-              <span className="dashboard-pulse-meter" aria-hidden="true"><i></i></span>
-              <small>{item.detail}</small>
-            </button>
-          ))}
-        </FlowField>
+        <DashboardIndexBoard indices={market.indices} reloadIndices={market.loadIndices} refreshRevision={marketRefreshRevision} onChangeView={onChangeView} />
       </section>
 
       <section className="dashboard-hotspots" aria-labelledby="dashboard-hotspots-heading">
@@ -133,7 +115,7 @@ export function DashboardView({
         </FlowField>
       </section>
 
-      <DashboardMarketOverview refreshRevision={marketRefreshRevision} onChangeView={onChangeView} />
+      <DashboardMarketOverview market={market} refreshRevision={marketRefreshRevision} onChangeView={onChangeView} />
 
     </section>
   );
@@ -144,14 +126,6 @@ const HOTSPOT_BOARD_META: Array<Pick<DashboardHotspotRanking, 'categoryCode' | '
   { categoryCode: 'TECHNOLOGY', label: '科技' },
   { categoryCode: 'POLITICS', label: '政治' }
 ];
-
-function pulseWorkspaceName(view: View) {
-  const labels: Partial<Record<View, string>> = {
-    knowledge: '知识工作台',
-    research: '研究工作区'
-  };
-  return labels[view] || '对应工作区';
-}
 
 function normalizeHotspotRankings(rankings?: DashboardHotspotRanking[]) {
   return HOTSPOT_BOARD_META.map((meta) => {

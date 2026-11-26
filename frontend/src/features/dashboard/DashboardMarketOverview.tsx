@@ -8,7 +8,7 @@ import type { SectorMarketEntry, View, WatchlistItem } from '../../shared/types'
 import type { MarketPulseWorkspace } from '../market-pulse/marketPulseTypes';
 import { AttributionReaderView } from '../watchlist/AttributionReaderView';
 import { WatchlistKlineDrawer } from '../watchlist/WatchlistKlineDrawer';
-import { useWatchlistDashboardData } from '../watchlist/useWatchlistDashboardData';
+import type { useWatchlistDashboardData } from '../watchlist/useWatchlistDashboardData';
 import { changeClass, formatPct, formatPrice, formatTurnover } from '../watchlist/watchlistFormatters';
 import './DashboardMarketOverview.css';
 
@@ -43,11 +43,11 @@ function qualityLabel(value?: string) {
   return '';
 }
 
-export function DashboardMarketOverview({ refreshRevision, onChangeView }: {
+export function DashboardMarketOverview({ market, refreshRevision, onChangeView }: {
+  market: ReturnType<typeof useWatchlistDashboardData>;
   refreshRevision: number;
   onChangeView: (view: View) => void;
 }) {
-  const market = useWatchlistDashboardData('/api/sector-market/movements');
   const [pulse, setPulse] = useState<MarketPulseWorkspace | null>(null);
   const [pulseError, setPulseError] = useState('');
   const [pulseLoading, setPulseLoading] = useState(true);
