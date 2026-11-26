@@ -24,13 +24,23 @@ class GlobalMarketSourceTest {
     void setup() {
         ReflectionTestUtils.setField(source, "transport", http);
         ReflectionTestUtils.setField(source, "json", new ObjectMapper());
-        for (String key : new String[]{"tencentUrl", "chartUrl", "coinbaseUrl", "goldHistoryUrl", "goldQuoteUrl"}) {
+        for (String key : new String[]{"tencentUrl", "chartUrl", "coinbaseUrl", "goldHistoryUrl", "goldQuoteUrl", "goldMinuteUrl", "tencentMinuteUrl"}) {
             ReflectionTestUtils.setField(source, key, "https://fixture/" + key + "/");
         }
     }
 
     private void response(String url, String text) {
         when(http.get(anyString(), eq(URI.create(url)), anyInt(), anyInt(), anyMap(), any(Charset.class))).thenReturn(text);
+    }
+
+    @Test
+    void goldMinutesRollIntoNextBeijingDay() throws Exception {
+        response("https://fixture/goldMinuteUrl/", """
+                {"minLine_1d":[["2024-01-02","0","LIFFE","金","23:59","2000"],
+                ["00:00","2001"],["00:01","0"]]}
+                """);
+        assertEquals(Map.of("2024-01-02T15:59:00Z", 2000d, "2024-01-02T16:00:00Z", 2001d),
+                source.intraday("XAU").points());
     }
 
     @Test

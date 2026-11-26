@@ -48,3 +48,22 @@ test('changes instrument and range, compares markets, persists and removes a ver
   await user.click(screen.getByRole('button',{name:'移出自选'}));
   expect(localStorage.getItem('finscope.global-markets.watchlist.v1')).toBe('[]');
 });
+
+test('loads intraday points for the selected instrument and switches the chart with the instrument',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async url=>{
+    const path=String(url);
+    if (path.endsWith('/intraday')) {
+      return apiResponse({source:path.includes('/XAU/')?'黄金分时源':'指数分时源',window:'一分钟价格',
+        points:{'2024-01-02T15:59:00Z':100,'2024-01-02T16:00:00Z':101}});
+    }
+    return apiResponse(path.includes('/companies/')?[]:quote({'2024-01-02':100}));
+  }));
+  const user=userEvent.setup();
+  render(<GlobalMarketsView/>);
+  await user.click(screen.getByRole('button',{name:'分时',exact:true}));
+  expect(await screen.findByText(/指数分时源/)).toBeVisible();
+  await user.click(screen.getByRole('button',{name:/现货黄金 XAU/}));
+  expect(await screen.findByText(/黄金分时源/)).toBeVisible();
+  expect(screen.queryByText(/指数分时源/)).toBeNull();
+  expect(screen.getByRole('img',{name:/分时走势/})).toBeVisible();
+});

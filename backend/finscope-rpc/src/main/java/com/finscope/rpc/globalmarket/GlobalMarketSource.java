@@ -3,6 +3,9 @@ package com.finscope.rpc.globalmarket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.domain.globalmarket.GlobalMarketSeries;
+import com.finscope.domain.globalmarket.IntradaySeries;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import com.finscope.rpc.marketintel.ProviderContractException;
 import com.finscope.rpc.quote.QuoteHttpTransport;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +45,80 @@ public class GlobalMarketSource {
     private String goldHistoryUrl;
     @Value("${finscope.global-market.gold-quote-url}")
     private String goldQuoteUrl;
+
+    @Value("${finscope.global-market.tencent-minute-url}")
+    private String tencentMinuteUrl;
+    @Value("${finscope.global-market.gold-minute-url}")
+    private String goldMinuteUrl;
+
+    public IntradaySeries intraday(String id) throws IOException {
+        if ("BTC".equals(id) || "ETH".equals(id)) {
+            String base = coinbaseUrl + "/products/" + id + "-USD";
+            JsonNode ticker = read("COINBASE", base + "/ticker", Map.of());
+            Instant at = Instant.parse(ticker.path("time").asText());
+            TreeMap<String, Double> points = new TreeMap<>();
+            for (JsonNode bar : read("COINBASE", base + "/candles?granularity=300", Map.of())) {
+                Instant close = time(bar.path(0)).plusSeconds(300);
+                if (close.isAfter(at.minusSeconds(86400)) && !close.isAfter(at)) {
+                    addPoint(points, close, bar.path(4).asDouble());
+                }
+            }
+            addPoint(points, at, ticker.path("price").asDouble());
+            return intradayResult("Coinbase Exchange", "滚动 24 小时 · 五分钟收盘与最新成交", points);
+        }
+        if ("XAU".equals(id)) {
+            JsonNode rows = read("SINA_XAU", goldMinuteUrl, SINA_HEADERS).path("minLine_1d");
+            LocalDate day = LocalDate.parse(rows.path(0).path(0).asText());
+            LocalTime previous = null;
+            TreeMap<String, Double> points = new TreeMap<>();
+            for (int i = 0; i < rows.size(); i++) {
+                JsonNode row = rows.get(i);
+                int offset = i == 0 ? 4 : 0;
+                LocalTime clock = LocalTime.parse(row.path(offset).asText());
+                if (previous != null && previous.getHour() >= 20 && clock.getHour() < 6) {
+                    day = day.plusDays(1);
+                }
+                addPoint(points, day.atTime(clock).atZone(BEIJING).toInstant(), row.path(offset + 1).asDouble());
+                previous = clock;
+            }
+            return intradayResult("新浪财经 · 伦敦金", "最近交易时段 · 一分钟价格", points);
+        }
+        String code = INDEXES.containsKey(id) ? Map.of("SPX", ".INX", "DJI", ".DJI", "IXIC", ".IXIC").get(id)
+                : id.substring(3).replace('-', '.');
+        String key = "us" + code;
+        JsonNode data = read("TENCENT_GLOBAL", tencentMinuteUrl + key, Map.of()).path("data").path(key);
+        JsonNode quote = data.path("qt").path(key);
+        String symbol = quote.path(2).asText();
+        if (!(symbol.equals(code) || symbol.startsWith(code + ".")) || !"USD".equals(quote.path(35).asText())) {
+            throw new IOException("缺少对应美股的分时报价");
+        }
+        LocalDate day = LocalDate.parse(data.at("/data/date").asText(), DateTimeFormatter.BASIC_ISO_DATE);
+        TreeMap<String, Double> points = new TreeMap<>();
+        for (JsonNode row : data.at("/data/data")) {
+            String[] fields = row.asText().trim().split("\\s+");
+            if (fields.length >= 2 && fields[0].matches("[0-9]{4}")) {
+                LocalTime clock = LocalTime.parse(fields[0], DateTimeFormatter.ofPattern("HHmm"));
+                if (!clock.isBefore(LocalTime.of(9, 30)) && !clock.isAfter(LocalTime.of(16, 0))) {
+                    addPoint(points, day.atTime(clock).atZone(NEW_YORK).toInstant(), Double.parseDouble(fields[1]));
+                }
+            }
+        }
+        String mode = "delay".equals(quote.path(0).asText()) ? " · 延迟报价" : "";
+        return intradayResult("腾讯行情", day + " 美股常规盘 · 一分钟价格" + mode, points);
+    }
+
+    private static void addPoint(TreeMap<String, Double> points, Instant at, double price) {
+        if (price > 0 && Double.isFinite(price) && !at.isAfter(Instant.now())) {
+            points.put(at.truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString(), price);
+        }
+    }
+
+    private static IntradaySeries intradayResult(String source, String window, TreeMap<String, Double> points) throws IOException {
+        if (points.isEmpty()) {
+            throw new IOException("缺少有效分时数据");
+        }
+        return new IntradaySeries(source, window, points);
+    }
 
     public GlobalMarketSeries fetch(String id) throws IOException {
         if ("XAU".equals(id)) {

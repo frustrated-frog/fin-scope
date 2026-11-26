@@ -49,6 +49,8 @@ management:
 
 finscope:
   global-market:
+    tencent-minute-url: https://web.ifzq.gtimg.cn/appstock/app/usMinute/query?code=
+    gold-minute-url: https://quotes.sina.cn/futures/api/json.php/GlobalFuturesService.getGlobalFuturesMinLine?symbol=XAU
     tencent-url: https://web.ifzq.gtimg.cn/appstock/app/usfqkline/get?param=
     chart-url: https://query1.finance.yahoo.com/v8/finance/chart/
     coinbase-url: https://api.exchange.coinbase.com

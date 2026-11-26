@@ -6,6 +6,7 @@ import com.finscope.common.exception.BusinessException;
 import com.finscope.common.exception.ErrorCode;
 import com.finscope.dao.marketdata.MarketDataSnapshotRepository;
 import com.finscope.domain.globalmarket.GlobalMarketSeries;
+import com.finscope.domain.globalmarket.IntradaySeries;
 import com.finscope.domain.marketdata.MarketDataCapability;
 import com.finscope.domain.marketdata.MarketDataSnapshot;
 import com.finscope.rpc.globalmarket.GlobalMarketSource;
@@ -44,10 +45,25 @@ public class GlobalMarketService {
 
     public record Result(GlobalMarketSeries series, boolean fallback, String retrievedAt) {}
 
-    public Result market(String id) {
+    private void validate(String id) {
         if (!CORE.contains(id) && !STOCK.matcher(id).matches()) {
             throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, "无法识别的全球行情标的");
         }
+    }
+
+    public IntradaySeries intraday(String id) {
+        validate(id);
+        return flights.execute("intraday/" + id, () -> {
+            try {
+                return source.intraday(id);
+            } catch (IOException | ProviderContractException | IllegalArgumentException | DateTimeException error) {
+                throw new BusinessException(ErrorCode.MARKET_DATA_UNAVAILABLE, "分时行情暂不可用", error);
+            }
+        });
+    }
+
+    public Result market(String id) {
+        validate(id);
         return flights.execute("global-market/" + id, () -> load(id));
     }
 
