@@ -99,7 +99,7 @@ export function GlobalMarketsView({refreshRevision=0}:{refreshRevision?:number})
       {compare && plotted.some(a=>!quotes[a.id]) && <p className="gm-note" role="status">等待行情 · {plotted.filter(a=>!quotes[a.id]).map(a=>a.name).join('、')}{plotted.some(a=>errors[a.id])?'（部分数据暂不可用）':''}</p>}
       {lines.length ? <MarketChart key={asset.id+'-'+compare+'-'+days} lines={lines} percent={compare}/> :
         <p className="gm-nochart">{loading?'正在读取历史日线…':'当前区间暂无可用日线'}</p>}
-      <footer className="gm-foot">{compare?'从首个共同日期的收盘价起算。美股按纽约交易日、加密货币按 UTC 日线对齐，休市处留空。':asset.id==='XAU'?'日线取自伦敦金历史收盘序列，顶部涨跌使用报价源随行情提供的参考价。':asset.group==='加密货币'?'日线按 UTC 零点切分，顶部涨跌使用滚动 24 小时参考价。':'展示已结束交易日的收盘价，休市处留空。'}</footer>
+      <footer className="gm-foot">{compare?'从首个共同日期的收盘价起算。美股按纽约交易日、加密货币按 UTC 日线对齐。':asset.id==='XAU'?'日线取自伦敦金历史收盘序列，顶部涨跌使用报价源随行情提供的参考价。':asset.group==='加密货币'?'日线按 UTC 零点切分，顶部涨跌使用滚动 24 小时参考价。':'折线连接相邻交易日的收盘价。'}</footer>
     </article>
   </section>;
 }

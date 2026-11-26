@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
+import { MarketChart } from './MarketChart';
 import { GlobalMarketsView } from './GlobalMarketsView';
 import { chartLines, core, type Snapshot } from './markets';
 
@@ -17,6 +18,18 @@ test('aligns returns to a common observed day and preserves weekend gaps',()=>{
   expect(lines.map(l=>l.points[0])).toEqual([{day:'2026-11-23',value:0},{day:'2026-11-23',value:0}]);
   expect(lines[1].points[1].value).toBeCloseTo(10);
   expect(chartLines([core[0]],{SPX:market},7,false)[0].points.map(p=>p.day)).not.toContain('2026-11-22');
+});
+test.each([false,true])('connects actual Friday and Monday closes in a single path (compare=%s)',compare=>{
+  const closes={'2026-11-20':100,'2026-11-23':110,'2026-11-24':105};
+  const quotes={SPX:quote(closes),BTC:quote({...closes,'2026-11-21':101,'2026-11-22':103})};
+  const assets=compare?[core[0],core[4]]:[core[0]];
+  const lines=chartLines(assets,quotes,7,compare);
+  const {container}=render(<MarketChart lines={lines} percent={compare}/>);
+  for (const line of lines) {
+    const strokes=container.querySelectorAll(`path[stroke="${line.asset.color}"]`);
+    expect(strokes).toHaveLength(1);
+    expect(strokes[0].getAttribute('d')?.match(/[ML]/g)).toEqual(line.points.map((_,i)=>i?'L':'M'));
+  }
 });
 test('changes instrument and range, compares markets, persists and removes a verified US favorite',async()=>{
   vi.stubGlobal('fetch',vi.fn(async (url)=>apiResponse(String(url).includes('/companies/')?[]:quote({'2026-11-23':100,'2026-11-24':110}))));

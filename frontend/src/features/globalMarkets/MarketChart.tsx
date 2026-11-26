@@ -36,21 +36,16 @@ export function MarketChart({lines,percent}:{lines:PlotLine[];percent:boolean}) 
         return <g key={i}><line className="gm-gridline" x1={left} x2={W-right} y1={y(v)} y2={y(v)}/><text x={left-8} textAnchor="end" y={y(v)+4}>{fmt(v)}</text></g>;
       })}
       {labels.map((day,i)=><text key={day} x={x(day)} y={H-8} textAnchor={i===labels.length-1?'end':i===0?'start':'middle'}>{day.slice(5)}</text>)}
-      {lines.map(l=>{
-        const segments:typeof l.points[]=[];
-        for (const point of l.points) {
-          const last=segments[segments.length-1];
-          if (last && Date.parse(point.day)-Date.parse(last[last.length-1].day)<=86400000) { last.push(point); }
-          else { segments.push([point]); }
+      {lines.map(({asset,points})=>{
+        const firstPoint=points[0], lastPoint=points[points.length-1];
+        if (points.length===1) {
+          return <circle key={asset.id} cx={x(firstPoint.day)} cy={y(firstPoint.value)} r="2" fill={asset.color}/>;
         }
-        return <g key={l.asset.id}>{segments.map(s=>{
-          const path=s.map((p,i)=>(i?'L':'M')+x(p.day).toFixed(2)+','+y(p.value).toFixed(2)).join(' ');
-          return <g key={s[0].day}>
-            {!percent && <path d={path+` L${x(s[s.length-1].day)},${H-bottom} L${x(s[0].day)},${H-bottom} Z`} fill={`url(#${fill})`}/>}
-            {s.length===1 ? <circle cx={x(s[0].day)} cy={y(s[0].value)} r="2" fill={l.asset.color}/> :
-              <path d={path} stroke={l.asset.color} fill="none" strokeWidth={percent?2:2.7} strokeLinejoin="round" strokeLinecap="round"/>}
-          </g>;
-        })}</g>;
+        const path=points.map((p,i)=>(i?'L':'M')+x(p.day).toFixed(2)+','+y(p.value).toFixed(2)).join(' ');
+        return <g key={asset.id}>
+          {!percent && <path d={path+` L${x(lastPoint.day)},${H-bottom} L${x(firstPoint.day)},${H-bottom} Z`} fill={`url(#${fill})`}/>}
+          <path d={path} stroke={asset.color} fill="none" strokeWidth={percent?2:2.7} strokeLinejoin="round" strokeLinecap="round"/>
+        </g>;
       })}
       <line className="gm-cursor" x1={x(current)} x2={x(current)} y1={top} y2={H-bottom}/>
       {lines.map(l=>{const p=l.points.find(p=>p.day===current);
