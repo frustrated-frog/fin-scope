@@ -1,6 +1,7 @@
 export type View =
   | 'dashboard'
   | 'agent'
+  | 'globalMarkets'
   | 'marketPulse'
   | 'briefs'
   | 'briefReader'

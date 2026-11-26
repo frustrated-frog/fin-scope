@@ -19,6 +19,7 @@ import type { KnowledgeOverview } from './features/knowledge/knowledgeTypes';
 import { ResearchView } from './features/research/ResearchView';
 import { SettingsView } from './features/settings/SettingsView';
 import { WatchlistView } from './features/watchlist/WatchlistView';
+import { GlobalMarketsView } from './features/globalMarkets/GlobalMarketsView';
 import { StrategyView } from './features/strategy/StrategyView';
 import { QuantResearchEntryIntent } from './features/strategy/quantTypes';
 import { api } from './shared/api/client';
@@ -51,7 +52,7 @@ function isResearchRunActive(status?: string) {
 
 export default function App() {
   const [view, setView] = useState<View>(() => (
-    ['marketIntel', 'financials'].includes(new URLSearchParams(window.location.search).get('agentView') ?? '')
+    ['marketIntel', 'financials', 'globalMarkets'].includes(new URLSearchParams(window.location.search).get('agentView') ?? '')
       ? new URLSearchParams(window.location.search).get('agentView') as View :
     new URLSearchParams(window.location.search).has('reactionEvent') || new URLSearchParams(window.location.search).has('reactionSample')
       ? 'investmentObservation' : new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
@@ -232,6 +233,8 @@ export default function App() {
         return 'Watchlist';
       case 'marketIntel':
         return 'Market Intel · 资金行为';
+      case 'globalMarkets':
+        return '全球行情';
       case 'marketPulse':
         return 'Market Pulse · 市场机会';
       case 'industryChain':
@@ -414,7 +417,7 @@ export default function App() {
 
   async function refreshWorkspace() {
     setMessage('正在刷新');
-    if (view === 'dashboard') {
+    if (view === 'dashboard' || view === 'globalMarkets') {
       setMarketRefreshRevision((current) => current + 1);
     }
     try {
@@ -531,6 +534,7 @@ export default function App() {
       {view === 'watchlist' && <WatchlistView addToast={addToast} setMessage={setMessage}
         initialTarget={watchlistTarget} onTargetConsumed={() => setWatchlistTarget(undefined)}
         onOpenIndustryChain={(stockCode) => { setIndustryChainStockCode(stockCode); setView('industryChain'); }} />}
+      {view === 'globalMarkets' && <GlobalMarketsView refreshRevision={marketRefreshRevision} />}
       {view === 'marketPulse' && <MarketPulseView addToast={addToast} setMessage={setMessage}
         onOpenWatchlist={(code, reportId) => { setWatchlistTarget(code ? { code, reportId } : undefined); setView('watchlist'); }}
         onOpenEvent={(change) => {

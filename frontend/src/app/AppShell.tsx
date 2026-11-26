@@ -29,6 +29,7 @@ const navGroups: Array<{
   {
     label: '决策',
     items: [
+      { id: 'globalMarkets', label: '全球行情', hint: '指数 · 黄金 · 加密货币', code: 'GM' },
       { id: 'marketPulse', label: 'Market Pulse', hint: '市场状态与机会', code: 'MP' },
       { id: 'watchlist', label: 'Watchlist', hint: '自选观察', code: 'WA' },
       { id: 'marketIntel', label: 'Market Intel', hint: '资金行为', code: 'MI' },
