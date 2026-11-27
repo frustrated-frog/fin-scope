@@ -9,14 +9,16 @@ import subprocess
 import time
 import uuid
 
+from .timeframes import Timeframes
 from .engine import COMMISSION_RATE, MIN_COMMISSION, SELL_TAX, SLIPPAGE, position_details
 
 IMAGE = "python:3.12-slim"
 SDK = """Implement decide(ctx) using Python 3.12 standard library. At each completed five-minute bar,
-ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), state (your prior JSON object), positionDetails (each held code: shares, sellable, frozen, averageCost, oldestLotDate),
+ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), state (your prior JSON object), positionDetails (each held code: shares, sellable, frozen, averageCost, oldestLotDate, holdingCalendarDays), session (MORNING or AFTERNOON),
 costs (commissionRate, minimumCommissionCny, sellTaxRate, slippageRate). Respect sellable before targeting exits;
 
 bars (available code -> chronological list of up to 49 dicts with open,high,low,close,amount,volume,at).
+Access bar["multiTimeframe"] for completed return5m, return15m, return60m, return1d and 20/60-session trend20d/trend60d. Missing features mean insufficient complete trading intervals. Daily values update at 15:00.
 Volume can be null for archived data and amount can be null for recent quotes. Be robust to short windows and missing symbols. Use deterministic
 logic and only ctx. Return a dict weights (available code -> absolute desired portfolio weight, 0 exits,
 omitted holds, nonnegative sum <= 1), scores (finite numeric scores for available codes including all
@@ -91,6 +93,7 @@ class PythonStrategy:
         self.name = "finscope-strategy-" + uuid.uuid4().hex
         self.process = None
         self.last = {}
+        self.features = {} if "multiTimeframe" in program else None
 
     def __enter__(self):
         cmd = [
@@ -176,11 +179,27 @@ class PythonStrategy:
                     raise ValueError("策略输入超时")
                 data = data[os.write(self.process.stdin.fileno(), data[:4096]) :]
 
+    def bar_features(self, code, bar):
+        if self.features is None:
+            return {}
+        if hasattr(bar, "multiTimeframe"):
+            return {"multiTimeframe": bar.multiTimeframe}
+        if code not in self.features:
+            self.features[code] = (Timeframes(), {})
+        state, recent = self.features[code]
+        at = bar.observed_at
+        if at not in recent:
+            recent[at] = state.update(at, bar)
+            if len(recent) > 49:
+                del recent[next(iter(recent))]
+        return {"multiTimeframe": recent[at]}
+
     def decide(self, histories, book, end, equity):
         bars = {
             c: [
                 dict(
                     at=b.observed_at.isoformat(),
+                    **self.bar_features(c, b),
                     open=b.open,
                     high=b.high,
                     low=b.low,
@@ -200,6 +219,7 @@ class PythonStrategy:
                 _factorReport=self.collect_factors,
                 at=end.isoformat(),
                 bars=bars,
+                session="MORNING" if end.hour < 12 else "AFTERNOON",
                 positionDetails=position_details(book, end),
                 costs=dict(commissionRate=COMMISSION_RATE, minimumCommissionCny=MIN_COMMISSION,
                            sellTaxRate=SELL_TAX, slippageRate=SLIPPAGE),

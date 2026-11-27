@@ -103,7 +103,7 @@ def position_details(book, end):
         first = min((d for d, q in lots if q and d <= today), default=None)
         details[code] = dict(shares=shares, sellable=sellable, frozen=shares - sellable,
                              averageCost=position["cost"] / shares if shares else None,
-                             oldestLotDate=first)
+                             oldestLotDate=first, holdingCalendarDays=(end.date() - datetime.fromisoformat(first).date()).days if first else None)
     return details
 
 

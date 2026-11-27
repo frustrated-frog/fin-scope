@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
 from .actions import read_actions
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
@@ -59,6 +60,7 @@ class PaperLab:
         self.limit = asyncio.Semaphore(4)
         self.action_queries = {}
         self.action_day = None
+        self.features = ForwardFeatures(self)
 
     @contextmanager
     def db(self):
@@ -385,7 +387,8 @@ class PaperLab:
                            ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
             return
         end = end.astimezone(SHANGHAI)
-        history = {c: bars[-49:] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
+        multi = isinstance(spec.rule, PythonRule) and "multiTimeframe" in spec.rule.code
+        history = {c: bars[-(320 if multi else 49):] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
         if len(history) < len(panel) and seen - end < timedelta(seconds=45):
             return
         book = json.loads(row["book"])
@@ -395,6 +398,9 @@ class PaperLab:
         if isinstance(spec.rule,PythonRule) and spec.rule.exDateAccounting:
             try:
                 history=await self.forward_actions(history,book,row["started"],end)
+                if multi:
+                    enriched = await asyncio.gather(*(self.features.attach(c, bars, end) for c, bars in history.items()))
+                    history = dict(zip(history, enriched))
                 book.setdefault("lastObserved",{}).update({c:end.isoformat() for c in history})
             except ValueError:
                 with self.db() as db:
