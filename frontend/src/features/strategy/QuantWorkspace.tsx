@@ -6,6 +6,8 @@ import { PaperCodingJobs } from './PaperCodingJobs';
 import { ClassicLibrary, classicExperimentType } from './ClassicStrategies';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { LearningWorkbench } from './LearningWorkbench';
+import { FinancialStatistics } from './FinancialStatistics';
+import { ResearchBrief } from './ResearchBrief';
 import { AutonomousStudies } from './AutonomousStudies';
 import { QuantHome } from './QuantHome';
 import { ResearchMap } from './ResearchMap';
@@ -18,7 +20,7 @@ import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { OvernightStrategyPanel } from './OvernightStrategyPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'overview' | 'strategyHome' | 'learning' | 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
+type Pane = 'overview' | 'studies' | 'statistics' | 'learning' | 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
 const studyViews: Record<string,string> = {walk:'滚动验证',grid:'参数实验',analysis:'收益归因',research:'总览',comparison:'同数据对照',portfolio:'组合与交易',evidence:'研究依据'};
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
@@ -62,7 +64,13 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     if (params.has('account')) {
       return 'paper';
     }
-    return Object.keys(studyViews).some(key=>params.has(key)) ? 'intraday' : 'overview';
+    if (Object.keys(studyViews).some(key => params.has(key))) {
+      return 'intraday';
+    }
+    if (params.has('financialStatistics')) {
+      return 'statistics';
+    }
+    return params.has('quantStudy') || params.has('quantCenter') ? 'studies' : 'overview';
   });
   const params = new URLSearchParams(window.location.search);
   const studyKey = Object.keys(studyViews).find(key=>params.has(key)) ?? 'research';
@@ -218,7 +226,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
 
   const inLibrary = pane === 'catalog' || pane === 'factors';
   const inLab = ['experiments', 'intraday', 'dailyResult', 'laboratory'].includes(pane);
-  const primary = inLibrary ? 'catalog' : inLab ? 'experiments' : pane === 'strategyHome' ? 'overview' : pane;
+  const primary = inLibrary ? 'catalog' : inLab ? 'experiments' : (pane === 'studies' || pane === 'statistics') ? 'overview' : pane;
   const gridBases=paperCatalog.rows.filter(v=>v.spec.rule.kind==='python' && v.spec.rule.recipe && v.spec.rule.executionVersion===2);
   const fallbackVersion = initialAnalysis === '收益归因' ? paperCatalog.rows.find(v=>v.comparisonId) ?? paperCatalog.rows[0] : gridBases[0];
   const researchId = paperId ?? (!paperSeed && !comparison ? fallbackVersion?.id : undefined);
@@ -227,8 +235,23 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     for (const key of [...Object.keys(studyViews),'account']) {
       url.searchParams.delete(key);
     }
-    if (pane !== 'overview') {
+    if (pane !== 'learning') {
+      url.searchParams.delete('study');
+      if (url.hash === '#quant-learning') {
+        url.hash = '';
+      }
+    }
+    if (pane !== 'studies') {
+      url.searchParams.delete('quantCenter');
       url.searchParams.delete('quantStudy');
+    }
+    if (pane === 'studies' && !url.searchParams.has('quantStudy')) {
+      url.searchParams.set('quantCenter', '1');
+    }
+    if (pane === 'statistics') {
+      url.searchParams.set('financialStatistics', '1');
+    } else {
+      url.searchParams.delete('financialStatistics');
     }
     if (pane==='intraday' && researchId && !paperSeed && !comparison) {
       const key=Object.keys(studyViews).find(k=>studyViews[k]===initialAnalysis) ?? 'research';
@@ -273,9 +296,17 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         </div>)}
     </nav>
 
-    {pane === 'overview' && <AutonomousStudies onStrategies={()=>setPane('strategyHome')}
+    {pane === 'statistics' && <FinancialStatistics onBack={()=>setPane('overview')} />}
+    {pane === 'studies' && <AutonomousStudies onStrategies={()=>setPane('overview')}
       onSource={m=>m.tool==='EXECUTION'?showAccount(m.version,m.first):showPaperVersion(m.version)}/>}
-    {pane === 'strategyHome' && <QuantHome catalog={paperCatalog} dailyCount={experiments.length} dailyStrategies={strategies.length}
+    {pane === 'overview' && <QuantHome research={<ResearchBrief onStatistics={()=>setPane('statistics')} onStudies={id=>{
+      const url = new URL(window.location.href);
+      if (id) {
+        url.searchParams.set('quantStudy', String(id));
+      }
+      window.history.replaceState(window.history.state,'',url);
+      setPane('studies');
+    }}/>} catalog={paperCatalog} dailyCount={experiments.length} dailyStrategies={strategies.length}
       onBuild={() => openPaper({hypothesis:'',classic:'TREND'})} onFactors={() => setPane('factors')}
       onLearning={() => setPane('learning')} onAttribution={id=>showPaperVersion(id,'收益归因')}
       onAI={() => openPaper({hypothesis:''})} onAccount={showAccount} onVersion={showPaperVersion} onLab={() => setPane('experiments')}/>}

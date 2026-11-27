@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../shared/api/client';
 import { lifecycleLabel, type PaperVersion } from './PaperLab';
 import { classicExperimentType, type ClassicRecord } from './ClassicStrategies';
@@ -13,8 +13,8 @@ interface Snapshot {
 const percent = (value:number) => (value > 0 ? '+' : '')+(value*100).toFixed(2)+'%';
 const amount = (value:number) => value.toLocaleString('zh-CN',{minimumFractionDigits:2, maximumFractionDigits:2});
 
-export function QuantHome({ catalog, dailyCount, dailyStrategies, onBuild, onFactors, onAI, onAccount, onVersion, onLab, onAttribution, onLearning }: {
-  catalog:{rows:PaperVersion[]; loading:boolean; error:string; refresh:()=>void}; dailyCount:number; dailyStrategies:number;
+export function QuantHome({ research, catalog, dailyCount, dailyStrategies, onBuild, onFactors, onAI, onAccount, onVersion, onLab, onAttribution, onLearning }: {
+  research?: ReactNode; catalog:{rows:PaperVersion[]; loading:boolean; error:string; refresh:()=>void}; dailyCount:number; dailyStrategies:number;
   onBuild:()=>void; onFactors:()=>void; onAI:()=>void; onAccount:(id:number,day?:string)=>void; onAttribution:(id:number)=>void; onLearning:()=>void; onVersion:(id:number)=>void; onLab:()=>void;
 }) {
   const [selected, select] = useState<number>();
@@ -64,6 +64,7 @@ export function QuantHome({ catalog, dailyCount, dailyStrategies, onBuild, onFac
     <header className="qh-title"><div><small>FINSCOPE / QUANT</small><h3>量化研究总览</h3></div>
       <dl>{[['策略版本',catalog.rows.length+dailyStrategies],['历史实验',catalog.rows.length+dailyCount],['运行账户',accounts.length]].map(([label,count])=>
         <div key={label}><dt>{label}</dt><dd>{catalog.loading || catalog.error ? '—' : count}</dd></div>)}</dl></header>
+    {research}
     {catalog.error && <p role="alert">{catalog.error} <button onClick={catalog.refresh}>重新读取</button></p>}
     <div className="qh-layout"><section className="qh-focus">
       <header><div><small>{comparison ? '本期研究焦点 · 同数据对照' : '实验表现'}</small><h4>{comparison ? '两组策略的收益差在哪里？' : version?.spec.rule.name ?? '回测实验'}</h4></div>

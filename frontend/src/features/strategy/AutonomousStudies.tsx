@@ -48,7 +48,7 @@ type Report = {
   reason: string;
   model: string;
 };
-interface Study {
+export interface Study {
   id: number;
   state: string;
   created: number;
@@ -59,7 +59,7 @@ interface Study {
   note: string | null;
   evidence?: Evidence | null;
 }
-interface Page {
+export interface StudyPage {
   items: Study[];
   highlights?: Study[];
   hasMore: boolean;
@@ -78,7 +78,7 @@ const date = (utc: number) =>
 const errorText = (e: unknown) => (e instanceof Error ? e.message : '请求未完成，请重试');
 
 const terms: Record<string, string> = {...tools, ...methodName, null: '暂无估计值'};
-function studyText(text?: string) {
+export function studyText(text?: string) {
   return text?.replace(/\b(?:ALLOCATION|CORRELATION|EXECUTION|EQUAL|INVERSE_VOL|RISK_PARITY|null)\b/g, term => terms[term]);
 }
 
@@ -242,7 +242,7 @@ export function AutonomousStudies({
   onStrategies: () => void;
   onSource: (m: Material) => void;
 }) {
-  const [page, setPage] = useState<Page>(),
+  const [page, setPage] = useState<StudyPage>(),
     [offset, setOffset] = useState(0),
     [chosen, choose] = useState<number | undefined>(
       () => Number(new URLSearchParams(location.search).get('quantStudy')) || undefined,
@@ -264,7 +264,7 @@ export function AutonomousStudies({
     let timer: number;
     async function read() {
       try {
-        const result = await api<Page>(url + (offset ? '?offset=' + offset : ''), { signal: ctrl.signal });
+        const result = await api<StudyPage>(url + (offset ? '?offset=' + offset : ''), { signal: ctrl.signal });
         if (ctrl.signal.aborted) {
           return;
         }
@@ -345,7 +345,7 @@ export function AutonomousStudies({
           <p>由研究员选题、计算和写作的股票研究与金融课堂</p>
         </div>
         <div>
-          <button onClick={onStrategies}>策略总览 ↗</button>
+          <button onClick={onStrategies}>返回研究总览</button>
           <button className="qs-primary" disabled={busy} onClick={() => submit()}>
             {busy ? '正在提交…' : '安排下一项研究'}
           </button>
