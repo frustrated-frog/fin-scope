@@ -47,10 +47,7 @@ const responses: Record<string, unknown> = {
     tracking: [], learning: [], archived: [], transitions: [], activeCount: 1, changedTodayCount: 1,
     waitingValidationCount: 1, archivedCount: 0, refreshedAt: '2026-08-20T10:00:00'
   },
-  '/api/strategy/overview': { holdings: [], targetWeight: 0, currentWeight: 0 },
   '/api/strategy/playbooks': [],
-  '/api/strategy/stock-theses': [],
-  '/api/strategy/reviews': [],
   '/api/dashboard': {
     sourceCount: 2,
     articleCount: 3,

@@ -4,35 +4,6 @@ import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
 import { StrategyView } from './StrategyView';
 
-test('shows empty workspace and creates the first fund', async () => {
-  const requests: Array<{ url: string; method: string }> = [];
-  const overview = { holdings: [], targetWeight: 0, currentWeight: 0 };
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input); const method = init?.method ?? 'GET'; requests.push({ url, method });
-    if (url.startsWith('/api/quant/')) return apiResponse([], { status: 200 });
-    if (url === '/api/strategy/overview' && method === 'GET') return apiResponse(overview, { status: 200 });
-    if (url === '/api/strategy/playbooks') return apiResponse([], { status: 200 });
-    if (url === '/api/strategy/stock-theses') return apiResponse([], { status: 200 });
-    if (url === '/api/strategy/reviews') return apiResponse([], { status: 200 });
-    if (url === '/api/strategy/holdings' && method === 'POST') {
-      overview.holdings = [{ id: 1, code: '020608', name: '测试基金', type: 'FUND', role: 'CORE', targetWeight: 60, currentWeight: 0, revision: 0 }] as never[];
-      overview.targetWeight = 60;
-      return apiResponse(overview.holdings[0], { status: 200 });
-    }
-    return apiResponse({}, { status: 200 });
-  }));
-  const user = userEvent.setup();
-  render(<StrategyView addToast={vi.fn()} setMessage={vi.fn()} />);
-  await user.click(screen.getByRole('button', { name: /长期投资工作台/ }));
-  expect(await screen.findByText('还没有组合资产')).toBeInTheDocument();
-  await user.click(screen.getAllByRole('button', { name: '添加资产' })[0]);
-  await user.type(screen.getByLabelText('标的代码'), '020608');
-  await user.type(screen.getByLabelText('目标权重'), '60');
-  await user.click(screen.getByRole('button', { name: '保存资产' }));
-  expect(requests).toContainEqual({ url: '/api/strategy/holdings', method: 'POST' });
-  expect(await screen.findByText('测试基金')).toBeInTheDocument();
-});
-
 test('shows a database-backed author strategy and opens its sourced rules', async () => {
   const code = 'STOCK_QUALITY_TREND_CHEN_XIAO_2020';
   const playbook = {
@@ -45,7 +16,6 @@ test('shows a database-backed author strategy and opens its sourced rules', asyn
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith('/api/quant/')) return apiResponse([], { status: 200 });
-    if (url === '/api/strategy/overview') return apiResponse({ holdings: [], targetWeight: 0, currentWeight: 0 }, { status: 200 });
     if (url === '/api/strategy/playbooks') return apiResponse([playbook], { status: 200 });
     if (url === `/api/strategy/playbooks/${code}`) return apiResponse({
       ...playbook,
@@ -54,14 +24,14 @@ test('shows a database-backed author strategy and opens its sourced rules', asyn
         { id: 2, sectionCode: 'TREND', sectionTitle: '趋势过滤', ruleType: 'FILTER', ruleText: '仅在中长期趋势向上时考虑买入。', testability: 'CANDIDATE_RULE', sourcePage: 34, sortOrder: 2 }
       ]
     }, { status: 200 });
-    if (url === '/api/strategy/stock-theses' || url === '/api/strategy/reviews') return apiResponse([], { status: 200 });
     return apiResponse({}, { status: 200 });
   }));
 
   const user = userEvent.setup();
   render(<StrategyView addToast={vi.fn()} setMessage={vi.fn()} />);
   await user.click(screen.getByRole('button', { name: /长期投资工作台/ }));
-  await user.click(await screen.findByRole('tab', { name: '策略库' }));
+  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['真实持仓', '策略库']);
+  expect(screen.getByRole('tab', { name: '策略库' })).toHaveAttribute('aria-selected', 'true');
 
   expect(await screen.findByText('质量趋势中长线')).toBeInTheDocument();
   expect(screen.getByText('陈潇 · 《中长线股票策略基础》')).toBeInTheDocument();

@@ -19,8 +19,6 @@ export type View =
   | 'majorEvents'
   | 'industryChain';
 
-export type StrategyHolding = { id: number; instrumentId: number; code: string; type: 'FUND' | 'STOCK'; name: string; role: string; targetWeight: number; currentWeight: number; quantity?: number; averageCost?: number; note?: string; revision: number; updatedAt?: string };
-export type StrategyOverview = { holdings: StrategyHolding[]; targetWeight: number; currentWeight: number };
 export type StrategyPlaybookRule = {
   id?: number;
   playbookId?: number;
@@ -52,8 +50,6 @@ export type StrategyPlaybook = {
   revision: number;
   rules?: StrategyPlaybookRule[];
 };
-export type StrategyStockThesis = { id: number; code: string; name: string; stage: string; thesis: string; buyConditions: string; invalidationConditions: string; watchFocus: string; note?: string; revision: number };
-export type StrategyReview = { id: number; reviewDate: string; facts: string; reasoning: string; nextAction: string; createdAt: string };
 export type StockLearningCardSection = { key: string; title: string; content: string; evidenceRefs: string[]; verificationStatus: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'UNVERIFIED' | 'CONTRADICTED'; sortOrder: number };
 export type StockLearningCardClaim = { dimensionCode: string; status?: 'READY' | 'INSUFFICIENT_EVIDENCE' | 'FAILED'; failureMessage?: string; headline: string; ratingLabel: string; ratingValue: 'HIGH' | 'MEDIUM_HIGH' | 'MEDIUM' | 'MEDIUM_LOW' | 'LOW' | 'UNKNOWN'; sections: StockLearningCardSection[]; confidence: string; sortOrder: number };
 export type StockLearningCardEvidence = { dimensionCode: string; evidenceCode: string; title: string; url?: string; source?: string; publishedAt?: string; contentOrigin?: string; sortOrder: number };

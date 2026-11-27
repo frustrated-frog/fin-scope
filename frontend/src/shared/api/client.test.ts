@@ -54,7 +54,7 @@ describe('api business errors', () => {
       timestamp: '2026-07-16T10:00:00Z'
     }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
 
-    await expect(api('/api/strategy/holdings')).rejects.toThrow('记录已被更新，请刷新后再试');
+    await expect(api('/api/strategy/playbooks/FUND_DCA/status')).rejects.toThrow('记录已被更新，请刷新后再试');
   });
 
   it('preserves status and code for recoverable optimistic-lock conflicts', async () => {
