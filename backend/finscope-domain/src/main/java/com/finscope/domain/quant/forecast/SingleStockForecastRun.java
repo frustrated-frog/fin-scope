@@ -38,15 +38,11 @@ public class SingleStockForecastRun {
         private boolean held;
         private String instrumentCode;
         private String instrumentName;
-        private String role;
-        private Double targetWeight;
-        private Double currentWeight;
         private Double quantity;
         private Double averageCost;
         private Double lastClose;
         private Double estimatedMarketValue;
         private Double unrealizedReturn;
-        private String note;
         private String interpretation;
     }
 

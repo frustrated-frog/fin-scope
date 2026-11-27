@@ -28,7 +28,7 @@ class StrategyInstrumentResolverTest {
         ReflectionTestUtils.setField(resolver, "instrumentRepository", instruments);
         ReflectionTestUtils.setField(resolver, "quoteService", quotes);
 
-        Instrument result = resolver.resolve("920001", "stock");
+        Instrument result = resolver.resolveStock("920001");
 
         assertEquals("BJ", result.getMarket());
     }

@@ -1,7 +1,6 @@
 package com.finscope.service.strategy.holding;
 
 import com.finscope.dao.strategy.StockTransactionRepository;
-import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.strategy.holding.StockTransaction;
 import com.finscope.domain.strategy.holding.StockTransactionType;
@@ -36,13 +35,12 @@ class StockTransactionServiceTest {
         instrument.setId(7L);
         instrument.setCode("600570");
         instrument.setName("恒生电子");
-        when(resolver.resolve("600570", "STOCK")).thenReturn(instrument);
+        when(resolver.resolveStock("600570")).thenReturn(instrument);
         when(repository.findAll(1000)).thenReturn(Collections.emptyList());
         service = new StockTransactionService();
         ReflectionTestUtils.setField(service, "repository", repository);
         ReflectionTestUtils.setField(service, "instrumentResolver", resolver);
         ReflectionTestUtils.setField(service, "accountingService", new StockPositionAccountingService());
-        ReflectionTestUtils.setField(service, "holdingRepository", mock(StrategyHoldingRepository.class));
     }
 
     @Test

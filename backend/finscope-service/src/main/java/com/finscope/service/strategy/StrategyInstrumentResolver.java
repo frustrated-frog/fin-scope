@@ -1,7 +1,7 @@
 package com.finscope.service.strategy;
 
 import com.finscope.common.exception.BusinessException;
-import com.finscope.common.exception.ErrorCode;
+import com.finscope.common.exception.BizErrorCode;
 import com.finscope.dao.instrument.InstrumentRepository;
 import com.finscope.domain.instrument.Instrument;
 import com.finscope.domain.instrument.Quote;
@@ -13,7 +13,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
-import com.finscope.common.exception.BizErrorCode;
 
 @Component
 public class StrategyInstrumentResolver {
@@ -23,31 +22,22 @@ public class StrategyInstrumentResolver {
     @Resource
     private QuoteService quoteService;
 
-    public Instrument resolve(String rawCode, String rawType) {
+    public Instrument resolveStock(String rawCode) {
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
-        String type = rawType == null ? "" : rawType.trim().toUpperCase(Locale.ROOT);
         if (!CODE.matcher(code).matches()) {
             throw new BusinessException(BizErrorCode.INSTRUMENT_CODE_6_DIGITS);
         }
-        if (!"FUND".equals(type) && !"STOCK".equals(type)) {
-            throw new BusinessException(BizErrorCode.PORTFOLIO_SUPPORTS_FUND_STOCK_ONLY);
-        }
-        if ("STOCK".equals(type)) {
-            return instrumentRepository.findByCodeTypeAndMarket(code, type, stockMarket(code))
-                    .orElseGet(() -> create(code, type));
-        }
-        return instrumentRepository.findByCodeAndType(code, type).orElseGet(() -> create(code, type));
+        return instrumentRepository.findByCodeTypeAndMarket(code, "STOCK", stockMarket(code))
+                .orElseGet(() -> create(code));
     }
 
-    private Instrument create(String code, String type) {
+    private Instrument create(String code) {
         Instrument value = new Instrument();
         value.setCode(code);
-        value.setType(type);
-        value.setName(resolveName(code, type));
+        value.setType("STOCK");
+        value.setName(resolveName(code));
         value.setAliases(code);
-        if ("STOCK".equals(type)) {
-            value.setMarket(stockMarket(code));
-        }
+        value.setMarket(stockMarket(code));
         return instrumentRepository.save(value);
     }
 
@@ -58,9 +48,9 @@ public class StrategyInstrumentResolver {
         return "SZ";
     }
 
-    private String resolveName(String code, String type) {
+    private String resolveName(String code) {
         try {
-            List<Quote> quotes = quoteService.fetch(type, Collections.singletonList(code));
+            List<Quote> quotes = quoteService.fetch("STOCK", Collections.singletonList(code));
             return quotes.isEmpty() || quotes.get(0).getName() == null
                     ? code : quotes.get(0).getName();
         } catch (RuntimeException ignored) {

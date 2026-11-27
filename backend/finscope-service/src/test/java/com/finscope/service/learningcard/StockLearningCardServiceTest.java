@@ -52,7 +52,7 @@ class StockLearningCardServiceTest {
         Instrument instrument = new Instrument();
         instrument.setId(1L); instrument.setCode("603618"); instrument.setName("杭电股份");
         StockLearningCard card = new StockLearningCard(); card.setId(2L); card.setInstrumentId(1L);
-        when(instruments.resolve("603618", "STOCK")).thenReturn(instrument);
+        when(instruments.resolveStock("603618")).thenReturn(instrument);
         when(cards.findOrCreate(1L, StockLearningFramework.CODE)).thenReturn(card);
         when(cards.latest(2L)).thenReturn(Optional.empty());
         when(cards.appendRun(any(StockLearningCardRun.class), anyList(), anyList()))
@@ -78,7 +78,7 @@ class StockLearningCardServiceTest {
         Instrument instrument = new Instrument();
         instrument.setId(1L); instrument.setCode("603618"); instrument.setName("杭电股份");
         StockLearningCard card = new StockLearningCard(); card.setId(2L); card.setInstrumentId(1L);
-        when(instruments.resolve("603618", "STOCK")).thenReturn(instrument);
+        when(instruments.resolveStock("603618")).thenReturn(instrument);
         when(cards.findOrCreate(1L, StockLearningFramework.CODE)).thenReturn(card);
         when(cards.latest(2L)).thenReturn(Optional.empty());
         when(cards.appendRun(any(StockLearningCardRun.class), anyList(), anyList()))
@@ -105,7 +105,7 @@ class StockLearningCardServiceTest {
         ReflectionTestUtils.setField(service, "cards", cards);
         Instrument instrument = new Instrument();
         instrument.setId(1L); instrument.setCode("603618"); instrument.setName("杭电股份");
-        when(instruments.resolve("603618", "STOCK")).thenReturn(instrument);
+        when(instruments.resolveStock("603618")).thenReturn(instrument);
         when(cards.findByInstrumentId(1L)).thenReturn(Optional.empty());
 
         StockLearningCardService.StockLearningCardView view = service.get("603618");
@@ -130,7 +130,7 @@ class StockLearningCardServiceTest {
         stale.setStatus("RUNNING"); stale.setCreatedAt(LocalDateTime.now().minusHours(1));
         StockLearningCardRun latest = new StockLearningCardRun(); latest.setId(9L); latest.setCardId(2L);
         latest.setStatus("DEGRADED"); latest.setCreatedAt(LocalDateTime.now().minusMinutes(30));
-        when(instruments.resolve("603618", "STOCK")).thenReturn(instrument);
+        when(instruments.resolveStock("603618")).thenReturn(instrument);
         when(cards.findOrCreate(1L, StockLearningFramework.CODE)).thenReturn(card);
         when(cards.latest(2L)).thenReturn(Optional.of(latest));
         when(cards.active(2L)).thenReturn(Optional.of(stale));

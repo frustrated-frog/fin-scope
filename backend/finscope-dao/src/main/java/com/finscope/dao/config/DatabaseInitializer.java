@@ -942,21 +942,6 @@ public class DatabaseInitializer implements InitializingBean {
         ensureColumn("attribution_evidence", "event_key", "TEXT");
         ensureColumn("attribution_evidence", "historical_context", "INTEGER NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_evidence_report ON attribution_evidence(report_id)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_holding ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "instrument_id INTEGER NOT NULL UNIQUE,"
-                + "role TEXT NOT NULL CHECK(role IN ('CORE','SATELLITE','DEFENSIVE','OBSERVE','SIMULATED','LIVE_VALIDATION')),"
-                + "target_weight REAL NOT NULL CHECK(target_weight >= 0 AND target_weight <= 100),"
-                + "current_weight REAL NOT NULL CHECK(current_weight >= 0 AND current_weight <= 100),"
-                + "note TEXT,"
-                + "sort_order INTEGER NOT NULL DEFAULT 0,"
-                + "revision INTEGER NOT NULL DEFAULT 0,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL,"
-                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_holding_instrument ON strategy_holding(instrument_id)");
-        ensureColumn("strategy_holding", "quantity", "REAL");
-        ensureColumn("strategy_holding", "average_cost", "REAL");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS stock_transaction ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "client_request_id TEXT NOT NULL UNIQUE,"
@@ -1055,28 +1040,6 @@ public class DatabaseInitializer implements InitializingBean {
                 + "FOREIGN KEY(playbook_id) REFERENCES strategy_playbook(id) ON DELETE CASCADE)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_playbook_rule_order "
                 + "ON strategy_playbook_rule(playbook_id,sort_order,id)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_stock_thesis ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "instrument_id INTEGER NOT NULL UNIQUE,"
-                + "stage TEXT NOT NULL CHECK(stage IN ('RESEARCH_POOL','WATCH_POOL','SIMULATED_PORTFOLIO','LIVE_VALIDATION')),"
-                + "thesis TEXT NOT NULL,"
-                + "buy_conditions TEXT NOT NULL,"
-                + "invalidation_conditions TEXT NOT NULL,"
-                + "watch_focus TEXT NOT NULL,"
-                + "note TEXT,"
-                + "revision INTEGER NOT NULL DEFAULT 0,"
-                + "created_at TEXT NOT NULL,"
-                + "updated_at TEXT NOT NULL,"
-                + "FOREIGN KEY(instrument_id) REFERENCES instrument(id) ON DELETE RESTRICT)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_stock_thesis_stage ON strategy_stock_thesis(stage)");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS strategy_review ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + "review_date TEXT NOT NULL,"
-                + "facts TEXT NOT NULL,"
-                + "reasoning TEXT NOT NULL,"
-                + "next_action TEXT NOT NULL,"
-                + "created_at TEXT NOT NULL)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_strategy_review_date ON strategy_review(review_date DESC)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS attribution_research_run ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "report_id INTEGER NOT NULL UNIQUE,"
@@ -1106,6 +1069,17 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_attribution_research_step_run ON attribution_research_step(run_id)");
         initializeMarketDataSchema();
         initializeQuantSchema();
+        removeRetiredStrategyTables();
+    }
+
+    private void removeRetiredStrategyTables() {
+        // Forecast reports remain independent. Only their old portfolio context came from strategy_holding.
+        jdbcTemplate.update("UPDATE single_stock_forecast_run SET holding_snapshot_json=NULL "
+                + "WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_holding') "
+                + "AND holding_snapshot_json IS NOT NULL");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS strategy_holding");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS strategy_stock_thesis");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS strategy_review");
     }
 
     private void seedNewsCategories() {

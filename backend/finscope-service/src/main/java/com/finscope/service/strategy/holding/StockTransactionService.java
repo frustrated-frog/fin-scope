@@ -1,11 +1,8 @@
 package com.finscope.service.strategy.holding;
 
 import com.finscope.dao.strategy.StockTransactionRepository;
-import com.finscope.dao.strategy.StrategyHoldingRepository;
 import com.finscope.domain.instrument.Instrument;
-import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.domain.strategy.holding.StockAccountSnapshot;
-import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.domain.strategy.holding.StockTransaction;
 import com.finscope.domain.strategy.holding.StockTransactionType;
 import com.finscope.service.strategy.StrategyInstrumentResolver;
@@ -29,8 +26,6 @@ public class StockTransactionService {
     private StrategyInstrumentResolver instrumentResolver;
     @Resource
     private StockPositionAccountingService accountingService;
-    @Resource
-    private StrategyHoldingRepository holdingRepository;
 
     public List<StockTransaction> list(int limit) {
         return repository.findAllDescending(limit);
@@ -47,7 +42,7 @@ public class StockTransactionService {
             throw new IllegalArgumentException("冲正请使用专用接口");
         }
         if (isSecurityEvent(request.getType())) {
-            Instrument instrument = instrumentResolver.resolve(requestedCode, "STOCK");
+            Instrument instrument = instrumentResolver.resolveStock(requestedCode);
             request.setInstrumentId(instrument.getId());
             request.setInstrumentCode(instrument.getCode() + marketSuffix(instrument.getCode()));
             request.setInstrumentName(instrument.getName());
@@ -57,9 +52,7 @@ public class StockTransactionService {
         normalizeMoney(request);
         validateFields(request);
         validateReplay(request);
-        StockTransaction saved = repository.save(request);
-        syncProjection(requestedCode, request.getInstrumentId());
-        return saved;
+        return repository.save(request);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -80,11 +73,7 @@ public class StockTransactionService {
         reversal.setReversalOfId(targetId);
         reversal.setNote(note);
         normalizeMoney(reversal);
-        StockTransaction saved = repository.save(reversal);
-        if (target.getInstrumentId() != null) {
-            syncProjection(bareCode(target.getInstrumentCode()), target.getInstrumentId());
-        }
-        return saved;
+        return repository.save(reversal);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -177,36 +166,6 @@ public class StockTransactionService {
         events.add(request);
         accountingService.replay(events);
         request.setId(null);
-    }
-
-    private void syncProjection(String requestedCode, Long instrumentId) {
-        if (instrumentId == null) {
-            return;
-        }
-        StockAccountSnapshot account = account();
-        StockPosition position = null;
-        for (StockPosition candidate : account.getPositions()) {
-            if (instrumentId.equals(candidate.getInstrumentId())) {
-                position = candidate;
-                break;
-            }
-        }
-        Double quantity = position == null ? 0d : position.getQuantity().doubleValue();
-        Double averageCost = position == null ? 0d : position.getAverageCost().doubleValue();
-        Optional<StrategyHolding> existing = holdingRepository.findStockByCode(requestedCode);
-        if (existing.isPresent()) {
-            holdingRepository.updatePositionProjection(existing.get().getId(), quantity, averageCost);
-            return;
-        }
-        StrategyHolding holding = new StrategyHolding();
-        holding.setInstrumentId(instrumentId);
-        holding.setRole("LIVE_VALIDATION");
-        holding.setTargetWeight(0);
-        holding.setCurrentWeight(0);
-        holding.setQuantity(quantity);
-        holding.setAverageCost(averageCost);
-        holding.setNote("由真实交易账本自动建立");
-        holdingRepository.save(holding);
     }
 
     private boolean isSecurityEvent(StockTransactionType type) {

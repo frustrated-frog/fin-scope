@@ -31,7 +31,7 @@ public class StockSupplyChainService {
     }
 
     public StockSupplyChainView get(String code) {
-        Instrument instrument = instrumentResolver.resolve(code, "STOCK");
+        Instrument instrument = instrumentResolver.resolveStock(code);
         StockSupplyChainView view = new StockSupplyChainView(instrument.getCode(), instrument.getName(),
                 repository.findSnapshot(instrument.getId()).orElse(null),
                 repository.latestRun(instrument.getId()).orElse(null));
@@ -47,7 +47,7 @@ public class StockSupplyChainService {
     }
 
     public StockSupplyChainRefreshRun refresh(String code) {
-        Instrument instrument = instrumentResolver.resolve(code, "STOCK");
+        Instrument instrument = instrumentResolver.resolveStock(code);
         StockSupplyChainRefreshRun active = repository.activeRun(instrument.getId()).orElse(null);
         if (active != null) {
             if (!isStale(active)) {

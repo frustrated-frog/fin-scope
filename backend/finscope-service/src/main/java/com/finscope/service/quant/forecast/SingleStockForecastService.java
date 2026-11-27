@@ -7,13 +7,13 @@ import com.finscope.common.exception.BizErrorCode;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
 import com.finscope.dao.quant.ForecastCandidateRunRepository;
-import com.finscope.dao.strategy.StrategyHoldingRepository;
+import com.finscope.service.strategy.holding.StockTransactionService;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.quant.forecast.ForecastCandidateRun;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
 import com.finscope.domain.quant.forecast.ForecastModelRace;
-import com.finscope.domain.strategy.StrategyHolding;
+import com.finscope.domain.strategy.holding.StockPosition;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,50 +27,25 @@ import java.util.Optional;
 @Service
 public class SingleStockForecastService {
     private static final Logger log = LoggerFactory.getLogger(SingleStockForecastService.class);
-    private final PythonSingleStockForecastClient client;
-    private final SingleStockForecastRunRepository runs;
-    private final ForecastCandidateRunRepository candidates;
-    private final ForecastRunPersistenceService persistence;
-    private final StrategyHoldingRepository holdings;
-    private final ForecastOutcomeSettlementService settlement;
-    private final ForecastModelHealthService health;
-    private final ForecastModelRaceService race;
+    @Autowired
+    private PythonSingleStockForecastClient client;
+    @Autowired
+    private SingleStockForecastRunRepository runs;
+    @Autowired
+    private ForecastCandidateRunRepository candidates;
+    @Autowired
+    private ForecastRunPersistenceService persistence;
+    @Autowired
+    private StockTransactionService transactions;
+    @Autowired
+    private ForecastOutcomeSettlementService settlement;
+    @Autowired
+    private ForecastModelHealthService health;
+    @Autowired
+    private ForecastModelRaceService race;
     private final ObjectMapper json = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-    @Autowired
-    public SingleStockForecastService(PythonSingleStockForecastClient client,
-                                      SingleStockForecastRunRepository runs,
-                                      ForecastCandidateRunRepository candidates,
-                                      ForecastRunPersistenceService persistence,
-                                      StrategyHoldingRepository holdings,
-                                      ForecastOutcomeSettlementService settlement,
-                                      ForecastModelHealthService health,
-                                      ForecastModelRaceService race) {
-        this.client = client;
-        this.runs = runs;
-        this.candidates = candidates;
-        this.persistence = persistence;
-        this.holdings = holdings;
-        this.settlement = settlement;
-        this.health = health;
-        this.race = race;
-    }
-
-    SingleStockForecastService(PythonSingleStockForecastClient client,
-                               SingleStockForecastRunRepository runs,
-                               StrategyHoldingRepository holdings) {
-        this(client, runs, null, null, holdings, null, null, null);
-    }
-
-    SingleStockForecastService(PythonSingleStockForecastClient client,
-                               SingleStockForecastRunRepository runs,
-                               StrategyHoldingRepository holdings,
-                               ForecastOutcomeSettlementService settlement,
-                               ForecastModelHealthService health) {
-        this(client, runs, null, null, holdings, settlement, health, null);
-    }
 
     public SingleStockForecastRun forecast(String requestedCode, int horizonDays) {
         String code = normalizeCode(requestedCode);
@@ -80,7 +55,7 @@ public class SingleStockForecastService {
         ForecastModelHealth modelHealth = modelHealth(report.getInstrumentCode(), horizonDays,
                 report.getModelVersion());
         applyHealthGate(report, modelHealth);
-        SingleStockForecastRun.HoldingSnapshot holding = holdingSnapshot(code, report);
+        SingleStockForecastRun.HoldingSnapshot holding = holdingSnapshot(report);
         SingleStockForecastRun value = new SingleStockForecastRun();
         value.setInstrumentCode(report.getInstrumentCode());
         value.setAsOfDate(report.getAsOfDate());
@@ -166,8 +141,10 @@ public class SingleStockForecastService {
         SingleStockForecastRun value = runs.findById(id).orElse(existing);
         try {
             value.setReport(json.readValue(value.getReportJson(), SingleStockForecast.class));
-            value.setHoldingSnapshot(json.readValue(
-                    value.getHoldingSnapshotJson(), SingleStockForecastRun.HoldingSnapshot.class));
+            if (value.getHoldingSnapshotJson() != null) {
+                value.setHoldingSnapshot(json.readValue(
+                        value.getHoldingSnapshotJson(), SingleStockForecastRun.HoldingSnapshot.class));
+            }
             value.setModelHealth(modelHealth(value.getInstrumentCode(), value.getHorizonDays(),
                     value.getModelVersion()));
             value.setModelRace(modelRace(value.getInstrumentCode(), value.getHorizonDays()));
@@ -225,29 +202,28 @@ public class SingleStockForecastService {
     }
 
     private SingleStockForecastRun.HoldingSnapshot holdingSnapshot(
-            String code, SingleStockForecast report) {
-        Optional<StrategyHolding> existing = holdings.findStockByCode(code);
+            SingleStockForecast report) {
+        Optional<StockPosition> existing = transactions.account().getPositions().stream()
+                .filter(position -> report.getInstrumentCode().equals(position.getInstrumentCode()))
+                .filter(position -> position.getQuantity().signum() > 0)
+                .findFirst();
         SingleStockForecastRun.HoldingSnapshot snapshot = new SingleStockForecastRun.HoldingSnapshot();
         snapshot.setHeld(existing.isPresent());
         snapshot.setInstrumentCode(report.getInstrumentCode());
         snapshot.setLastClose(report.getLastClose());
         if (!existing.isPresent()) {
-            snapshot.setInterpretation("当前策略组合中没有这只股票；该报告只评价模型和历史虚拟策略。");
+            snapshot.setInterpretation("生成报告时，真实持仓账本中没有这只股票。");
             return snapshot;
         }
-        StrategyHolding holding = existing.get();
-        snapshot.setInstrumentName(holding.getName());
-        snapshot.setRole(holding.getRole());
-        snapshot.setTargetWeight(holding.getTargetWeight());
-        snapshot.setCurrentWeight(holding.getCurrentWeight());
-        snapshot.setQuantity(holding.getQuantity());
-        snapshot.setAverageCost(holding.getAverageCost());
-        snapshot.setNote(holding.getNote());
-        if (holding.getQuantity() != null && report.getLastClose() != null) {
-            snapshot.setEstimatedMarketValue(holding.getQuantity() * report.getLastClose());
-        }
-        if (holding.getAverageCost() != null && holding.getAverageCost() > 0 && report.getLastClose() != null) {
-            snapshot.setUnrealizedReturn(report.getLastClose() / holding.getAverageCost() - 1d);
+        StockPosition position = existing.get();
+        snapshot.setInstrumentName(position.getInstrumentName());
+        snapshot.setQuantity(position.getQuantity().doubleValue());
+        snapshot.setAverageCost(position.getAverageCost().doubleValue());
+        if (report.getLastClose() != null) {
+            snapshot.setEstimatedMarketValue(snapshot.getQuantity() * report.getLastClose());
+            if (snapshot.getAverageCost() > 0) {
+                snapshot.setUnrealizedReturn(report.getLastClose() / snapshot.getAverageCost() - 1d);
+            }
         }
         snapshot.setInterpretation(interpretation(report.getStatus()));
         return snapshot;

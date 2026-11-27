@@ -499,10 +499,10 @@ export interface SingleStockForecastRun {
     settledAt?: string; sourceCode?: string; note?: string };
   modelHealth?: ForecastModelHealth;
   modelRace?: ForecastModelRace;
-  holdingSnapshot?: { held: boolean; instrumentCode: string; instrumentName?: string; role?: string;
-    targetWeight?: number; currentWeight?: number; quantity?: number; averageCost?: number;
+  holdingSnapshot?: { held: boolean; instrumentCode: string; instrumentName?: string;
+    quantity?: number; averageCost?: number;
     lastClose?: number; estimatedMarketValue?: number; unrealizedReturn?: number;
-    note?: string; interpretation: string };
+    interpretation: string };
 }
 
 export interface ForecastModelHealth {

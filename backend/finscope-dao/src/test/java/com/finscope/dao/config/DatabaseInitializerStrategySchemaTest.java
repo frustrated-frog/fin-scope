@@ -3,7 +3,6 @@ package com.finscope.dao.config;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.sqlite.SQLiteDataSource;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -11,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DatabaseInitializerStrategySchemaTest {
     private JdbcTemplate jdbcTemplate;
@@ -31,9 +29,7 @@ class DatabaseInitializerStrategySchemaTest {
     }
 
     @Test
-    void createsStrategyTablesAndRejectsInvalidWeight() {
-        assertEquals(1, jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_holding'", Integer.class));
+    void createsRetainedStrategyTables() {
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_playbook'", Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
@@ -43,13 +39,6 @@ class DatabaseInitializerStrategySchemaTest {
                 Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM pragma_foreign_key_list('strategy_playbook_rule') WHERE \"table\"='strategy_playbook'",
-                Integer.class));
-        assertEquals(1, jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_stock_thesis'", Integer.class));
-        assertEquals(1, jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='strategy_review'", Integer.class));
-        assertEquals(1, jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('strategy_holding') WHERE \"table\"='instrument'",
                 Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stock_transaction'", Integer.class));
@@ -62,12 +51,26 @@ class DatabaseInitializerStrategySchemaTest {
                         + "WHERE indexes.\"unique\"=1",
                 Integer.class));
 
-        jdbcTemplate.update("INSERT INTO instrument(code,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
-                "020608", "FUND", "测试基金", "2026-07-12T00:00:00", "2026-07-12T00:00:00");
+    }
 
-        assertThrows(DataAccessException.class, () -> jdbcTemplate.update(
-                "INSERT INTO strategy_holding(instrument_id,role,target_weight,current_weight,revision,created_at,updated_at) "
-                        + "VALUES(1,'CORE',101,0,0,'2026-07-12T00:00:00','2026-07-12T00:00:00')"));
+    @Test
+    void removesLegacyPortfolioDataOnceAndPreservesForecastReports() throws Exception {
+        for (String table : new String[]{"strategy_holding", "strategy_stock_thesis", "strategy_review"}) {
+            jdbcTemplate.execute("CREATE TABLE " + table + " (id INTEGER PRIMARY KEY)");
+            jdbcTemplate.update("INSERT INTO " + table + " VALUES (1)");
+        }
+        jdbcTemplate.update("INSERT INTO single_stock_forecast_run(instrument_code,as_of_date,status,"
+                + "data_fingerprint,model_version,report_schema_version,report_json,holding_snapshot_json,created_at) "
+                + "VALUES ('600519.SH','2026-01-01','READY','sample','v1','v1','{}','{}','2026-01-01')");
+        initializer.afterPropertiesSet();
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT count(*) FROM sqlite_master WHERE name IN "
+                + "('strategy_holding','strategy_stock_thesis','strategy_review')", Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT count(*) FROM single_stock_forecast_run "
+                + "WHERE report_json='{}' AND holding_snapshot_json IS NULL", Integer.class));
+        jdbcTemplate.update("UPDATE single_stock_forecast_run SET holding_snapshot_json='{}'");
+        initializer.afterPropertiesSet();
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT count(*) FROM single_stock_forecast_run "
+                + "WHERE holding_snapshot_json='{}'", Integer.class));
     }
 
     @Test

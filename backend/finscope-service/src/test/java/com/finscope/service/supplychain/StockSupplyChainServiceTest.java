@@ -37,7 +37,7 @@ class StockSupplyChainServiceTest {
         instrument.setCode("688012");
         instrument.setName("中微公司");
         instrument.setType("STOCK");
-        when(resolver.resolve("688012", "STOCK")).thenReturn(instrument);
+        when(resolver.resolveStock("688012")).thenReturn(instrument);
     }
 
     @Test
@@ -66,7 +66,7 @@ class StockSupplyChainServiceTest {
         assertEquals("中微公司", result.getName());
         assertNull(result.getSnapshot());
         assertNull(result.getRefreshRun());
-        verify(resolver).resolve("688012", "STOCK");
+        verify(resolver).resolveStock("688012");
     }
 
     @Test

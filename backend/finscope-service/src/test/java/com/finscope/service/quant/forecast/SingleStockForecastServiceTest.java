@@ -2,11 +2,15 @@ package com.finscope.service.quant.forecast;
 
 import com.finscope.dao.quant.SingleStockForecastRunRepository;
 import com.finscope.dao.quant.ForecastCandidateRunRepository;
-import com.finscope.dao.strategy.StrategyHoldingRepository;
+import com.finscope.service.strategy.holding.StockTransactionService;
+import com.finscope.domain.strategy.holding.StockAccountSnapshot;
+import com.finscope.domain.strategy.holding.StockPosition;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.junit.jupiter.api.BeforeEach;
+import java.math.BigDecimal;
 import com.finscope.domain.quant.forecast.SingleStockForecast;
 import com.finscope.domain.quant.forecast.SingleStockForecastRun;
 import com.finscope.domain.quant.forecast.ForecastModelHealth;
-import com.finscope.domain.strategy.StrategyHolding;
 import com.finscope.rpc.quant.PythonSingleStockForecastClient;
 import org.junit.jupiter.api.Test;
 
@@ -25,26 +29,35 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SingleStockForecastServiceTest {
+    private final SingleStockForecastService service = new SingleStockForecastService();
+    private final PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
+    private final SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
+    private final StockAccountSnapshot account = new StockAccountSnapshot();
+
+    @BeforeEach
+    void setup() {
+        StockTransactionService transactions = mock(StockTransactionService.class);
+        when(transactions.account()).thenReturn(account);
+        ReflectionTestUtils.setField(service, "client", client);
+        ReflectionTestUtils.setField(service, "runs", runs);
+        ReflectionTestUtils.setField(service, "transactions", transactions);
+    }
+
     @Test
     void savesEveryPythonReportWithAnIsolatedHoldingSnapshot() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         SingleStockForecast forecast = forecast();
-        StrategyHolding holding = new StrategyHolding();
-        holding.setCode("600519");
-        holding.setName("贵州茅台");
-        holding.setRole("LIVE_VALIDATION");
-        holding.setQuantity(10d);
-        holding.setAverageCost(1400d);
+        StockPosition holding = new StockPosition();
+        holding.setInstrumentCode("600519.SH");
+        holding.setInstrumentName("贵州茅台");
+        account.getPositions().add(holding);
+        holding.setQuantity(BigDecimal.TEN);
+        holding.setAverageCost(BigDecimal.valueOf(1400));
         when(client.forecast("600519", 5)).thenReturn(forecast);
-        when(holdings.findStockByCode("600519")).thenReturn(Optional.of(holding));
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> {
             SingleStockForecastRun value = invocation.getArgument(0);
             value.setId(7L);
             return value;
         });
-        SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
 
         SingleStockForecastRun result = service.forecast("600519.SH", 5);
 
@@ -59,35 +72,27 @@ class SingleStockForecastServiceTest {
 
     @Test
     void loadsSavedDetailWithoutRecomputingTheForecast() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         SingleStockForecastRun stored = new SingleStockForecastRun();
         stored.setId(9L);
         stored.setReportJson("{\"instrumentCode\":\"600519.SH\",\"asOfDate\":\"2026-08-07\"}");
-        stored.setHoldingSnapshotJson("{\"held\":false}");
+        stored.setHoldingSnapshotJson(null);
         when(runs.findById(9L)).thenReturn(Optional.of(stored));
-        SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
 
         SingleStockForecastRun result = service.detail(9L);
 
         assertEquals("600519.SH", result.getReport().getInstrumentCode());
+        org.junit.jupiter.api.Assertions.assertNull(result.getHoldingSnapshot());
         verify(client, never()).forecast(any());
     }
 
     @Test
     void marksAnInsufficientForecastUnavailableForMaturityValidation() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         SingleStockForecast forecast = forecast();
         forecast.setStatus("INSUFFICIENT_DATA");
         forecast.setUpProbability(null);
         when(client.forecast("600519", 5)).thenReturn(forecast);
-        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(
                 invocation -> invocation.getArgument(0));
-        SingleStockForecastService service = new SingleStockForecastService(client, runs, holdings);
 
         SingleStockForecastRun result = service.forecast("600519", 5);
 
@@ -97,9 +102,6 @@ class SingleStockForecastServiceTest {
 
     @Test
     void pausesOnlyTheDirectionWhenRealOutcomeHealthGateIsClosed() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         ForecastOutcomeSettlementService settlement = mock(ForecastOutcomeSettlementService.class);
         ForecastModelHealthService healthService = mock(ForecastModelHealthService.class);
         SingleStockForecast forecast = forecast();
@@ -109,11 +111,10 @@ class SingleStockForecastServiceTest {
         health.setDirectionOutputPaused(true);
         health.setConclusion("真实结果持续弱于门槛");
         when(client.forecast("600519", 5)).thenReturn(forecast);
-        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
         when(healthService.evaluate("600519.SH", 5, forecast.getModelVersion())).thenReturn(health);
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        SingleStockForecastService service = new SingleStockForecastService(
-                client, runs, holdings, settlement, healthService);
+        ReflectionTestUtils.setField(service, "settlement", settlement);
+        ReflectionTestUtils.setField(service, "health", healthService);
 
         SingleStockForecastRun result = service.forecast("600519", 5);
 
@@ -126,21 +127,17 @@ class SingleStockForecastServiceTest {
 
     @Test
     void forecastContinuesWhenBestEffortOutcomeSettlementTemporarilyFails() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         ForecastOutcomeSettlementService settlement = mock(ForecastOutcomeSettlementService.class);
         ForecastModelHealthService healthService = mock(ForecastModelHealthService.class);
         SingleStockForecast forecast = forecast();
         doThrow(new IllegalStateException("provider timeout"))
                 .when(settlement).settlePending("600519.SH");
         when(client.forecast("600519", 5)).thenReturn(forecast);
-        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
         when(healthService.evaluate("600519.SH", 5, forecast.getModelVersion()))
                 .thenReturn(new ForecastModelHealth());
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        SingleStockForecastService service = new SingleStockForecastService(
-                client, runs, holdings, settlement, healthService);
+        ReflectionTestUtils.setField(service, "settlement", settlement);
+        ReflectionTestUtils.setField(service, "health", healthService);
 
         SingleStockForecastRun result = service.forecast("600519", 5);
 
@@ -150,10 +147,7 @@ class SingleStockForecastServiceTest {
 
     @Test
     void savesEveryVersionSixCandidateAsFrozenShadowEvidence() {
-        PythonSingleStockForecastClient client = mock(PythonSingleStockForecastClient.class);
-        SingleStockForecastRunRepository runs = mock(SingleStockForecastRunRepository.class);
         ForecastCandidateRunRepository candidates = mock(ForecastCandidateRunRepository.class);
-        StrategyHoldingRepository holdings = mock(StrategyHoldingRepository.class);
         SingleStockForecast forecast = forecast();
         forecast.setReportSchemaVersion("single-stock-research-v6");
         SingleStockForecast.ModelCompetition competition = new SingleStockForecast.ModelCompetition();
@@ -162,14 +156,12 @@ class SingleStockForecastServiceTest {
         competition.getCandidates().add(candidate("REGIME_LOGISTIC", "CHALLENGER", .66d));
         forecast.setModelCompetition(competition);
         when(client.forecast("600519", 5)).thenReturn(forecast);
-        when(holdings.findStockByCode("600519")).thenReturn(Optional.empty());
         when(runs.save(any(SingleStockForecastRun.class))).thenAnswer(invocation -> {
             SingleStockForecastRun value = invocation.getArgument(0);
             value.setId(17L);
             return value;
         });
-        SingleStockForecastService service = new SingleStockForecastService(
-                client, runs, candidates, null, holdings, null, null, null);
+        ReflectionTestUtils.setField(service, "candidates", candidates);
 
         service.forecast("600519", 5);
 

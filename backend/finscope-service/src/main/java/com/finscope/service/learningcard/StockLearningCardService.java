@@ -28,7 +28,7 @@ public class StockLearningCardService {
     }
 
     public StockLearningCardRun start(String code) {
-        Instrument instrument = instrumentResolver.resolve(code, "STOCK");
+        Instrument instrument = instrumentResolver.resolveStock(code);
         StockLearningCard card = cards.findOrCreate(instrument.getId(), StockLearningFramework.CODE);
         StockLearningCardRun active = cards.active(card.getId()).orElse(null);
         if (active != null) {
@@ -59,7 +59,7 @@ public class StockLearningCardService {
     }
 
     public StockLearningCardView get(String code) {
-        Instrument instrument = instrumentResolver.resolve(code, "STOCK");
+        Instrument instrument = instrumentResolver.resolveStock(code);
         Optional<StockLearningCard> stored = cards.findByInstrumentId(instrument.getId());
         StockLearningCard card = stored.orElseGet(() -> emptyCard(instrument));
         StockLearningCardRun latest = stored.isPresent() ? cards.latest(card.getId()).orElse(null) : null;
