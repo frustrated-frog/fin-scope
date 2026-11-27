@@ -75,11 +75,20 @@ def simulate(jobs, snapshots, timeline, frozen, image, capital, execution=None):
     panel = {}
     for digest in snapshots:
         panel.update(jobs.read_panel(digest, daily_window=True))
+    return simulate_panel(panel, timeline, frozen.code, image, capital, execution)
+
+
+def simulate_panel(panel, timeline, code, image, capital, execution=None, *, first=None, last=None):
     curve, decisions, trades = [], [], []
     book = new_book(capital)
     plans = {}
-    with PythonStrategy(frozen.code, image, sdk_version=4) as runtime:
+    with PythonStrategy(code, image, sdk_version=4) as runtime:
         for at, history in frames(panel):
+            day = at.date().isoformat()
+            if first and day < first:
+                continue
+            if last and day > last:
+                break
             entry = as_of(timeline, at)
             if not entry or not active_codes(entry, book):
                 continue

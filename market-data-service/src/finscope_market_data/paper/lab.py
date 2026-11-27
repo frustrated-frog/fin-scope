@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
 from . import classic_study, classic_universe, learning, performance
-from . import parameter_grid
+from . import parameter_grid, walk_forward
 from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
@@ -612,6 +612,17 @@ class PaperLab:
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
         router.get("/versions/jobs")(self.jobs.list)
+
+        @router.get("/versions/walk-forward/{version}")
+        def walks(version: int):
+            return walk_forward.results(self, version)
+
+        @router.post("/versions/walk-forward/{version}")
+        def walk(version: int, value: walk_forward.WalkRequest):
+            try:
+                return walk_forward.enqueue(self, version, value)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
 
         @router.get("/versions/grids/{version}")
         def grid_results(version: int):

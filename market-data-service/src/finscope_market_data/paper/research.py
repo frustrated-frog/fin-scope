@@ -313,6 +313,8 @@ class ResearchJobs:
             id INTEGER PRIMARY KEY, state TEXT NOT NULL, request TEXT NOT NULL, log TEXT NOT NULL DEFAULT '[]',
             version INTEGER, created TEXT NOT NULL, auto_key TEXT UNIQUE)""")
 
+        db.execute("""CREATE TABLE IF NOT EXISTS paper_walk_result(
+            job INTEGER PRIMARY KEY REFERENCES paper_job(id), result TEXT NOT NULL)""")
         db.execute("""CREATE TABLE IF NOT EXISTS paper_candidate(
             job INTEGER NOT NULL, ordinal INTEGER NOT NULL, program TEXT NOT NULL, metrics TEXT NOT NULL,
             decision TEXT, image TEXT NOT NULL, PRIMARY KEY(job,ordinal))""")
@@ -1016,6 +1018,10 @@ class ResearchJobs:
             trials = self.trials(job)
 
     async def process(self, job, request):
+        if request.get("researchMode") == "WALK_FORWARD":
+            from . import walk_forward
+            await asyncio.to_thread(walk_forward.run, self, job, request)
+            return
         if request.get("researchMode") == "CLASSIC":
             await classic_study.run(self, job, request)
             return
