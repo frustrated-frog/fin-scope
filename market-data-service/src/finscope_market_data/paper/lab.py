@@ -314,7 +314,7 @@ class PaperLab:
             evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
             account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
             health = self.execution_health(db, version, account, stamp())
-        history["performance"] = performance.report(history.get("curve", []), spec.capital, history.get("fees", 0))
+        history["performance"] = performance.report(history.get("curve", []), spec.capital, history.get("fees", 0), history.get("costs"))
         book = json.loads(account["book"]) if account else None
         if history.get("classicSnapshots"):
             try:
@@ -334,7 +334,7 @@ class PaperLab:
         return dict(stockNames=self.name_lookup(codes) if self.name_lookup else {},
                     executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
-                    forwardPerformance=performance.report(daily, spec.capital, book["fees"]) if book else None,
+                    forwardPerformance=performance.report(daily, spec.capital, book["fees"], book.get("executionCosts")) if book else None,
                     book=book, review=json.loads(row[0]) if row else None)
 
     def save_review(self, version, review):

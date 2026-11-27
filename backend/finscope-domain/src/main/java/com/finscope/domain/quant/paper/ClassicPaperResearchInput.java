@@ -7,6 +7,7 @@ public record ClassicPaperResearchInput(BigDecimal capital, boolean autoStart, L
                                        String startDate, String endDate) {
     public record Components(String family, String base, String period, Integer window, Integer holdings,
                              Integer poolSize, BigDecimal minTurnover, String allocation, BigDecimal exposure,
-                             BigDecimal maxWeight, String rebalance, BigDecimal maxFeeBps) {
+                             BigDecimal maxWeight, String rebalance, BigDecimal maxFeeBps, Integer riskWindow,
+                             BigDecimal targetVol, BigDecimal stopLoss, BigDecimal drawdownStop) {
     }
 }

@@ -114,3 +114,43 @@ def test_fee_cap_checked_again_on_partial_fill_and_blocks_a_price_gap():
     event=execute(book,order,bar(at,volume=2000),at)
     assert event["action"] == "未成交" and "费率上限" in event["reason"]
     assert book["cash"] == 10000
+
+
+def test_optimization_and_volatility_target_use_aligned_completed_days():
+    from finscope_market_data.paper.portfolio_math import optimized_weights, portfolio_risk
+    diagonal=[[.01,0.],[0.,.04]]
+    assert optimized_weights(diagonal,"MIN_VARIANCE",1.,1.) == pytest.approx([.8,.2],abs=1e-6)
+    assert optimized_weights(diagonal,"RISK_PARITY",1.,1.) == pytest.approx([2/3,1/3],abs=1e-6)
+    assert optimized_weights(diagonal,"MIN_VARIANCE",1.,.55) == pytest.approx([.55,.45])
+    def rows(multiple):
+        price=100
+        daily=[]
+        for i, r in enumerate([0,.01,-.02,.03,-.01,.02,-.03]):
+            price *= 1+multiple*r
+            daily.append(dict(at=f"2026-11-{i+10}T15:00",close=price))
+        return [dict(dailyWindow=daily)]
+    cfg=Recipe(family="MULTI",allocation="RISK_PARITY",riskWindow=5,exposure=1,maxWeight=1,targetVol=.05)
+    weights,audit=portfolio_risk([A,B],{A:rows(1),B:rows(2)},cfg.model_dump(),{})
+    assert audit["days"] == 5 and sum(audit["contributions"].values()) == pytest.approx(1.)
+    assert sum(weights.values()) < 1 and audit["annualVol"] == pytest.approx(.05)
+    short=rows(2)
+    short[0]["dailyWindow"]=short[0]["dailyWindow"][:-3]
+    assert portfolio_risk([A,B],{A:rows(1),B:short},cfg.model_dump(),{})[1]["unavailable"]
+
+
+@pytest.mark.parametrize("setting", ["stopLoss","drawdownStop"])
+def test_risk_can_exit_on_a_non_selection_bar_and_wait_for_t_plus_one(setting):
+    cfg=Recipe(family="MOMENTUM",rebalance="WEEKLY",**{setting:.05})
+    at=datetime(2026,11,24,10,0,tzinfo=SHANGHAI)
+    book=new_book(10000)
+    book.update(cash=0.,positions={A:dict(lots=[[str(at.date()),1000]],cost=10000.,price=10.)})
+    def step(t,price):
+        return classic_study.step(book,{A:[bar(t,price)]},BASE,t,t+timedelta(seconds=3),10000,execution=cfg)
+    step(at,10)
+    point=step(at+timedelta(minutes=5),9.)
+    assert point["rebalance"]["source"] == "盘中风控" and not point["events"]
+    assert point["rebalance"]["legs"][A]["target"] == 0
+    next_day=at+timedelta(days=1)
+    step(next_day,9.)
+    final=step(next_day+timedelta(minutes=10),9.)
+    assert final["rebalance"]["status"]=="已完成" and not book["positions"]

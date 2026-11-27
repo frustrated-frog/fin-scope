@@ -3,7 +3,7 @@ import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 import { FactorAssets, DatasetArchive } from './PaperArchive';
 import { PaperCodingJobs } from './PaperCodingJobs';
-import { ClassicLibrary } from './ClassicStrategies';
+import { ClassicLibrary, classicExperimentType } from './ClassicStrategies';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
@@ -202,7 +202,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     ? strategies.filter(v => parseSpec(v)?.factors?.some(factor => factor.code === selectedFactorCode)) : [];
   const archive = [
     ...paperCatalog.rows.map(v => ({ key: 'paper-' + v.id, name: v.spec.rule.name,
-      type: v.spec.rule.kind === 'python' && v.spec.rule.recipe ? '经典策略 · 组件实验' : '盘中 · 五分钟',
+      type: v.spec.rule.kind === 'python' && v.spec.rule.recipe ? `#${v.id} · ${classicExperimentType(v.spec.rule.recipe)}` : '盘中 · 五分钟',
       status: lifecycleLabel(v), date: v.created, open: () => showPaperVersion(v.id) })),
     ...experiments.map(v => ({ key: 'daily-' + v.id,
       name: strategies.find(strategy => strategy.id === v.strategyVersionId)?.name ?? `日频实验 #${v.id}`,

@@ -499,7 +499,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const originalRecipe = comparison?.spec.rule.kind === 'python' ? comparison.spec.rule.recipe : undefined;
-  const [recipe, setRecipe] = useState<ClassicRecipe>({maxFeeBps:0, ...(originalRecipe ?? {...defaultRecipe, family:seed?.classic ?? defaultRecipe.family})});
+  const [recipe, setRecipe] = useState<ClassicRecipe>({maxFeeBps:0, riskWindow:10, targetVol:0, stopLoss:0, drawdownStop:0,
+    ...(originalRecipe ?? {...defaultRecipe, family:seed?.classic ?? defaultRecipe.family})});
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [autoStart, setAutoStart] = useState(!seed?.classic && !originalRecipe);

@@ -83,7 +83,8 @@ class PaperResearchServiceTest {
     void submitsClassicComparisonUsingExecutionEngineDefaultsForOmittedComponents() {
         var token = java.util.UUID.randomUUID();
         var recipe = new ClassicPaperResearchInput.Components("MOMENTUM", null, null, 7, null,
-                null, null, "EQUAL", null, null, null, BigDecimal.valueOf(30));
+                null, null, "RISK_PARITY", null, null, null, BigDecimal.valueOf(30), 10,
+                new BigDecimal("0.15"), new BigDecimal("0.08"), null);
         var input = new ClassicPaperResearchInput(BigDecimal.valueOf(10000), false, 4L, recipe, "2026-09-01", "2026-11-26");
         service.submitClassic(input, token);
         ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
@@ -94,6 +95,8 @@ class PaperResearchServiceTest {
         assertEquals("2026-09-01", job.path("startDate").asText());
         assertEquals("2026-11-26", job.path("endDate").asText());
         assertEquals(30, job.path("recipe").path("maxFeeBps").asInt());
+        assertEquals("RISK_PARITY", job.path("recipe").path("allocation").asText());
+        assertEquals(0.08, job.path("recipe").path("stopLoss").asDouble());
         assertEquals(4L, job.path("reference").asLong());
         assertEquals(10000, job.path("capital").asInt());
         assertFalse(job.path("autoStart").asBoolean());

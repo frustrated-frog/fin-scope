@@ -1,26 +1,18 @@
 """Execute a frozen classic target in board lots until filled, replaced or expired."""
-from datetime import datetime, time
+from datetime import time
 
-from finscope_market_data.forecast.trading_calendar import next_session
-from .engine import SHANGHAI, COMMISSION_RATE, MIN_COMMISSION, SELL_TAX, money, sellable_shares
-
-
-def expires_at(at, frequency):
-    day = at.date()
-    while (following := next_session(day)) is not None:
-        if (frequency == "DAILY" or frequency == "WEEKLY" and following.isocalendar()[:2] != at.date().isocalendar()[:2]
-                or frequency == "MONTHLY" and following.month != at.month):
-            return datetime.combine(following, time(14, 45), SHANGHAI)
-        day = following
-    return datetime.combine(day, time(15), SHANGHAI)
+from .classic_recipe import expires_at
+from .portfolio_risk import protect
+from .engine import COMMISSION_RATE, INTERVAL, MIN_COMMISSION, SELL_TAX, money, sellable_shares
 
 
-def expire(book, at, histories):
+def expire(book, at, histories, *, before_fill=False):
     plan = book.get("rebalancePlan")
     if not plan or plan["status"] != "进行中":
         return
     reason = ""
-    if at.isoformat() >= plan["expires"]:
+    effective = at-INTERVAL if before_fill else at
+    if effective.isoformat() >= plan["expires"]:
         reason = "已到下一调仓周期"
     elif any(getattr(bars[-1], "actions", []) for c, bars in histories.items() if c in plan["legs"]):
         reason = "除权日结束原股数目标"
@@ -42,18 +34,16 @@ def create(book, selection, scores, at, frequency):
 
 
 def reconcile(book, plan, histories, base, at, fee_limit):
+    mark_filled_targets(book, plan, at)
+    if plan["status"] == "已完成":
+        return []
     pending = {o["code"] for o in book["pending"]}
     orders = []
-    remaining = False
     for code, leg in sorted(plan["legs"].items(), key=lambda item: (-item[1]["score"], item[0])):
         pos = book["positions"].get(code, {})
-        held = sum(q for _, q in pos.get("lots", []))
-        gap = leg["target"] - held
-        leg.update(actual=held, remaining=gap)
+        gap = leg["remaining"]
         if not gap:
-            leg["reason"] = "已达目标股数"
             continue
-        remaining = True
         side = "BUY" if gap > 0 else "SELL"
         bars = histories.get(code)
         sellable = sellable_shares(pos, str(at.date()))
@@ -79,8 +69,6 @@ def reconcile(book, plan, histories, base, at, fee_limit):
                                rank=len(orders)+1, maxShares=quantity, budget=money(notional),
                                planAt=plan["at"], maxFeeBps=fee_limit))
         leg["reason"] = reason
-    if not remaining:
-        plan.update(status="已完成", updated=at.isoformat())
     # A sell may fund a buy on the same executable bar. Otherwise do not send an
     # order that cannot afford even one lot at the signal price.
     if not any(o["side"] == "SELL" for o in orders + book["pending"]):
@@ -114,9 +102,24 @@ def record_fills(book, events, histories):
             plan.update(fills=plan["fills"] + 1, fees=money(plan["fees"]+event["fee"]))
 
 
-def advance_plan(book, point, histories, entry, at, available, runtime, frequency, fee_limit, clock):
+def mark_filled_targets(book, plan, at):
+    for code, leg in plan["legs"].items():
+        shares = sum(q for _,q in book["positions"].get(code, {}).get("lots", []))
+        leg.update(actual=shares, remaining=leg["target"]-shares)
+        if not leg["remaining"]:
+            leg["reason"] = "已达目标股数"
+    if all(not leg["remaining"] for leg in plan["legs"].values()):
+        plan.update(status="已完成", updated=at.isoformat())
+
+
+def advance_plan(book, point, histories, entry, at, available, runtime, recipe, capital, clock):
     record_fills(book, point["events"], histories)
+    current = book.get("rebalancePlan")
+    if current and current["status"] == "进行中" and at.isoformat() >= current["expires"]:
+        mark_filled_targets(book, current, at)
+    expire(book, at, {})
     plan = book.get("rebalancePlan")
+    new_selection = False
     if runtime and entry and at.time() == time(14, 45):
         book["selectionBase"] = entry["codes"]
         _, scores = runtime.decide(histories, book, at, book["equity"])
@@ -125,15 +128,17 @@ def advance_plan(book, point, histories, entry, at, available, runtime, frequenc
             point["selection"] = dict(**selection, base=entry["codes"], knownAt=entry["at"])
             point["scores"] = scores
             if not selection.get("skipped"):
+                new_selection = True
                 if plan and plan["status"] == "进行中":
                     plan.update(status="已替换", updated=at.isoformat())
                     book["pending"] = [o for o in book["pending"] if o.get("planAt") != plan["at"]]
                 if plan:
                     point["previousPlan"] = plan.copy()
-                plan = book["rebalancePlan"] = create(book, selection, scores, at, frequency)
+                plan = book["rebalancePlan"] = create(book, selection, scores, at, recipe.rebalance)
         book.pop("signalReasons", None)
+    plan = protect(book, plan, histories, at, recipe, new_selection, capital)
     if plan and plan["status"] == "进行中":
-        orders = reconcile(book, plan, histories, (entry or {}).get("codes", []), at, fee_limit)
+        orders = reconcile(book, plan, histories, (entry or {}).get("codes", []), at, recipe.maxFeeBps)
         seen = (clock() if clock else available).isoformat()
         for order in orders:
             order["available"] = seen

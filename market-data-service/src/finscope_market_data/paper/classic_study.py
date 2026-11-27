@@ -5,7 +5,7 @@ import json
 
 from finscope_market_data.forecast.trading_calendar import previous_session
 from .analysis import frames
-from . import rebalance
+from . import performance, rebalance
 from .classic_recipe import FAMILIES, Recipe, program
 from .classic_universe import active_codes, as_of, schedule
 from .engine import ENGINE, SHANGHAI, advance, new_book
@@ -52,10 +52,9 @@ def step(book, history, entry, at, available, capital, runtime=None, decision_cl
     if entry and entry["codes"] and not book.get("classicBenchmark"):
         book["classicBenchmark"] = list(entry["codes"])
     if execution is not None:
-        rebalance.expire(book, at, fresh)
+        rebalance.expire(book, at, fresh, before_fill=True)
         point = advance(book, None, fresh, at, available, capital, universe=codes, decide=noop)
-        return rebalance.advance_plan(book, point, fresh, entry, at, available, runtime, execution.rebalance,
-                                      execution.maxFeeBps, decision_clock)
+        return rebalance.advance_plan(book, point, fresh, entry, at, available, runtime, execution, capital, decision_clock)
     decide = noop
     if runtime and entry and at.strftime("%H:%M") == "14:45":
         book["selectionBase"] = entry["codes"]
@@ -99,6 +98,8 @@ def simulate(jobs, snapshots, timeline, frozen, image, capital, execution=None):
         raise ValueError("按实际入池时间过滤后，至少需要三个有行情的交易日")
     if not any(d["candidates"] for d in decisions):
         raise ValueError("所选周期和流动性条件没有合格样本，请调整窗口或股票池")
+    if execution and all(d.get("skipped") for d in decisions):
+        raise ValueError("整个区间内均缺少足够的有效样本生成目标组合，请检查行情周期与风险窗口")
     extra = dict(plans=list(plans.values()), costs=book["executionCosts"]) if execution else {}
     return dict(curve=curve, decisions=decisions, trades=trades, fills=book["fills"], fees=book["fees"], **extra,
                 firstDay=curve[0]["at"][:10], lastDay=curve[-1]["at"][:10],
@@ -127,9 +128,13 @@ async def run(jobs, job, request):
     result = await asyncio.to_thread(simulate, jobs, snapshots, request["timeline"], frozen, image, request["capital"], execution)
     if request.get("reference"):
         with jobs.lab.db() as db:
-            original = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (request["reference"],)).fetchone()[0])
+            original_row = db.execute("SELECT history,spec FROM paper_version WHERE id=?", (request["reference"],)).fetchone()
+            original = json.loads(original_row[0])
+            rule = json.loads(original_row[1])["rule"]
         result["comparison"] = dict(version=request["reference"], netReturn=original["validationReturn"],
-                                    fills=original["fills"], fees=original["fees"])
+                                    fills=original["fills"], fees=original["fees"], executionVersion=rule.get("executionVersion",1),
+                                    frequency=rule["recipe"]["rebalance"],
+                                    performance=performance.report(original["curve"],request["capital"],original["fees"],original.get("costs")))
     result.update(classicSnapshots=snapshots, universeTimeline=request["timeline"], validationMode="CLASSIC",
                   requestedStart=request["start"][:10], requestedEnd=request["cutoff"][:10])
     jobs.save_version(job, request, frozen, image, snapshots[0], result)

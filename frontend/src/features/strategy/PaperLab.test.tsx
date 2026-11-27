@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { apiResponse } from '../../test/apiEnvelope';
@@ -121,10 +121,15 @@ test('submits the library selection with explicit liquidity units and a separate
   const turnover = screen.getByLabelText(/最低平均成交额估算/);
   await user.clear(turnover);
   await user.type(turnover, '25');
-  await user.selectOptions(screen.getByLabelText('权重分配'), 'INVERSE_VOL');
+  await user.selectOptions(screen.getByLabelText('权重分配'), 'RISK_PARITY');
+  fireEvent.change(screen.getByLabelText('回测开始日'), {target:{value:'2026-10-08'}});
+  fireEvent.change(screen.getByLabelText('回测结束日'), {target:{value:'2026-11-26'}});
+  await user.click(screen.getByText('风险设置'));
+  fireEvent.change(screen.getByLabelText('个股成本止损（%）'), {target:{value:'8'}});
   await user.click(screen.getByRole('button', {name:'运行经典策略回测'}));
   expect(requests).toEqual([{url:'/api/quant/paper/versions/jobs/classic', body:expect.objectContaining({
-    capital:10000, autoStart:false, recipe:expect.objectContaining({family:'REVERSION', allocation:'INVERSE_VOL', minTurnover:250000}),
+    capital:10000, autoStart:false, startDate:'2026-10-08', endDate:'2026-11-26',
+    recipe:expect.objectContaining({family:'REVERSION', allocation:'RISK_PARITY', minTurnover:250000, stopLoss:.08}),
   })}]);
   expect(browse).toHaveBeenCalledOnce();
 });

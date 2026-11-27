@@ -6,7 +6,7 @@ from statistics import fmean, stdev
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 
 
-def report(points, capital, fees):
+def report(points, capital, fees, costs=None):
     closes = {}
     for point in points:
         closes[point["at"][:10]] = point
@@ -26,7 +26,9 @@ def report(points, capital, fees):
         previous, prior_day = equity, current
     last = closes[max(closes)]
     volatility = stdev(returns) if len(returns) >= 2 else None
-    return dict(days=len(closes), returnDays=len(returns), netReturn=last["equity"]/capital-1,
+    mean_equity = fmean(point["equity"] for point in closes.values())
+    turnover = costs["notional"]/mean_equity if costs and mean_equity > 0 else None
+    return dict(days=len(closes), returnDays=len(returns), netReturn=last["equity"]/capital-1, turnover=turnover,
                 excess=(last["equity"]-last["benchmark"])/capital, maxDrawdown=max_drawdown,
                 feeRate=fees/capital, dailyVol=volatility,
                 sharpe=fmean(returns)*sqrt(252)/volatility if len(returns) >= 60 and volatility else None)

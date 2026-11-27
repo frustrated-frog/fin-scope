@@ -149,6 +149,12 @@ def decide(ctx):
         ordered = [c for c in ordered if data[c]['volatility'] > 0]
     chosen = ordered[:cfg['holdings']]
     targets = portfolio(chosen, data, scores, cfg)
+    risk = {}
+    if chosen:
+        targets, risk = portfolio_risk(chosen, ctx['bars'], cfg, targets)
+        if risk.get('unavailable') and (cfg['allocation'] in ('MIN_VARIANCE','RISK_PARITY') or cfg.get('targetVol')):
+            return dict(weights={}, scores={}, state=dict(state, selection=dict(at=ctx['at'], candidates=liquid,
+                        targets={}, risk=risk, skipped='协方差样本不足或方差为零，等待有效日收益')))
     weights, reasons = {}, {}
     for code in set(targets) | set(ctx['positions']):
         if code not in ctx['bars']:
@@ -162,7 +168,7 @@ def decide(ctx):
                          if code in targets else '已离开本期持仓名单，调仓目标为零')
     # Persist the rebalance decision separately from the subsequent fills.
     return dict(weights=weights, scores=scores, reasons=reasons, state=dict(cycle=period,
-                selection=dict(at=ctx['at'], candidates=liquid, targets=targets)))
+                selection=dict(at=ctx['at'], candidates=liquid, targets=targets, risk=risk)))
 
 
 def factors(bars):

@@ -1,10 +1,22 @@
 """Configuration and versioned executable source for classic stock strategies."""
 import inspect
-from datetime import date
+from datetime import date, datetime, time
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from . import classic_components
+from finscope_market_data.forecast.trading_calendar import next_session
+from .engine import SHANGHAI
+from . import classic_components, portfolio_math
+
+
+def expires_at(at, frequency):
+    day = at.date()
+    while (following := next_session(day)) is not None:
+        if (frequency == "DAILY" or frequency == "WEEKLY" and following.isocalendar()[:2] != at.date().isocalendar()[:2]
+                or frequency == "MONTHLY" and following.month != at.month):
+            return datetime.combine(following, time(14, 45), SHANGHAI)
+        day = following
+    return datetime.combine(day, time(15), SHANGHAI)
 
 
 class Recipe(BaseModel):
@@ -16,11 +28,15 @@ class Recipe(BaseModel):
     holdings: int = Field(default=3, ge=1, le=10)
     poolSize: int = Field(default=12, ge=1, le=24)
     minTurnover: float = Field(default=0, ge=0, le=1e12)
-    allocation: Literal["EQUAL", "INVERSE_VOL", "SCORE"] = "EQUAL"
+    allocation: Literal["EQUAL", "INVERSE_VOL", "SCORE", "MIN_VARIANCE", "RISK_PARITY"] = "EQUAL"
     exposure: float = Field(default=.95, gt=0, le=1)
     maxWeight: float = Field(default=.4, gt=0, le=1)
     rebalance: Literal["DAILY", "WEEKLY", "MONTHLY"] = "DAILY"
     maxFeeBps: float = Field(default=0, ge=0, le=10000)
+    riskWindow: int = Field(default=10, ge=5, le=20)
+    targetVol: float = Field(default=0, ge=0, le=2)
+    stopLoss: float = Field(default=0, ge=0, lt=1)
+    drawdownStop: float = Field(default=0, ge=0, lt=1)
 
     @model_validator(mode="after")
     def coherent(self):
@@ -62,6 +78,6 @@ FAMILIES = {
 def program(recipe):
     from .research import Program
     name, thesis = FAMILIES[recipe.family]
-    source = inspect.getsource(classic_components)
+    source = inspect.getsource(portfolio_math) + "\n" + inspect.getsource(classic_components)
     return Program(name=name, hypothesis=thesis, factor=thesis,
                    code='RECIPE = ' + repr(recipe.model_dump()) + '\n' + source)

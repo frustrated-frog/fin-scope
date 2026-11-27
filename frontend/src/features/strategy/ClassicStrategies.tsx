@@ -11,21 +11,27 @@ const families = {
 export type Family = keyof typeof families;
 const bases = { COHORT: '登记研究池', DISCOVERY: '股票发现历史候选池', GEM: '登记研究池 · 创业板', SH_MAIN: '登记研究池 · 沪市主板' };
 const intervals = { '5m': '5 分钟', '15m': '15 分钟', '1d': '日线' };
-const allocations = { EQUAL: '等权', SCORE: '得分排名加权', INVERSE_VOL: '逆波动率' };
+const allocations = { EQUAL: '等权', SCORE: '得分排名加权', INVERSE_VOL: '逆波动率', MIN_VARIANCE:'最小方差', RISK_PARITY:'风险平价' };
 const frequencies = { DAILY: '每个交易日', WEEKLY: '每周', MONTHLY: '每月' };
+export function classicExperimentType(recipe:ClassicRecipe) {
+  return `${frequencies[recipe.rebalance]}调仓 · ${allocations[recipe.allocation]}`;
+}
 export interface ClassicRecipe {
   family: Family; base: keyof typeof bases; period: keyof typeof intervals; allocation: keyof typeof allocations;
   rebalance: keyof typeof frequencies; window: number; holdings: number; poolSize: number;
   maxWeight: number; exposure: number; minTurnover: number; maxFeeBps?:number;
+  riskWindow?:number; targetVol?:number; stopLoss?:number; drawdownStop?:number;
 }
 export const defaultRecipe: ClassicRecipe = { family: 'TREND', base: 'COHORT', period: '15m', window: 6,
   holdings: 3, poolSize: 12, allocation: 'EQUAL', rebalance: 'DAILY', exposure: .95, maxWeight: .4, minTurnover: 0 };
-export interface Selection {at: string; knownAt: string; base: string[]; candidates: string[]; targets: Record<string, number>; skipped?: string}
+export interface Selection {at: string; knownAt: string; base: string[]; candidates: string[]; targets: Record<string, number>; skipped?: string;
+  risk?:{days?:number; through?:string; annualVol?:number; scale?:number; contributions?:Record<string,number>; strongestPair?:{left:string;right:string;correlation:number}}}
 export interface ClassicTrade {at: string; available: string; code: string; action: string; side: string; quantity?: number; price?: number; fee?: number; reason: string}
 export interface ClassicRecord {decisions?: Selection[]; trades?: ClassicTrade[]; firstDay?: string; lastDay?: string;
   requestedStart?:string; requestedEnd?:string; plans?:RebalancePlan[]; costs?:ExecutionCosts; performance?:Performance;
   classicSnapshots?: string[]; coverageError?: string; classicCoverage?: {symbols:number; measured:number; bars:number; missingActions:number; unknownTerms:number};
-  fees: number; fills: number; validationReturn?: number; validationBenchmark?: number; comparison?: {version: number; netReturn: number; fills: number; fees: number}}
+  fees: number; fills: number; validationReturn?: number; validationBenchmark?: number; comparison?: {version: number; netReturn: number; fills: number; fees: number;
+    executionVersion?:number; frequency?:keyof typeof frequencies; performance?:Performance}}
 const percent = (v: number) => (v*100).toFixed(2)+'%';
 
 export function ClassicLibrary({onChoose}: {onChoose: (family: Family) => void}) {
@@ -68,13 +74,19 @@ export function ClassicEditor({recipe:r, onChange, fixedBase}: {recipe: ClassicR
       {number('minTurnover','最低平均成交额估算（万元 / 根）',0,1e8,.0001,.01)}
       <label>调仓频率<select value={r.rebalance} onChange={e=>onChange({...r,rebalance:e.target.value as ClassicRecipe['rebalance']})}>{options(frequencies)}</select></label>
     </div></fieldset>
+    <details className="execution-report"><summary>风险设置</summary><div className="classic-fields">
+      {number('riskWindow','协方差窗口（交易日收益）',5,20)}
+      {number('targetVol','年化波动率目标（%）',0,200,100,.1)}
+      {number('stopLoss','个股成本止损（%）',0,99.9,100,.1)}
+      {number('drawdownStop','组合回撤清仓线（%）',0,99.9,100,.1)}
+    </div><p>波动率目标只降低仓位。止损和回撤每五分钟按最新估值检查，受 T+1 与成交限制约束。组合回撤触发后持币至下次有效选股，再开始记录新的净值高点。三个百分比设为 0 即关闭对应规则。</p></details>
     <fieldset><legend>组合仓位</legend><div className="classic-fields">
       <label>权重分配<select value={r.allocation} onChange={e=>onChange({...r,allocation:e.target.value as ClassicRecipe['allocation']})}>{options(allocations)}</select></label>
       {number('exposure','股票目标总仓位（%）',.1,100,100,.1)}{number('maxWeight','单股仓位上限（%）',.1,100,100,.1)}
       {number('maxFeeBps','单笔费用上限（基点，0 表示不限）',0,10000,1,.1)}
     </div></fieldset>
     <p>{r.base === 'DISCOVERY' ? '使用当时最新发布的股票发现名单，取前 24 只符合范围的沪深 A 股。' :
-      '按首次登记时间取所选范围内的前 24 只股票。'}在所选调仓周期的首个可用交易日 14:45 选股。日线信号使用此前已收盘的行情。超过单股上限的资金留作现金。</p>
+      '按首次登记时间取所选范围内的前 24 只股票。'}在所选调仓周期的首个可用交易日 14:45 选股。日线信号使用此前已收盘的行情。未完成的股数目标持续至下一周期调仓时点。单笔费用上限包含佣金和印花税，1 基点等于成交额的 0.01%。</p>
   </div>;
 }
 export function ClassicSelection({value, name}: {value: Selection; name: (c:string)=>string}) {
@@ -83,14 +95,18 @@ export function ClassicSelection({value, name}: {value: Selection; name: (c:stri
       <p>流动性筛选后 · {value.candidates.map(name).join('、') || '空'}</p></details>
     {value.skipped ? <p>{value.skipped}</p> : <div className="classic-targets">{Object.entries(value.targets).map(([code,w])=><span key={code}>{name(code)} <b>{percent(w)}</b></span>)}
       {!Object.keys(value.targets).length && <span>目标为空仓</span>}</div>}
+    {value.risk?.annualVol != null && <details><summary>目标组合的风险估计</summary>
+      <p>使用截至 {value.risk.through} 的 {value.risk.days} 个共同日收益，估算年化波动率 {percent(value.risk.annualVol)}。协方差向对角阵收缩 10%。</p>
+      <p>风险贡献占比 · {Object.entries(value.risk.contributions??{}).map(([c,v])=>name(c)+' '+percent(v)).join('、')}</p>
+      {value.risk.strongestPair && <p>相关性绝对值最高 · {name(value.risk.strongestPair.left)} 与 {name(value.risk.strongestPair.right)}，收缩后相关系数 {value.risk.strongestPair.correlation.toFixed(2)}。</p>}</details>}
   </div>;
 }
 export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicRecord;recipe:ClassicRecipe;name:(c:string)=>string}) {
-  const days = Array.from(new Set([...(h.decisions??[]),...(h.trades??[])].map(e=>e.at.slice(0,10)))).sort().reverse();
+  const days = Array.from(new Set([...(h.decisions??[]),...(h.trades??[]),...(h.plans??[])].map(e=>e.at.slice(0,10)))).sort().reverse();
   const [selected,select]=useState('');
   const day = days.includes(selected) ? selected : days[0];
   const decision = h.decisions?.find(e=>e.at.startsWith(day));
-  const plan = h.plans?.find(p=>p.at.startsWith(day));
+  const plans = h.plans?.filter(p=>p.at.startsWith(day)) ?? [];
   const trades = h.trades?.filter(e=>e.at.startsWith(day)) ?? [];
   return <div className="classic-report"><p>{h.firstDay} 至 {h.lastDay} · {intervals[r.period]} × {r.window} 根 · {frequencies[r.rebalance]}调仓 · {allocations[r.allocation]}</p>
     {h.requestedStart && <p>指定区间 {h.requestedStart} 至 {h.requestedEnd}。区间前的行情用于预热指标，收益从首个可用交易日开始记账。</p>}
@@ -98,13 +114,16 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
       <div><small>期初股票池等权基准</small><b>{percent(h.validationBenchmark??0)}</b></div>
       <div><small>调仓观察次数</small><b>{h.decisions?.length??0}</b></div></div>
     {h.comparison && <p>同数据对照 #{h.comparison.version} · 原实验 {percent(h.comparison.netReturn)} · 收益差 {(((h.validationReturn??0)-h.comparison.netReturn)*100).toFixed(2)} 个百分点 · 原实验成交 {h.comparison.fills} 笔，费用 ¥ {h.comparison.fees.toFixed(2)}</p>}
+    {h.comparison?.performance && <p>原实验{h.comparison.frequency && '按'+frequencies[h.comparison.frequency]+'调仓'}，日末最大回撤 {percent(h.comparison.performance.maxDrawdown)}。
+      本次费用{h.fees <= h.comparison.fees ? '减少' : '增加'} ¥ {Math.abs(h.fees-h.comparison.fees).toFixed(2)}。
+      {h.comparison.executionVersion === 1 && '原版本采用单次信号执行，比较中同时包含执行方式的变化。'}</p>}
     {h.classicCoverage && <p>区间快照共 {h.classicCoverage.symbols} 只，实测成交量覆盖 {h.classicCoverage.measured.toLocaleString()} / {h.classicCoverage.bars.toLocaleString()} 根。
       {h.classicCoverage.missingActions > 0 && `其中 ${h.classicCoverage.missingActions} 只缺少完整除权核验，跨日价格变化可能影响收益。`}
       {h.classicCoverage.unknownTerms > 0 && `区间内有 ${h.classicCoverage.unknownTerms} 次除权只有日期，权益估值可能不完整。`}</p>}
     {h.coverageError && <p>{h.coverageError}</p>}
     <details><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
       {decision && <ClassicSelection value={decision} name={name}/>}
-      {plan && <PlanReport plan={plan} name={name}/>}
+      {plans.map(plan=><PlanReport key={plan.at} plan={plan} name={name}/>)}
       {trades.map((e,i)=><p key={i}><time>{e.at.slice(11,16)}</time> · {e.side==='BUY'?'买入':'卖出'} {name(e.code)} · {e.action} · {e.quantity ? e.quantity+' 股 × ¥ '+e.price+'，费用 ¥ '+e.fee : e.reason}</p>)}
       {!trades.length && <p>此日没有委托或成交。</p>}
     </details>
