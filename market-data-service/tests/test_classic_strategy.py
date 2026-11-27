@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 from finscope_market_data.paper import classic_components as components
 from finscope_market_data.paper.classic_recipe import Recipe, program
-from finscope_market_data.paper.classic_universe import as_of, schedule, active_codes
+from finscope_market_data.paper.classic_universe import as_of, schedule, active_codes, polling_codes
 from finscope_market_data.paper.engine import SHANGHAI, new_book
 
 
@@ -67,6 +67,17 @@ def test_late_discovery_report_and_departed_position(tmp_path):
     book = new_book(10000)
     book["positions"]["600001"] = {}
     assert active_codes(as_of(timeline,at),book) == ["600003","600001"]
+
+
+def test_poll_after_a_new_publication_can_still_process_the_preceding_bar():
+    end = datetime(2026, 11, 26, 14, 45, tzinfo=SHANGHAI)
+    now = end + timedelta(seconds=12)
+    first = dict(at=(end-timedelta(days=1)).isoformat(), codes=["600001"])
+    second = dict(at=(end+timedelta(seconds=4)).isoformat(), codes=["600002"])
+    timeline = [first, second]
+    book = new_book(10000)
+    assert polling_codes(timeline, book, now-timedelta(minutes=5), now) == ["600001", "600002"]
+    assert active_codes(as_of(timeline, end), book) == ["600001"]
 
 
 @pytest.mark.asyncio

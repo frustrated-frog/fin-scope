@@ -314,6 +314,12 @@ class PaperLab:
             evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
             account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
             health = self.execution_health(db, version, account, stamp())
+        if history.get("classicSnapshots"):
+            try:
+                parts = [self.jobs.classic_snapshot_coverage(d) for d in history["classicSnapshots"]]
+                history["classicCoverage"] = {k: sum(part[k] for part in parts) for k in parts[0]}
+            except (OSError, ValueError):
+                history["coverageError"] = "无法读取原始快照覆盖，已保存的回测结果仍可查看。"
         codes = set(spec.codes) | {m['code'] for m in history.get('members', [])}
         for entry in history.get("universeTimeline", []):
             codes.update(entry["codes"])
@@ -357,7 +363,7 @@ class PaperLab:
                 if base not in timelines:
                     timelines[base] = await asyncio.to_thread(classic_universe.schedule, self, base, now, now-timedelta(days=1))
                 book = json.loads(row["book"])
-                codes.update(classic_universe.active_codes(classic_universe.as_of(timelines[base], now), book))
+                codes.update(classic_universe.polling_codes(timelines[base], book, now-INTERVAL, now))
             else:
                 codes.update(spec["codes"])
         codes = sorted(codes)
@@ -433,7 +439,7 @@ class PaperLab:
         book = json.loads(row["book"])
         recipe = getattr(spec.rule, "recipe", None)
         timeline = (timelines or {}).get(recipe.base, []) if recipe else []
-        codes = classic_universe.active_codes(classic_universe.as_of(timeline, now), book) if recipe else spec.codes
+        codes = classic_universe.polling_codes(timeline, book, now-INTERVAL, now) if recipe else spec.codes
         panel = {c: data[c] if isinstance(data.get(c), list) else [] for c in codes}
         cutoff = now - timedelta(seconds=3)
         closed = {c: [b for b in bars if b.observed_at <= cutoff] for c, bars in panel.items()}
@@ -445,10 +451,13 @@ class PaperLab:
                            ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
             return
         end = end.astimezone(SHANGHAI)
+        if recipe:
+            eligible = classic_universe.active_codes(classic_universe.as_of(timeline, end), book)
+            closed = {c: closed[c] for c in eligible if c in closed}
         multi = isinstance(spec.rule, PythonRule) and (spec.rule.sdkVersion >= 2
                 or book.get("controlRule", {}).get("sdkVersion", 1) >= 2)
         history = {c: bars[-(320 if multi else 49):] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
-        if len(history) < len(panel) and seen - end < timedelta(seconds=45):
+        if len(history) < len(closed) and seen - end < timedelta(seconds=45):
             return
         last = max(book["last"] or row["started"], book.get("resumedAt", ""))
         if end.isoformat() <= last:

@@ -76,3 +76,12 @@ def as_of(timeline, at):
 def active_codes(entry, book):
     return list(dict.fromkeys([*(entry or {}).get("codes", []), *book.get("classicBenchmark", []),
                               *book["positions"], *(o["code"] for o in book["pending"])]))
+
+
+def polling_codes(timeline, book, earliest, now):
+    # A report can be published between the close of a bar and its arrival.
+    codes = active_codes(as_of(timeline, earliest), book)
+    for entry in timeline:
+        if earliest.isoformat() < entry["at"] <= now.isoformat():
+            codes.extend(entry["codes"])
+    return list(dict.fromkeys(codes))

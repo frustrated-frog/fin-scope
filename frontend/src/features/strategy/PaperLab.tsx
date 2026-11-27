@@ -751,7 +751,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   <div><span>相对等权基准</span><strong>{latest ? pct((latest.equity-latest.benchmark)/spec.capital) : '—'}</strong></div>
                 </div>}
                 {accountsOnly && <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details>}
-                {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟 · {spec.codes.length} 只股票</p>}
+                {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟撮合 · {classic ? '快照末期股票池 ' : ''}{spec.codes.length} 只</p>}
                 {accountsOnly && detail?.executionHealth && <div className="paper-execution-health">
                   <strong>{detail.executionHealth.date} 执行</strong><span>{detail.executionHealth.executed} / {detail.executionHealth.due} 个到期时点已运行</span>
                   {detail.executionHealth.days.some(day => day.missed > 0) && <details><summary>查看近七天漏跑时点</summary>
@@ -874,7 +874,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {detail.history.validationMode === 'SHARED_WITH_PARENT' && '手动对照复用父策略的历史窗口。'}
                       {detail.history.validationMode === 'NEW_AFTER_FORWARD' && '留出行情采自触发本次研究的复盘之后。'}
                       {detail.history.validationMode === 'NEW_AFTER_FACTOR' && '本次验证使用所选因子可用之后的行情。'}</p>
-                    <p>快照指纹 <code>{spec.rule.snapshot.slice(0,16)}</code></p>
+                    <p>快照指纹 {(detail.history.classicSnapshots ?? [spec.rule.snapshot]).map(digest =>
+                      <code key={digest} title={digest}>{digest.slice(0,16)} </code>)}</p>
                     {detail.history.symbolCoverage && <div className="paper-coverage-scroll"><table className="paper-position-table"><thead><tr><th>股票</th><th>有行情 / 池内日期</th><th>完整日</th><th>真实量 / 总根数</th><th>除权核验</th></tr></thead>
                       <tbody>{Object.entries(detail.history.symbolCoverage).map(([c,v]) => <tr key={c}><th>{stockName(c)}</th><td>{v.days} / {v.poolDays}</td><td>{v.completeDays}</td><td>{v.measuredVolumeBars} / {v.bars}</td><td>{v.actionsVerified ? (v.exDates?.length ?? 0)+' 个日期' : '缺资料'}{v.unsupportedActions ? ' · 含配股或未分类事件' : ''}</td></tr>)}</tbody></table></div>}
                     {!detail.history.symbolCoverage && detail.history.coverage && <p>{Object.entries(detail.history.coverage).map(([code,n]) => stockName(code) + ' ' + n + ' 根').join(' · ')}</p>}

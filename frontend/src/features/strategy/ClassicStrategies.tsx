@@ -22,6 +22,7 @@ export const defaultRecipe: ClassicRecipe = { family: 'TREND', base: 'COHORT', p
 export interface Selection {at: string; knownAt: string; base: string[]; candidates: string[]; targets: Record<string, number>; skipped?: string}
 export interface ClassicTrade {at: string; available: string; code: string; action: string; side: string; quantity?: number; price?: number; fee?: number; reason: string}
 export interface ClassicRecord {decisions?: Selection[]; trades?: ClassicTrade[]; firstDay?: string; lastDay?: string;
+  classicSnapshots?: string[]; coverageError?: string; classicCoverage?: {symbols:number; measured:number; bars:number; missingActions:number; unknownTerms:number};
   fees: number; fills: number; validationReturn?: number; validationBenchmark?: number; comparison?: {version: number; netReturn: number; fills: number; fees: number}}
 const percent = (v: number) => (v*100).toFixed(2)+'%';
 
@@ -92,6 +93,10 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
       <div><small>期初股票池等权基准</small><b>{percent(h.validationBenchmark??0)}</b></div>
       <div><small>调仓观察次数</small><b>{h.decisions?.length??0}</b></div></div>
     {h.comparison && <p>同数据对照 #{h.comparison.version} · 原实验 {percent(h.comparison.netReturn)} · 收益差 {(((h.validationReturn??0)-h.comparison.netReturn)*100).toFixed(2)} 个百分点 · 原实验成交 {h.comparison.fills} 笔，费用 ¥ {h.comparison.fees.toFixed(2)}</p>}
+    {h.classicCoverage && <p>区间快照共 {h.classicCoverage.symbols} 只，实测成交量覆盖 {h.classicCoverage.measured.toLocaleString()} / {h.classicCoverage.bars.toLocaleString()} 根。
+      {h.classicCoverage.missingActions > 0 && `其中 ${h.classicCoverage.missingActions} 只缺少完整除权核验，跨日价格变化可能影响收益。`}
+      {h.classicCoverage.unknownTerms > 0 && `区间内有 ${h.classicCoverage.unknownTerms} 次除权只有日期，权益估值可能不完整。`}</p>}
+    {h.coverageError && <p>{h.coverageError}</p>}
     <details><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
       {decision && <ClassicSelection value={decision} name={name}/>}
       {trades.map((e,i)=><p key={i}><time>{e.at.slice(11,16)}</time> · {e.side==='BUY'?'买入':'卖出'} {name(e.code)} · {e.action} · {e.quantity ? e.quantity+' 股 × ¥ '+e.price+'，费用 ¥ '+e.fee : e.reason}</p>)}

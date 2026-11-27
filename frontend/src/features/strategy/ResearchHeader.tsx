@@ -5,7 +5,7 @@ type Section = 'catalog' | 'experiments' | 'paper';
 
 const sections = {
   catalog: { title: '策略与因子', description: '从策略背后的逻辑入手，查看它用了哪些因子，再选择一个想验证的想法。', metric: '盘中规则版本' },
-  experiments: { title: '量化实验室', description: '给定本金和股票池，让 AI 设计规则。打开实验记录，查看回测中的收益、成交与费用。', metric: '实验记录' },
+  experiments: { title: '量化实验室', description: '配置经典策略，或让 AI 编写策略。用同一份行情比较调仓、成交和扣费收益。', metric: '实验记录' },
   paper: { title: '模拟实盘', description: '每个策略独立记账。按交易日跟踪净值、回看调仓决定，再与同期基准比较。', metric: '运行中账户' },
 };
 

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import ExitStack
 from datetime import datetime, timedelta
 import fcntl
+from functools import lru_cache
 import gzip
 import hashlib
 import json
@@ -697,11 +698,28 @@ class ResearchJobs:
 
         return await asyncio.to_thread(freeze)
 
-    def read_panel(self, digest, *, daily_window=False):
+    def snapshot_payload(self, digest):
         raw = gzip.decompress(self.snapshot_path(digest).read_bytes())
         if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError("快照校验失败")
-        payload = json.loads(raw)
+        return json.loads(raw)
+
+    @lru_cache(maxsize=96)
+    def classic_snapshot_coverage(self, digest):
+        payload = self.snapshot_payload(digest)
+        totals = dict(symbols=0, measured=0, bars=0, missingActions=0, unknownTerms=0)
+        for series in payload["bars"].values():
+            rows = [r for r in series if r[0] >= payload["eligibleFrom"]]
+            totals["symbols"] += 1
+            totals["bars"] += len(rows)
+            totals["measured"] += sum(not r[7] for r in rows)
+            if not rows or any(not r[8] for r in rows):
+                totals["missingActions"] += 1
+            totals["unknownTerms"] += sum(event.get("termsKnown") is False for r in rows for event in r[9])
+        return totals
+
+    def read_panel(self, digest, *, daily_window=False):
+        payload = self.snapshot_payload(digest)
         start = datetime.fromisoformat(payload["eligibleFrom"]) if "eligibleFrom" in payload else None
         panel = {
             c: [

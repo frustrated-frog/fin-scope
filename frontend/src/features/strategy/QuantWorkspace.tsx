@@ -201,7 +201,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   const linkedStrategies = pane === 'factors' && selectedFactorCode
     ? strategies.filter(v => parseSpec(v)?.factors?.some(factor => factor.code === selectedFactorCode)) : [];
   const archive = [
-    ...paperCatalog.rows.map(v => ({ key: 'paper-' + v.id, name: v.spec.rule.name, type: '盘中 · 五分钟',
+    ...paperCatalog.rows.map(v => ({ key: 'paper-' + v.id, name: v.spec.rule.name,
+      type: v.spec.rule.kind === 'python' && v.spec.rule.recipe ? '经典策略 · 组件实验' : '盘中 · 五分钟',
       status: lifecycleLabel(v), date: v.created, open: () => showPaperVersion(v.id) })),
     ...experiments.map(v => ({ key: 'daily-' + v.id,
       name: strategies.find(strategy => strategy.id === v.strategyVersionId)?.name ?? `日频实验 #${v.id}`,
