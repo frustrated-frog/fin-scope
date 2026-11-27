@@ -3,6 +3,8 @@ import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
+import { WalkForward } from './WalkForward';
+import { ParameterGrid } from './ParameterGrid';
 import { ReturnAttribution } from './ReturnAttribution';
 import { PerformanceReport, PlanReport, type ExecutionCosts, type RebalancePlan, type Performance } from './ExecutionReport';
 import './PaperLab.css';
@@ -491,11 +493,13 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
   );
 }
 
-export function PaperLab({ seed, initialId, initialDay, comparison, catalog, accountsOnly = false,
+export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总览', onAnalysisResult, comparison, catalog, accountsOnly = false,
   onAccount, onExperiment, onCompare, onBrowse }: {
   seed?: PaperSeed;
   initialId?: number;
   initialDay?: string;
+  initialAnalysis?: string;
+  onAnalysisResult?: (id: number) => void;
   comparison?: PaperVersion;
   catalog: PaperCatalog;
   accountsOnly?: boolean;
@@ -508,7 +512,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
   const [selectedId, setId] = useState(initialId);
   const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
-  const [analysisView, setAnalysisView] = useState('总览');
+  const [requestedView, setAnalysisView] = useState(initialAnalysis);
   const [day, setDay] = useState(initialDay ?? '');
   const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
   const [hypothesis, setHypothesis] = useState(seed?.hypothesis || (comparison && !(comparison.spec.rule.kind === 'python' && comparison.spec.rule.recipe) ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : ''));
@@ -530,6 +534,8 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
   const active = versions.find((v) => v.id === id);
   const spec = active?.spec;
   const classic = spec?.rule.kind === 'python' ? spec.rule.recipe : undefined;
+  const canReplay = !!classic && spec?.rule.kind==='python' && spec.rule.executionVersion===2;
+  const analysisView = !canReplay && ['滚动验证','参数实验'].includes(requestedView) ? '总览' : requestedView;
   const book = active?.book;
   useEffect(() => {
     let alive = true;
@@ -740,7 +746,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
         <div className="quant-results">
           {!active || !spec ? (
             <div className="quant-catalog-empty">
-              <strong>{catalog.loading ? '正在读取…' : accountsOnly ? '暂无运行中的模拟账户' : '正在读取实验版本'}</strong>
+              <strong>{catalog.loading ? '正在读取…' : accountsOnly ? '暂无运行中的模拟账户' : '请选择已有的回测版本'}</strong>
               {accountsOnly && !catalog.loading && <><p>在实验室查看回测结果，启动模拟后可在这里跟踪账户。</p>
                 <button onClick={catalog.rows.length ? () => onExperiment(catalog.rows[0].id) : onBrowse}>
                   {catalog.rows.length ? '查看最近的回测' : '前往实验室'}</button></>}
@@ -834,12 +840,15 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
                     </small>
                   </header>
                   <nav className="qh-tabs" aria-label="回测分析维度">
-                    {['总览', '收益归因', ...(detail.history.comparison ? ['同数据对照'] : []), ...(classic ? ['组合与交易'] : []), '研究依据'].map(view=>
+                    {['总览', '收益归因', ...(detail.history.comparison ? ['同数据对照'] : []), ...(classic ? ['组合与交易'] : []), ...(canReplay ? ['参数实验','滚动验证'] : []), '研究依据'].map(view=>
                       <button key={view} aria-pressed={view===analysisView} onClick={()=>setAnalysisView(view)}>{view}</button>)}
                   </nav>
                   {analysisView==='总览' && <BacktestOverview history={detail.history} capital={spec.capital}>
                   <PaperTrace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
                   </BacktestOverview>}
+                  {analysisView==='滚动验证' && classic && <WalkForward key={active.id} version={active.id} recipe={classic}/>}
+                  {analysisView==='参数实验' && classic && <ParameterGrid key={active.id} version={active.id} recipe={classic}
+                    capital={spec.capital} onResult={onAnalysisResult ?? onExperiment}/>}
                   {analysisView==='收益归因' && <ReturnAttribution key={active.id} version={active} onCompare={onCompare}/>}
                   {analysisView==='同数据对照' && detail.history.comparison && <section className="qh-comparison">
                     <h5>同一份冻结行情 · 实验 #{detail.history.comparison.version} 与 #{active.id}</h5>
