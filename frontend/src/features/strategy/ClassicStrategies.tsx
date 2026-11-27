@@ -11,8 +11,8 @@ const families = {
 export type Family = keyof typeof families;
 const bases = { COHORT: '登记研究池', DISCOVERY: '股票发现历史候选池', GEM: '登记研究池 · 创业板', SH_MAIN: '登记研究池 · 沪市主板' };
 const intervals = { '5m': '5 分钟', '15m': '15 分钟', '1d': '日线' };
-const allocations = { EQUAL: '等权', SCORE: '得分排名加权', INVERSE_VOL: '逆波动率', MIN_VARIANCE:'最小方差', RISK_PARITY:'风险平价' };
-const frequencies = { DAILY: '每个交易日', WEEKLY: '每周', MONTHLY: '每月' };
+export const allocations = { EQUAL: '等权', SCORE: '得分排名加权', INVERSE_VOL: '逆波动率', MIN_VARIANCE:'最小方差', RISK_PARITY:'风险平价' };
+export const frequencies = { DAILY: '每个交易日', WEEKLY: '每周', MONTHLY: '每月' };
 export function classicExperimentType(recipe:ClassicRecipe) {
   return `${frequencies[recipe.rebalance]}调仓 · ${allocations[recipe.allocation]}`;
 }

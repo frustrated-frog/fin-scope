@@ -130,9 +130,17 @@ export function ReturnAttribution({version,onCompare}:{version:PaperVersion;onCo
     setResult(undefined);setError('');
     api<Report>('/api/quant/paper/versions/attribution/'+version.id,{signal:controller.signal})
       .then(data=>{
-        if (!data?.current || data.current.id!==version.id) {throw new Error('没有读到该版本的归因账本');}
-        if (!controller.signal.aborted) {setResult(data);}
-      }).catch(e=>{if(!controller.signal.aborted){setError(errorMessage(e));}});
+        if (!data?.current || data.current.id!==version.id) {
+          throw new Error('没有读到该版本的归因账本');
+        }
+        if (!controller.signal.aborted) {
+          setResult(data);
+        }
+      }).catch(e=>{
+        if (!controller.signal.aborted) {
+          setError(errorMessage(e));
+        }
+      });
     return ()=>controller.abort();
   },[version.id,retry]);
   if (!result || result.current.id!==version.id) {
@@ -148,7 +156,7 @@ export function ReturnAttribution({version,onCompare}:{version:PaperVersion;onCo
     <div className="att-context"><i/>{r.current.first.slice(0,10)} — {r.current.last.slice(0,10)} · 冻结回测</div>
     <h3>{r.paired && r.base ? label(r.current)+' 与 '+label(r.base) : r.current.name}</h3>
     <p>{insight}</p></div>
-    <div className="att-head-result"><span>{b?'扣费收益差':'扣费收益'}</span><strong>{amt(b?b.points:100*r.current.net/r.current.capital,true)}
+    <div className="att-head-result" data-loss={(b?b.net:r.current.net)<0}><span>{b?'扣费收益差':'扣费收益'}</span><strong>{amt(b?b.points:100*r.current.net/r.current.capital,true)}
       <small>{b?'个百分点':'%'}</small></strong></div></header>
     <div className="att-evidence-grid">{b&&<ReturnBridge report={r}/>}<StudyLedger r={r}/></div>
     <div className="att-detail-grid"><ContributionTable r={r}/><Tutor key={version.id} report={r} onCompare={q=>onCompare(version,q)}/></div>

@@ -19,7 +19,7 @@ export interface RebalancePlan {
   legs: Record<string, {weight:number; target:number; originalTarget?:number; actual?:number; remaining?:number; reason?:string; lastOutcome?:string; riskReason?:string}>;
 }
 export interface Performance {
-  days:number; closeDays?:number; returnDays:number; netReturn:number; excess:number; maxDrawdown:number|null; feeRate:number;
+  days:number; closeDays?:number; asOf?:string; returnDays:number; netReturn:number; excess:number; maxDrawdown:number|null; feeRate:number;
   dailyVol:number | null; sharpe:number | null; turnover?:number | null;
 }
 const money = (v:number) => '¥ ' + v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -39,7 +39,7 @@ export function PerformanceReport({value:p, costs}:{value:Performance; costs?:Ex
       {costs && <><div><dt>佣金</dt><dd>{money(costs.commission)}</dd></div><div><dt>印花税</dt><dd>{money(costs.stampTax)}</dd></div>
         <div><dt>成交价内的滑点</dt><dd>{money(costs.slippage)}</dd></div><div><dt>双边成交额</dt><dd>{money(costs.notional)}</dd></div></>}
     </dl>
-    <p>收盘风险使用 15:00 净值{p.closeDays!=null?'，已覆盖 '+p.closeDays+' 个收盘日':''}。双边换手率取买卖成交额之和除以每日最后观测的平均权益。波动率取相邻交易日的净收益，满 60 个有效日收益后显示夏普。</p>
+    <p>{p.asOf && '收益截至 '+stamp(p.asOf)+'。'}收盘风险使用 15:00 净值{p.closeDays!=null?'，已覆盖 '+p.closeDays+' 个收盘日':''}。双边换手率取买卖成交额之和除以每日最后观测的平均权益。波动率取相邻交易日的净收益，满 60 个有效日收益后显示夏普。</p>
   </details>;
 }
 
@@ -54,7 +54,12 @@ function initialTarget(plan:RebalancePlan, leg:PlanLeg) {
 
 function PlanStages({plan, name}:{plan:RebalancePlan; name:(code:string)=>string}) {
   const [chosen,choose]=useState('');
-  const codes=Object.keys(plan.legs).sort((a,b)=>Math.abs(plan.legs[b].remaining??0)-Math.abs(plan.legs[a].remaining??0));
+  const codes=Object.keys(plan.legs).sort((a,b)=>{
+    const first=plan.legs[a], second=plan.legs[b];
+    return Math.abs(second.remaining??0)-Math.abs(first.remaining??0)
+      || Number(Boolean(second.riskReason))-Number(Boolean(first.riskReason))
+      || Math.max(second.target,second.actual??0)-Math.max(first.target,first.actual??0);
+  });
   const code=codes.includes(chosen)?chosen:codes[0];
   if (!code) {
     return null;

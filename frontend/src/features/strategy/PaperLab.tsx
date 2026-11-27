@@ -30,6 +30,7 @@ interface BasicRule {
 interface PythonRule {
   kind: 'python';
   recipe?: ClassicRecipe;
+  executionVersion?: number;
   exDateAccounting?: boolean;
   name: string;
   hypothesis: string;

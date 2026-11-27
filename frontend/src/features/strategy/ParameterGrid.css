@@ -1,0 +1,16 @@
+.pg-design {display:grid;grid-template-columns:minmax(0,1.6fr) minmax(220px,1fr);gap:14px}
+.pg-terminal .grid-axis {border:0;border-top:1px solid var(--att-line);padding:9px 0 2px;margin:15px 0 0;min-width:0}
+.grid-axis legend {padding-right:10px;color:var(--att-quiet);font-size:.78rem}
+.pg-terminal .grid-axis button {margin:1px 5px 4px 0;font-size:.78rem;color:#b8cdd8}
+.pg-terminal .grid-axis button[aria-pressed=true] {border-color:#66c9bba3;background:#2c56596e;color:#b1f0e3}
+.pg-preview>header>b {font:600 1.3rem ui-monospace,monospace;color:var(--att-teal)}
+.pg-preview ul {padding:0;margin:14px 0 8px;list-style:none}
+.pg-preview li {display:grid;grid-template-columns:1fr 1fr auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--att-line);color:#c7dfe5;font-size:.85rem}
+.pg-preview li b {color:var(--att-ice);font-weight:500}
+.pg-results {margin-top:14px}
+.pg-results label {color:var(--att-quiet);font-size:.78rem}
+.pg-results select {max-width:100%;color:var(--att-ink);background:#172d3b;border:1px solid var(--att-line);padding:6px;border-radius:5px}
+.pg-results td details {max-width:17em;white-space:normal;text-align:left}
+.pg-results td [class=att-link] {padding:3px 6px}
+.pg-terminal .att-head-result small {margin:0 4px 0 0}
+@media(max-width:780px){.pg-design{grid-template-columns:1fr}.pg-results>header{align-items:flex-start}}

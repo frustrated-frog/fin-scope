@@ -71,3 +71,11 @@
 .att-stock-detail div {display:flex;flex-wrap:wrap;gap:5px 12px;margin:4px 0;color:#bbd0d8;font-size:.75rem}
 .att-stock-detail strong {color:#a4dcda}
 @media(prefers-reduced-motion:reduce){.att-stock i{transition:none}}
+.att-nav>div {display:flex;gap:8px;flex-wrap:wrap}
+.att-head-result[data-loss=true] {border-color:var(--att-rose)}
+.att-head-result[data-loss=true] strong {color:var(--att-rose)}
+@media(max-width:760px){
+  .workspace:has(.quant-workspace)>.topbar {position:static}
+  .att-axis {gap:3px}
+  .att-axis span {line-height:1.35;text-wrap:balance}
+}
