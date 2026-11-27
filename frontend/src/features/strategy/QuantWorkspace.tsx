@@ -43,16 +43,18 @@ function EquityChart({ experiment }: { experiment?: QuantExperiment }) {
   </div>;
 }
 
-export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed, marketContext }: {
+export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryIntentConsumed, marketContext, onReading }: {
   addToast: Toast;
   setMessage: (message: string) => void;
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
   marketContext?: StockDiscoveryMarketContext;
+  onReading?: () => void;
 }) {
   const [pane, setPane] = useState<Pane>('overview');
   const [paperSeed,setPaperSeed] = useState<PaperSeed>();
   const [paperId, setPaperId] = useState<number>();
+  const [paperDay, setPaperDay] = useState<string>();
   const paperCatalog = usePaperCatalog();
   const [comparison, setComparison] = useState<PaperVersion>();
   function showPaperVersion(id: number) {
@@ -68,7 +70,8 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     setPaperSeed(seed);
     setPane('intraday');
   }
-  function showAccount(id: number) {
+  function showAccount(id: number, day?: string) {
+    setPaperDay(day);
     setPaperId(id);
     setPane('paper');
   }
@@ -234,6 +237,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
 
     {pane === 'overview' && <QuantHome catalog={paperCatalog} dailyCount={experiments.length} dailyStrategies={strategies.length}
       onBuild={() => openPaper({hypothesis:'',classic:'TREND'})} onFactors={() => setPane('factors')}
+      onCompare={(base,question) => openPaper({hypothesis:question ?? ''},base)} onReading={onReading}
       onAI={() => openPaper({hypothesis:''})} onAccount={showAccount} onVersion={showPaperVersion} onLab={() => setPane('experiments')}/>}
     {(inLibrary || pane === 'experiments' || pane === 'paper') && <ResearchHeader section={inLibrary ? 'catalog' : pane === 'paper' ? 'paper' : 'experiments'}
       count={paperCatalog.loading || paperCatalog.error ? undefined : inLibrary ? paperCatalog.rows.length : pane === 'paper' ? running : archive.length}>
@@ -270,7 +274,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
 
     {(pane === 'paper' || pane === 'intraday') && <PaperLab
       key={`${pane}-${paperId ?? 'new'}-${comparison?.id ?? ''}`}
-      seed={pane === 'intraday' ? paperSeed : undefined} initialId={paperId}
+      seed={pane === 'intraday' ? paperSeed : undefined} initialId={paperId} initialDay={pane === 'paper' ? paperDay : undefined}
       comparison={pane === 'intraday' ? comparison : undefined} accountsOnly={pane === 'paper'} catalog={paperCatalog}
       onBrowse={() => setPane('experiments')} onExperiment={showPaperVersion} onAccount={showAccount}
       onCompare={base => openPaper({ hypothesis: '' }, base)} />}

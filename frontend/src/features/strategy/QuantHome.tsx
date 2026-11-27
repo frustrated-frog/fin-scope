@@ -4,6 +4,7 @@ import { lifecycleLabel, type PaperVersion } from './PaperLab';
 import { classicExperimentType, type ClassicRecord } from './ClassicStrategies';
 import { ExperimentReturnChart, type ComparisonCurve, type EquityObservation } from './ExperimentReturnChart';
 import './QuantHome.css';
+import { LearningWorkbench } from './LearningWorkbench';
 
 interface Snapshot {
   history: ClassicRecord & {curve:EquityObservation[]; model?:unknown};
@@ -12,9 +13,9 @@ interface Snapshot {
 const percent = (value:number) => (value > 0 ? '+' : '')+(value*100).toFixed(2)+'%';
 const amount = (value:number) => value.toLocaleString('zh-CN',{minimumFractionDigits:2, maximumFractionDigits:2});
 
-export function QuantHome({ catalog, dailyCount, dailyStrategies, onBuild, onFactors, onAI, onAccount, onVersion, onLab }: {
+export function QuantHome({ catalog, dailyCount, dailyStrategies, onBuild, onFactors, onAI, onAccount, onVersion, onLab, onCompare, onReading }: {
   catalog:{rows:PaperVersion[]; loading:boolean; error:string; refresh:()=>void}; dailyCount:number; dailyStrategies:number;
-  onBuild:()=>void; onFactors:()=>void; onAI:()=>void; onAccount:(id:number)=>void; onVersion:(id:number)=>void; onLab:()=>void;
+  onBuild:()=>void; onFactors:()=>void; onAI:()=>void; onAccount:(id:number,day?:string)=>void; onCompare:(version:PaperVersion,question?:string)=>void; onReading?:()=>void; onVersion:(id:number)=>void; onLab:()=>void;
 }) {
   const [selected, select] = useState<number>();
   const [resource,setResource] = useState<{id:number; data?:Snapshot; error?:string}>();
@@ -64,6 +65,8 @@ export function QuantHome({ catalog, dailyCount, dailyStrategies, onBuild, onFac
       <dl>{[['策略版本',catalog.rows.length+dailyStrategies],['历史实验',catalog.rows.length+dailyCount],['运行账户',accounts.length]].map(([label,count])=>
         <div key={label}><dt>{label}</dt><dd>{catalog.loading || catalog.error ? '—' : count}</dd></div>)}</dl></header>
     {catalog.error && <p role="alert">{catalog.error} <button onClick={catalog.refresh}>重新读取</button></p>}
+    <LearningWorkbench versions={catalog.rows} loading={catalog.loading} error={catalog.error} onAccount={onAccount}
+      onVersion={onVersion} onFactors={onFactors} onCompare={onCompare} onReading={onReading} onLab={onLab}/>
     <div className="qh-layout"><section className="qh-focus">
       <header><div><small>{comparison ? '同数据对照' : '实验表现'}</small><h4>{version?.spec.rule.name ?? '回测实验'}</h4></div>
         {version && <label className="qh-switch">切换实验 ▾<select aria-label="切换回测实验" value={version.id} onChange={e=>select(Number(e.target.value))}>

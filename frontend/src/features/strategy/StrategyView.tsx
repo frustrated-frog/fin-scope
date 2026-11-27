@@ -10,6 +10,7 @@ interface Props {
   setMessage: (message: string) => void;
   entryIntent?: QuantResearchEntryIntent;
   onEntryIntentConsumed?: () => void;
+  onReading?: () => void;
   marketContext?: StockDiscoveryMarketContext;
 }
 

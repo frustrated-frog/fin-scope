@@ -488,10 +488,11 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
   );
 }
 
-export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = false,
+export function PaperLab({ seed, initialId, initialDay, comparison, catalog, accountsOnly = false,
   onAccount, onExperiment, onCompare, onBrowse }: {
   seed?: PaperSeed;
   initialId?: number;
+  initialDay?: string;
   comparison?: PaperVersion;
   catalog: PaperCatalog;
   accountsOnly?: boolean;
@@ -505,9 +506,9 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
   const [analysisView, setAnalysisView] = useState('总览');
-  const [day, setDay] = useState('');
+  const [day, setDay] = useState(initialDay ?? '');
   const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
-  const [hypothesis, setHypothesis] = useState(comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : seed?.hypothesis ?? '');
+  const [hypothesis, setHypothesis] = useState(seed?.hypothesis || (comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : ''));
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const originalRecipe = comparison?.spec.rule.kind === 'python' ? comparison.spec.rule.recipe : undefined;
@@ -662,6 +663,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">对照因子权重 · Ridge 与等权</option>}
             </select>
           </label>
+          {engine === 'classic' && parent && seed?.hypothesis && <p>已登记的研究问题 · {seed.hypothesis}</p>}
           {engine === 'classic' && <><ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>
             {parent ? <p>沿用原实验的股票名单、区间和行情快照。</p> : <fieldset className="classic-date-range"><legend>回测区间</legend>
               <div className="classic-fields"><label>回测开始日<input type="date" value={startDate} max={endDate || undefined} required={!!endDate} onChange={e=>setStartDate(e.target.value)}/></label>

@@ -1,0 +1,99 @@
+.learn-workbench {
+  --learn-line: #88aec433;
+  --learn-accent: #87e6dc;
+  color: #e5f1f5;
+  margin: 20px 0;
+  padding: clamp(14px, 2vw, 28px);
+  border: 1px solid #73b8bd49;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 10% 0%, #29515852, transparent 52%), #101f31a8;
+}
+.learn-top,.learn-filters,.learn-actions,.learn-journal header {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.learn-workbench .learn-top h4 {font-size: clamp(1.35rem, 2vw, 1.85rem); color: #edf8fa; letter-spacing: .02em}
+.learn-workbench p {line-height: 1.65; margin: 7px 0 12px; font-size: .88rem}
+.learn-top p {margin: 3px 0 0}
+.learn-filters {justify-content: flex-start; gap: 10px}
+.learn-workbench label {display: grid; gap: 5px; color: #b3c8d4; font-size: .78rem}
+.learn-workbench select,.learn-workbench input,.learn-workbench textarea {
+  min-width: 0; max-width: 100%; color-scheme: dark; font: inherit; font-size: .88rem; color: #edf5f7;
+  padding: 7px 9px; border: 1px solid #729aac60; border-radius: 6px; background: #132738;
+}
+.learn-filters select {max-width: min(30vw, 340px)}
+.learn-periods {display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 4px; margin: 20px 0 18px;
+  padding: 4px; border: 1px solid var(--learn-line); border-radius: 10px; background: #0c192794}
+.learn-workbench button {color: var(--learn-accent); background: transparent; font: inherit; font-size: .85rem; border: 1px solid var(--learn-line);
+  border-radius: 6px; padding: 7px 10px; cursor: pointer}
+.learn-workbench button:hover {background: #407a821f; border-color: #75b8c0aa}
+.learn-workbench button:focus-visible,.learn-workbench summary:focus-visible {outline: 2px solid var(--learn-accent); outline-offset: 2px}
+.learn-workbench button:disabled {cursor: wait; opacity: .65}
+.learn-periods button {text-align: left; padding: 10px clamp(6px, 1.3vw, 18px); border-color: transparent; display: grid; gap: 3px; color: #b6c8d7; transition: background-color 160ms ease}
+.learn-periods button[aria-pressed=true] {color: #aaf5e9; background: #294b57; box-shadow: inset 0 -2px 0 #83e3d3}
+.learn-periods strong {font-size: clamp(.85rem,1.3vw,1.05rem)}
+.learn-periods small {font-size: .73rem}
+.learn-grid {display: grid; grid-template-columns: minmax(0,1.95fr) minmax(230px,1fr); gap: clamp(14px,2vw,28px); align-items: start}
+.learn-observe,.learn-journal {min-width: 0}
+.learn-observe>header>span {color: var(--learn-accent); font-size: .75rem}
+.learn-workbench .learn-observe>header h4 {color: #edf5fa; margin: 3px 0 15px; font-size: clamp(1.12rem,1.6vw,1.55rem)}
+.learn-workbench h5 {color: #cfe4ee; font-size: .92rem; margin: 14px 0 8px}
+.learn-scroll {overflow-x: auto}
+.learn-workbench table {width: 100%; border-collapse: collapse; font-size: .83rem; font-variant-numeric: tabular-nums}
+.learn-workbench th,.learn-workbench td {padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--learn-line); white-space: nowrap}
+.learn-workbench th:first-child {text-align:left; white-space:normal}
+.learn-workbench th small {display: block; font-size: .7rem; font-weight: 400}
+.learn-workbench thead th {color: #9ab3c2; font-weight: 500}
+.learn-workbench tbody th button {text-align: left; border: 0; padding: 4px 0; color: #c7dce5}
+.learn-workbench tbody th button[aria-pressed=true] {color: var(--learn-accent); text-decoration: underline; text-underline-offset: 4px}
+.learn-workbench .learn-metrics {display: grid; grid-template-columns: repeat(auto-fit,minmax(min(112px,100%),1fr)); gap: 6px; margin: 10px 0}
+.learn-metrics>div {padding: 10px; background: #23435359; border-radius: 5px}
+.learn-metrics dt {font-size: .75rem}
+.learn-metrics dd {margin: 5px 0 0; font-size: 1rem; color: #deeff3; font-weight: 650}
+.learn-workbench .learn-link,.learn-actions button {margin-top: 12px}
+.learn-actions {justify-content: flex-start; gap: 8px}
+.learn-journal {padding: 15px; border: 1px solid #7db8c744; border-radius: 10px; background: linear-gradient(145deg,#203c50b8,#17293c99)}
+.learn-journal header {gap: 6px}
+.learn-journal header h5 {margin: 0}
+.learn-journal header+header,.learn-journal article+header {border-top: 1px solid var(--learn-line); margin-top: 14px; padding-top: 14px}
+.learn-journal header:first-child button {background: #22514f; color: #b7f7e9; border-color: #699e9477}
+.learn-journal form {display: grid; gap: 9px; margin-top: 12px}
+.learn-journal textarea {resize: vertical; min-height: 68px}
+.learn-workbench [role=alert] {color:#ffb7ac}
+.learn-workbench [role=status] {color:#a7d4dc}
+.learn-record {margin-top: 8px; padding: 10px 0; border-top: 1px solid var(--learn-line)}
+.learn-record summary,.learn-disclosure summary {cursor: pointer; color: #b6dce1}
+.learn-record summary span,.learn-record time {font-size:.72rem; margin: 0 6px}
+.learn-journal small {font-size:.73rem}
+.learn-lesson {margin-top: 12px; overflow-wrap: anywhere}
+.learn-lesson p {color: #e2eff2; white-space: pre-line}
+.learn-lesson button {display: block; margin-top: 10px}
+.learn-disclosure {border-top: 1px solid var(--learn-line); margin-top: 12px; padding-top: 10px}
+.learn-steps {padding-left: 20px; font-size: .86rem; color:#bad0db}
+.learn-steps li {margin: 8px 0}
+.learn-steps b {color: #cae7e9; margin-right: 8px}
+.learn-checklist {display:grid; gap:7px}
+.learn-checklist div {display:grid; grid-template-columns:minmax(6em,auto) 1fr; gap:8px; border-top: 1px solid var(--learn-line); padding-top:7px; font-size:.85rem}
+.learn-checklist dd {margin:0}
+.learn-bars {display:grid;gap:5px;margin:8px 0 16px}
+.learn-bars div {display:grid;grid-template-columns:7em minmax(2em,1fr) 4em;align-items:center;gap:8px;font-size:.76rem}
+.learn-bars meter {width:100%;height:10px;accent-color:#73c8c3}
+.learn-workbench .learn-placeholder {padding:12px 0}
+@media(max-width:940px){.learn-grid{grid-template-columns:1fr}.learn-filters select{max-width:52vw}}
+@media(max-width:600px){.learn-top,.learn-filters{align-items:stretch}.learn-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(105px,.85fr);width:100%}.learn-filters select{max-width:100%;width:100%}.learn-periods button{padding:8px 2px;text-align:center}.learn-periods small{display:none}.learn-grid{gap:14px}.learn-workbench th,.learn-workbench td{padding:7px 3px}.learn-workbench .learn-metrics{grid-template-columns:1fr 1fr}.learn-journal{padding:12px}}
+@media(prefers-reduced-motion:reduce){.learn-periods button{transition:none}}
+.learn-callout {display:flex;align-items:center;gap:18px;padding:12px 15px;margin:10px 0 14px;border-left:3px solid #7ed9ca;background:linear-gradient(100deg,#28585a66,transparent)}
+.learn-callout>strong {font-weight:600;font-size:clamp(1.65rem,2.4vw,2.3rem);letter-spacing:.01em;color:#a6efde;white-space:nowrap}
+.learn-callout b,.learn-callout small {display:block}.learn-callout small {margin-top:3px}
+.learn-journal>h5:first-child {margin-top:0;color:#acf0df}
+.learn-journal>p+header {border-top:1px solid var(--learn-line);padding-top:12px}
+.learn-journal header button {color:#ace6df}
+.learn-workbench {scroll-margin-top:90px}
+.learn-aside {min-width:0;display:grid;gap:14px;align-content:start}
+.learn-reasons {border:1px solid var(--learn-line);border-radius:10px;padding:15px;background:#1e354544}
+.learn-reasons h5 {margin:0 0 10px}
+.learn-reason {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:5px 0;font-size:.78rem;color:#b8cbd7}
+.learn-reason strong {color:#f3c19a}
+.learn-reason progress {grid-column:1/-1;width:100%;height:4px;appearance:none;border:0;background:#324450;border-radius:3px}
+.learn-reason progress::-webkit-progress-bar {background:#324450;border-radius:3px}
+.learn-reason progress::-webkit-progress-value {background:#deaa83;border-radius:3px}
+.learn-reason progress::-moz-progress-bar {background:#deaa83}

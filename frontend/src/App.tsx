@@ -52,7 +52,7 @@ function isResearchRunActive(status?: string) {
 
 export default function App() {
   const [view, setView] = useState<View>(() => (
-    ['marketIntel', 'financials', 'globalMarkets'].includes(new URLSearchParams(window.location.search).get('agentView') ?? '')
+    ['marketIntel', 'financials', 'globalMarkets', 'strategy'].includes(new URLSearchParams(window.location.search).get('agentView') ?? '')
       ? new URLSearchParams(window.location.search).get('agentView') as View :
     new URLSearchParams(window.location.search).has('reactionEvent') || new URLSearchParams(window.location.search).has('reactionSample')
       ? 'investmentObservation' : new URLSearchParams(window.location.search).has('section') ? 'knowledge' : 'dashboard'
@@ -556,7 +556,7 @@ export default function App() {
       {view === 'marketIntel' && <MarketIntelView addToast={addToast} setMessage={setMessage} onOpenQuantResearch={(intent) => { setQuantResearchIntent(intent); setView('strategy'); }} />}
       {view === 'financials' && <FinancialsView addToast={addToast} setMessage={setMessage} />}
       {view === 'strategy' && <StrategyView addToast={addToast} setMessage={setMessage} entryIntent={quantResearchIntent}
-        marketContext={stockDiscoveryMarketContext} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
+        onReading={() => setView('knowledge')} marketContext={stockDiscoveryMarketContext} onEntryIntentConsumed={() => setQuantResearchIntent(undefined)} />}
       {view === 'majorEvents' && <MajorEventView addToast={addToast} />}
     </AppShell>
   );
