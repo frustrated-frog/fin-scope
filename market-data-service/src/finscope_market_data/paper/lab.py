@@ -13,7 +13,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
-from .local_runtime import PaperWake
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
@@ -63,7 +62,6 @@ class PaperLab:
         self.action_queries = {}
         self.action_day = None
         self.features = ForwardFeatures(self)
-        self.wake = PaperWake()
 
     @contextmanager
     def db(self):
@@ -313,7 +311,7 @@ class PaperLab:
             evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
             account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
             health = self.execution_health(db, version, account, stamp())
-        return dict(localRunner=self.wake.enabled, idleSleepPrevented=self.wake.active, executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
+        return dict(executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
                     book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
 
@@ -472,24 +470,16 @@ class PaperLab:
             return await asyncio.to_thread(compute)
         return advance(book, rule, history, end, seen, spec.capital, universe=spec.codes, decision_clock=decision_clock)
 
-    def has_running_accounts(self):
-        with self.db() as db:
-            return db.execute("SELECT 1 FROM paper_account WHERE lifecycle='RUNNING' LIMIT 1").fetchone() is not None
-
     async def run(self, stop):
-        try:
-            while not stop.is_set():
-                try:
-                    self.wake.update(stamp(), self.has_running_accounts)
-                    await self.tick()
-                except Exception:
-                    log.exception("paper account update failed")
-                try:
-                    await asyncio.wait_for(stop.wait(), timeout=25)
-                except TimeoutError:
-                    pass
-        finally:
-            self.wake.close()
+        while not stop.is_set():
+            try:
+                await self.tick()
+            except Exception:
+                log.exception("paper account update failed")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=25)
+            except TimeoutError:
+                pass
 
     def routes(self):
         router = APIRouter(prefix="/v1/paper")
