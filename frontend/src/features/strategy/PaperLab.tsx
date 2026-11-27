@@ -1,3 +1,4 @@
+import { BacktestOverview, PortfolioOverview } from './QuantAnalytics';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
@@ -764,6 +765,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   <div><span>当日盈亏（元）</span><strong>{latest && prior !== undefined ? currency(latest.equity-prior) : '—'}</strong></div>
                   <div><span>相对等权基准</span><strong>{latest ? pct((latest.equity-latest.benchmark)/spec.capital) : '—'}</strong></div>
                 </div>}
+                {accountsOnly && book && detail && <PortfolioOverview book={book} capital={spec.capital} daily={detail.daily}
+                  performance={detail.forwardPerformance} name={stockName}/>}
                 {accountsOnly && <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details>}
                 {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟撮合 · {classic ? '快照末期股票池 ' : ''}{spec.codes.length} 只</p>}
                 {accountsOnly && detail?.executionHealth && <div className="paper-execution-health">
@@ -797,37 +800,6 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   </p>
                 )}
               </section>
-              {!accountsOnly && <section className="quant-readout">
-                <header>
-                  <h4>策略与因子</h4>
-                  <button className="quant-action" onClick={() => onCompare(active)}>{classic ? '沿用数据做对照' : spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
-                </header>
-                <p>{detail?.history.factorAuthor ? spec.rule.hypothesis : spec.origin}</p>
-                {spec.rule.kind === 'python' ? <>
-                  <p>{spec.rule.factor}</p>
-                  <details className="paper-source"><summary>查看 Python 策略源码</summary>
-                    <pre tabIndex={0}><code>{spec.rule.code}</code></pre>
-                  </details>
-                </> : <><div className="paper-formula">
-                  {spec.rule.terms.map((t, i) => (
-                    <span key={i}>
-                      {i > 0 ? ' + ' : ''}
-                      {t.weight} × {features[t.feature]}({t.window})
-                    </span>
-                  ))}
-                </div>
-                <p>
-                  以五分钟为一根 K 线。买入得分 ≥ {spec.rule.entry}，卖出得分 ≤{' '}
-                  {spec.rule.exit}，最多持有 {spec.rule.slots} 只。
-                </p>
-                </>}
-                <details>
-                  <summary>
-                    {spec.source} · {classic ? '冻结时 ' : ''}{spec.codes.length} 只
-                  </summary>
-                  <p>{spec.codes.map(stockName).join(' · ')}</p>
-                </details>
-              </section>}
               {!accountsOnly && detail && (
                 <section className="quant-readout">
                   <header>
@@ -837,6 +809,10 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {currency(detail.history.fees)}
                     </small>
                   </header>
+                  <BacktestOverview history={detail.history} capital={spec.capital}>
+                  <Trace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
+                  </BacktestOverview>
+                  {detail.history.comparison && <button className="quant-record-link" onClick={() => onExperiment(detail.history.comparison!.version)}>打开原实验 #{detail.history.comparison.version} ↗</button>}
                   {classic && <ClassicEvidence history={detail.history} recipe={classic} name={stockName}/>}
                   {detail.history.performance && <PerformanceReport value={detail.history.performance} costs={detail.history.costs}/>}
                   {!classic && spec.rule.kind === 'python' && <div className="paper-validation">
@@ -906,9 +882,40 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       T+1，一字线跳过。{spec.rule.kind === 'python' && spec.rule.exDateAccounting ? '已核验的现金分红计入应收，送股计入持仓。来源仅提供除权日，到账及上市日未知的权益保持锁定。配股按不认购处理。' : '此版本账本未计分红送转。'}
                     </p>
                   </details>
-                  <Trace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
+
                 </section>
               )}
+              {!accountsOnly && <section className="quant-readout">
+                <header>
+                  <h4>策略与因子</h4>
+                  <button className="quant-action" onClick={() => onCompare(active)}>{classic ? '沿用数据做对照' : spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
+                </header>
+                <p>{detail?.history.factorAuthor ? spec.rule.hypothesis : spec.origin}</p>
+                {spec.rule.kind === 'python' ? <>
+                  <p>{spec.rule.factor}</p>
+                  <details className="paper-source"><summary>查看 Python 策略源码</summary>
+                    <pre tabIndex={0}><code>{spec.rule.code}</code></pre>
+                  </details>
+                </> : <><div className="paper-formula">
+                  {spec.rule.terms.map((t, i) => (
+                    <span key={i}>
+                      {i > 0 ? ' + ' : ''}
+                      {t.weight} × {features[t.feature]}({t.window})
+                    </span>
+                  ))}
+                </div>
+                <p>
+                  以五分钟为一根 K 线。买入得分 ≥ {spec.rule.entry}，卖出得分 ≤{' '}
+                  {spec.rule.exit}，最多持有 {spec.rule.slots} 只。
+                </p>
+                </>}
+                <details>
+                  <summary>
+                    {spec.source} · {classic ? '冻结时 ' : ''}{spec.codes.length} 只
+                  </summary>
+                  <p>{spec.codes.map(stockName).join(' · ')}</p>
+                </details>
+              </section>}
               {accountsOnly && detail?.forwardEvidence && <section className="quant-readout paper-glass"><header><h4>前向研究观察</h4><small>{detail.forwardEvidence.status}</small></header>
                 <p>已观察 {detail.forwardEvidence.sessions} 个交易日 · {detail.forwardEvidence.fills} 笔成交 · 最大回撤 {pct(detail.forwardEvidence.maxDrawdown)} · 费用占本金 {pct(detail.forwardEvidence.feeRate)} · 相对基准 {pct(detail.forwardEvidence.relativeReturn)}</p>
                 {detail.forwardEvidence.reasons.length > 0 && <p>{detail.forwardEvidence.reasons.join(' · ')}</p>}</section>}

@@ -5,6 +5,7 @@ import { FactorAssets, DatasetArchive } from './PaperArchive';
 import { PaperCodingJobs } from './PaperCodingJobs';
 import { ClassicLibrary, classicExperimentType } from './ClassicStrategies';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
+import { ResearchMap } from './ResearchMap';
 import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
 import { ResearchDatasetWizard } from './ResearchDatasetWizard';
@@ -216,12 +217,18 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
       <div className="quant-protocol" aria-label="实验协议"><span>DATA</span><i/><span>FACTOR</span><i/><span>SPEC</span><i/><span>RUN</span><i/><span>READ</span></div>
     </header>}
 
-    <nav className="quant-panes" aria-label="量化工作台页面">
-      {([['discovery','股票发现'],['overnight','尾盘与盘后'],['forecast','单股预测'],['catalog','策略与因子'],['experiments','实验室'],['paper','模拟实盘']] as Array<[Pane,string]>).map(([id,label]) =>
-        <button type="button" aria-current={primary === id ? 'page' : undefined} key={id}
-          className={primary === id ? 'active' : ''} onClick={() => setPane(id)}>
-          {label}{id === 'paper' && running > 0 && <small>{running} 个运行中</small>}
-        </button>)}
+    <nav className="quant-panes qa-navigation" aria-label="量化工作台页面">
+      {([
+        ['市场研究', [['discovery','股票发现'], ['overnight','尾盘与盘后'], ['forecast','单股预测']]],
+        ['量化工作空间', [['catalog','策略与因子'], ['experiments','实验室'], ['paper','模拟实盘']]]
+      ] as Array<[string, Array<[Pane,string]>]>).map(([group, links]) =>
+        <div className="qa-nav-group" role="group" aria-label={group} key={group}>
+          <span aria-hidden="true">{group}</span>
+          <div>{links.map(([id,label]) => <button type="button" aria-current={primary === id ? 'page' : undefined} key={id}
+            className={primary === id ? 'active' : ''} onClick={() => setPane(id)}>
+            {label}{id === 'paper' && running > 0 && <small>{running} 个运行中</small>}
+          </button>)}</div>
+        </div>)}
     </nav>
 
     {(inLibrary || pane === 'experiments' || pane === 'paper') && <ResearchHeader section={inLibrary ? 'catalog' : pane === 'paper' ? 'paper' : 'experiments'}
@@ -233,8 +240,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     </nav>}
     </ResearchHeader>}
 
-    {pane === 'experiments' && <DatasetArchive/>}
-    {pane === 'experiments' && <PaperCodingJobs onOpen={showPaperVersion}/>}
+    {pane === 'experiments' && <ResearchMap versions={paperCatalog.rows} onExperiment={showPaperVersion} onAccount={showAccount}/>}
     {pane === 'experiments' && <section className="quant-panel quant-archive">
       <header className="quant-catalog-toolbar"><div className="quant-panel-title"><h4>最近实验</h4></div></header>
       {paperCatalog.error && <p className="quant-error" role="alert">{paperCatalog.error} <button onClick={paperCatalog.refresh}>重试</button></p>}
@@ -243,6 +249,9 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
           <td>{record.type}</td><td><span className="research-record-status" data-running={record.status === '模拟中'}>{record.status}</span></td><td>{record.date?.slice(0,16).replace('T',' ') ?? '—'}</td></tr>)}</tbody></table></div>
         : <div className="quant-empty"><strong>{paperCatalog.loading ? '正在读取实验' : '暂无实验记录'}</strong><p>新建实验后，可在这里查看规则、数据和回测结果。</p></div>}
     </section>}
+
+    {pane === 'experiments' && <PaperCodingJobs onOpen={showPaperVersion}/>}
+    {pane === 'experiments' && <DatasetArchive/>}
 
     {inLab && pane !== 'experiments' && <div className="quant-catalog-toolbar">
       <button className="quant-record-link" onClick={() => setPane('experiments')}>← 实验列表</button>
