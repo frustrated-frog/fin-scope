@@ -16,6 +16,7 @@ import com.finscope.domain.quant.paper.LearningVerdictInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicGridInput;
+import com.finscope.domain.quant.paper.WalkForwardInput;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.rpc.llm.LunaResponsesClient;
 import com.finscope.rpc.quant.PythonPaperClient;
@@ -114,6 +115,38 @@ public class PaperResearchService {
         review.put("model", llm.model());
         review.put("text", report);
         return paper.saveReview(id, review);
+    }
+
+    public JsonNode walkResults(long version) {
+        return paper.walkResults(version);
+    }
+
+    public JsonNode runWalk(long version, WalkForwardInput input, UUID requestId) {
+        ObjectNode body = json.valueToTree(input);
+        body.put("requestId", requestId.toString());
+        return paper.runWalk(version, body);
+    }
+
+    public JsonNode teachWalk(long version, long job) {
+        for (JsonNode row : walkResults(version)) {
+            if (row.path("id").asLong() == job && "DONE".equals(row.path("state").asText())) {
+                if (!llm.isConfigured()) {
+                    throw invalid("请先配置本地 Luna API Key");
+                }
+                ObjectNode evidence = json.createObjectNode();
+                evidence.set("plan", row.path("plan"));
+                evidence.set("report", row.path("result"));
+                String prompt = "用中文教初学者读滚动验证。训练按扣费收益选参，每轮验证和固定原参对照各从相同本金空仓起步。"
+                        + "observation 用具体样本外数据描述现象；calculation 展示一轮两者收益相减的百分点算式；"
+                        + "limits 解释样本数量、训练窗口重叠和短期交易成本；hypothesis 提出下一次只改变一个变量的实验。"
+                        + "各项写一小段，返回 JSON，不编造、不承诺收益。";
+                ObjectNode answer = lessonFields(prompt, evidence,
+                        List.of("observation", "calculation", "limits", "hypothesis"), 2200);
+                answer.put("model", llm.model());
+                return answer;
+            }
+        }
+        throw invalid("请选择本版本已完成的滚动验证");
     }
 
     public JsonNode gridResults(long version) {

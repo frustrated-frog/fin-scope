@@ -8,6 +8,7 @@ import com.finscope.domain.quant.paper.LearningVerdictInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicGridInput;
+import com.finscope.domain.quant.paper.WalkForwardInput;
 import com.finscope.service.quant.paper.PaperResearchService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,6 +42,22 @@ public class PaperResearchController {
     @GetMapping("/factors/{id:[a-f0-9]{64}}")
     public ApiResponse<JsonNode> factor(@PathVariable String id) {
         return ApiResponses.success(service.factor(id));
+    }
+
+    @GetMapping("/walk-forward/{version}")
+    public ApiResponse<JsonNode> walkResults(@PathVariable long version) {
+        return ApiResponses.success(service.walkResults(version));
+    }
+
+    @PostMapping("/walk-forward/{version}")
+    public ApiResponse<JsonNode> runWalk(@PathVariable long version, @RequestBody WalkForwardInput input,
+            @RequestHeader("Idempotency-Key") UUID requestId) {
+        return ApiResponses.success(service.runWalk(version, input, requestId));
+    }
+
+    @PostMapping("/walk-forward/{version}/{job}/teach")
+    public ApiResponse<JsonNode> teachWalk(@PathVariable long version, @PathVariable long job) {
+        return ApiResponses.success(service.teachWalk(version, job));
     }
 
     @GetMapping("/grids/{version}")
