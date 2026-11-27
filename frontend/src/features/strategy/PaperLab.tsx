@@ -97,6 +97,7 @@ interface Point extends Tick {
   stale?: string[];
 }
 interface Detail {
+  executionHealth?: {date:string; due:number; executed:number; days:{date:string; missed:number; missingTimes:string[]}[]} | null;
   daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
   stockNames?: Record<string, string>;
   review?: { at: string; model: string; text: string };
@@ -704,6 +705,12 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 </div>}
                 {accountsOnly && <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details>}
                 {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟 · {spec.codes.length} 只股票</p>}
+                {accountsOnly && detail?.executionHealth && <div className="paper-execution-health">
+                  <strong>{detail.executionHealth.date} 执行</strong><span>{detail.executionHealth.executed} / {detail.executionHealth.due} 个到期时点已运行</span>
+                  {detail.executionHealth.days.some(day => day.missed > 0) && <details><summary>查看近七天漏跑时点</summary>
+                    {detail.executionHealth.days.filter(day => day.missed > 0).map(day =>
+                      <p key={day.date}>{day.date} · {day.missed} 次 · {day.missingTimes.join(' · ')}</p>)}</details>}
+                </div>}
                 {accountsOnly && active.started && (
                   <>
                     <Trace

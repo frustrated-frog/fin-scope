@@ -9,9 +9,13 @@ import subprocess
 import time
 import uuid
 
+from .engine import COMMISSION_RATE, MIN_COMMISSION, SELL_TAX, SLIPPAGE, position_details
+
 IMAGE = "python:3.12-slim"
 SDK = """Implement decide(ctx) using Python 3.12 standard library. At each completed five-minute bar,
-ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), state (your prior JSON object),
+ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), state (your prior JSON object), positionDetails (each held code: shares, sellable, frozen, averageCost, oldestLotDate),
+costs (commissionRate, minimumCommissionCny, sellTaxRate, slippageRate). Respect sellable before targeting exits;
+
 bars (available code -> chronological list of up to 49 dicts with open,high,low,close,amount,volume,at).
 Volume can be null for archived data and amount can be null for recent quotes. Be robust to short windows and missing symbols. Use deterministic
 logic and only ctx. Return a dict weights (available code -> absolute desired portfolio weight, 0 exits,
@@ -196,6 +200,9 @@ class PythonStrategy:
                 _factorReport=self.collect_factors,
                 at=end.isoformat(),
                 bars=bars,
+                positionDetails=position_details(book, end),
+                costs=dict(commissionRate=COMMISSION_RATE, minimumCommissionCny=MIN_COMMISSION,
+                           sellTaxRate=SELL_TAX, slippageRate=SLIPPAGE),
                 equity=equity,
                 cash=book["cash"],
                 positions={

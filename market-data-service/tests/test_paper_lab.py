@@ -27,7 +27,7 @@ def test_signal_waits_for_observable_fill_and_sell_obeys_t_plus_one():
     for minutes in [15,20]:
         end = START + timedelta(minutes=minutes)
         point = advance(book,RULE,bars([10,9.9,9.7]),end,end,10000)
-    assert point["events"][0]["action"] == "未成交" and book["fills"] == 1
+    assert point["events"] == [] and book["pending"] == [] and book["fills"] == 1
     end = START + timedelta(days=1)
     advance(book,RULE,bars([10,9.9,9.7]),end,end,10000)
     advance(book,RULE,bars([10,9.9,9.7]),end+timedelta(minutes=5),end+timedelta(minutes=5),10000)
@@ -125,3 +125,19 @@ def test_reviews_use_observed_day_and_retry_missing_closes(tmp_path, monkeypatch
     lab.save_review(1,module.Review(at=day2.isoformat(),text="收盘复盘",model="test"))
     assert lab.detail(1,day1.date().isoformat())["review"] is None
     assert lab.pending_reviews() == [{"id":1,"day":day1.date().isoformat()}]
+
+
+def test_weekly_health_tracks_whole_missing_days_pause_and_lunch(tmp_path):
+    lab = PaperLab(tmp_path / "lab.db", lambda: None)
+    now = START + timedelta(days=4, minutes=7)
+    account = dict(started=START.isoformat(), lifecycle="RUNNING",
+                   book='{"resumedAt":"2026-11-27T09:40:00+08:00"}')
+    with lab.db() as db:
+        db.execute("INSERT INTO paper_run_interval VALUES(?,?,?)",
+                   (1, START.isoformat(), "2026-11-24T15:06:00+08:00"))
+        db.execute("INSERT INTO paper_point VALUES(1,?,'{}')", ("2026-11-27T10:00:00+08:00",))
+        health = lab.execution_health(db, 1, account, now)
+    assert health["executed"] == 1 and health["due"] == 4
+    assert "10:05" not in health["missingTimes"]
+    assert [d["date"] for d in health["days"]] == ["2026-11-27", "2026-11-24", "2026-11-23"]
+    assert health["days"][1]["missed"] == 48

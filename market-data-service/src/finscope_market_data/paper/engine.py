@@ -83,12 +83,36 @@ def unfilled_reason(order, bar, end):
     return None
 
 
+COMMISSION_RATE = 0.0003
+MIN_COMMISSION = 5
+SELL_TAX = 0.0005
+SLIPPAGE = 0.0005
+
+
+def sellable_shares(position, day):
+    return sum(q for bought, q in position.get("lots", []) if bought < day)
+
+
+def position_details(book, end):
+    today = end.date().isoformat()
+    details = {}
+    for code, position in book["positions"].items():
+        lots = position["lots"]
+        shares = sum(q for _, q in lots)
+        sellable = sellable_shares(position, today)
+        first = min((d for d, q in lots if q and d <= today), default=None)
+        details[code] = dict(shares=shares, sellable=sellable, frozen=shares - sellable,
+                             averageCost=position["cost"] / shares if shares else None,
+                             oldestLotDate=first)
+    return details
+
+
 def execute(book, order, bar, end):
     code, side = order["code"], order["side"]
     reason = unfilled_reason(order, bar, end)
     if reason:
         return {**order, "action": "未成交", "reason": reason}
-    adjusted = bar.open * (1.0005 if side == "BUY" else 0.9995)
+    adjusted = bar.open * (1 + SLIPPAGE if side == "BUY" else 1 - SLIPPAGE)
     price = round(min(bar.high, max(bar.low, adjusted)), 4)
     lot = 200 if code.startswith(("688", "689")) else 100
     pos = book["positions"].get(code, {})
@@ -96,17 +120,17 @@ def execute(book, order, bar, end):
     if side == "BUY":
         budget = min(book["cash"], order["budget"])
         quantity = min(capacity, int(budget / price) // lot * lot)
-        while quantity and money(quantity * price + max(5, quantity * price * 0.0003)) > budget:
+        while quantity and money(quantity * price + max(MIN_COMMISSION, quantity * price * COMMISSION_RATE)) > budget:
             quantity -= lot
     else:
-        quantity = min(capacity, order.get("maxShares", capacity), sum(q for day, q in pos.get("lots", []) if day < end.date().isoformat()))
+        quantity = min(capacity, order.get("maxShares", capacity), sellable_shares(pos, end.date().isoformat()))
     if quantity <= 0:
         reason = "可用资金不足一个交易单位" if side == "BUY" else "T+1 限制，可卖股数为零"
         if capacity <= 0:
             reason = "本根成交量的 5% 不足一个交易单位"
         return {**order, "action": "未成交", "reason": reason}
     gross = money(quantity * price)
-    fee = money(max(5, gross * 0.0003) + (gross * 0.0005 if side == "SELL" else 0))
+    fee = money(max(MIN_COMMISSION, gross * COMMISSION_RATE) + (gross * SELL_TAX if side == "SELL" else 0))
     if side == "BUY":
         book["cash"] = money(book["cash"] - gross - fee)
         position = book["positions"].setdefault(code, dict(lots=[], cost=0))
@@ -134,7 +158,7 @@ def execute(book, order, bar, end):
     return dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
 
 
-def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None, legacy=False, decision_clock=None):
+def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None, legacy=False, decision_clock=None, check_sellable=True):
     """Only histories with a fresh closed bar may signal or fill."""
     universe = universe or list(histories)
     waiting = []
@@ -203,6 +227,11 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
                      available=available.isoformat(), budget=money(abs(delta) if targets is not None else equity / rule.slots))
         if targets is not None and side == "SELL" and targets[code] > 0:
             order["maxShares"] = int(abs(delta) / price) // lot * lot
+        if side == "SELL" and check_sellable:
+            sellable = sellable_shares(book["positions"][code], end.date().isoformat())
+            if not sellable:
+                continue
+            order["maxShares"] = min(order.get("maxShares", sellable), sellable)
         book["pending"].append(order)
         events.append(dict(**order, action="信号"))
     book.update(equity=equity, last=end.isoformat())

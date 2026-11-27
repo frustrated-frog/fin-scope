@@ -17,6 +17,9 @@ from .datasets import ResearchDatasets
 from .actions import read_actions
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
+from finscope_market_data.forecast.trading_calendar import next_session
+from finscope_market_data.overnight.engine import expected_times
+
 from .research import JobRequest, PythonRule, ResearchJobs
 from .python_runtime import PythonStrategy
 
@@ -69,6 +72,8 @@ class PaperLab:
               CREATE TABLE IF NOT EXISTS paper_account (
                 id INTEGER PRIMARY KEY REFERENCES paper_version(id), started TEXT NOT NULL,
                 book TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS paper_run_interval (
+                id INTEGER NOT NULL, started TEXT NOT NULL, ended TEXT NOT NULL, PRIMARY KEY(id,started));
               CREATE TABLE IF NOT EXISTS paper_review (
                 id INTEGER NOT NULL, at TEXT NOT NULL, review TEXT NOT NULL, PRIMARY KEY(id,at));
               CREATE TABLE IF NOT EXISTS paper_point (
@@ -180,7 +185,7 @@ class PaperLab:
         labels = {"PAUSED":"已暂停","RUNNING":"等待新行情","STOPPED":"已停止","ARCHIVED":"已归档"}
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT lifecycle,book FROM paper_account WHERE id=?", (version,)).fetchone()
+            row = db.execute("SELECT lifecycle,book,started FROM paper_account WHERE id=?", (version,)).fetchone()
             if not row:
                 raise HTTPException(404, "账户不存在")
             if row["lifecycle"] == state:
@@ -191,6 +196,9 @@ class PaperLab:
             for account in [book, book.get("control")]:
                 if account:
                     account["pending"] = []
+            if row["lifecycle"] == "RUNNING":
+                db.execute("INSERT INTO paper_run_interval VALUES(?,?,?)",
+                           (version, book.get("resumedAt", row["started"]), stamp().isoformat()))
             if state == "RUNNING":
                 book["resumedAt"] = stamp().isoformat()
             db.execute("UPDATE paper_account SET lifecycle=?,status=?,book=?,revision=revision+1 WHERE id=?",
@@ -247,6 +255,32 @@ class PaperLab:
                     cash=close.get("cash"), holdings=close.get("holdings"), control=close.get("control"),
                     fills=fills, fees=money(fees), decisions=list(events.values()))
 
+    def execution_health(self, db, version, account, now):
+        if not account:
+            return None
+        since = now.date() - timedelta(days=6)
+        intervals = [(r[0], r[1]) for r in db.execute(
+            "SELECT started,ended FROM paper_run_interval WHERE id=? AND ended>=?", (version, str(since)))]
+        if account["lifecycle"] == "RUNNING":
+            intervals.append((json.loads(account["book"]).get("resumedAt", account["started"]), now.isoformat()))
+        observed = {row[0] for row in db.execute(
+            "SELECT at FROM paper_point WHERE id=? AND at>=?", (version, str(since)))}
+        reports = []
+        day = next_session(since - timedelta(days=1))
+        while day and day <= now.date():
+            due = []
+            for clock in expected_times("15:00"):
+                at = datetime.fromisoformat(f"{day}T{clock}").replace(tzinfo=SHANGHAI)
+                deadline = (at + INTERVAL).isoformat()
+                if any(start < at.isoformat() and deadline <= end for start, end in intervals):
+                    due.append(at.isoformat())
+            if due:
+                missing = [t[11:16] for t in due if t not in observed]
+                reports.append(dict(date=str(day), due=len(due), executed=len(due)-len(missing),
+                                    missed=len(missing), missingTimes=missing))
+            day = next_session(day)
+        return {**reports[-1], "days": list(reversed(reports))} if reports else None
+
     def detail(self, version, day):
         with self.db() as db:
             self.jobs.schema(db)
@@ -268,8 +302,9 @@ class PaperLab:
             row = db.execute("SELECT review FROM paper_review WHERE id=? AND at>=? AND at<? ORDER BY at DESC LIMIT 1",
                              (version, selected, selected+"Z")).fetchone()
             evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
-            account = db.execute("SELECT book FROM paper_account WHERE id=?", (version,)).fetchone()
-        return dict(forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
+            account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
+            health = self.execution_health(db, version, account, stamp())
+        return dict(executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
                     book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
 

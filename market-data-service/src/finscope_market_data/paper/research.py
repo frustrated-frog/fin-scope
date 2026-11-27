@@ -209,6 +209,7 @@ def simulate(
     legacy=False,
     validation_start=None,
     expected_development=None,
+    check_sellable=True,
 ):
     days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
     if len(days) < 3:
@@ -254,7 +255,7 @@ def simulate(
                 capital,
                 universe=list(panel),
                 decide=runtime.decide,
-                legacy=legacy,
+                legacy=legacy, check_sellable=check_sellable,
             )
             sample = {key: point[key] for key in ("at", "equity", "benchmark")}
             if other:
@@ -267,7 +268,7 @@ def simulate(
                     capital,
                     universe=list(panel),
                     decide=other.decide,
-                    legacy=legacy,
+                    legacy=legacy, check_sellable=check_sellable,
                 )
                 sample["control"] = baseline["equity"]
             if valid:
@@ -286,7 +287,7 @@ def simulate(
         curve=curve,
         fills=book["fills"],
         fees=book["fees"],
-        engine=(LEGACY_ENGINE if legacy else ENGINE) + "-python-v1",
+        engine=(LEGACY_ENGINE if legacy else ENGINE) + ("-python-v2" if check_sellable else "-python-v1"),
         **metrics,
     )
 
@@ -376,6 +377,7 @@ class ResearchJobs:
             spec.capital,
             parent,
             validation_start=saved.get("validationStart"),
+            check_sellable=saved.get("engine","").endswith("-python-v2"),
             legacy=saved.get("engine") == LEGACY_ENGINE + "-python-v1",
         )
         if any(saved.get(k) != v for k, v in actual.items()):

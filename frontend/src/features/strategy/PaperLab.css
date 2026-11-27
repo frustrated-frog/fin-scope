@@ -277,3 +277,7 @@
 .paper-asset-picker { display: flex; flex-wrap: wrap; gap: .5rem; }
 .paper-asset-picker [aria-pressed=true] { border-color: #69bdaf; }
 .paper-factor-study pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.paper-execution-health { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 16px; margin:12px 0; color:var(--muted); font-size:13px; }
+.paper-execution-health strong { color:var(--research-accent); }
+.paper-lab .paper-execution-health details { margin:0; }
