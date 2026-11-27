@@ -38,6 +38,7 @@ class Program(BaseModel):
 
 class PythonRule(Program):
     kind: Literal["python"]
+    sdkVersion: Literal[1, 2] = 1
     exDateAccounting: bool = False
     factorDiagnostics: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -210,6 +211,7 @@ def simulate(
     validation_start=None,
     expected_development=None,
     check_sellable=True,
+    sdk_version=2,
 ):
     days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
     if len(days) < 3:
@@ -222,9 +224,9 @@ def simulate(
     curve, metrics = [], {}
     deadline = time.monotonic() + 600
     with ExitStack() as stack:
-        runtime = stack.enter_context(PythonStrategy(program.code, image))
+        runtime = stack.enter_context(PythonStrategy(program.code, image, sdk_version=sdk_version))
         other = (
-            stack.enter_context(PythonStrategy(control["code"], control["image"]))
+            stack.enter_context(PythonStrategy(control["code"], control["image"], sdk_version=control.get("sdkVersion", 1)))
             if control
             else None
         )
@@ -382,6 +384,7 @@ class ResearchJobs:
             spec.capital,
             saved.get("baselineRule") or parent,
             validation_start=saved.get("validationStart"),
+            sdk_version=spec.rule.sdkVersion,
             check_sellable=saved.get("engine","").endswith("-python-v2"),
             legacy=saved.get("engine") == LEGACY_ENGINE + "-python-v1",
         )
@@ -1109,6 +1112,7 @@ class ResearchJobs:
     def save_version(self, job, request, program, image, digest, summary):
         rule = dict(
             kind="python",
+            sdkVersion=2,
             exDateAccounting=True,
             factorDiagnostics=True,
             **program.model_dump(),

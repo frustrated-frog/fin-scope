@@ -87,7 +87,7 @@ async def run(jobs, job, request):
                       factor="四项标准化收益因子按开发段 Ridge 系数组合；尾盘选前三，每只目标 32%，次日首个可执行窗口退出。")
     baseline = dict(kind="python", name="多周期因子等权对照", code=tail_model.source(model, equal=True),
                     factor="同一批标准化因子采用等权评分。", hypothesis=tail_model.HYPOTHESIS,
-                    image=image, snapshot=digests[0], exDateAccounting=True)
+                    image=image, snapshot=digests[0], sdkVersion=2, exDateAccounting=True)
     validation = {c: [b for b in bars if str(b.observed_at.date()) >= split] for c, bars in trade_panel.items()}
     valid_coverage = coverage(validation)
     summary = await asyncio.to_thread(simulate, trade_panel, program, image, request["capital"], baseline,

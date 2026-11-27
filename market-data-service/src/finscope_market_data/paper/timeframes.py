@@ -55,6 +55,7 @@ class ForwardFeatures:
     def __init__(self, lab):
         self.lab = lab
         self.cache = {}
+        self.read_slots = asyncio.Semaphore(3)
         self.day = None
 
     async def attach(self, code, bars, end):
@@ -86,7 +87,8 @@ class ForwardFeatures:
         # forward_actions already clipped the live input at the last known ex-date.
         if getattr(bars[-1], "windowClipped", False):
             return state, prior
-        archived = await asyncio.to_thread(self.lab.datasets.bars, code, cutoff)
+        async with self.read_slots:
+            archived = await asyncio.to_thread(self.lab.datasets.bars, code, cutoff)
         rows = {b.ended_at: b for b in archived[-(63 * 48):]}
         for b in bars:
             if b.observed_at.date() < end.date():

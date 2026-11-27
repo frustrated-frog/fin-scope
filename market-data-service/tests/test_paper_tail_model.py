@@ -78,7 +78,7 @@ async def test_frozen_pair_deploys_and_fills_together_in_forward_engine(tmp_path
                    origin=tail_model.HYPOTHESIS)
     job = lab.jobs.submit(request)["jobId"]
     program = Program(name=tail_model.NAME, hypothesis=tail_model.HYPOTHESIS, factor="test", code=tail_model.source(fit))
-    baseline = dict(**program.model_dump(), kind="python", image=image, snapshot="a"*64, exDateAccounting=True)
+    baseline = dict(**program.model_dump(), kind="python", image=image, snapshot="a"*64, sdkVersion=2, exDateAccounting=True)
     baseline["code"] = tail_model.source(fit, equal=True)
     clock = data["600000"][-96].observed_at
     monkeypatch.setattr("finscope_market_data.paper.lab.stamp", lambda: clock)

@@ -84,7 +84,7 @@ def image_id():
 
 
 class PythonStrategy:
-    def __init__(self, program, image, *, collect_factors=False):
+    def __init__(self, program, image, *, collect_factors=False, sdk_version=2):
         self.collect_factors = collect_factors
         self.factor_values = {}
         self.factor_names = None
@@ -93,7 +93,7 @@ class PythonStrategy:
         self.name = "finscope-strategy-" + uuid.uuid4().hex
         self.process = None
         self.last = {}
-        self.features = {} if "multiTimeframe" in program else None
+        self.features = {} if sdk_version >= 2 else None
 
     def __enter__(self):
         cmd = [
@@ -179,6 +179,14 @@ class PythonStrategy:
                     raise ValueError("策略输入超时")
                 data = data[os.write(self.process.stdin.fileno(), data[:4096]) :]
 
+    def account_context(self, book, end):
+        if self.features is None:
+            return {}
+        return dict(session="MORNING" if end.hour < 12 else "AFTERNOON",
+                    positionDetails=position_details(book, end),
+                    costs=dict(commissionRate=COMMISSION_RATE, minimumCommissionCny=MIN_COMMISSION,
+                               sellTaxRate=SELL_TAX, slippageRate=SLIPPAGE))
+
     def bar_features(self, code, bar):
         if self.features is None:
             return {}
@@ -219,10 +227,7 @@ class PythonStrategy:
                 _factorReport=self.collect_factors,
                 at=end.isoformat(),
                 bars=bars,
-                session="MORNING" if end.hour < 12 else "AFTERNOON",
-                positionDetails=position_details(book, end),
-                costs=dict(commissionRate=COMMISSION_RATE, minimumCommissionCny=MIN_COMMISSION,
-                           sellTaxRate=SELL_TAX, slippageRate=SLIPPAGE),
+                **self.account_context(book, end),
                 equity=equity,
                 cash=book["cash"],
                 positions={

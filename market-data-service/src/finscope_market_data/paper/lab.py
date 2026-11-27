@@ -408,8 +408,8 @@ class PaperLab:
             return
         end = end.astimezone(SHANGHAI)
         book = json.loads(row["book"])
-        multi = isinstance(spec.rule, PythonRule) and ("multiTimeframe" in spec.rule.code
-                or "multiTimeframe" in book.get("controlRule", {}).get("code", ""))
+        multi = isinstance(spec.rule, PythonRule) and (spec.rule.sdkVersion >= 2
+                or book.get("controlRule", {}).get("sdkVersion", 1) >= 2)
         history = {c: bars[-(320 if multi else 49):] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
         if len(history) < len(panel) and seen - end < timedelta(seconds=45):
             return
@@ -461,7 +461,7 @@ class PaperLab:
         if isinstance(rule, PythonRule):
             def compute():
                 closing=rule.factorDiagnostics and end.strftime("%H:%M")=="15:00"
-                with PythonStrategy(rule.code,rule.image,collect_factors=closing) as strategy:
+                with PythonStrategy(rule.code, rule.image, collect_factors=closing, sdk_version=rule.sdkVersion) as strategy:
                     point=advance(book,None,history,end,seen,spec.capital,universe=spec.codes,decide=strategy.decide,decision_clock=decision_clock)
                     if closing:
                         point["factorClose"]=dict(prices={c:rows[-1].close for c,rows in history.items()},
