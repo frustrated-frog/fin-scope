@@ -31,3 +31,7 @@
 .wf-coach b {color:#93d8df}
 @media (max-width:1000px) {.wf-pair {grid-template-columns:1fr}.wf-config form {grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px) {.wf-run {align-items:flex-start;flex-direction:column}.wf-kpis strong small {display:block;margin:0}.wf-kpis>div{padding:10px 5px}.wf-terminal td,.wf-terminal th {padding:6px 4px}}
+.forward-pnl {margin-top:16px}
+.forward-pnl .att-card>header {display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.forward-pnl .wf-kpis {margin-block:12px}
+.forward-pnl .wf-kpis span {color:#b3c5cf}

@@ -19,7 +19,7 @@ from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
-from . import attribution
+from . import attribution, forward_attribution
 from .actions import read_actions, verified_dates
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
@@ -262,8 +262,10 @@ class PaperLab:
                     fees += event["fee"]
         opening_equity = prior["equity"] if prior else capital
         opening_benchmark = prior["benchmark"] if prior else capital
-        return dict(at=close["at"], firstAt=points[0]["at"], observations=len(points),
-                    equity=close["equity"], openingEquity=opening_equity, pnl=money(close["equity"]-opening_equity),
+        pnl = money(close["equity"] - opening_equity)
+        return dict(attribution=forward_attribution.summarize(points, prior, capital, pnl, money(fees)),
+                    at=close["at"], firstAt=points[0]["at"], observations=len(points),
+                    equity=close["equity"], openingEquity=opening_equity, pnl=pnl,
                     benchmark=close["benchmark"], openingBenchmark=opening_benchmark,
                     cash=close.get("cash"), holdings=close.get("holdings"), control=close.get("control"),
                     fills=fills, fees=money(fees), decisions=list(events.values()))
@@ -532,6 +534,7 @@ class PaperLab:
                 db.execute("UPDATE paper_account SET status=? WHERE id=? AND revision=?",
                            ("策略运行失败，本时点未执行",row["id"],row["revision"]))
             return
+        forward_attribution.record_marks(book, point)
         point["previousAt"] = last
         previous = datetime.fromisoformat(last).astimezone(SHANGHAI)
         # Count missing observations within today's two sessions, excluding the lunch break.

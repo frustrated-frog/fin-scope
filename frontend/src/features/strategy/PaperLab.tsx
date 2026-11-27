@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
+import { ForwardPnl, type ObservedPnl } from './ForwardPnl';
 import { WalkForward } from './WalkForward';
 import { ParameterGrid } from './ParameterGrid';
 import { ReturnAttribution } from './ReturnAttribution';
@@ -134,7 +135,7 @@ const factorLabels: Record<string, string> = {
 interface Detail {
   forwardPerformance?:Performance;
   executionHealth?: {date:string; due:number; executed:number; days:{date:string; missed:number; missingTimes:string[]}[]} | null;
-  daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
+  daySummary?: { attribution?: ObservedPnl; at: string; pnl: number; fills: number; fees: number } | null;
   stockNames?: Record<string, string>;
   review?: { at: string; model: string; text: string };
   daily: Tick[];
@@ -792,6 +793,7 @@ export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总�
                 </div>}
                 {accountsOnly && book && detail && <PortfolioOverview book={book} capital={spec.capital} daily={detail.daily}
                   performance={detail.forwardPerformance} name={stockName}/>}
+                {accountsOnly && detail?.daySummary?.attribution && <ForwardPnl value={detail.daySummary.attribution} name={stockName}/>}
                 {accountsOnly && detail && <section className="qh-events"><h5>最近投资决策 <small>{detail.day}</small></h5>
                   {detail.points.filter(point=>point.events?.length).slice(-3).reverse().map(point=>
                     <div key={point.at}><time>{point.at.slice(11,16)}</time><span>{point.events.map((event,index)=><span key={index}>
