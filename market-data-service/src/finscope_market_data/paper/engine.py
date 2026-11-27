@@ -187,10 +187,11 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
     values = {code: pos["price"] * sum(q for _, q in pos["lots"]) for code,pos in book["positions"].items()}
     equity = money(book["cash"] + book.get("dividendReceivable", 0) + sum(values.values()))
     # Each original member keeps its benchmark weight during outages.
-    benchmark = fmean(marks.get(c, book["anchors"].get(c, 1)) / book["anchors"].get(c, 1) for c in universe)
+    reference = book.get("classicBenchmark") or universe
+    benchmark = fmean(marks.get(c, book["anchors"].get(c, 1)) / book["anchors"].get(c, 1) for c in reference) if reference else 1.
     distributions = book.get("benchmarkDistributions")
     if distributions:
-        benchmark = fmean((marks.get(c,1)*distributions.get(c,{}).get("shares",1) + distributions.get(c,{}).get("cash",0)) / book["anchors"].get(c,1) for c in universe)
+        benchmark = fmean((marks.get(c,1)*distributions.get(c,{}).get("shares",1) + distributions.get(c,{}).get("cash",0)) / book["anchors"].get(c,1) for c in reference) if reference else 1.
     book["stale"] = [code for code in universe if code not in histories]
     if decide is None:
         targets = None

@@ -27,7 +27,8 @@ def completed_bar(rows, at):
 
 
 class Timeframes:
-    def __init__(self, *, candles=False):
+    def __init__(self, *, candles=False, daily_window=False):
+        self.daily_window = () if daily_window else None
         self.candles = {} if candles else None
         self.day = None
         self.session_bars = {}
@@ -43,6 +44,8 @@ class Timeframes:
             if self.day is not None and (not consecutive_observed_sessions(self.day, day)
                                          or len(self.session_bars) != 48 or getattr(bar, "actions", None)):
                 self.closes.clear()
+                if self.daily_window is not None:
+                    self.daily_window = ()
                 self.features.clear()
             if self.candles is not None:
                 previous = self.candles.get("1d") if "return1d" in self.features else None
@@ -66,6 +69,8 @@ class Timeframes:
                     if self.candles is not None:
                         self.candles.pop(key[6:], None)
         if slot == 47 and len(self.session_bars) == 48:
+            if self.daily_window is not None:
+                self.daily_window = (*self.daily_window[-20:], self.candles["1d"])
             self.closes.append(bar.close)
             for days in (20, 60):
                 if len(self.closes) > days:
@@ -81,15 +86,15 @@ class ForwardFeatures:
         self.read_slots = asyncio.Semaphore(3)
         self.day = None
 
-    async def attach(self, code, bars, end):
+    async def attach(self, code, bars, end, *, daily_window=False):
         if self.day != end.date():
             self.cache.clear()
             self.day = end.date()
         # Warm from the previous completed session, then append today's observed bars.
         today = [b for b in bars if b.observed_at.date() == end.date()]
-        key = (code, end.date(), bars[0].observed_at.date(), getattr(bars[-1], "windowClipped", False))
+        key = (code, end.date(), bars[0].observed_at.date(), getattr(bars[-1], "windowClipped", False), daily_window)
         if key not in self.cache:
-            task = asyncio.create_task(self.seed(code, bars, end))
+            task = asyncio.create_task(self.seed(code, bars, end, daily_window))
             self.cache[key] = task
         try:
             state, prior, limited = await self.cache[key]
@@ -101,12 +106,12 @@ class ForwardFeatures:
         for bar in today:
             features = state.update(bar.observed_at, bar)
             result.append(bar.model_copy(update={"multiTimeframe": features, "completedBars": state.candles.copy(),
-                                                 "shortHistory": limited or getattr(bar, "shortHistory", False)}))
+                                                 "dailyWindow": state.daily_window, "shortHistory": limited or getattr(bar, "shortHistory", False)}))
         return result[-49:]
 
-    async def seed(self, code, bars, end):
+    async def seed(self, code, bars, end, daily_window=False):
         cutoff = end.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None) - timedelta(microseconds=1)
-        state = Timeframes(candles=True)
+        state = Timeframes(candles=True, daily_window=daily_window)
         prior = []
         # forward_actions already clipped the live input at the last known ex-date.
         if getattr(bars[-1], "windowClipped", False):

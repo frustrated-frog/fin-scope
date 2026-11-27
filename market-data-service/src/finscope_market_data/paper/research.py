@@ -22,7 +22,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
-from . import factor_library, tail_experiment
+from . import classic_study, factor_library, tail_experiment
+from .classic_recipe import ClassicRequest, Recipe
 from .actions import annotate
 from .analysis import coverage, evaluate, frames, observe_close
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
@@ -39,7 +40,8 @@ class Program(BaseModel):
 
 class PythonRule(Program):
     kind: Literal["python"]
-    sdkVersion: Literal[1, 2, 3] = 1
+    sdkVersion: Literal[1, 2, 3, 4] = 1
+    recipe: Recipe | None = None
     exDateAccounting: bool = False
     factorDiagnostics: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -335,6 +337,9 @@ class ResearchJobs:
             return {"jobId": cursor.lastrowid}
 
     def enqueue(self, value):
+        if isinstance(value, ClassicRequest):
+            request = classic_study.freeze(self.lab, value, datetime.now(SHANGHAI))
+            return self.submit(request, "classic:" + str(value.requestId) if value.requestId else None)
         if isinstance(value, tail_experiment.RidgeRequest):
             request = tail_experiment.freeze_request(self.archive, value, datetime.now(SHANGHAI))
             return self.submit(request, "ridge:" + str(value.requestId) if value.requestId else None)
@@ -376,19 +381,23 @@ class ResearchJobs:
                 ).fetchone()[0]
             )
         self.update(job, "BACKTEST", "按原始源码、运行镜像和冻结行情复验")
-        panel = await asyncio.to_thread(self.read_panel, spec.rule.snapshot)
-        actual = await asyncio.to_thread(
-            simulate,
-            panel,
-            spec.rule,
-            spec.rule.image,
-            spec.capital,
-            saved.get("baselineRule") or parent,
-            validation_start=saved.get("validationStart"),
-            sdk_version=spec.rule.sdkVersion,
-            check_sellable=saved.get("engine","").endswith("-python-v2"),
-            legacy=saved.get("engine") == LEGACY_ENGINE + "-python-v1",
-        )
+        if spec.rule.recipe:
+            actual = await asyncio.to_thread(classic_study.simulate, self, saved["classicSnapshots"],
+                                             saved["universeTimeline"], spec.rule, spec.rule.image, spec.capital)
+        else:
+            panel = await asyncio.to_thread(self.read_panel, spec.rule.snapshot)
+            actual = await asyncio.to_thread(
+                simulate,
+                panel,
+                spec.rule,
+                spec.rule.image,
+                spec.capital,
+                saved.get("baselineRule") or parent,
+                validation_start=saved.get("validationStart"),
+                sdk_version=spec.rule.sdkVersion,
+                check_sellable=saved.get("engine","").endswith("-python-v2"),
+                legacy=saved.get("engine") == LEGACY_ENGINE + "-python-v1",
+            )
         if any(saved.get(k) != v for k, v in actual.items()):
             raise ValueError("复验结果与保存的回测记录不一致")
         with self.lab.db() as db:
@@ -688,7 +697,7 @@ class ResearchJobs:
 
         return await asyncio.to_thread(freeze)
 
-    def read_panel(self, digest):
+    def read_panel(self, digest, *, daily_window=False):
         raw = gzip.decompress(self.snapshot_path(digest).read_bytes())
         if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError("快照校验失败")
@@ -714,11 +723,13 @@ class ResearchJobs:
         }
         if start:
             for code, bars in panel.items():
-                state = Timeframes(candles=True)
+                state = Timeframes(candles=True, daily_window=daily_window)
                 eligible = []
                 for bar in bars:
                     features = state.update(bar.observed_at, bar)
                     if bar.observed_at >= start:
+                        if daily_window:
+                            bar.dailyWindow = state.daily_window
                         bar.multiTimeframe = features
                         bar.completedBars = state.candles.copy()
                         eligible.append(bar)
@@ -983,6 +994,9 @@ class ResearchJobs:
             trials = self.trials(job)
 
     async def process(self, job, request):
+        if request.get("researchMode") == "CLASSIC":
+            await classic_study.run(self, job, request)
+            return
         if request.get("researchMode") == "RIDGE":
             await tail_experiment.run(self, job, request)
             return
@@ -1132,9 +1146,10 @@ class ResearchJobs:
     def save_version(self, job, request, program, image, digest, summary):
         rule = dict(
             kind="python",
-            sdkVersion=3,
+            sdkVersion=4 if request.get("recipe") else 3,
+            **({"recipe": request["recipe"]} if request.get("recipe") else {}),
             exDateAccounting=True,
-            factorDiagnostics=True,
+            factorDiagnostics=not bool(request.get("recipe")),
             **program.model_dump(),
             image=image,
             snapshot=digest,

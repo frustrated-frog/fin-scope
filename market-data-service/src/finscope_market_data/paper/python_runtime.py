@@ -227,6 +227,7 @@ class PythonStrategy:
                 dict(
                     at=b.observed_at.isoformat(),
                     **self.bar_features(c, b),
+                    **({"dailyWindow": getattr(b, "dailyWindow", ())} if self.sdk_version == 4 and b.observed_at == end else {}),
                     open=b.open,
                     high=b.high,
                     low=b.low,
@@ -243,6 +244,7 @@ class PythonStrategy:
         self.last = {c: series[-1].observed_at for c, series in histories.items()}
         self.send(
             dict(
+                **({"selectionBase": book.get("selectionBase", [])} if self.sdk_version == 4 else {}),
                 _factorReport=self.collect_factors,
                 _estimateCosts=self.sdk_version >= 3,
                 at=end.isoformat(),

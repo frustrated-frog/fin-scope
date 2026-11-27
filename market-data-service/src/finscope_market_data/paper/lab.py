@@ -13,6 +13,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from . import classic_study, classic_universe
+from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
@@ -313,6 +315,14 @@ class PaperLab:
             account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
             health = self.execution_health(db, version, account, stamp())
         codes = set(spec.codes) | {m['code'] for m in history.get('members', [])}
+        for entry in history.get("universeTimeline", []):
+            codes.update(entry["codes"])
+        for point in points:
+            codes.update(point.get("selection", {}).get("base", []))
+            codes.update(point.get("holdings", {}))
+            codes.update(e["code"] for e in point.get("events", []))
+        if account:
+            codes.update(json.loads(account["book"]).get("positions", {}))
         return dict(stockNames=self.name_lookup(codes) if self.name_lookup else {},
                     executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
@@ -337,12 +347,25 @@ class PaperLab:
             return
         with self.db() as db:
             rows = db.execute("SELECT a.*,v.spec FROM paper_account a JOIN paper_version v ON a.id=v.id WHERE lifecycle='RUNNING'").fetchall()
-        codes = sorted({c for row in rows for c in json.loads(row["spec"])["codes"]})
+        timelines = {}
+        codes = set()
+        for row in rows:
+            spec = json.loads(row["spec"])
+            recipe = spec["rule"].get("recipe")
+            if recipe:
+                base = recipe["base"]
+                if base not in timelines:
+                    timelines[base] = await asyncio.to_thread(classic_universe.schedule, self, base, now, now-timedelta(days=1))
+                book = json.loads(row["book"])
+                codes.update(classic_universe.active_codes(classic_universe.as_of(timelines[base], now), book))
+            else:
+                codes.update(spec["codes"])
+        codes = sorted(codes)
         data = dict(zip(codes, await asyncio.gather(*(self.bars(c) for c in codes), return_exceptions=True)))
         slots = asyncio.Semaphore(3)
         async def update(row):
             async with slots:
-                await self.update_account(row, data, now)
+                await self.update_account(row, data, now, timelines=timelines)
         await asyncio.gather(*(update(row) for row in rows))
 
     async def action_events(self, code, start, end):
@@ -405,9 +428,13 @@ class PaperLab:
         windows = await asyncio.gather(*(attach(c, bars) for c, bars in histories.items()))
         return {code: window for code, window in zip(histories, windows) if window}
 
-    async def update_account(self, row, data, now):
+    async def update_account(self, row, data, now, *, timelines=None):
         spec = Research.model_validate_json(row["spec"])
-        panel = {c: data[c] if isinstance(data[c], list) else [] for c in spec.codes}
+        book = json.loads(row["book"])
+        recipe = getattr(spec.rule, "recipe", None)
+        timeline = (timelines or {}).get(recipe.base, []) if recipe else []
+        codes = classic_universe.active_codes(classic_universe.as_of(timeline, now), book) if recipe else spec.codes
+        panel = {c: data[c] if isinstance(data.get(c), list) else [] for c in codes}
         cutoff = now - timedelta(seconds=3)
         closed = {c: [b for b in bars if b.observed_at <= cutoff] for c, bars in panel.items()}
         end = max((bars[-1].observed_at for bars in closed.values() if bars), default=None)
@@ -418,7 +445,6 @@ class PaperLab:
                            ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
             return
         end = end.astimezone(SHANGHAI)
-        book = json.loads(row["book"])
         multi = isinstance(spec.rule, PythonRule) and (spec.rule.sdkVersion >= 2
                 or book.get("controlRule", {}).get("sdkVersion", 1) >= 2)
         history = {c: bars[-(320 if multi else 49):] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
@@ -436,7 +462,8 @@ class PaperLab:
                 if not history:
                     raise ValueError("等待核验公司行为")
                 if multi:
-                    enriched = await asyncio.gather(*(self.features.attach(c, bars, end) for c, bars in history.items()))
+                    enriched = await asyncio.gather(*(self.features.attach(c, bars, end, daily_window=bool(recipe))
+                                                      for c, bars in history.items()))
                     history = dict(zip(history, enriched))
                 book.setdefault("lastObserved",{}).update({c:end.isoformat() for c in history})
             except ValueError:
@@ -445,7 +472,16 @@ class PaperLab:
                                ("等待核验公司行为",row["id"],row["revision"]))
                 return
         try:
-            point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
+            if recipe:
+                entry = classic_universe.as_of(timeline, end)
+                def classic_tick():
+                    if end.strftime("%H:%M") == "14:45":
+                        with PythonStrategy(spec.rule.code, spec.rule.image, sdk_version=4) as runtime:
+                            return classic_study.step(book, history, entry, end, seen, spec.capital, runtime, stamp)
+                    return classic_study.step(book, history, entry, end, seen, spec.capital)
+                point = await asyncio.to_thread(classic_tick)
+            else:
+                point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
             if unverified:
                 point["unverifiedActions"] = unverified
             limited = [c for c, bars in history.items() if getattr(bars[-1], "shortHistory", False)]
@@ -551,7 +587,7 @@ class PaperLab:
             return [self.jobs.trial_view(t) for t in self.jobs.trials(job)]
 
         @router.post("/versions/jobs")
-        def queue(value: RidgeRequest | JobRequest):
+        def queue(value: ClassicRequest | RidgeRequest | JobRequest):
             try:
                 return self.jobs.enqueue(value)
             except ValueError as exc:
