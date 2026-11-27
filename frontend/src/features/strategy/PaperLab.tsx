@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
+import { PerformanceReport, PlanReport, type ExecutionCosts, type RebalancePlan, type Performance } from './ExecutionReport';
 import './PaperLab.css';
 
 export interface PaperSeed {
@@ -51,6 +52,8 @@ interface Position {
   price: number;
 }
 interface Book {
+  executionCosts?:ExecutionCosts;
+  rebalancePlan?:RebalancePlan;
   equity: number;
   cash: number;
   fills: number;
@@ -91,6 +94,7 @@ interface Decision {
   signalReason?: string;
 }
 interface Point extends Tick {
+  rebalance?:RebalancePlan;
   selection?: Selection;
   cash?: number;
   holdings?: Record<string, number>;
@@ -122,6 +126,7 @@ const factorLabels: Record<string, string> = {
 };
 
 interface Detail {
+  forwardPerformance?:Performance;
   executionHealth?: {date:string; due:number; executed:number; days:{date:string; missed:number; missingTimes:string[]}[]} | null;
   daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
   stockNames?: Record<string, string>;
@@ -376,6 +381,7 @@ function Decisions({
                 <DecisionList events={p.controlEvents} stockName={stockName}/>
               </details>}
               {p.selection && <ClassicSelection value={p.selection} name={stockName}/>}
+              {p.rebalance && <PlanReport plan={p.rebalance} name={stockName}/>}
               <p className="paper-point-reason">{p.reason}</p>
               {p.holdings && <div className="paper-point-book">
                 <strong>现金 ¥{currency(p.cash ?? 0)}</strong>
@@ -493,7 +499,9 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const originalRecipe = comparison?.spec.rule.kind === 'python' ? comparison.spec.rule.recipe : undefined;
-  const [recipe, setRecipe] = useState<ClassicRecipe>(originalRecipe ?? {...defaultRecipe, family:seed?.classic ?? defaultRecipe.family});
+  const [recipe, setRecipe] = useState<ClassicRecipe>({maxFeeBps:0, ...(originalRecipe ?? {...defaultRecipe, family:seed?.classic ?? defaultRecipe.family})});
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [autoStart, setAutoStart] = useState(!seed?.classic && !originalRecipe);
   const submission = useRef<{ body: string; token: string }>();
   const parent = comparison;
@@ -539,7 +547,8 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setError('');
     try {
       const coding = engine !== 'luna';
-      const body = JSON.stringify(engine === 'classic' ? {recipe, reference:parent?.id, autoStart, capital:Number(capital)} : engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
+      const body = JSON.stringify(engine === 'classic' ? {recipe, reference:parent?.id, autoStart, capital:Number(capital),
+        startDate:startDate || undefined, endDate:endDate || undefined} : engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
         academyVersionId: seed?.academyVersionId, factorCode: seed?.factorCode });
       const key = engine + body + autoIterate;
       if (coding && submission.current?.body !== key) {
@@ -640,7 +649,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">Ridge · 尾盘多因子对照</option>}
             </select>
           </label>
-          {engine === 'classic' && <ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>}
+          {engine === 'classic' && <><ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>
+            {parent ? <p>沿用原实验的股票名单、区间和行情快照。</p> : <fieldset className="classic-date-range"><legend>回测区间</legend>
+              <div className="classic-fields"><label>回测开始日<input type="date" value={startDate} max={endDate || undefined} required={!!endDate} onChange={e=>setStartDate(e.target.value)}/></label>
+              <label>回测结束日<input type="date" value={endDate} min={startDate || undefined} required={!!startDate} onChange={e=>setEndDate(e.target.value)}/></label></div>
+              <p>留空使用最近收盘日及之前 30 个自然日。选择更长区间时按已归档的行情回放。</p></fieldset>}</>}
           {engine !== 'ridge' && engine !== 'classic' && <label>
             研究方向（选填）
             <textarea
@@ -824,6 +837,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     </small>
                   </header>
                   {classic && <ClassicEvidence history={detail.history} recipe={classic} name={stockName}/>}
+                  {detail.history.performance && <PerformanceReport value={detail.history.performance} costs={detail.history.costs}/>}
                   {!classic && spec.rule.kind === 'python' && <div className="paper-validation">
                     <div><small>{detail.history.model ? '训练期内回放收益' : '开发段收益'}</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
                     <div><small>留出段收益</small><b>{pct(detail.history.validationReturn ?? 0)}</b></div>
@@ -897,7 +911,9 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {accountsOnly && detail?.forwardEvidence && <section className="quant-readout paper-glass"><header><h4>前向研究观察</h4><small>{detail.forwardEvidence.status}</small></header>
                 <p>已观察 {detail.forwardEvidence.sessions} 个交易日 · {detail.forwardEvidence.fills} 笔成交 · 最大回撤 {pct(detail.forwardEvidence.maxDrawdown)} · 费用占本金 {pct(detail.forwardEvidence.feeRate)} · 相对基准 {pct(detail.forwardEvidence.relativeReturn)}</p>
                 {detail.forwardEvidence.reasons.length > 0 && <p>{detail.forwardEvidence.reasons.join(' · ')}</p>}</section>}
-              {accountsOnly && book && <Holdings book={book} capital={spec.capital} stockName={stockName}/>}
+              {accountsOnly && book && <><Holdings book={book} capital={spec.capital} stockName={stockName}/>
+                {book.rebalancePlan && <PlanReport plan={book.rebalancePlan} name={stockName}/>}
+                {detail?.forwardPerformance && <PerformanceReport value={detail.forwardPerformance} costs={book.executionCosts}/>}</>}
               {accountsOnly && control && <details className="quant-readout paper-glass"><summary>
                 {detail?.history.model ? '因子等权对照' : '原策略对照'}持仓 · {control.fills} 笔成交
               </summary><Holdings book={control} capital={spec.capital} stockName={stockName}/></details>}

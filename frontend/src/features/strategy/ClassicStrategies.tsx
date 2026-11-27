@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PlanReport, type ExecutionCosts, type RebalancePlan, type Performance } from './ExecutionReport';
 import './ClassicStrategies.css';
 
 const families = {
@@ -15,13 +16,14 @@ const frequencies = { DAILY: '每个交易日', WEEKLY: '每周', MONTHLY: '每�
 export interface ClassicRecipe {
   family: Family; base: keyof typeof bases; period: keyof typeof intervals; allocation: keyof typeof allocations;
   rebalance: keyof typeof frequencies; window: number; holdings: number; poolSize: number;
-  maxWeight: number; exposure: number; minTurnover: number;
+  maxWeight: number; exposure: number; minTurnover: number; maxFeeBps?:number;
 }
 export const defaultRecipe: ClassicRecipe = { family: 'TREND', base: 'COHORT', period: '15m', window: 6,
   holdings: 3, poolSize: 12, allocation: 'EQUAL', rebalance: 'DAILY', exposure: .95, maxWeight: .4, minTurnover: 0 };
 export interface Selection {at: string; knownAt: string; base: string[]; candidates: string[]; targets: Record<string, number>; skipped?: string}
 export interface ClassicTrade {at: string; available: string; code: string; action: string; side: string; quantity?: number; price?: number; fee?: number; reason: string}
 export interface ClassicRecord {decisions?: Selection[]; trades?: ClassicTrade[]; firstDay?: string; lastDay?: string;
+  requestedStart?:string; requestedEnd?:string; plans?:RebalancePlan[]; costs?:ExecutionCosts; performance?:Performance;
   classicSnapshots?: string[]; coverageError?: string; classicCoverage?: {symbols:number; measured:number; bars:number; missingActions:number; unknownTerms:number};
   fees: number; fills: number; validationReturn?: number; validationBenchmark?: number; comparison?: {version: number; netReturn: number; fills: number; fees: number}}
 const percent = (v: number) => (v*100).toFixed(2)+'%';
@@ -69,6 +71,7 @@ export function ClassicEditor({recipe:r, onChange, fixedBase}: {recipe: ClassicR
     <fieldset><legend>组合仓位</legend><div className="classic-fields">
       <label>权重分配<select value={r.allocation} onChange={e=>onChange({...r,allocation:e.target.value as ClassicRecipe['allocation']})}>{options(allocations)}</select></label>
       {number('exposure','股票目标总仓位（%）',.1,100,100,.1)}{number('maxWeight','单股仓位上限（%）',.1,100,100,.1)}
+      {number('maxFeeBps','单笔费用上限（基点，0 表示不限）',0,10000,1,.1)}
     </div></fieldset>
     <p>{r.base === 'DISCOVERY' ? '使用当时最新发布的股票发现名单，取前 24 只符合范围的沪深 A 股。' :
       '按首次登记时间取所选范围内的前 24 只股票。'}在所选调仓周期的首个可用交易日 14:45 选股。日线信号使用此前已收盘的行情。超过单股上限的资金留作现金。</p>
@@ -87,8 +90,10 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
   const [selected,select]=useState('');
   const day = days.includes(selected) ? selected : days[0];
   const decision = h.decisions?.find(e=>e.at.startsWith(day));
+  const plan = h.plans?.find(p=>p.at.startsWith(day));
   const trades = h.trades?.filter(e=>e.at.startsWith(day)) ?? [];
   return <div className="classic-report"><p>{h.firstDay} 至 {h.lastDay} · {intervals[r.period]} × {r.window} 根 · {frequencies[r.rebalance]}调仓 · {allocations[r.allocation]}</p>
+    {h.requestedStart && <p>指定区间 {h.requestedStart} 至 {h.requestedEnd}。区间前的行情用于预热指标，收益从首个可用交易日开始记账。</p>}
     <div className="paper-validation"><div><small>区间扣费收益</small><b>{percent(h.validationReturn??0)}</b></div>
       <div><small>期初股票池等权基准</small><b>{percent(h.validationBenchmark??0)}</b></div>
       <div><small>调仓观察次数</small><b>{h.decisions?.length??0}</b></div></div>
@@ -99,6 +104,7 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
     {h.coverageError && <p>{h.coverageError}</p>}
     <details><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
       {decision && <ClassicSelection value={decision} name={name}/>}
+      {plan && <PlanReport plan={plan} name={name}/>}
       {trades.map((e,i)=><p key={i}><time>{e.at.slice(11,16)}</time> · {e.side==='BUY'?'买入':'卖出'} {name(e.code)} · {e.action} · {e.quantity ? e.quantity+' 股 × ¥ '+e.price+'，费用 ¥ '+e.fee : e.reason}</p>)}
       {!trades.length && <p>此日没有委托或成交。</p>}
     </details>

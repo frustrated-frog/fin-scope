@@ -24,3 +24,11 @@
 .classic-targets b,.classic-report time {color:#83d9ca;font-variant-numeric:tabular-nums}
 .classic-library button:focus-visible,.classic-report summary:focus-visible {outline:2px solid #72ddd3;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.classic-cards button {transition:none}.classic-cards button:hover {transform:none}}
+.execution-report {margin-block:.8rem;border-top:1px solid #6794a341;padding-top:.7rem}
+.execution-report summary {cursor:pointer;font-weight:600}
+.execution-report summary strong {margin-inline:.45rem;color:var(--accent,#7adacf)}
+.execution-report summary small,.execution-report p,.execution-metrics dt {color:var(--muted,#aebed1)}
+.execution-report summary small {margin-left:.5rem}
+.execution-metrics {display:grid;grid-template-columns:repeat(auto-fit,minmax(136px,1fr));gap:.9rem}
+.execution-metrics dt {font-size:.82rem}
+.execution-metrics dd {margin:.3rem 0 0;color:#91d9cf;font-variant-numeric:tabular-nums}
