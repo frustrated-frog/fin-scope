@@ -18,7 +18,7 @@ interface Study {
   result: null | { baseline: number; capital: number; wins: number; meanSpread: number; folds: Fold[];
     coverage: {closeDays: number; tailDays: number; spans: number} };
 }
-type Lesson = {observation: string; calculation: string; limits: string; hypothesis: string; model: string};
+type Lesson = {observation: string; calculation: string; limits: string; hypothesis: string; model: string; nextPlan?: Study['plan']};
 const pct = (v: number) => (v > 0 ? '+' : '') + (100 * v).toFixed(2) + '%';
 const message = (e: unknown) => e instanceof Error ? e.message : '读取失败，请重试';
 const days = (first: string, last: string) => first.slice(5) + ' — ' + last.slice(5);
@@ -31,7 +31,7 @@ function defaults(key: Parameter, recipe: ClassicRecipe) {
   return [...new Set([base-step, base, base+step].map(n => +Math.max(min, Math.min(max, n)).toFixed(2)))].join(', ');
 }
 
-function Evidence({ study, endpoint }: { study: Study; endpoint: string }) {
+function Evidence({ study, endpoint, onApply }: { study: Study; endpoint: string; onApply: (p:Study['plan'])=>void }) {
   const [foldIndex, select] = useState(0);
   const [lesson, setLesson] = useState<Lesson>();
   const [teaching, setTeaching] = useState(false);
@@ -86,7 +86,7 @@ function Evidence({ study, endpoint }: { study: Study; endpoint: string }) {
     </section>
     <section className="att-card wf-coach"><header><h4>AI 研究助教</h4><button disabled={teaching} onClick={teach}>{teaching?'正在解读…':lesson?'重新解读':'解读本次验证'}</button></header>
       {error && <p role="alert">{error}</p>}{lesson && <div>{([['观察',lesson.observation],['计算',lesson.calculation],['证据边界',lesson.limits],['下一次实验',lesson.hypothesis]]).map(([k,v])=>
-        <p key={k}><b>{k}</b> {v}</p>)}<small>{lesson.model}</small></div>}</section>
+        <p key={k}><b>{k}</b> {v}</p>)}<small>{lesson.model}</small> {lesson.nextPlan && <button onClick={()=>onApply(lesson.nextPlan!)}>填入 {lesson.nextPlan.trainDays} 日训练方案</button>}</div>}</section>
   </div>;
 }
 
@@ -98,6 +98,7 @@ export function WalkForward({version, recipe}: {version: number; recipe: Classic
   const [studies, setStudies] = useState<Study[]>(), [selected, setSelected]=useState<number>();
   const [revision, refresh] = useState(0), [busy, setBusy]=useState(false);
   const [readError, setReadError] = useState(''), [submitError, setSubmitError]=useState('');
+  const settings=useRef<HTMLDetailsElement>(null);
   const token=useRef<{body:string; id:string}>();
   const study=studies?.find(s=>s.id===selected) ?? studies?.[0];
   useEffect(()=>{
@@ -133,7 +134,7 @@ export function WalkForward({version, recipe}: {version: number; recipe: Classic
   return <div className="att-terminal wf-terminal">
     <header className="att-intro"><div><div className="att-context"><i/>实验 #{version} · 冻结行情</div><h3>滚动验证</h3>
       <p>先用过去的交易日选择参数，再用随后行情与固定原参对照。每轮重新选参、重新撮合。</p></div></header>
-    <details className="wf-config att-card" open={!studies?.length || undefined}><summary>设置验证方案</summary>
+    <details ref={settings} className="wf-config att-card" open={!studies?.length || undefined}><summary>设置验证方案</summary>
       <form onSubmit={submit}><label>研究参数<select value={parameter} onChange={e=>{const k=e.target.value as Parameter;setParameter(k);setValues(defaults(k,recipe));}}>
         {(Object.keys(labels) as Parameter[]).map(k=><option key={k} value={k}>{labels[k]}</option>)}</select></label>
         <label>候选值<input required value={values} onChange={e=>setValues(e.target.value)}/></label>
@@ -147,7 +148,14 @@ export function WalkForward({version, recipe}: {version: number; recipe: Classic
     {study ? <><div className="wf-run"><label>验证记录 <select value={study.id} onChange={e=>setSelected(Number(e.target.value))}>
       {studies?.map(s=><option key={s.id} value={s.id}>#{s.id} · {s.created.slice(5,16).replace('T',' ')} · {states[s.state]??s.state}</option>)}</select></label>
       <span>{labels[study.plan.parameter]} · 训练 {study.plan.trainDays} 日 / 验证 {study.plan.testDays} 日</span></div>
-      {study.result ? <Evidence key={study.id} study={study} endpoint={endpoint}/> : <p role={study.state==='FAILED'?'alert':'status'}>{study.latest || '等待执行器读取冻结行情…'}</p>}</>
+      {study.result ? <Evidence key={study.id} study={study} endpoint={endpoint} onApply={p=>{
+        setParameter(p.parameter);setValues(p.values.join(', '));setTrain(p.trainDays);setTest(p.testDays);setSubmitError('');
+        if (settings.current) {
+          settings.current.open=true;
+          settings.current.scrollIntoView?.({block:'center'});
+          settings.current.querySelector('input')?.focus({preventScroll:true});
+        }
+      }}/> : <p role={study.state==='FAILED'?'alert':'status'}>{study.latest || '等待执行器读取冻结行情…'}</p>}</>
     : !readError && <p role="status">{studies?'还没有验证记录。设置候选参数后即可运行第一轮研究。':'正在读取验证记录…'}</p>}
   </div>;
 }

@@ -136,12 +136,30 @@ public class PaperResearchService {
                 ObjectNode evidence = json.createObjectNode();
                 evidence.set("plan", row.path("plan"));
                 evidence.set("report", row.path("result"));
+                JsonNode plan = row.path("plan");
+                JsonNode coverage = row.path("result").path("coverage");
+                int train = plan.path("trainDays").asInt();
+                int test = plan.path("testDays").asInt();
+                int longest = coverage.path("spans").asInt() == 1 ? coverage.path("closeDays").asInt() : train + test;
+                List<Integer> choices = List.of(train - 5, train - 1, train + 1, train + 5).stream()
+                        .filter(days -> days >= 5 && days <= 120 && days + test <= longest).toList();
+                evidence.set("allowedTrainDays", json.valueToTree(choices));
                 String prompt = "用中文教初学者读滚动验证。训练按扣费收益选参，每轮验证和固定原参对照各从相同本金空仓起步。"
                         + "observation 用具体样本外数据描述现象；calculation 展示一轮两者收益相减的百分点算式；"
                         + "limits 解释样本数量、训练窗口重叠和短期交易成本；hypothesis 提出下一次只改变一个变量的实验。"
-                        + "各项写一小段，返回 JSON，不编造、不承诺收益。";
+                        + "下一次实验仅改变训练天数，从 allowedTrainDays 选一个，nextTrainDays 返回对应的整数字符串，"
+                        + "hypothesis 说明这个改变预测会带来什么；如无可选值 nextTrainDays 写“无”。各项写一小段，返回 JSON。";
                 ObjectNode answer = lessonFields(prompt, evidence,
-                        List.of("observation", "calculation", "limits", "hypothesis"), 2200);
+                        List.of("observation", "calculation", "limits", "hypothesis", "nextTrainDays"), 2200);
+                String chosen = answer.remove("nextTrainDays").asText();
+                for (int days : choices) {
+                    if (Integer.toString(days).equals(chosen)) {
+                        ObjectNode nextPlan = ((ObjectNode) plan).deepCopy();
+                        nextPlan.put("trainDays", days);
+                        answer.set("nextPlan", nextPlan);
+                        break;
+                    }
+                }
                 answer.put("model", llm.model());
                 return answer;
             }

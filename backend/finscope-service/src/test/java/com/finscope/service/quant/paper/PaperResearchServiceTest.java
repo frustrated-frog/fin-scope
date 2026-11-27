@@ -36,6 +36,23 @@ class PaperResearchServiceTest {
     @InjectMocks private PaperResearchService service;
 
     @Test
+    void walkLessonOffersOnlyAFeasibleSingleChangeForTheCompletedRun() throws Exception {
+        JsonNode reports = json.readTree("""
+                [{"id":14,"state":"DONE","plan":{"parameter":"window","values":[4,6,8],"trainDays":15,"testDays":5},
+                "result":{"coverage":{"spans":1,"closeDays":37}}}]
+                """);
+        when(paper.walkResults(9)).thenReturn(reports);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.completeText(anyString(), anyString(), eq(2200))).thenReturn("""
+                {"observation":"持平","calculation":"零个百分点","limits":"四个窗口","hypothesis":"延长训练期","nextTrainDays":"20"}
+                """);
+        var plan = service.teachWalk(9, 14).path("nextPlan");
+        assertEquals(20, plan.path("trainDays").asInt());
+        assertEquals(5, plan.path("testDays").asInt());
+        assertEquals(3, plan.path("values").size());
+    }
+
+    @Test
     void freezesDistinctStocksAndPassesExecutableRuleToReplay() throws Exception {
         WatchlistItem stock = new WatchlistItem();
         stock.setCode("600001");
