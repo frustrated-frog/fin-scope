@@ -118,8 +118,9 @@ def execute(book, order, bar, end):
     pos = book["positions"].get(code, {})
     capacity = int(bar.volume * 0.05) // lot * lot
     if side == "BUY":
-        budget = min(book["cash"], order["budget"])
-        quantity = min(capacity, int(budget / price) // lot * lot)
+        planned = "planAt" in order
+        budget = book["cash"] if planned else min(book["cash"], order["budget"])
+        quantity = min(capacity, order.get("maxShares", capacity), int(budget / price) // lot * lot)
         while quantity and money(quantity * price + max(MIN_COMMISSION, quantity * price * COMMISSION_RATE)) > budget:
             quantity -= lot
     else:
@@ -131,6 +132,8 @@ def execute(book, order, bar, end):
         return {**order, "action": "未成交", "reason": reason}
     gross = money(quantity * price)
     fee = money(max(MIN_COMMISSION, gross * COMMISSION_RATE) + (gross * SELL_TAX if side == "SELL" else 0))
+    if order.get("maxFeeBps") and fee * 10000 > gross * order["maxFeeBps"]:
+        return {**order, "action": "未成交", "reason": "本笔佣金与印花税超过费率上限"}
     if side == "BUY":
         book["cash"] = money(book["cash"] - gross - fee)
         position = book["positions"].setdefault(code, dict(lots=[], cost=0))
@@ -155,7 +158,10 @@ def execute(book, order, bar, end):
             pos["cost"] = money(pos["cost"] - cost)
     book["fills"] += 1
     book["fees"] = money(book["fees"] + fee)
-    return dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
+    event = dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
+    if "planAt" in order:
+        event["stampTax"] = money(gross * SELL_TAX) if side == "SELL" else 0.
+    return event
 
 
 def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None, legacy=False, decision_clock=None, check_sellable=True):

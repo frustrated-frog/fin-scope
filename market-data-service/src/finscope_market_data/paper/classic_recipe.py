@@ -1,5 +1,6 @@
 """Configuration and versioned executable source for classic stock strategies."""
 import inspect
+from datetime import date
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -19,6 +20,7 @@ class Recipe(BaseModel):
     exposure: float = Field(default=.95, gt=0, le=1)
     maxWeight: float = Field(default=.4, gt=0, le=1)
     rebalance: Literal["DAILY", "WEEKLY", "MONTHLY"] = "DAILY"
+    maxFeeBps: float = Field(default=0, ge=0, le=10000)
 
     @model_validator(mode="after")
     def coherent(self):
@@ -35,8 +37,18 @@ class ClassicRequest(BaseModel):
     recipe: Recipe
     capital: float = Field(ge=.01, le=1e10, allow_inf_nan=False)
     reference: int | None = Field(default=None, gt=0)
+    startDate: date | None = None
+    endDate: date | None = None
     autoStart: bool = False
     requestId: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if (self.startDate is None) != (self.endDate is None):
+            raise ValueError("自定义区间须同时填写开始日和结束日")
+        if self.startDate and self.startDate > self.endDate:
+            raise ValueError("开始日不能晚于结束日")
+        return self
 
 
 FAMILIES = {

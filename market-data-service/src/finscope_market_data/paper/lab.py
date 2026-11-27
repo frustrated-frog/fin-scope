@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
-from . import classic_study, classic_universe
+from . import classic_study, classic_universe, performance
 from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
@@ -305,7 +305,7 @@ class PaperLab:
             closes = [json.loads(r[0]) for r in db.execute("""
                 SELECT p.point FROM paper_point p JOIN
                 (SELECT max(at) AS at FROM paper_point WHERE id=? GROUP BY substr(at,1,10)
-                 ORDER BY at DESC LIMIT 365) d ON p.at=d.at WHERE p.id=? ORDER BY p.at""", (version,version))]
+                 ) d ON p.at=d.at WHERE p.id=? ORDER BY p.at""", (version,version))]
             daily = [{k:p[k] for k in ("at","equity","benchmark","control") if k in p} for p in closes]
             prior = db.execute("SELECT point FROM paper_point WHERE id=? AND at<? ORDER BY at DESC LIMIT 1",
                                (version, selected)).fetchone()
@@ -314,6 +314,8 @@ class PaperLab:
             evidence=db.execute("SELECT evidence FROM paper_forward_evidence WHERE version=?", (version,)).fetchone()
             account = db.execute("SELECT book,started,lifecycle FROM paper_account WHERE id=?", (version,)).fetchone()
             health = self.execution_health(db, version, account, stamp())
+        history["performance"] = performance.report(history.get("curve", []), spec.capital, history.get("fees", 0))
+        book = json.loads(account["book"]) if account else None
         if history.get("classicSnapshots"):
             try:
                 parts = [self.jobs.classic_snapshot_coverage(d) for d in history["classicSnapshots"]]
@@ -332,7 +334,8 @@ class PaperLab:
         return dict(stockNames=self.name_lookup(codes) if self.name_lookup else {},
                     executionHealth=health,forwardEvidence=json.loads(evidence[0]) if evidence else None,history=history, days=days, day=selected, points=points, daily=daily, spec=spec.model_dump(),
                     daySummary=self.day_summary(points, json.loads(prior[0]) if prior else None, spec.capital),
-                    book=json.loads(account[0]) if account else None, review=json.loads(row[0]) if row else None)
+                    forwardPerformance=performance.report(daily, spec.capital, book["fees"]) if book else None,
+                    book=book, review=json.loads(row[0]) if row else None)
 
     def save_review(self, version, review):
         with self.db() as db:
@@ -483,11 +486,12 @@ class PaperLab:
         try:
             if recipe:
                 entry = classic_universe.as_of(timeline, end)
+                execution = recipe if spec.rule.executionVersion == 2 else None
                 def classic_tick():
                     if end.strftime("%H:%M") == "14:45":
                         with PythonStrategy(spec.rule.code, spec.rule.image, sdk_version=4) as runtime:
-                            return classic_study.step(book, history, entry, end, seen, spec.capital, runtime, stamp)
-                    return classic_study.step(book, history, entry, end, seen, spec.capital)
+                            return classic_study.step(book, history, entry, end, seen, spec.capital, runtime, stamp, execution=execution)
+                    return classic_study.step(book, history, entry, end, seen, spec.capital, decision_clock=stamp, execution=execution)
                 point = await asyncio.to_thread(classic_tick)
             else:
                 point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)

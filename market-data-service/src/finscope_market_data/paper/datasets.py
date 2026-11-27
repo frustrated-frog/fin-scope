@@ -75,15 +75,17 @@ class ResearchDatasets:
                 (code, code),
             )
 
-    def bars(self, code, end):
+    def bars(self, code, end, *, since=None):
         symbol = code + (".SH" if code.startswith("6") else ".SZ")
-        historical = self.archive.research_bars(symbol, end) if self.archive else []
+        historical = []
+        if self.archive:
+            historical = self.archive.research_bars(symbol, end, since=since) if since else self.archive.research_bars(symbol, end)
         combined = {b.ended_at: b for b in historical}
         with self.lab.db() as db:
             self.schema(db)
             for r in db.execute(
-                "SELECT * FROM paper_measured_bar WHERE code=? AND at<=? ORDER BY at",
-                (code, end.isoformat()),
+                "SELECT * FROM paper_measured_bar WHERE code=? AND at BETWEEN ? AND ? ORDER BY at",
+                (code, since.isoformat() if since else "", end.isoformat()),
             ):
                 at = datetime.fromisoformat(r["at"])
                 original = combined.get(at)
@@ -113,7 +115,8 @@ class ResearchDatasets:
                         continue
                     item["amount"] = original.amount
                 combined[at] = SimpleNamespace(ended_at=at, **item)
-        return [combined[t] for t in sorted(combined)[-12000:]]
+        times = sorted(combined)
+        return [combined[t] for t in (times if since else times[-12000:])]
 
     def register(self, codes, *, current_pool=False):
         with self.lab.db() as db:

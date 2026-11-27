@@ -43,6 +43,7 @@ class PythonRule(Program):
     kind: Literal["python"]
     sdkVersion: Literal[1, 2, 3, 4] = 1
     recipe: Recipe | None = None
+    executionVersion: Literal[1, 2] = 1
     exDateAccounting: bool = False
     factorDiagnostics: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -384,7 +385,8 @@ class ResearchJobs:
         self.update(job, "BACKTEST", "按原始源码、运行镜像和冻结行情复验")
         if spec.rule.recipe:
             actual = await asyncio.to_thread(classic_study.simulate, self, saved["classicSnapshots"],
-                                             saved["universeTimeline"], spec.rule, spec.rule.image, spec.capital)
+                                             saved["universeTimeline"], spec.rule, spec.rule.image, spec.capital,
+                                             spec.rule.recipe if spec.rule.executionVersion == 2 else None)
         else:
             panel = await asyncio.to_thread(self.read_panel, spec.rule.snapshot)
             actual = await asyncio.to_thread(
@@ -629,7 +631,7 @@ class ResearchJobs:
             raise ValueError("无效行情快照")
         return self.root / (digest + ".json.gz")
 
-    async def snapshot(self, codes, job=None, *, eligible_from=None, cutoff=None):
+    async def snapshot(self, codes, job=None, *, eligible_from=None, cutoff=None, full_interval=False):
         cutoff = cutoff or datetime.now(SHANGHAI)
         self.lab.datasets.register(codes)
         recent = await asyncio.gather(
@@ -643,7 +645,8 @@ class ResearchJobs:
             for code, live in zip(codes, recent):
                 if isinstance(live, list):
                     self.lab.datasets.save_quotes(code, live, cutoff)
-                archived = self.lab.datasets.bars(code, cutoff.replace(tzinfo=None))
+                bounds = {"since": datetime.combine(warmup_start, datetime.min.time())} if full_interval else {}
+                archived = self.lab.datasets.bars(code, cutoff.replace(tzinfo=None), **bounds)
                 records = {}
                 for b in archived:
                     if eligible_from and b.ended_at.date() < warmup_start:
@@ -659,7 +662,8 @@ class ResearchJobs:
                         b.amount,
                         b.volume is None,
                     ]
-                panel[code] = [records[t] for t in sorted(records)[-12000:]]
+                times = sorted(records)
+                panel[code] = [records[t] for t in (times if full_interval else times[-12000:])]
             return panel
 
         panel = await asyncio.to_thread(collect)
@@ -1165,7 +1169,7 @@ class ResearchJobs:
         rule = dict(
             kind="python",
             sdkVersion=4 if request.get("recipe") else 3,
-            **({"recipe": request["recipe"]} if request.get("recipe") else {}),
+            **({"recipe": request["recipe"], "executionVersion": request.get("executionVersion", 1)} if request.get("recipe") else {}),
             exDateAccounting=True,
             factorDiagnostics=not bool(request.get("recipe")),
             **program.model_dump(),

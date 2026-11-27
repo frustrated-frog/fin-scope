@@ -74,8 +74,10 @@ def as_of(timeline, at):
 
 
 def active_codes(entry, book):
+    plan = book.get("rebalancePlan", {})
+    legs = plan.get("legs", {}) if plan.get("status") == "进行中" else ()
     return list(dict.fromkeys([*(entry or {}).get("codes", []), *book.get("classicBenchmark", []),
-                              *book["positions"], *(o["code"] for o in book["pending"])]))
+                              *book["positions"], *(o["code"] for o in book["pending"]), *legs]))
 
 
 def polling_codes(timeline, book, earliest, now):

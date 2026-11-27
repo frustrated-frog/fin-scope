@@ -83,13 +83,14 @@ class OvernightStore:
         with self.connect() as db:
             return db.execute('SELECT version FROM overnight_data_revision WHERE id=1').fetchone()[0]
 
-    def research_bars(self, code, through):
+    def research_bars(self, code, through, *, since=None):
         """Completed archived days may repair research inputs, never frozen forecasts."""
         with self.connect() as db:
-            live = db.execute('SELECT payload FROM overnight_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
-                              (code, through.isoformat())).fetchall()
-            history = db.execute('SELECT payload FROM overnight_historical_minute WHERE code=? AND ended_at<=? ORDER BY ended_at',
-                                 (code, through.isoformat())).fetchall()
+            bounds = (code, since.isoformat() if since else '', through.isoformat())
+            live = db.execute('SELECT payload FROM overnight_minute WHERE code=? AND ended_at BETWEEN ? AND ? ORDER BY ended_at',
+                              bounds).fetchall()
+            history = db.execute('SELECT payload FROM overnight_historical_minute WHERE code=? AND ended_at BETWEEN ? AND ? ORDER BY ended_at',
+                                 bounds).fetchall()
         from collections import defaultdict
         days, archived = defaultdict(list), defaultdict(list)
         for row in live:

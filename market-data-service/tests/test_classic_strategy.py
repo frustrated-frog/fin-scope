@@ -81,7 +81,8 @@ def test_poll_after_a_new_publication_can_still_process_the_preceding_bar():
 
 
 @pytest.mark.asyncio
-async def test_forward_executes_frozen_classic_program_and_replaces_members(tmp_path, monkeypatch):
+@pytest.mark.parametrize("execution_version", [1, 2])
+async def test_forward_executes_frozen_classic_program_and_replaces_members(tmp_path, monkeypatch, execution_version):
     from finscope_market_data.models import MinutePriceBar, StockSymbol
     from finscope_market_data.paper.lab import PaperLab
     from finscope_market_data.paper.python_runtime import image_id
@@ -100,7 +101,7 @@ async def test_forward_executes_frozen_classic_program_and_replaces_members(tmp_
     recipe = Recipe(family="MOMENTUM", period="5m", base="DISCOVERY", holdings=1)
     frozen = program(recipe)
     request = dict(pool="COHORT", source="test", capital=10000, codes=["600001"], origin="test",
-                   autoStart=True, recipe=recipe.model_dump())
+                   autoStart=True, recipe=recipe.model_dump(), executionVersion=execution_version)
     job = lab.jobs.submit(request)["jobId"]
     lab.jobs.save_version(job, request, frozen, image, "a"*64, {})
     timelines = {"DISCOVERY":[dict(at="2026-11-24T16:00:00+08:00",codes=["600001"]),
