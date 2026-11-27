@@ -18,6 +18,7 @@ import { OvernightStrategyPanel } from './OvernightStrategyPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
 type Pane = 'overview' | 'learning' | 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
+const studyViews: Record<string,string> = {walk:'滚动验证',grid:'参数实验',analysis:'收益归因',research:'总览',comparison:'同数据对照',portfolio:'组合与交易',evidence:'研究依据'};
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -57,12 +58,16 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     if (params.has('study') || window.location.hash === '#quant-learning') {
       return 'learning';
     }
-    return ['walk','grid','analysis'].some(key=>params.has(key)) ? 'intraday' : 'overview';
+    if (params.has('account')) {
+      return 'paper';
+    }
+    return Object.keys(studyViews).some(key=>params.has(key)) ? 'intraday' : 'overview';
   });
   const params = new URLSearchParams(window.location.search);
-  const [initialAnalysis, setInitialAnalysis] = useState(params.has('walk') ? '滚动验证' : params.has('grid') ? '参数实验' : params.has('analysis') ? '收益归因' : '总览');
+  const studyKey = Object.keys(studyViews).find(key=>params.has(key)) ?? 'research';
+  const [initialAnalysis, setInitialAnalysis] = useState(studyViews[studyKey]);
   const [paperSeed,setPaperSeed] = useState<PaperSeed>();
-  const [paperId, setPaperId] = useState<number | undefined>(()=>Number(params.get('walk') ?? params.get('grid') ?? params.get('analysis')) || undefined);
+  const [paperId, setPaperId] = useState<number | undefined>(()=>Number(params.get('account') ?? params.get(studyKey)) || undefined);
   const [paperDay, setPaperDay] = useState<string>();
   const paperCatalog = usePaperCatalog();
   const [comparison, setComparison] = useState<PaperVersion>();
@@ -216,6 +221,21 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   const gridBases=paperCatalog.rows.filter(v=>v.spec.rule.kind==='python' && v.spec.rule.recipe && v.spec.rule.executionVersion===2);
   const fallbackVersion = initialAnalysis === '收益归因' ? paperCatalog.rows.find(v=>v.comparisonId) ?? paperCatalog.rows[0] : gridBases[0];
   const researchId = paperId ?? (!paperSeed && !comparison ? fallbackVersion?.id : undefined);
+  useEffect(()=>{
+    const url = new URL(window.location.href);
+    for (const key of [...Object.keys(studyViews),'account']) {
+      url.searchParams.delete(key);
+    }
+    if (pane==='intraday' && researchId && !paperSeed && !comparison) {
+      const key=Object.keys(studyViews).find(k=>studyViews[k]===initialAnalysis) ?? 'research';
+      url.searchParams.set(key,String(researchId));
+    } else if (pane==='paper' && paperId) {
+      url.searchParams.set('account',String(paperId));
+    }
+    if (url.href!==window.location.href) {
+      window.history.replaceState(window.history.state,'',url);
+    }
+  },[pane,initialAnalysis,researchId,paperId,paperSeed,comparison]);
   const running = paperCatalog.rows.filter(item => lifecycleLabel(item) === '模拟中').length;
   const linkedStrategies = pane === 'factors' && selectedFactorCode
     ? strategies.filter(v => parseSpec(v)?.factors?.some(factor => factor.code === selectedFactorCode)) : [];
@@ -296,10 +316,10 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         {!paperCatalog.rows.some(v=>v.id===researchId) && <option value={researchId??''} disabled>选择实验</option>}
         {paperCatalog.rows.map(v=><option key={v.id} value={v.id}>#{v.id} · {v.spec.rule.name}</option>)}</select></label></nav>}
     {(pane === 'paper' || pane === 'intraday') && <PaperLab
-      key={`${pane}-${pane==='paper'?paperId:researchId}-${comparison?.id ?? ''}-${initialAnalysis}`}
-      seed={pane === 'intraday' ? paperSeed : undefined} initialId={pane==='paper'?paperId:researchId} initialAnalysis={initialAnalysis} onAnalysisResult={id=>showPaperVersion(id,'收益归因')} initialDay={pane === 'paper' ? paperDay : undefined}
+      key={`${pane}-${pane==='paper'?paperId:researchId}-${comparison?.id ?? ''}`}
+      seed={pane === 'intraday' ? paperSeed : undefined} initialId={pane==='paper'?paperId:researchId} initialAnalysis={initialAnalysis} onAnalysisChange={setInitialAnalysis} onAnalysisResult={id=>showPaperVersion(id,'收益归因')} initialDay={pane === 'paper' ? paperDay : undefined}
       comparison={pane === 'intraday' ? comparison : undefined} accountsOnly={pane === 'paper'} catalog={paperCatalog}
-      onBrowse={() => setPane('experiments')} onExperiment={showPaperVersion} onAccount={showAccount}
+      onChooseAccount={setPaperId} onBrowse={() => setPane('experiments')} onExperiment={showPaperVersion} onAccount={showAccount}
       onCompare={(base,question)=>openPaper({hypothesis:question??''},base)} />}
 
     {pane === 'overnight' && <OvernightStrategyPanel />}

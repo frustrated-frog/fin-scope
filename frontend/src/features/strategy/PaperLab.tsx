@@ -494,12 +494,14 @@ export function PaperLibrary({ factors, onOpen, catalog }: {
   );
 }
 
-export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总览', onAnalysisResult, comparison, catalog, accountsOnly = false,
+export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总览', onAnalysisChange, onAnalysisResult, onChooseAccount, comparison, catalog, accountsOnly = false,
   onAccount, onExperiment, onCompare, onBrowse }: {
   seed?: PaperSeed;
   initialId?: number;
   initialDay?: string;
   initialAnalysis?: string;
+  onAnalysisChange?: (view:string) => void;
+  onChooseAccount?: (id:number) => void;
   onAnalysisResult?: (id: number) => void;
   comparison?: PaperVersion;
   catalog: PaperCatalog;
@@ -513,7 +515,9 @@ export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总�
   const [selectedId, setId] = useState(initialId);
   const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
-  const [requestedView, setAnalysisView] = useState(initialAnalysis);
+  const [localView, setLocalView] = useState(initialAnalysis);
+  const requestedView = onAnalysisChange ? initialAnalysis : localView;
+  const setAnalysisView = onAnalysisChange ?? setLocalView;
   const [day, setDay] = useState(initialDay ?? '');
   const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
   const [hypothesis, setHypothesis] = useState(seed?.hypothesis || (comparison && !(comparison.spec.rule.kind === 'python' && comparison.spec.rule.recipe) ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : ''));
@@ -739,7 +743,7 @@ export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总�
         {accountsOnly && versions.length > 0 && <aside className="quant-run-list quant-panel">
           <div className="quant-panel-title"><h4>模拟账户</h4></div>
           {versions.map(v => <button key={v.id} className={v.id === id ? 'active' : ''} aria-pressed={v.id === id}
-            onClick={() => { setDay(''); setId(v.id); }}>
+            onClick={() => { setDay(''); setId(v.id); onChooseAccount?.(v.id); }}>
             <i data-status="SUCCEEDED"/><span><b>{v.spec.rule.name}</b><small>实验 #{v.id} · {lifecycleLabel(v)}</small></span>
             <em>{v.book && pct(v.book.equity / v.spec.capital - 1)}</em>
           </button>)}

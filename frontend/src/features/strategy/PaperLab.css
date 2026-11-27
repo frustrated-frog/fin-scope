@@ -307,3 +307,13 @@
   margin-top: .55rem;
   overflow-wrap: anywhere;
 }
+
+.paper-lab .quant-results > .quant-readout { min-width: 0; }
+.quant-workspace > .att-nav { --att-quiet: var(--muted); --att-line: var(--line); --att-ice: #97cfdd; }
+.quant-workspace > .att-nav label { min-width: 0; max-width: 100%; }
+.quant-workspace > .att-nav select { min-width: 0; max-width: 100%; }
+@media (max-width: 640px) {
+  .paper-lab .qh-tabs { gap: 4px 14px; }
+  .paper-lab .qh-tabs button { padding: 6px 0; }
+  .paper-lab .att-terminal { min-width: 0; }
+}
