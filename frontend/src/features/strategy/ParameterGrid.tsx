@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { allocations, frequencies, type ClassicRecipe } from './ClassicStrategies';
+import { GridCharts } from './GridCharts';
 import './ParameterGrid.css';
 
 type Cycle = ClassicRecipe['rebalance'];
 type Allocation = ClassicRecipe['allocation'];
-interface GridRow {
+export interface GridRow {
+  analytics?: {drawdown:number | null; turnover:number | null; feeRate:number; closes:{day:string;net:number}[]} | null;
   id: number;
   version: number | null;
   state: string;
@@ -248,6 +250,7 @@ export function ParameterGrid({
             <p role="status">
               已完成 {completed} / {group.rows.length} 组
             </p>
+            <GridCharts key={group.batch} rows={group.rows}/>
             <div className="att-scroll">
               <table>
                 <thead>

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import performance
 from .classic_recipe import Recipe
 from .engine import SHANGHAI
 
@@ -53,6 +54,15 @@ def enqueue(lab, version, grid):
     return {"batch":batch, "count":len(combinations)}
 
 
+
+def analytics(curve, capital, fees, costs):
+    if not curve or not capital:
+        return None
+    metrics = performance.report(curve, capital, fees, costs)
+    closes = [dict(day=p["at"][:10], net=p["equity"]/capital-1) for p in curve if p["at"][11:16]=="15:00"]
+    return dict(drawdown=metrics["maxDrawdown"], turnover=metrics["turnover"], feeRate=metrics["feeRate"], closes=closes)
+
+
 def results(lab, version):
     with lab.db() as db:
         lab.jobs.schema(db)
@@ -60,14 +70,20 @@ def results(lab, version):
           SELECT j.id,j.state,j.version,j.created,json_extract(j.log,'$[#-1]') AS latest,
             json_extract(j.request,'$.grid') AS batch,json_extract(j.request,'$.recipe') AS recipe,
             json_extract(v.history,'$.validationReturn') AS net,json_extract(v.history,'$.validationBenchmark') AS benchmark,
-            json_extract(v.history,'$.fees') AS fees,json_extract(v.history,'$.fills') AS fills
+            json_extract(v.history,'$.fees') AS fees,json_extract(v.history,'$.fills') AS fills,
+            json_extract(v.history,'$.gridAnalytics') AS analytics,
+            CASE WHEN json_type(v.history,'$.gridAnalytics') IS NULL THEN json_extract(v.history,'$.curve') END AS curve,
+            json_extract(v.spec,'$.capital') AS capital,json_extract(v.history,'$.costs') AS costs
           FROM paper_job j LEFT JOIN paper_version v ON j.version=v.id WHERE j.auto_key LIKE 'grid:%'
             AND json_extract(j.request,'$.reference')=? ORDER BY j.id DESC""",(version,))
         groups = {}
         for row in rows:
             group = groups.setdefault(row["batch"],dict(batch=row["batch"],created=row["created"],rows=[]))
             recipe = json.loads(row["recipe"])
-            group["rows"].append({**{key:row[key] for key in ("id","state","version","latest","net","benchmark","fees","fills")},
+            metrics = json.loads(row["analytics"]) if row["analytics"] else analytics(
+                json.loads(row["curve"]) if row["curve"] else [], row["capital"], row["fees"],
+                json.loads(row["costs"]) if row["costs"] else None)
+            group["rows"].append({"analytics":metrics, **{key:row[key] for key in ("id","state","version","latest","net","benchmark","fees","fills")},
                                   **{key:recipe[key] for key in ("rebalance","allocation","holdings")}})
         for group in groups.values():
             group["rows"].reverse()

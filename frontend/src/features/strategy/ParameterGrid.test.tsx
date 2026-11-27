@@ -64,3 +64,15 @@ test('previews a grid before submitting and displays actual results with empty p
   await user.click(screen.getByRole('button', { name: /分析 #12/ }));
   expect(open).toHaveBeenCalledWith(12);
 });
+
+test('switches between risk, costs and actual closing NAV for completed variants', async ()=>{
+  vi.stubGlobal('fetch',vi.fn(async ()=>apiResponse([{batch:'charts',created:'2026-11-27T15:00',
+    rows:[{id:11,version:9,state:'DONE',rebalance:'WEEKLY',allocation:'EQUAL',holdings:3,net:-.03,
+      benchmark:0,fees:12,fills:4,analytics:{drawdown:.06,turnover:null,feeRate:.0012,closes:[{day:'2026-11-26',net:-.01},{day:'2026-11-27',net:-.03}]}}]}])));
+  render(<ParameterGrid version={9} recipe={defaultRecipe} capital={10000} onResult={vi.fn()}/>);
+  expect(await screen.findByRole('img',{name:/风险与收益/})).toBeVisible();
+  await userEvent.click(screen.getByRole('button',{name:'换手与费用'}));
+  expect(screen.getByText('这一批尚无可绘制的观测。')).toBeVisible();
+  await userEvent.click(screen.getByRole('button',{name:'净值对比'}));
+  expect(screen.getByRole('img',{name:/净值对比/})).toBeVisible();
+});

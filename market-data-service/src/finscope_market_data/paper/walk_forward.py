@@ -1,5 +1,4 @@
 """Rolling selection and paired out-of-sample replay on immutable classic snapshots."""
-import ast
 from datetime import date, datetime
 import json
 from typing import Literal
@@ -9,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 from . import classic_study, performance
-from .classic_recipe import Recipe
+from .classic_recipe import Recipe, archived_body, variant_code
 from .engine import SHANGHAI
 
 
@@ -49,10 +48,7 @@ def source(db, version):
     if (rule.get("executionVersion") != 2 or not rule.get("image") or not history.get("classicSnapshots")
             or not history.get("universeTimeline") or not rule.get("code", "").startswith("RECIPE = ")):
         raise ValueError("请选择保存了完整行情与执行版本的经典回测")
-    original, _, body = rule["code"].partition("\n")
-    if not body or ast.literal_eval(original.removeprefix("RECIPE = ")) != rule["recipe"]:
-        raise ValueError("冻结源码与归档参数不一致")
-    return spec, history, body
+    return spec, history, archived_body(rule)
 
 
 def enqueue(lab, version, value):
@@ -113,7 +109,7 @@ def run(jobs, job, request):
 
     def replay(value, days):
         recipe = Recipe.model_validate({**rule["recipe"], plan["parameter"]: value})
-        code = "RECIPE = " + repr(recipe.model_dump()) + "\n" + body
+        code = variant_code(recipe, body)
         raw = classic_study.simulate_panel(panel, history["universeTimeline"], code, rule["image"], capital,
                                            recipe, first=days[0], last=days[-1])
         observed = sorted({p["at"][:10] for p in raw["curve"] if p["at"][11:16] == "15:00"})

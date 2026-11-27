@@ -1,4 +1,5 @@
 """Configuration and versioned executable source for classic stock strategies."""
+import ast
 import inspect
 from datetime import date, datetime, time
 from typing import Literal
@@ -82,3 +83,16 @@ def program(recipe):
     source = inspect.getsource(portfolio_math) + "\n" + inspect.getsource(classic_components)
     return Program(name=name, hypothesis=thesis, factor=thesis,
                    code='RECIPE = ' + repr(recipe.model_dump()) + '\n' + source)
+
+
+def archived_body(rule):
+    header, separator, body = rule.get("code", "").partition("\n")
+    if not separator or not body or not header.startswith("RECIPE = "):
+        raise ValueError("归档策略缺少可变更的参数声明")
+    if ast.literal_eval(header.removeprefix("RECIPE = ")) != rule["recipe"]:
+        raise ValueError("冻结源码与归档参数不一致")
+    return body
+
+
+def variant_code(recipe, body):
+    return "RECIPE = " + repr(recipe.model_dump()) + "\n" + body

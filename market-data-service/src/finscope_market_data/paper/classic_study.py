@@ -1,12 +1,14 @@
 """Run a frozen classic strategy against dated universes using the shared paper ledger."""
 import asyncio
-from datetime import datetime, time, timedelta
+from bisect import bisect_left
+from datetime import date, datetime, time, timedelta
+from operator import attrgetter
 import json
 
 from finscope_market_data.forecast.trading_calendar import previous_session
 from .analysis import frames
 from . import performance, rebalance
-from .classic_recipe import FAMILIES, Recipe, program
+from .classic_recipe import FAMILIES, Recipe, archived_body, program, variant_code
 from .classic_universe import active_codes, as_of, schedule
 from .engine import ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, image_id
@@ -79,6 +81,13 @@ def simulate(jobs, snapshots, timeline, frozen, image, capital, execution=None):
 
 
 def simulate_panel(panel, timeline, code, image, capital, execution=None, *, first=None, last=None):
+    if first and last:
+        start = datetime.combine(date.fromisoformat(first), time.min, SHANGHAI)
+        stop = datetime.combine(date.fromisoformat(last) + timedelta(days=1), time.min, SHANGHAI)
+        stamp = attrgetter("observed_at")
+        # frames() exposes at most 49 past bars per symbol. Higher-timeframe features are already frozen.
+        panel = {code: bars[max(0, bisect_left(bars, start, key=stamp) - 49):bisect_left(bars, stop, key=stamp)]
+                 for code, bars in panel.items()}
     curve, decisions, trades = [], [], []
     book = new_book(capital)
     plans = {}
@@ -119,8 +128,19 @@ def simulate_panel(panel, timeline, code, image, capital, execution=None, *, fir
 
 async def run(jobs, job, request):
     recipe = Recipe.model_validate(request["recipe"])
-    frozen = program(recipe)
-    image = await asyncio.to_thread(image_id)
+    if request.get("grid"):
+        from .research import Program
+        with jobs.lab.db() as db:
+            row = db.execute("SELECT spec FROM paper_version WHERE id=?", (request["reference"],)).fetchone()
+        if not row:
+            raise ValueError("找不到参数实验的冻结基线")
+        rule = json.loads(row[0])["rule"]
+        frozen = Program(name=rule["name"], hypothesis=rule["hypothesis"], factor=rule["factor"],
+                         code=variant_code(recipe, archived_body(rule)))
+        image = rule["image"]
+    else:
+        frozen = program(recipe)
+        image = await asyncio.to_thread(image_id)
     codes = list(dict.fromkeys(c for entry in request["timeline"] for c in entry["codes"]))
     snapshots = request.get("classicSnapshots", [])
     for index in range(0, len(codes), 16):
@@ -136,6 +156,9 @@ async def run(jobs, job, request):
     jobs.update(job, "BACKTEST", "按历史名单逐次选股、计算目标仓位并撮合")
     execution = recipe if request.get("executionVersion", 1) == 2 else None
     result = await asyncio.to_thread(simulate, jobs, snapshots, request["timeline"], frozen, image, request["capital"], execution)
+    if request.get("grid"):
+        from .parameter_grid import analytics
+        result["gridAnalytics"] = analytics(result["curve"], request["capital"], result["fees"], result.get("costs"))
     if request.get("reference"):
         with jobs.lab.db() as db:
             original_row = db.execute("SELECT history,spec FROM paper_version WHERE id=?", (request["reference"],)).fetchone()

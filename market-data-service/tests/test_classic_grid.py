@@ -49,3 +49,13 @@ def test_invalid_grid_rolls_back_every_member_and_rejects_missing_snapshot(tmp_p
     baseline(other,False)
     with pytest.raises(ValueError,match="冻结快照"):
         enqueue(other,8,req)
+
+
+def test_chart_metrics_use_real_closes_and_preserve_missing_costs():
+    from finscope_market_data.paper.parameter_grid import analytics
+    curve = [dict(at="2026-11-25T15:00", equity=99, benchmark=100),
+             dict(at="2026-11-26T14:55", equity=104, benchmark=100)]
+    chart = analytics(curve,100,2,None)
+    assert chart["turnover"] is None and chart["feeRate"] == .02
+    assert chart["drawdown"] == pytest.approx(.01)
+    assert len(chart["closes"]) == 1 and chart["closes"][0]["day"] == "2026-11-25"

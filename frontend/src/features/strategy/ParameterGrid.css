@@ -14,3 +14,15 @@
 .pg-results td [class=att-link] {padding:3px 6px}
 .pg-terminal .att-head-result small {margin:0 4px 0 0}
 @media(max-width:780px){.pg-design{grid-template-columns:1fr}.pg-results>header{align-items:flex-start}}
+.pg-charts {margin-bottom:16px;padding:14px;border:1px solid var(--att-line);border-radius:9px;background:linear-gradient(116deg,#203b4a9c,#14243164)}
+.pg-charts header {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pg-chart-layout {display:grid;grid-template-columns:minmax(0,3fr) minmax(140px,1fr);gap:20px;align-items:center}
+.pg-chart-layout svg {display:block;width:100%;height:auto;overflow:visible}
+.pg-chart-layout path {fill:none;stroke:#728ea041}
+.pg-chart-layout text {fill:#a3bccb;font:12px system-ui,sans-serif}
+.pg-chart-layout circle {cursor:pointer}
+.pg-chart-layout aside {padding-left:16px;border-left:1px solid var(--att-line)}
+.pg-chart-layout aside strong,.pg-chart-layout aside span,.pg-chart-layout aside label {display:block}
+.pg-chart-layout aside strong {color:var(--att-ice);font:600 1.6rem 'Barlow',sans-serif;margin-top:12px}
+.pg-chart-layout aside span,.pg-chart-layout aside label {color:var(--att-quiet);font-size:.78rem}
+@media(max-width:700px){.pg-chart-layout{grid-template-columns:minmax(0,1fr)}.pg-chart-layout aside{padding-left:0;border-left:0}}
