@@ -52,6 +52,26 @@ async def test_ex_date_window_survives_next_bar_and_restart(tmp_path, monkeypatc
     assert second["600000"] == history[1:] and len(queries) == 1
 
 
+@pytest.mark.asyncio
+async def test_unverified_history_keeps_intraday_features_and_protects_overnight_ledger(tmp_path, monkeypatch):
+    lab = PaperLab(tmp_path / "paper.db", lambda: None)
+    symbol = StockSymbol(code="600000", market="SH")
+    async def unavailable(*args):
+        return None
+    monkeypatch.setattr(lab, "action_events", unavailable)
+    times = [(23, 15, 0), (24, 9, 35), (24, 9, 40), (24, 9, 45)]
+    bars = [MinutePriceBar(symbol=symbol, observed_at=datetime(2026, 11, d, h, m, tzinfo=SHANGHAI),
+                           frequency_minutes=5, open=10, high=11, low=9, close=10.5, volume=500)
+            for d, h, m in times]
+    end = bars[-1].observed_at
+    history = await lab.forward_actions({"600000": bars}, {}, str(end.date()), end)
+    enriched = await lab.features.attach("600000", history["600000"], end)
+    assert enriched[-1].shortHistory and set(enriched[-1].completedBars) == {"5m", "15m"}
+    assert enriched[0].observed_at == bars[1].observed_at
+    with pytest.raises(ValueError, match="等待核验"):
+        await lab.forward_actions({"600000": bars}, {"anchors": {"600000": 10}}, "2026-11-23", end)
+
+
 def test_research_memory_requires_latest_information_date(tmp_path):
     lab = PaperLab(tmp_path / "lab.db", lambda: None)
     j = lab.jobs.submit({"origin": "test"})["jobId"]

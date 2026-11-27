@@ -87,12 +87,12 @@ class ForwardFeatures:
             self.day = end.date()
         # Warm from the previous completed session, then append today's observed bars.
         today = [b for b in bars if b.observed_at.date() == end.date()]
-        key = (code, end.date(), bars[0].observed_at.date())
+        key = (code, end.date(), bars[0].observed_at.date(), getattr(bars[-1], "windowClipped", False))
         if key not in self.cache:
             task = asyncio.create_task(self.seed(code, bars, end))
             self.cache[key] = task
         try:
-            state, prior = await self.cache[key]
+            state, prior, limited = await self.cache[key]
         except Exception:
             self.cache.pop(key, None)
             raise
@@ -100,7 +100,8 @@ class ForwardFeatures:
         result = prior.copy()
         for bar in today:
             features = state.update(bar.observed_at, bar)
-            result.append(bar.model_copy(update={"multiTimeframe": features, "completedBars": state.candles.copy()}))
+            result.append(bar.model_copy(update={"multiTimeframe": features, "completedBars": state.candles.copy(),
+                                                 "shortHistory": limited or getattr(bar, "shortHistory", False)}))
         return result[-49:]
 
     async def seed(self, code, bars, end):
@@ -109,7 +110,7 @@ class ForwardFeatures:
         prior = []
         # forward_actions already clipped the live input at the last known ex-date.
         if getattr(bars[-1], "windowClipped", False):
-            return state, prior
+            return state, prior, getattr(bars[-1], "shortHistory", False)
         async with self.read_slots:
             archived = await asyncio.to_thread(self.lab.datasets.bars, code, cutoff)
         rows = {b.ended_at: b for b in archived[-(63 * 48):]}
@@ -117,14 +118,15 @@ class ForwardFeatures:
             if b.observed_at.date() < end.date():
                 rows[b.observed_at.replace(tzinfo=None)] = b
         if not rows:
-            return state, prior
+            return state, prior, False
         events = await self.lab.action_events(code, min(rows).date(), end.date())
         if events is None:
-            raise ValueError("等待核验多周期历史窗口")
-        boundary = max((event["ex_date"] for event in events), default="")
+            # forward_actions checked the recent input. Do not use older unverified prices.
+            rows = {b.observed_at.replace(tzinfo=None): b for b in bars if b.observed_at.date() < end.date()}
+        boundary = max((event["ex_date"] for event in events or []), default="")
         for at, bar in sorted(rows.items()):
             if str(at.date()) >= boundary:
                 features = state.update(at, bar)
                 if hasattr(bar, "observed_at"):
                     prior.append(bar.model_copy(update={"multiTimeframe": features, "completedBars": state.candles.copy()}))
-        return state, prior[-49:]
+        return state, prior[-49:], events is None

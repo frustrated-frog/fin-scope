@@ -92,6 +92,7 @@ interface Point extends Tick {
   holdings?: Record<string, number>;
   events: Decision[];
   controlEvents?: Decision[];
+  shortHistory?: string[];
   scores: Record<string, number | null>;
   reason: string;
   previousAt?: string;
@@ -376,6 +377,7 @@ function Decisions({
                 {!Object.keys(p.holdings).length && <span>空仓</span>}
               </div>}
               {p.stale?.length ? <p>缺少本根行情 · {p.stale.map(stockName).join('、')}</p> : null}
+              {!!p.shortHistory?.length && <p>历史除权资料待核验，仅使用可核验的行情窗口 · {p.shortHistory.map(stockName).join('、')}</p>}
               {p.missedBars ? <p>此前有 {p.missedBars} 根盘中行情未执行。</p> : null}
               <FactorScores scores={p.scores} stockName={stockName}/>
             </div>

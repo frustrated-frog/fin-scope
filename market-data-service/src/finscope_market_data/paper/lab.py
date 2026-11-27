@@ -379,6 +379,13 @@ class PaperLab:
                 events = await self.action_queries[key]
                 if events is None:
                     self.action_queries.pop(key, None)
+                    # Same-day prices need no overnight adjustment. Retain unresolved prior
+                    # ledger entitlements for the next verified observation.
+                    ledgers = (book, book.get("control", {}))
+                    if observed >= today or all(code not in ledger.get("anchors", {}) for ledger in ledgers):
+                        current = [b for b in bars if b.observed_at.date() == end.date()]
+                        current[-1] = current[-1].model_copy(update={"windowClipped": True, "shortHistory": True})
+                        return current
                     raise ValueError("等待核验公司行为")
                 for event in sorted(events, key=lambda item: item["ex_date"]):
                     boundary = max(boundary, event["ex_date"])
@@ -433,6 +440,9 @@ class PaperLab:
                 return
         try:
             point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
+            limited = [c for c, bars in history.items() if getattr(bars[-1], "shortHistory", False)]
+            if limited:
+                point["shortHistory"] = limited
             if "controlRule" in book:
                 rule = book["controlRule"]
                 control_rule = PythonRule.model_validate(rule) if rule.get("kind") == "python" else Rule.model_validate(rule)
