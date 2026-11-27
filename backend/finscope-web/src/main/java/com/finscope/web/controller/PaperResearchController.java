@@ -10,6 +10,7 @@ import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicGridInput;
 import com.finscope.domain.quant.paper.WalkForwardInput;
 import com.finscope.service.quant.paper.PaperResearchService;
+import com.finscope.service.quant.paper.PaperPortfolioRiskService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +24,16 @@ import java.util.UUID;
 public class PaperResearchController {
     @Resource
     private PaperResearchService service;
+
+    @Resource
+    private PaperPortfolioRiskService portfolioRisk;
+
+    @GetMapping("/{version}/portfolio-risk")
+    public ApiResponse<JsonNode> portfolioRisk(@PathVariable long version,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate day,
+            @RequestParam(defaultValue = "60") int window) {
+        return ApiResponses.success(portfolioRisk.analyze(version, day, window));
+    }
 
     @GetMapping
     public ApiResponse<JsonNode> versions() {

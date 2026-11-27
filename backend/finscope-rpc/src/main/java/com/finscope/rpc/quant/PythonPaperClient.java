@@ -72,6 +72,10 @@ public class PythonPaperClient {
         return call("/grids/" + version, input);
     }
 
+    public JsonNode portfolioRisk(long version, LocalDate day, int window) {
+        return call("/" + version + "/portfolio-risk?window=" + window + (day == null ? "" : "&day=" + day), null);
+    }
+
     public JsonNode attribution(long version) {
         return call("/attribution/" + version, null);
     }
