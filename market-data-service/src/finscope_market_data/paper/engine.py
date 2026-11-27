@@ -197,6 +197,7 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
         scores = {c: score(rule, histories[c]) if c in histories else None for c in universe}
     else:
         targets, scores = decide(histories, book, end, equity)
+    explanations = book.pop("signalReasons", {})
     ranking = sorted((c for c in scores if scores[c] is not None), key=lambda c: (-scores[c], c))
     if decision_clock:
         available = decision_clock()
@@ -215,7 +216,7 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
             if abs(delta) < price * lot and not (targets[code] == 0 and code in values):
                 continue
             side = "BUY" if delta > 0 else "SELL"
-            reason = f"策略目标仓位 {targets[code]:.1%}"
+            reason = explanations.get(code, f"策略目标仓位 {targets[code]:.1%}")
         elif code in values and value <= rule.exit:
             side, reason = "SELL", "得分降至退出阈值"
         elif code not in values and free > 0 and value >= rule.entry and rank <= rule.slots:
@@ -225,6 +226,8 @@ def advance(book, rule, histories, end, available, capital, *, universe=None, de
             continue
         order = dict(code=code, side=side, reason=reason, score=value, rank=rank,
                      available=available.isoformat(), budget=money(abs(delta) if targets is not None else equity / rule.slots))
+        if code in explanations:
+            order["signalReason"] = explanations[code]
         if targets is not None and side == "SELL" and targets[code] > 0:
             order["maxShares"] = int(abs(delta) / price) // lot * lot
         if side == "SELL" and check_sellable:

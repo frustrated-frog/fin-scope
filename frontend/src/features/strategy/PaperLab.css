@@ -294,3 +294,16 @@
 }
 .paper-model-study dt { font-size: .78rem; color: var(--muted); }
 .paper-model-study dd { margin: .25rem 0 0; font-variant-numeric: tabular-nums; font-weight: 650; }
+
+.paper-model-study dl:has(.paper-factor-definition) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}
+.paper-model-study .paper-factor-definition {
+  font-size: .83rem;
+  font-weight: 400;
+}
+.paper-factor-definition code {
+  display: block;
+  margin-top: .55rem;
+  overflow-wrap: anywhere;
+}

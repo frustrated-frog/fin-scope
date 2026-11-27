@@ -26,6 +26,7 @@ from . import factor_library, tail_experiment
 from .actions import annotate
 from .analysis import coverage, evaluate, frames, observe_close
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
+from .timeframes import Timeframes
 from .python_runtime import PythonStrategy, SDK, image_id
 
 
@@ -618,12 +619,14 @@ class ResearchJobs:
             raise ValueError("无效行情快照")
         return self.root / (digest + ".json.gz")
 
-    async def snapshot(self, codes, job=None, *, first_day=None, cutoff=None):
+    async def snapshot(self, codes, job=None, *, eligible_from=None, cutoff=None):
         cutoff = cutoff or datetime.now(SHANGHAI)
         self.lab.datasets.register(codes)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
-        ) if first_day is None else [None] * len(codes)
+        ) if eligible_from is None else [None] * len(codes)
+
+        warmup_start = eligible_from.date() - timedelta(days=120) if eligible_from else None
 
         def collect():
             panel = {}
@@ -633,7 +636,7 @@ class ResearchJobs:
                 archived = self.lab.datasets.bars(code, cutoff.replace(tzinfo=None))
                 records = {}
                 for b in archived:
-                    if first_day and b.ended_at.date() < first_day:
+                    if eligible_from and b.ended_at.date() < warmup_start:
                         continue
                     at = b.ended_at.replace(tzinfo=SHANGHAI)
                     records[at] = [
@@ -655,11 +658,11 @@ class ResearchJobs:
             for c, rows in panel.items()
             if len({r[0][:10] for r in rows}) < 3 or not any(not r[7] for r in rows)
         ]
-        if cold and first_day is None:
+        if cold and eligible_from is None:
             await self.lab.datasets.ensure(cold, cutoff, wait=True)
             panel = await asyncio.to_thread(collect)
         for code, rows in panel.items():
-            if not rows and first_day is None:
+            if not rows and eligible_from is None:
                 raise ValueError(f"{code} 没有可用于回测的行情，请待补数后重试")
         async def attach(code, rows):
             if not rows:
@@ -670,8 +673,9 @@ class ResearchJobs:
         await asyncio.gather(*(attach(c, rows) for c, rows in panel.items()))
 
         def freeze():
+            payload = {"eligibleFrom": eligible_from.isoformat(), "bars": panel} if eligible_from else panel
             raw = json.dumps(
-                panel, sort_keys=True, separators=(",", ":"), allow_nan=False
+                payload, sort_keys=True, separators=(",", ":"), allow_nan=False
             ).encode()
             digest = hashlib.sha256(raw).hexdigest()
             self.root.mkdir(parents=True, exist_ok=True)
@@ -688,7 +692,9 @@ class ResearchJobs:
         raw = gzip.decompress(self.snapshot_path(digest).read_bytes())
         if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError("快照校验失败")
-        return {
+        payload = json.loads(raw)
+        start = datetime.fromisoformat(payload["eligibleFrom"]) if "eligibleFrom" in payload else None
+        panel = {
             c: [
                 SimpleNamespace(
                     observed_at=datetime.fromisoformat(at),
@@ -704,8 +710,20 @@ class ResearchJobs:
                 )
                 for at, o, h, l, p, v, a, estimated, *extra in rows
             ]
-            for c, rows in json.loads(raw).items()
+            for c, rows in (payload["bars"] if start else payload).items()
         }
+        if start:
+            for code, bars in panel.items():
+                state = Timeframes(candles=True)
+                eligible = []
+                for bar in bars:
+                    features = state.update(bar.observed_at, bar)
+                    if bar.observed_at >= start:
+                        bar.multiTimeframe = features
+                        bar.completedBars = state.candles.copy()
+                        eligible.append(bar)
+                panel[code] = eligible
+        return panel
 
     def trials(self, job):
         with self.lab.db() as db:
@@ -807,6 +825,8 @@ class ResearchJobs:
                         c: [
                             dict(
                                 at=b.observed_at.isoformat(),
+                                **({"multiTimeframe": b.multiTimeframe, "completedBars": b.completedBars}
+                                   if hasattr(b, "multiTimeframe") else {}),
                                 open=b.open,
                                 high=b.high,
                                 low=b.low,

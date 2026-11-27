@@ -50,11 +50,14 @@ public class PaperResearchService {
 
     public JsonNode detail(long id, LocalDate day) {
         ObjectNode detail = (ObjectNode) paper.detail(id, day);
-        List<String> codes = new ArrayList<>();
+        Set<String> codes = new LinkedHashSet<>();
         for (JsonNode code : detail.path("spec").path("codes")) {
             codes.add(code.asText());
         }
-        detail.set("stockNames", json.valueToTree(stockNames.findNames(codes)));
+        for (JsonNode member : detail.path("history").path("members")) {
+            codes.add(member.path("code").asText());
+        }
+        detail.set("stockNames", json.valueToTree(stockNames.findNames(List.copyOf(codes))));
         return detail;
     }
 

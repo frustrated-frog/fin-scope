@@ -434,6 +434,16 @@ class PaperLab:
                 rule = book["controlRule"]
                 control_rule = PythonRule.model_validate(rule) if rule.get("kind") == "python" else Rule.model_validate(rule)
                 control = await self.forward(book["control"], control_rule, spec, history, end, seen, decision_clock=stamp)
+                # Both legs may trade only after the slower decision was available.
+                announced = stamp().isoformat()
+                for ledger, tick in ((book, point), (book["control"], control)):
+                    new_signals = {e["code"] for e in tick["events"] if e["action"] == "信号"}
+                    for order in ledger["pending"]:
+                        if order["code"] in new_signals:
+                            order["available"] = announced
+                    for event in tick["events"]:
+                        if event["action"] == "信号":
+                            event["available"] = announced
                 point["control"] = control["equity"]
                 point["controlEvents"] = control["events"]
         except Exception as error:

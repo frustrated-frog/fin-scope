@@ -24,7 +24,7 @@ Access bar["multiTimeframe"] for completed return5m, return15m, return60m, retur
 Volume can be null for archived data and amount can be null for recent quotes. Be robust to short windows and missing symbols. Use deterministic
 logic and only ctx. Return a dict weights (available code -> absolute desired portfolio weight, 0 exits,
 omitted holds, nonnegative sum <= 1), scores (finite numeric scores for available codes including all
-weight keys), state (small JSON dict). Execution, fees and T+1 belong to the simulator.
+weight keys), state (small JSON dict). Optionally include reasons (target code -> brief Chinese reason for this rebalance). Execution, fees and T+1 belong to the simulator.
 Module globals do not persist. Write a complete runnable strategy with your own named factor function,
 position sizing, entry/exit and rebalance timing. For new research implement factors(bars):
 return 1-4 named independent numeric factors, {factor_name:{available_code:finite_number}}.
@@ -321,5 +321,11 @@ class PythonStrategy:
             or len(json.dumps(state, allow_nan=False)) > 8192
         ):
             raise ValueError("state 必须为不超过 8KB 的 JSON 对象")
+        reasons = result.get("reasons", {}) if self.sdk_version >= 3 else {}
+        if (not isinstance(reasons, dict) or not reasons.keys() <= weights.keys()
+                or any(not isinstance(v, str) or not 0 < len(v) <= 400 for v in reasons.values())):
+            raise ValueError("调仓理由须对应目标仓位，每项最多 400 字")
+        if reasons:
+            book["signalReasons"] = reasons
         book["strategyState"] = state
         return weights, scores

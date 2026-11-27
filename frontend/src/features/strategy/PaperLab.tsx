@@ -85,11 +85,13 @@ interface Decision {
   score: number;
   reason: string;
   available: string;
+  signalReason?: string;
 }
 interface Point extends Tick {
   cash?: number;
   holdings?: Record<string, number>;
   events: Decision[];
+  controlEvents?: Decision[];
   scores: Record<string, number | null>;
   reason: string;
   previousAt?: string;
@@ -99,6 +101,8 @@ interface Point extends Tick {
 interface TailModel {
   features: string[];
   coefficients: number[];
+  formulas?: Record<string, { formula: string; reason: string }>;
+  samplesByCode?: Record<string, number>;
   symbols: number;
   samples: number;
   dates: number;
@@ -121,7 +125,8 @@ interface Detail {
   days: string[];
   day: string;
   forwardEvidence?: { sessions: number; fills: number; status: string; reasons: string[]; maxDrawdown: number; feeRate: number; relativeReturn: number } | null;
-  history: { model?: TailModel; unverifiedSymbols?: number; incompleteActionTerms?: number; researchPoolSize?: number; controlFees?: number; controlFills?: number; developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
+  history: { model?: TailModel; factorAuthor?: string; members?: {code: string; joined: string}[];
+    researchCoverage?: Record<string, {days: number; bars: number; completeDays: number; measuredVolumeBars: number}>; unverifiedSymbols?: number; incompleteActionTerms?: number; researchPoolSize?: number; controlFees?: number; controlFills?: number; developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
     days?: number; validationStart?: string; developmentReturn?: number; validationReturn?: number;
     validationBenchmark?: number; controlReturn?: number; estimatedVolumeBars?: number; coverage?: Record<string, number> };
 }
@@ -303,6 +308,22 @@ function FactorScores({ scores, stockName }: { scores: Point['scores']; stockNam
   </section>;
 }
 
+function DecisionList({events, stockName}: {events: Decision[]; stockName: (code: string) => string}) {
+  return (<div className="paper-decision-list">{events.map((e, i) => <div className="paper-decision" key={i} data-side={e.side}>
+                <div className="paper-decision-title">
+                  <strong>{e.side === 'BUY' ? '买入' : '卖出'} {stockName(e.code)}</strong>
+                  <span data-blocked={e.action === '未成交'}>{e.action}</span>
+                  <time>信号 {e.available.slice(11, 19)}</time>
+                </div>
+                <p>{e.reason}</p>
+                {e.signalReason && e.signalReason !== e.reason && <p>{e.signalReason}</p>}
+                <div className="paper-decision-values">
+                  <span>排名 <b>{e.rank}</b></span><span>得分 <b>{e.score.toFixed(4)}</b></span>
+                  {e.quantity ? <span>{e.quantity} 股 × ¥{e.price?.toFixed(3)} · 费用 ¥{e.fee}</span> : null}
+                </div>
+              </div>)}</div>);
+}
+
 function Decisions({
   detail,
   selectDay,
@@ -344,18 +365,10 @@ function Decisions({
               <span>¥{currency(p.equity)}</span>
             </summary>
             <div className="paper-replay-body">
-              <div className="paper-decision-list">{p.events.map((e, i) => <div className="paper-decision" key={i} data-side={e.side}>
-                <div className="paper-decision-title">
-                  <strong>{e.side === 'BUY' ? '买入' : '卖出'} {stockName(e.code)}</strong>
-                  <span data-blocked={e.action === '未成交'}>{e.action}</span>
-                  <time>信号 {e.available.slice(11, 19)}</time>
-                </div>
-                <p>{e.reason}</p>
-                <div className="paper-decision-values">
-                  <span>排名 <b>{e.rank}</b></span><span>得分 <b>{e.score.toFixed(4)}</b></span>
-                  {e.quantity ? <span>{e.quantity} 股 × ¥{e.price?.toFixed(3)} · 费用 ¥{e.fee}</span> : null}
-                </div>
-              </div>)}</div>
+              <DecisionList events={p.events} stockName={stockName}/>
+              {!!p.controlEvents?.length && <details><summary>{detail.history.model ? '因子等权对照' : '原策略对照'} · {p.controlEvents.length} 条记录</summary>
+                <DecisionList events={p.controlEvents} stockName={stockName}/>
+              </details>}
               <p className="paper-point-reason">{p.reason}</p>
               {p.holdings && <div className="paper-point-book">
                 <strong>现金 ¥{currency(p.cash ?? 0)}</strong>
@@ -653,7 +666,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           <p className="research-method-note">
             {parent
               ? engine === 'codex' ? '沿用原版本的行情快照和本金。新旧策略在同一时间窗口独立执行。' : '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
-              : engine === 'ridge' ? '用有入池日期的研究样本训练，首批最多 24 只进入交易池。14:45 选股，次日开盘后卖出。Ridge 和因子等权对照各用一份本金。'
+              : engine === 'ridge' ? 'Codex 用开发期数据提出因子，Ridge 学习权重。两组在同一股票池于 14:45 选股，次日开盘后卖出，各用一份本金。'
               : engine === 'codex' ? 'Codex 编写因子、仓位和调仓逻辑，在隔离环境试跑。按交易日留出最后一段行情验证。' : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
           </p>
           <label className="paper-start-option">
@@ -750,7 +763,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 {accountsOnly && control && (
                   <p>
                     {spec.parent ? '同期原因子账户 #' + spec.parent : '同期因子等权账户'} · 净值 ¥
-                    {currency(control.equity)} · 因子版本收益差{' '}
+                    {currency(control.equity)} · 扣费后收益差{' '}
                     {pct((equity - control.equity) / spec.capital)} ·
                     两个账户同时启动
                   </p>
@@ -761,7 +774,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   <h4>策略与因子</h4>
                   <button className="quant-action" onClick={() => onCompare(active)}>{spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
                 </header>
-                <p>{spec.origin}</p>
+                <p>{detail?.history.factorAuthor ? spec.rule.hypothesis : spec.origin}</p>
                 {spec.rule.kind === 'python' ? <>
                   <p>{spec.rule.factor}</p>
                   <details className="paper-source"><summary>查看 Python 策略源码</summary>
@@ -813,16 +826,31 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     。
                   </p>
                   {detail.history.model && <details className="paper-model-study" open>
-                    <summary>Ridge 模型与训练样本</summary>
+                    <summary>{detail.history.factorAuthor ? 'Codex 因子与 Ridge 权重' : 'Ridge 模型与训练样本'}</summary>
                     <p>{detail.history.model.firstDay} 至 {detail.history.model.lastLabel} · {detail.history.model.dates} 个信号日 · {detail.history.model.samples} 个有效股日样本</p>
                     <p>登记 {detail.history.researchPoolSize} 只，{detail.history.model.symbols} 只有合格训练样本。开发段拟合后冻结权重，每个交易日在训练中占相同权重。</p>
                     <dl>{detail.history.model.features.map((feature, i) => <div key={feature}>
                       <dt>{factorLabels[feature] ?? feature}</dt><dd>{(detail.history.model!.coefficients[i] * 100).toFixed(3)}%</dd>
+                      {detail.history.model!.formulas?.[feature] && <dd className="paper-factor-definition">
+                        <code>{detail.history.model!.formulas[feature].formula}</code>
+                        <p>{detail.history.model!.formulas[feature].reason}</p>
+                      </dd>}
                     </div>)}</dl>
                     <p>系数表示因子上升一个训练标准差时，预测隔夜收益的变化。留出段对照成交 {detail.history.controlFills} 笔，费用 ¥ {currency(detail.history.controlFees ?? 0)}。</p>
                     {!!(detail.history.unverifiedSymbols || detail.history.incompleteActionTerms) && <p>
                       留出段有 {detail.history.unverifiedSymbols} 只股票缺少完整除权核验，{detail.history.incompleteActionTerms} 次除权只有日期，相关权益可能影响净值。
                     </p>}
+                  </details>}
+                  {detail.history.researchCoverage && detail.history.members && <details><summary>研究股票池与开发期覆盖 · {detail.history.members.length} 只</summary>
+                    <div className="paper-coverage-scroll"><table className="paper-position-table">
+                      <thead><tr><th>股票</th><th>首次入池</th><th>完整交易日</th><th>实测量 / 总根数</th><th>训练样本</th></tr></thead>
+                      <tbody>{detail.history.members.map(member => {
+                        const coverage = detail.history.researchCoverage?.[member.code];
+                        return <tr key={member.code}><th>{stockName(member.code)}</th><td>{member.joined.slice(0,10)}</td>
+                          <td>{coverage?.completeDays ?? 0}</td><td>{coverage?.measuredVolumeBars ?? 0} / {coverage?.bars ?? 0}</td>
+                          <td>{detail.history.model?.samplesByCode?.[member.code] ?? 0}</td></tr>;
+                      })}</tbody>
+                    </table></div>
                   </details>}
                   {detail.history.developmentTrials && <><h5>开发段候选与因子评价</h5><PaperResearchEvidence trials={detail.history.developmentTrials}/></>}
                   {spec.rule.kind === 'python' && <details><summary>行情快照与复验 · {detail.history.days} 个交易日</summary>

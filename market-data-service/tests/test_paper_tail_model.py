@@ -5,7 +5,7 @@ import pytest
 
 from finscope_market_data.forecast.trading_calendar import next_session
 from finscope_market_data.overnight.engine import expected_times
-from finscope_market_data.paper import tail_model
+from finscope_market_data.paper import factor_proposal, tail_model
 from finscope_market_data.paper.engine import SHANGHAI
 
 
@@ -72,13 +72,16 @@ async def test_frozen_pair_deploys_and_fills_together_in_forward_engine(tmp_path
         pytest.skip("strategy image unavailable")
     data = panel()
     observations = [r for code, bars in data.items() for r in tail_model.samples(code, bars)]
-    fit = tail_model.train(observations, data["600000"][-48*4].observed_at.date().isoformat())
+    proposal = factor_proposal.FactorProposal(hypothesis="量价与时段反转", factors=[
+        "日内加速 | return5m - return15m | 比较两种趋势", "振幅 | -abs(range15m) | 偏好低波动"])
+    formulas = factor_proposal.definitions(proposal, factor_proposal.INPUTS)
+    fit = tail_model.train(observations, data["600000"][-48*4].observed_at.date().isoformat(), formulas=formulas)
     lab = PaperLab(tmp_path / "paper.db", lambda: None)
     request = dict(capital=10000, autoStart=True, pool="COHORT", source="dated", codes=list(data),
                    origin=tail_model.HYPOTHESIS)
     job = lab.jobs.submit(request)["jobId"]
     program = Program(name=tail_model.NAME, hypothesis=tail_model.HYPOTHESIS, factor="test", code=tail_model.source(fit))
-    baseline = dict(**program.model_dump(), kind="python", image=image, snapshot="a"*64, sdkVersion=2, exDateAccounting=True)
+    baseline = dict(**program.model_dump(), kind="python", image=image, snapshot="a"*64, sdkVersion=3, exDateAccounting=True)
     baseline["code"] = tail_model.source(fit, equal=True)
     clock = data["600000"][-96].observed_at
     monkeypatch.setattr("finscope_market_data.paper.lab.stamp", lambda: clock)
@@ -98,3 +101,20 @@ async def test_frozen_pair_deploys_and_fills_together_in_forward_engine(tmp_path
     detail = lab.detail(1, "")
     for book in (detail["book"], detail["book"]["control"]):
         assert book["fills"] == 6 and not book["positions"] and book["fees"] > 0
+    events = [e for point in detail["points"] for e in point["events"]]
+    assert any(e["action"] == "成交" and "可卖" in e["signalReason"] for e in events)
+    assert any(e["action"] == "成交" for p in detail["points"] for e in p["controlEvents"])
+
+
+def test_formula_interpreter_rejects_missing_inputs_and_unavailable_operations():
+    def define(text):
+        return factor_proposal.definitions(factor_proposal.FactorProposal(hypothesis="测算", factors=[
+            "第一项 | return5m | 观察趋势", "第二项 | " + text + " | 观察风险"]), ["return5m", "return15m"])
+
+    for expr in ["return1d", "return5m ** 2", "return5m()", "2", "return5m"]:
+        with pytest.raises(ValueError):
+            define(expr)
+    specs = define("abs(return5m) / return15m")
+    assert factor_proposal.factor_values(specs, {"return5m": -.2}) == {"第一项": -.2}
+    assert factor_proposal.factor_values(specs, {"return5m": -.2, "return15m": 0}) == {"第一项": -.2}
+    assert factor_proposal.factor_values(specs, {"return5m": -.2, "return15m": .1})["第二项"] == 2

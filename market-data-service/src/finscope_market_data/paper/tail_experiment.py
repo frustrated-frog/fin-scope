@@ -13,7 +13,7 @@ from finscope_market_data.overnight.universe import POOL_KEY
 from .analysis import coverage
 from .engine import SHANGHAI
 from .python_runtime import image_id
-from . import tail_model
+from . import factor_proposal, tail_model
 
 
 class RidgeRequest(BaseModel):
@@ -45,23 +45,23 @@ def freeze_request(archive, value, now):
 
 
 async def run(jobs, job, request):
-    from .research import Program, simulate
+    from .research import Program, invoke, simulate
 
     image = await asyncio.to_thread(image_id)
     codes = request["codes"]
     members = {m["code"]: m["joined"] for m in request["members"]}
     # All traded names must already be known at the first historical decision.
-    first = max(members[c][:10] for c in codes)
-    start = datetime.fromisoformat(first).date()
+    start = max(datetime.fromisoformat(members[c]) for c in codes)
     cutoff = datetime.fromisoformat(request["dataThrough"] + "T15:00").replace(tzinfo=SHANGHAI)
     digests = request.get("cohortSnapshots", [])
     other = [c for c in members if c not in codes]
     batches = [codes] + [other[i:i+12] for i in range(0, len(other), 12)]
     training = []
+    research_coverage = {}
     for i, batch in enumerate(batches):
         jobs.update(job, "DATA", f"读取冻结研究名单第 {i+1}/{len(batches)} 批")
         if i == len(digests):
-            digest = await jobs.snapshot(batch, job, first_day=start, cutoff=cutoff)
+            digest = await jobs.snapshot(batch, job, eligible_from=start, cutoff=cutoff)
             digests.append(digest)
             with jobs.lab.db() as db:
                 db.execute("UPDATE paper_job SET request=json_set(request,'$.cohortSnapshots',json(?)) WHERE id=?",
@@ -78,21 +78,43 @@ async def run(jobs, job, request):
             rows = []
             for code, bars in panel.items():
                 development = [b for b in bars if str(b.observed_at.date()) < split]
+                eligible = [b for b in development if b.observed_at.isoformat() >= members[code]]
+                report = coverage({code: eligible})[code]
+                research_coverage[code] = {k: report[k] for k in ("first", "last", "days", "completeDays", "bars", "measuredVolumeBars")}
                 rows.extend(tail_model.samples(code, development, members[code]))
             return rows
         training.extend(await asyncio.to_thread(extract))
-    jobs.update(job, "VALIDATING", "按交易日加权拟合 Ridge，冻结系数，与等权因子同窗回测")
-    model = await asyncio.to_thread(tail_model.train, training, split)
-    program = Program(name=tail_model.NAME, hypothesis=tail_model.HYPOTHESIS, code=tail_model.source(model),
-                      factor="四项标准化收益因子按开发段 Ridge 系数组合；尾盘选前三，每只目标 32%，次日首个可执行窗口退出。")
+    jobs.update(job, "CODING", "用开发段覆盖提出因子公式和研究假设")
+    proposal = request.get("factorProposal")
+    if proposal:
+        proposal = factor_proposal.FactorProposal.model_validate(proposal)
+        formulas = factor_proposal.definitions(proposal, factor_proposal.INPUTS)
+        model = await asyncio.to_thread(tail_model.train, training, split, formulas=formulas)
+    else:
+        feedback = ""
+        for attempt in range(2):
+            try:
+                proposal, formulas = await asyncio.to_thread(factor_proposal.propose, training, invoke, feedback)
+                model = await asyncio.to_thread(tail_model.train, training, split, formulas=formulas)
+                break
+            except ValueError as error:
+                if attempt == 1:
+                    raise
+                feedback = str(error)
+        with jobs.lab.db() as db:
+            db.execute("UPDATE paper_job SET request=json_set(request,'$.factorProposal',json(?)) WHERE id=?",
+                       (proposal.model_dump_json(), job))
+    jobs.update(job, "VALIDATING", "已冻结 Codex 因子与 Ridge 权重，进入独立留出段")
+    program = Program(name=tail_model.NAME, hypothesis=proposal.hypothesis, code=tail_model.source(model),
+                      factor="、".join(model["features"]) + "按开发段 Ridge 系数组合，尾盘最多选三只，次日可卖时退出。")
     baseline = dict(kind="python", name="多周期因子等权对照", code=tail_model.source(model, equal=True),
                     factor="同一批标准化因子采用等权评分。", hypothesis=tail_model.HYPOTHESIS,
-                    image=image, snapshot=digests[0], sdkVersion=2, exDateAccounting=True)
+                    image=image, snapshot=digests[0], sdkVersion=3, exDateAccounting=True)
     validation = {c: [b for b in bars if str(b.observed_at.date()) >= split] for c, bars in trade_panel.items()}
     valid_coverage = coverage(validation)
     summary = await asyncio.to_thread(simulate, trade_panel, program, image, request["capital"], baseline,
                                       validation_start=split)
-    summary.update(model=model, researchPoolSize=len(members), baselineRule=baseline, validationMode="RIDGE",
+    summary.update(model=model, factorAuthor="Codex", researchCoverage=research_coverage, researchPoolSize=len(members), baselineRule=baseline, validationMode="RIDGE",
                    universeHash=request["universeHash"], researchSnapshots=digests, members=request["members"],
                    symbolCoverage=coverage(trade_panel), validationCoverage=valid_coverage,
                    unverifiedSymbols=sum(not r["actionsVerified"] for r in valid_coverage.values()),
