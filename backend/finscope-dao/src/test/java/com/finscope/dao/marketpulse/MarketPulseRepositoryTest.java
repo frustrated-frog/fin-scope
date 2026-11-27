@@ -93,6 +93,19 @@ class MarketPulseRepositoryTest {
                 repository.findRecentDates(10, LocalDate.of(2026, 8, 21)));
     }
 
+    @Test
+    void onlyUsesStagesThatWereKnownOnTheBusinessDate() {
+        LocalDate day = LocalDate.of(2026, 8, 21);
+        var timely = workspace(day, 80);
+        timely.getRegime().setQualityStatus(MarketPulseQualityStatus.READY);
+        repository.saveWorkspace(timely);
+        var backfilled = workspace(day.minusDays(1), 70);
+        backfilled.getRegime().setQualityStatus(MarketPulseQualityStatus.READY);
+        backfilled.getRegime().setCalculatedAt(day.atTime(10, 0));
+        repository.saveWorkspace(backfilled);
+        assertEquals(java.util.Set.of(day), repository.timelyStages(day.minusDays(2), day).keySet());
+    }
+
     private MarketPulseWorkspace workspace(LocalDate businessDate, int confidence) {
         MarketRegimeSnapshot regime = new MarketRegimeSnapshot();
         regime.setBusinessDate(businessDate);

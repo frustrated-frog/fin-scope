@@ -11,7 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
+import com.finscope.common.enums.marketpulse.MarketStage;
 import java.util.Optional;
 
 @Repository
@@ -75,6 +78,23 @@ public class MarketPulseRepository {
                 "SELECT workspace_json FROM market_opportunity_run WHERE business_date=?",
                 String.class, businessDate.toString());
         return values.isEmpty() ? Optional.empty() : Optional.of(workspace(values.get(0)));
+    }
+
+    /** 当天实际形成的可用快照。事后回填的历史判断不能用于解释此前的投资决策。 */
+    public Map<LocalDate, MarketStage> timelyStages(LocalDate first, LocalDate last) {
+        return jdbcTemplate.query("""
+                SELECT business_date,json_extract(snapshot_json,'$.marketStage') AS stage
+                FROM market_regime_snapshot WHERE business_date BETWEEN ? AND ?
+                AND quality_status='READY' AND substr(calculated_at,1,10)=business_date
+                AND json_extract(snapshot_json,'$.marketStage') IS NOT NULL
+                AND json_extract(snapshot_json,'$.marketStage') <> 'INSUFFICIENT_DATA'
+                """, rs -> {
+            Map<LocalDate, MarketStage> result = new LinkedHashMap<>();
+            while (rs.next()) {
+                result.put(LocalDate.parse(rs.getString("business_date")), MarketStage.valueOf(rs.getString("stage")));
+            }
+            return result;
+        }, first.toString(), last.toString());
     }
 
     public Optional<MarketPulseWorkspace> findLatestWorkspace() {
