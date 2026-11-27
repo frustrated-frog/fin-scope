@@ -124,7 +124,11 @@ class FixedSelection:
             self.samples.append(dict(at=key,knownThrough=dates[-1][-1],volatility=vol*scale,
                                      members=[dict(code=c, weight=weights[c],risk=w*m/var) for c,w,m in zip(codes,vector,marginal)]))
         book.setdefault("strategyState",{})["selection"] = dict(at=key,candidates=codes,targets=weights)
-        return weights, {c:0. for c in codes}
+        targets = dict(weights)
+        for code in book["positions"]:
+            if code in histories:
+                targets.setdefault(code, 0.)
+        return targets, {code: 0. for code in targets}
 
 
 def allocation(panel, spec, history):
@@ -154,7 +158,7 @@ def allocation(panel, spec, history):
         legs.append(dict(method=runtime.method,net=metrics["netReturn"],drawdown=metrics["maxDrawdown"],fees=book["fees"],
                          fills=book["fills"],turnover=metrics["turnover"],samples=runtime.samples,
                          curve=[dict(day=p["at"][:10],nav=p["equity"]/spec["capital"]) for p in curve]))
-    return dict(capital=spec["capital"],decisions=len(tape),skipped=runs[0][0].missing,window=recipe.riskWindow,legs=legs,
+    return dict(methodVersion=2,capital=spec["capital"],decisions=len(tape),skipped=runs[0][0].missing,window=recipe.riskWindow,legs=legs,
                 formula="σp² = wᵀΣw；风险贡献占比 RCᵢ = wᵢ(Σw)ᵢ / (wᵀΣw)",
                 design="冻结每个历史决策时点的选中名单。三组使用相同本金、日期、风险约束与费用，各自独立撮合。Σ 用共同日收益估计，非对角项收缩 10%。",
                 limitation="风险贡献对应决策时的目标仓位。整手、现金和 T+1 会使实际持仓偏离目标；缺少共同风险窗口时三组一起跳过。")

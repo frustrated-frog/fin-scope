@@ -57,3 +57,15 @@ def test_regime_requires_both_market_directions():
     hist = dict(firstDay="2026-11-02",lastDay="2026-11-02",universeTimeline=[dict(at=at.isoformat(),codes=list(panel))])
     with pytest.raises(ValueError,match="至少五个"):
         aq.correlation_study(panel,hist)
+
+
+def test_a_frozen_move_to_cash_exits_quoted_holdings_and_keeps_unquoted_positions():
+    at = datetime(2026, 11, 11, 14, 45, tzinfo=SHANGHAI)
+    for method in aq.METHODS:
+        strategy = aq.FixedSelection({at.isoformat(): []}, Recipe(family="TREND"), method)
+        book = new_book(10000)
+        book["positions"] = {"quoted": {}, "suspended": {}}
+        targets, scores = strategy.decide({"quoted": [object()]}, book, at, 10000)
+        assert targets == {"quoted": 0.}
+        assert set(scores) == set(targets)
+        assert book["strategyState"]["selection"]["targets"] == {}
