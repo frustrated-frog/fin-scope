@@ -93,6 +93,7 @@ interface Point extends Tick {
   events: Decision[];
   controlEvents?: Decision[];
   shortHistory?: string[];
+  unverifiedActions?: string[];
   scores: Record<string, number | null>;
   reason: string;
   previousAt?: string;
@@ -376,7 +377,8 @@ function Decisions({
                 {Object.entries(p.holdings).map(([code, q]) => <span key={code}>{stockName(code)} {q} 股</span>)}
                 {!Object.keys(p.holdings).length && <span>空仓</span>}
               </div>}
-              {p.stale?.length ? <p>缺少本根行情 · {p.stale.map(stockName).join('、')}</p> : null}
+              {!!p.stale?.filter(c => !p.unverifiedActions?.includes(c)).length && <p>缺少本根行情 · {p.stale.filter(c => !p.unverifiedActions?.includes(c)).map(stockName).join('、')}</p>}
+              {!!p.unverifiedActions?.length && <p>除权权益待核验，本时点暂缓交易并沿用上次估值 · {p.unverifiedActions.map(stockName).join('、')}</p>}
               {!!p.shortHistory?.length && <p>历史除权资料待核验，仅使用可核验的行情窗口 · {p.shortHistory.map(stockName).join('、')}</p>}
               {p.missedBars ? <p>此前有 {p.missedBars} 根盘中行情未执行。</p> : null}
               <FactorScores scores={p.scores} stockName={stockName}/>

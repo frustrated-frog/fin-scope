@@ -386,14 +386,14 @@ class PaperLab:
                         current = [b for b in bars if b.observed_at.date() == end.date()]
                         current[-1] = current[-1].model_copy(update={"windowClipped": True, "shortHistory": True})
                         return current
-                    raise ValueError("等待核验公司行为")
+                    return []
                 for event in sorted(events, key=lambda item: item["ex_date"]):
                     boundary = max(boundary, event["ex_date"])
                     if observed < event["ex_date"] <= today:
                         held = any(code in account.get("positions", {}) for account in (book, book.get("control", {})))
                         if held and event.get("termsKnown") is False:
                             self.action_queries.pop(key, None)
-                            raise ValueError("等待核验持仓除权权益")
+                            return []
                         due.append(event)
                 windows[code] = {"from": start, "through": today, "exDate": boundary}
             window = [bar for bar in bars if bar.observed_at.date().isoformat() >= boundary]
@@ -402,7 +402,8 @@ class PaperLab:
                 window[-1] = window[-1].model_copy(update={"actions": due, "windowClipped": True})
             return window
 
-        return dict(zip(histories, await asyncio.gather(*(attach(c, bars) for c, bars in histories.items()))))
+        windows = await asyncio.gather(*(attach(c, bars) for c, bars in histories.items()))
+        return {code: window for code, window in zip(histories, windows) if window}
 
     async def update_account(self, row, data, now):
         spec = Research.model_validate_json(row["spec"])
@@ -426,9 +427,14 @@ class PaperLab:
         last = max(book["last"] or row["started"], book.get("resumedAt", ""))
         if end.isoformat() <= last:
             return
+        unverified = []
         if isinstance(spec.rule,PythonRule) and spec.rule.exDateAccounting:
             try:
+                observed_codes = set(history)
                 history=await self.forward_actions(history,book,row["started"],end)
+                unverified = sorted(observed_codes.difference(history))
+                if not history:
+                    raise ValueError("等待核验公司行为")
                 if multi:
                     enriched = await asyncio.gather(*(self.features.attach(c, bars, end) for c, bars in history.items()))
                     history = dict(zip(history, enriched))
@@ -440,6 +446,8 @@ class PaperLab:
                 return
         try:
             point = await self.forward(book, spec.rule, spec, history, end, seen, decision_clock=stamp)
+            if unverified:
+                point["unverifiedActions"] = unverified
             limited = [c for c, bars in history.items() if getattr(bars[-1], "shortHistory", False)]
             if limited:
                 point["shortHistory"] = limited

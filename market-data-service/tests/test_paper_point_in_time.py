@@ -68,8 +68,10 @@ async def test_unverified_history_keeps_intraday_features_and_protects_overnight
     enriched = await lab.features.attach("600000", history["600000"], end)
     assert enriched[-1].shortHistory and set(enriched[-1].completedBars) == {"5m", "15m"}
     assert enriched[0].observed_at == bars[1].observed_at
-    with pytest.raises(ValueError, match="等待核验"):
-        await lab.forward_actions({"600000": bars}, {"anchors": {"600000": 10}}, "2026-11-23", end)
+    book = {"anchors": {"600000": 10}, "positions": {"600000": {"lots": [["2026-11-23", 100]]}}}
+    tradable = await lab.forward_actions({"600000": bars, "600001": bars}, book, "2026-11-23", end)
+    assert set(tradable) == {"600001"}
+    assert "lastObserved" not in book and book["positions"]["600000"]["lots"] == [["2026-11-23", 100]]
 
 
 def test_research_memory_requires_latest_information_date(tmp_path):
