@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
 from . import classic_study, classic_universe, learning, performance
+from .. import financial_statistics
 from . import autonomous_quant, parameter_grid, walk_forward
 from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
@@ -615,6 +616,13 @@ class PaperLab:
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
         router.get("/versions/jobs")(self.jobs.list)
+
+        @router.post("/versions/financial-statistics")
+        def financial_study(value: financial_statistics.StatisticsQuery):
+            try:
+                return financial_statistics.analyze(self.index_store, value)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
 
         @router.get("/versions/research-center/sources")
         def center_sources():
