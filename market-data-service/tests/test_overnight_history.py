@@ -18,6 +18,18 @@ def bar(stamp, price=10):
                      low=price - 1, close=price, amount=10000)
 
 
+def test_research_reader_keeps_its_snapshot_during_a_backfill_commit(tmp_path):
+    store = OvernightStore(tmp_path / 'overnight.db')
+    with store.connect() as reader, store.connect() as writer:
+        reader.execute('BEGIN')
+        before = reader.execute('SELECT version FROM overnight_data_revision').fetchone()
+        writer.execute('PRAGMA busy_timeout=100')
+        store.advance_revision(writer)
+        writer.commit()
+        assert reader.execute('SELECT version FROM overnight_data_revision').fetchone() == before
+    assert store.data_revision() == before[0] + 1
+
+
 def test_sdk_contract_enforces_raw_identity_cutoff_and_conflicts():
     row = ['2026-09-21', '20260921093500000', 'sh.605058', '10', '11', '9', '10', '1000', '10000', '3']
     def payload(rows):

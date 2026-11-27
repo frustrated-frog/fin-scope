@@ -25,6 +25,9 @@ class OvernightStore:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
+            # Backfill writes and paper-research snapshots share this local archive.
+            # WAL lets a replay read committed bars while a backfill transaction is open.
+            db.execute('PRAGMA journal_mode=WAL').fetchone()
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS overnight_data_revision (
                     id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
