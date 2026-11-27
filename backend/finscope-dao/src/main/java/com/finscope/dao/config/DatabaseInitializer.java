@@ -47,6 +47,14 @@ public class DatabaseInitializer implements InitializingBean {
         jdbcTemplate.execute("PRAGMA journal_mode=WAL");
         jdbcTemplate.execute("PRAGMA busy_timeout=30000");
         jdbcTemplate.execute("PRAGMA foreign_keys=ON");
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS quant_autonomous_study(
+                  id INTEGER PRIMARY KEY, trigger_key TEXT NOT NULL UNIQUE, state TEXT NOT NULL,
+                  created INTEGER NOT NULL, updated INTEGER NOT NULL, due INTEGER NOT NULL DEFAULT 0,
+                  attempts INTEGER NOT NULL DEFAULT 0, lease TEXT, lease_until INTEGER NOT NULL DEFAULT 0,
+                  source_key TEXT UNIQUE, plan TEXT, evidence TEXT, report TEXT, note TEXT)
+                """);
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_quant_study_ready ON quant_autonomous_study(state,due,lease_until)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_task_contract ("
                 + "research_run_id INTEGER PRIMARY KEY,contract_json TEXT NOT NULL)");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS research_quality_assessment ("

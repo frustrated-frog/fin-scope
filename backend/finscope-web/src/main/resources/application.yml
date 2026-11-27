@@ -155,6 +155,8 @@ finscope:
     warmup-interval-ms: 60000
   quant:
     paper-pool-sync-ms: 900000
+    autonomous-study-enabled: true
+    autonomous-study-poll-ms: 60000
     paper-review-cron: "0 10/15 * * * *"
     market-data-sync-cron: 0 30 18 * * MON-FRI
   next-session-prediction:

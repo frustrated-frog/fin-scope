@@ -28,6 +28,14 @@ public class PythonPaperClient {
     @Value("${finscope.python-market-data.evaluation-timeout-ms:30000}")
     private int timeoutMs;
 
+    public JsonNode studySources() {
+        return call("/research-center/sources", null);
+    }
+
+    public JsonNode computeStudy(JsonNode input) {
+        return call("/research-center/compute", input);
+    }
+
     public JsonNode versions() {
         return call("", null);
     }

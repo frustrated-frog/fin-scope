@@ -220,6 +220,16 @@ public class AppConfig {
         return executor;
     }
 
+    @Bean(name = "quantStudyExecutor")
+    public ThreadPoolTaskExecutor quantStudyExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("quant-study-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        return executor;
+    }
+
     @Bean(name = "paperReviewExecutor")
     public ThreadPoolTaskExecutor paperReviewExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
