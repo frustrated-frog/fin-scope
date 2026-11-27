@@ -13,7 +13,7 @@ export interface RebalancePlan {
   fills: number;
   fees: number;
   source?:string;
-  legs: Record<string, {weight:number; target:number; actual?:number; remaining?:number; reason?:string; lastOutcome?:string; riskReason?:string}>;
+  legs: Record<string, {weight:number; target:number; originalTarget?:number; actual?:number; remaining?:number; reason?:string; lastOutcome?:string; riskReason?:string}>;
 }
 export interface Performance {
   days:number; returnDays:number; netReturn:number; excess:number; maxDrawdown:number; feeRate:number;
@@ -43,8 +43,8 @@ export function PerformanceReport({value:p, costs}:{value:Performance; costs?:Ex
 export function PlanReport({plan:p, name}:{plan:RebalancePlan; name:(c:string)=>string}) {
   return <details className="execution-report"><summary>{p.source??'调仓执行'} <strong>{p.status}</strong> <small>{p.fills} 笔成交</small></summary>
     <p>目标生成于 {stamp(p.at)}，有效至 {stamp(p.expires)}。截至 {stamp(p.updated)}，已付费用 {money(p.fees)}。{p.reason}</p>
-    <div className="paper-coverage-scroll"><table className="paper-position-table"><thead><tr><th>股票</th><th>目标股数</th><th>实际股数</th><th>剩余调整</th><th>执行情况</th></tr></thead>
-      <tbody>{Object.entries(p.legs).map(([code,l])=><tr key={code}><th>{name(code)}</th><td>{l.target}</td><td>{l.actual??'—'}</td>
+    <div className="paper-coverage-scroll"><table className="paper-position-table"><thead><tr><th>股票</th><th>盘中风控前目标</th><th>风控后目标</th><th>实际股数</th><th>剩余调整</th><th>执行情况</th></tr></thead>
+      <tbody>{Object.entries(p.legs).map(([code,l])=><tr key={code}><th>{name(code)}</th><td>{l.originalTarget ?? (l.riskReason ? '—' : l.target)}</td><td>{l.target}</td><td>{l.actual??'—'}</td>
         <td>{l.remaining ? (l.remaining>0?'买 ':'卖 ')+Math.abs(l.remaining)+' 股' : '—'}</td>
         <td>{l.riskReason && l.riskReason+' · '}{l.reason}{l.lastOutcome && l.lastOutcome!=='成交' && ' · '+l.lastOutcome}</td></tr>)}</tbody></table></div>
   </details>;

@@ -59,35 +59,36 @@ export function ClassicEditor({recipe:r, onChange, fixedBase}: {recipe: ClassicR
       value={Number.isFinite(r[key]) ? Number((Number(r[key])*multiplier).toFixed(5)) : ''}
       onChange={e => onChange({...r, [key]:e.target.value === '' ? NaN : Number(e.target.value)/multiplier})}/></label>;
   }
-  return <div className="classic-editor">
-    <div className="classic-fields">
-      <label>策略类型<select value={r.family} onChange={e=>onChange({...r,family:e.target.value as Family})}>
+  const [activeModule, setActiveModule] = useState(1);
+  const modules = [
+    {title:'研究股票池', summary:bases[r.base], fields:<><label>基础股票池<select value={r.base} disabled={fixedBase} onChange={e=>onChange({...r,base:e.target.value as ClassicRecipe['base']})}>{options(bases)}</select></label>
+      {number('poolSize','流动性候选数',r.holdings || 1,24)}
+      {number('minTurnover','最低平均成交额估算（万元 / 根）',0,1e8,.0001,.01)}</>},
+    {title:'信号与因子', summary:families[r.family][0], fields:<><label>策略类型<select value={r.family} onChange={e=>onChange({...r,family:e.target.value as Family})}>
         {(Object.keys(families) as Family[]).map(f=><option key={f} value={f}>{families[f][0]}</option>)}</select></label>
-      <label>基础股票池<select value={r.base} disabled={fixedBase} onChange={e=>onChange({...r,base:e.target.value as ClassicRecipe['base']})}>{options(bases)}</select></label>
-    </div>
-    <div className="classic-formula"><code>{families[r.family][2]}</code><span>{families[r.family][1]}</span></div>
-    <fieldset><legend>选股与调仓</legend><div className="classic-fields">
       <label>信号行情<select value={r.period} onChange={e=>onChange({...r,period:e.target.value as ClassicRecipe['period'],window:Math.min(r.window,e.target.value==='15m'?12:20)})}>{options(intervals)}</select></label>
       {number('window','回看窗口（根）',3,r.period==='15m'?12:20)}
-      {number('poolSize','流动性候选数',r.holdings || 1,24)}
+      <div className="classic-formula"><code>{families[r.family][2]}</code><span>{families[r.family][1]}</span></div></>},
+    {title:'组合仓位', summary:allocations[r.allocation], fields:<><label>权重分配<select value={r.allocation} onChange={e=>onChange({...r,allocation:e.target.value as ClassicRecipe['allocation']})}>{options(allocations)}</select></label>
       {number('holdings','最多持股数',1,Math.min(r.poolSize || 10,10))}
-      {number('minTurnover','最低平均成交额估算（万元 / 根）',0,1e8,.0001,.01)}
-      <label>调仓频率<select value={r.rebalance} onChange={e=>onChange({...r,rebalance:e.target.value as ClassicRecipe['rebalance']})}>{options(frequencies)}</select></label>
-    </div></fieldset>
-    <details className="execution-report"><summary>风险设置</summary><div className="classic-fields">
-      {number('riskWindow','协方差窗口（交易日收益）',5,20)}
+      {number('exposure','股票目标总仓位（%）',.1,100,100,.1)}
+      {number('maxWeight','单股仓位上限（%）',.1,100,100,.1)}</>},
+    {title:'风险设置', summary:r.stopLoss || r.drawdownStop || r.targetVol ? '已配置风险阈值' : '未设主动阈值', fields:<>{number('riskWindow','协方差窗口（交易日收益）',5,20)}
       {number('targetVol','年化波动率目标（%）',0,200,100,.1)}
       {number('stopLoss','个股成本止损（%）',0,99.9,100,.1)}
-      {number('drawdownStop','组合回撤清仓线（%）',0,99.9,100,.1)}
-    </div><p>波动率目标只降低仓位。止损和回撤每五分钟按最新估值检查，受 T+1 与成交限制约束。组合回撤触发后持币至下次有效选股，再开始记录新的净值高点。三个百分比设为 0 即关闭对应规则。</p></details>
-    <fieldset><legend>组合仓位</legend><div className="classic-fields">
-      <label>权重分配<select value={r.allocation} onChange={e=>onChange({...r,allocation:e.target.value as ClassicRecipe['allocation']})}>{options(allocations)}</select></label>
-      {number('exposure','股票目标总仓位（%）',.1,100,100,.1)}{number('maxWeight','单股仓位上限（%）',.1,100,100,.1)}
-      {number('maxFeeBps','单笔费用上限（基点，0 表示不限）',0,10000,1,.1)}
-    </div></fieldset>
-    <p>{r.base === 'DISCOVERY' ? '使用当时最新发布的股票发现名单，取前 24 只符合范围的沪深 A 股。' :
-      '按首次登记时间取所选范围内的前 24 只股票。'}在所选调仓周期的首个可用交易日 14:45 选股。日线信号使用此前已收盘的行情。未完成的股数目标持续至下一周期调仓时点。单笔费用上限包含佣金和印花税，1 基点等于成交额的 0.01%。</p>
-  </div>;
+      {number('drawdownStop','组合回撤清仓线（%）',0,99.9,100,.1)}</>},
+    {title:'再平衡', summary:frequencies[r.rebalance], fields:<><label>调仓频率<select value={r.rebalance} onChange={e=>onChange({...r,rebalance:e.target.value as ClassicRecipe['rebalance']})}>{options(frequencies)}</select></label>
+      <p>周期内首个可用交易日 14:45 选股；未完成的股数目标持续到下一次调仓。</p></>},
+    {title:'交易执行', summary:'五分钟撮合 · T+1', fields:<>{number('maxFeeBps','单笔费用上限（基点，0 表示不限）',0,10000,1,.1)}
+      <p>先卖后买，成交受可卖股数、现金和实际成交量限制。费用上限按佣金及印花税计算。</p></>}
+  ];
+  return <section className="classic-editor qh-builder"><h4>策略构建器</h4><div className="qh-builder-layout">
+    <nav aria-label="策略组成模块">{modules.map((module,index)=><button type="button" key={module.title}
+      aria-pressed={activeModule===index} onClick={()=>setActiveModule(index)}><b>{module.title}</b><small>{module.summary}</small></button>)}</nav>
+    <div>{modules.map((module,index)=><fieldset key={module.title} hidden={index!==activeModule}
+      onInvalidCapture={event=>{setActiveModule(index);const input=event.target as HTMLInputElement;requestAnimationFrame(()=>input.focus());}}>
+      <legend>{module.title}配置</legend><div className="classic-fields">{module.fields}</div></fieldset>)}</div>
+  </div></section>;
 }
 export function ClassicSelection({value, name}: {value: Selection; name: (c:string)=>string}) {
   return <div className="classic-selection"><p>名单可用时间 {value.knownAt.slice(0,16).replace('T',' ')} · 基础 {value.base.length} 只 · 合格候选 {value.candidates.length} 只</p>
@@ -113,15 +114,11 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
     <div className="paper-validation"><div><small>区间扣费收益</small><b>{percent(h.validationReturn??0)}</b></div>
       <div><small>期初股票池等权基准</small><b>{percent(h.validationBenchmark??0)}</b></div>
       <div><small>调仓观察次数</small><b>{h.decisions?.length??0}</b></div></div>
-    {h.comparison && <p>同数据对照 #{h.comparison.version} · 原实验 {percent(h.comparison.netReturn)} · 收益差 {(((h.validationReturn??0)-h.comparison.netReturn)*100).toFixed(2)} 个百分点 · 原实验成交 {h.comparison.fills} 笔，费用 ¥ {h.comparison.fees.toFixed(2)}</p>}
-    {h.comparison?.performance && <p>原实验{h.comparison.frequency && '按'+frequencies[h.comparison.frequency]+'调仓'}，日末最大回撤 {percent(h.comparison.performance.maxDrawdown)}。
-      本次费用{h.fees <= h.comparison.fees ? '减少' : '增加'} ¥ {Math.abs(h.fees-h.comparison.fees).toFixed(2)}。
-      {h.comparison.executionVersion === 1 && '原版本采用单次信号执行，比较中同时包含执行方式的变化。'}</p>}
     {h.classicCoverage && <p>区间快照共 {h.classicCoverage.symbols} 只，实测成交量覆盖 {h.classicCoverage.measured.toLocaleString()} / {h.classicCoverage.bars.toLocaleString()} 根。
       {h.classicCoverage.missingActions > 0 && `其中 ${h.classicCoverage.missingActions} 只缺少完整除权核验，跨日价格变化可能影响收益。`}
       {h.classicCoverage.unknownTerms > 0 && `区间内有 ${h.classicCoverage.unknownTerms} 次除权只有日期，权益估值可能不完整。`}</p>}
     {h.coverageError && <p>{h.coverageError}</p>}
-    <details><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
+    <details open><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
       {decision && <ClassicSelection value={decision} name={name}/>}
       {plans.map(plan=><PlanReport key={plan.at} plan={plan} name={name}/>)}
       {trades.map((e,i)=><p key={i}><time>{e.at.slice(11,16)}</time> · {e.side==='BUY'?'买入':'卖出'} {name(e.code)} · {e.action} · {e.quantity ? e.quantity+' 股 × ¥ '+e.price+'，费用 ¥ '+e.fee : e.reason}</p>)}

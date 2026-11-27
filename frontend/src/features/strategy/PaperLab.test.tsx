@@ -63,7 +63,8 @@ test('account holdings, replay and a saved review display names for an existing 
     onBrowse={vi.fn()} onCompare={vi.fn()} />);
   const event = await screen.findByText('成交 · 超声电子');
   await userEvent.click(event);
-  expect(screen.getByText('买入 超声电子')).toBeVisible();
+  expect(container.querySelector('.paper-decision-title')).toHaveTextContent('买入 超声电子');
+  expect(container.querySelector('.qh-events')).toHaveTextContent('买入 超声电子');
   expect(screen.getByText('持有超声电子。')).toBeVisible();
   expect(container.querySelector('.paper-position b')).toHaveTextContent('超声电子');
   expect(container.querySelector('.paper-scores')).toHaveTextContent('超声电子');
@@ -118,9 +119,11 @@ test('submits the library selection with explicit liquidity units and a separate
   expect(screen.getByLabelText('策略类型')).toHaveValue('REVERSION');
   expect(screen.getByLabelText('回测完成后自动启动模拟账户')).not.toBeChecked();
   await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '10000');
+  await user.click(screen.getByRole('button',{name:/研究股票池/}));
   const turnover = screen.getByLabelText(/最低平均成交额估算/);
   await user.clear(turnover);
   await user.type(turnover, '25');
+  await user.click(screen.getByRole('button',{name:/组合仓位/}));
   await user.selectOptions(screen.getByLabelText('权重分配'), 'RISK_PARITY');
   fireEvent.change(screen.getByLabelText('回测开始日'), {target:{value:'2026-10-08'}});
   fireEvent.change(screen.getByLabelText('回测结束日'), {target:{value:'2026-11-26'}});

@@ -5,6 +5,7 @@ import { FactorAssets, DatasetArchive } from './PaperArchive';
 import { PaperCodingJobs } from './PaperCodingJobs';
 import { ClassicLibrary, classicExperimentType } from './ClassicStrategies';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
+import { QuantHome } from './QuantHome';
 import { ResearchMap } from './ResearchMap';
 import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
@@ -15,7 +16,7 @@ import { StockDiscoveryPanel } from './StockDiscoveryPanel';
 import { OvernightStrategyPanel } from './OvernightStrategyPanel';
 import { QuantDataset, QuantDatasetQuality, QuantExperiment, QuantFactorAnalysis, QuantResearchEntryIntent, QuantStrategyDraft, QuantStrategySpec, QuantStrategyVersion, ResearchDraft, ResearchFactorDefinition } from './quantTypes';
 
-type Pane = 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
+type Pane = 'overview' | 'discovery' | 'overnight' | 'forecast' | 'laboratory' | 'catalog' | 'factors' | 'experiments' | 'intraday' | 'dailyResult' | 'paper';
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void;
 const statusText: Record<string, string> = { EMPTY: '等待数据', QUALITY_PENDING: '等待质量门禁', BLOCKED: '质量阻断', READY: '质量通过', QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '失败' };
 
@@ -49,7 +50,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
   onEntryIntentConsumed?: () => void;
   marketContext?: StockDiscoveryMarketContext;
 }) {
-  const [pane, setPane] = useState<Pane>('discovery');
+  const [pane, setPane] = useState<Pane>('overview');
   const [paperSeed,setPaperSeed] = useState<PaperSeed>();
   const [paperId, setPaperId] = useState<number>();
   const paperCatalog = usePaperCatalog();
@@ -220,7 +221,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
     <nav className="quant-panes qa-navigation" aria-label="量化工作台页面">
       {([
         ['市场研究', [['discovery','股票发现'], ['overnight','尾盘与盘后'], ['forecast','单股预测']]],
-        ['量化工作空间', [['catalog','策略与因子'], ['experiments','实验室'], ['paper','模拟实盘']]]
+        ['量化工作空间', [['overview','研究总览'], ['catalog','策略与因子'], ['experiments','实验室'], ['paper','模拟实盘']]]
       ] as Array<[string, Array<[Pane,string]>]>).map(([group, links]) =>
         <div className="qa-nav-group" role="group" aria-label={group} key={group}>
           <span aria-hidden="true">{group}</span>
@@ -231,6 +232,9 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
         </div>)}
     </nav>
 
+    {pane === 'overview' && <QuantHome catalog={paperCatalog} dailyCount={experiments.length} dailyStrategies={strategies.length}
+      onBuild={() => openPaper({hypothesis:'',classic:'TREND'})} onFactors={() => setPane('factors')}
+      onAI={() => openPaper({hypothesis:''})} onAccount={showAccount} onVersion={showPaperVersion} onLab={() => setPane('experiments')}/>}
     {(inLibrary || pane === 'experiments' || pane === 'paper') && <ResearchHeader section={inLibrary ? 'catalog' : pane === 'paper' ? 'paper' : 'experiments'}
       count={paperCatalog.loading || paperCatalog.error ? undefined : inLibrary ? paperCatalog.rows.length : pane === 'paper' ? running : archive.length}>
       {pane === 'experiments' && <button className="quant-action research-create" onClick={() => openPaper({hypothesis: ''})}><span aria-hidden="true">＋</span>新建实验</button>}

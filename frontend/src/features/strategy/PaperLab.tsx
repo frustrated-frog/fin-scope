@@ -1,5 +1,5 @@
 import { BacktestOverview, PortfolioOverview } from './QuantAnalytics';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
@@ -166,7 +166,7 @@ async function loadVersions() {
 const errText = (e: unknown) =>
   e instanceof Error ? e.message : '实验读取失败';
 
-function Trace({
+export function PaperTrace({
   points,
   capital,
   onDay,
@@ -179,6 +179,8 @@ function Trace({
   selected?: string;
   controlLabel?: string;
 }) {
+  const fillId = useId();
+  const [cursor,setCursor] = useState<number>();
   if (!points.length) {
     return <div className="paper-trace-pending">
       <i aria-hidden="true"/>
@@ -199,6 +201,8 @@ function Trace({
       .map((p, i) => (i ? 'L' : 'M') + x(i) + ',' + y(p[k] ?? capital))
       .join(' ');
   const last = points.length - 1;
+  const index = Math.min(cursor ?? last,last);
+  const observation = points[index];
   return (
     <div className="quant-chart">
       <div className="paper-chart-key">
@@ -211,6 +215,10 @@ function Trace({
         role="img"
         aria-label="策略与股票池等权基准净值"
       >
+        <defs><linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#65c9df" stopOpacity=".23"/><stop offset="1" stopColor="#65c9df" stopOpacity=".01"/>
+        </linearGradient></defs>
+        <path d={line('equity')+' L'+x(last)+' 126 H50 Z'} fill={'url(#'+fillId+')'}/>
         {[high, (high + low) / 2, low].map((value, index) => (
           <g key={index}>
             <text className="paper-axis-label" x="1" y={29 + index * 50}>
@@ -236,8 +244,8 @@ function Trace({
           />
         )}
         <circle
-          cx={x(last)}
-          cy={y(points[last].equity)}
+          cx={x(onDay ? last : index)}
+          cy={y(onDay ? points[last].equity : observation.equity)}
           r="4"
           fill="var(--quant-cyan)"
         />
@@ -258,6 +266,8 @@ function Trace({
             </rect>
           ))}
       </svg>
+      {!onDay && points.length>1 && <label className="qh-inspect"><span>{observation.at.slice(5,16).replace('T',' ')} · 策略 {(observation.equity/capital).toFixed(3)} · 基准 {(observation.benchmark/capital).toFixed(3)}</span>
+        <input type="range" aria-label="逐时点查看回测净值" min="0" max={last} value={index} onChange={e=>setCursor(Number(e.target.value))}/></label>}
       <div className="paper-axis">
         <span>{points[0].at.slice(0, 16).replace('T', ' ')}</span>
         <span>{points[last].at.slice(0, 16).replace('T', ' ')}</span>
@@ -494,6 +504,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [selectedId, setId] = useState(initialId);
   const id = accountsOnly && !versions.some(v => v.id === selectedId) ? versions[0]?.id : selectedId;
   const [detail, setDetail] = useState<Detail>();
+  const [analysisView, setAnalysisView] = useState('总览');
   const [day, setDay] = useState('');
   const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
   const [hypothesis, setHypothesis] = useState(comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : seed?.hypothesis ?? '');
@@ -644,11 +655,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               取消
             </button>
           </header>
-          <label>策略引擎
-            <select value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => {setEngine(e.target.value); if (e.target.value === 'classic') {setAutoStart(false);} }}>
-              <option value="codex">Codex · Python 策略</option><option value="luna">Luna · 因子规则</option>
-              {(originalRecipe || (!parent && !seed?.academyVersionId && !seed?.factorCode)) && <option value="classic">经典策略 · 组件实验</option>}
-              {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">Ridge · 尾盘多因子对照</option>}
+          <label>研究方式
+            <select aria-label="策略引擎" value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => {setEngine(e.target.value); if (e.target.value === 'classic') {setAutoStart(false);} }}>
+              <option value="codex">自由编写策略 · Codex Python</option><option value="luna">验证因子规则 · Luna</option>
+              {(originalRecipe || (!parent && !seed?.academyVersionId && !seed?.factorCode)) && <option value="classic">组合策略组件 · 可视化构建</option>}
+              {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">对照因子权重 · Ridge 与等权</option>}
             </select>
           </label>
           {engine === 'classic' && <><ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>
@@ -749,6 +760,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {spec.parent ? '启动对照模拟' : '启动模拟'}
                     </button>
                   )}
+                  {!accountsOnly && <button className="quant-action" onClick={() => onCompare(active)}>{classic ? '沿用数据做对照' : spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>}
                 </header>
                 {accountsOnly && active.started && <div className="paper-account-actions">
                   {(!active.lifecycle || active.lifecycle === 'RUNNING') &&
@@ -767,6 +779,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 </div>}
                 {accountsOnly && book && detail && <PortfolioOverview book={book} capital={spec.capital} daily={detail.daily}
                   performance={detail.forwardPerformance} name={stockName}/>}
+                {accountsOnly && detail && <section className="qh-events"><h5>最近投资决策 <small>{detail.day}</small></h5>
+                  {detail.points.filter(point=>point.events?.length).slice(-3).reverse().map(point=>
+                    <div key={point.at}><time>{point.at.slice(11,16)}</time><span>{point.events.map((event,index)=><span key={index}>
+                      <b>{event.side==='BUY'?'买入':'卖出'} {stockName(event.code)}</b> · {event.action}{event.quantity ? ' · '+event.quantity+' 股' : ''} {event.reason}</span>)}</span></div>)}
+                  {!detail.points.some(point=>point.events?.length) && <p>所选交易日暂无买卖事件。</p>}</section>}
                 {accountsOnly && <details><summary>策略假设</summary><p>{spec.rule.hypothesis}</p></details>}
                 {!accountsOnly && <p>初始本金 ¥{currency(spec.capital)} · 五分钟撮合 · {classic ? '快照末期股票池 ' : ''}{spec.codes.length} 只</p>}
                 {accountsOnly && detail?.executionHealth && <div className="paper-execution-health">
@@ -777,7 +794,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 </div>}
                 {accountsOnly && active.started && (
                   <>
-                    <Trace
+                    <PaperTrace
                       points={detail?.daily ?? []}
                       capital={spec.capital}
                       controlLabel={detail?.history.model ? '因子等权对照' : undefined}
@@ -809,11 +826,26 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {currency(detail.history.fees)}
                     </small>
                   </header>
-                  <BacktestOverview history={detail.history} capital={spec.capital}>
-                  <Trace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
-                  </BacktestOverview>
-                  {detail.history.comparison && <button className="quant-record-link" onClick={() => onExperiment(detail.history.comparison!.version)}>打开原实验 #{detail.history.comparison.version} ↗</button>}
-                  {classic && <ClassicEvidence history={detail.history} recipe={classic} name={stockName}/>}
+                  <nav className="qh-tabs" aria-label="回测分析维度">
+                    {['总览', ...(detail.history.comparison ? ['同数据对照'] : []), ...(classic ? ['组合与交易'] : []), '研究依据'].map(view=>
+                      <button key={view} aria-pressed={view===analysisView} onClick={()=>setAnalysisView(view)}>{view}</button>)}
+                  </nav>
+                  {analysisView==='总览' && <BacktestOverview history={detail.history} capital={spec.capital}>
+                  <PaperTrace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
+                  </BacktestOverview>}
+                  {analysisView==='同数据对照' && detail.history.comparison && <section className="qh-comparison">
+                    <h5>同一份冻结行情 · 实验 #{detail.history.comparison.version} 与 #{active.id}</h5>
+                    <table><thead><tr><th>指标</th><th>原实验 #{detail.history.comparison.version}</th><th>本次实验 #{active.id}</th></tr></thead>
+                      <tbody>{[
+                        ['扣费收益',pct(detail.history.comparison.netReturn),detail.history.validationReturn!=null ? pct(detail.history.validationReturn) : '—'],
+                        ['日末最大回撤',detail.history.comparison.performance ? pct(-detail.history.comparison.performance.maxDrawdown) : '—', detail.history.performance ? pct(-detail.history.performance.maxDrawdown) : '—'],
+                        ['实际成交',detail.history.comparison.fills+' 笔',detail.history.fills+' 笔'],
+                        ['累计费用','¥ '+currency(detail.history.comparison.fees),'¥ '+currency(detail.history.fees)]
+                      ].map(([label,base,current])=><tr key={label}><th>{label}</th><td>{base}</td><td>{current}</td></tr>)}</tbody></table>
+                    {detail.history.comparison.executionVersion===1 && <p>原版本采用单次信号执行，两次实验的执行方式也有差异。</p>}
+                    <button className="qh-link" onClick={() => onExperiment(detail.history.comparison!.version)}>打开原实验 #{detail.history.comparison.version} ↗</button></section>}
+                  {analysisView==='组合与交易' && classic && <ClassicEvidence history={detail.history} recipe={classic} name={stockName}/>}
+                  {analysisView==='研究依据' && <>
                   {detail.history.performance && <PerformanceReport value={detail.history.performance} costs={detail.history.costs}/>}
                   {!classic && spec.rule.kind === 'python' && <div className="paper-validation">
                     <div><small>{detail.history.model ? '训练期内回放收益' : '开发段收益'}</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
@@ -881,14 +913,13 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       元，卖出另计万五印花税。执行
                       T+1，一字线跳过。{spec.rule.kind === 'python' && spec.rule.exDateAccounting ? '已核验的现金分红计入应收，送股计入持仓。来源仅提供除权日，到账及上市日未知的权益保持锁定。配股按不认购处理。' : '此版本账本未计分红送转。'}
                     </p>
-                  </details>
+                  </details></>}
 
                 </section>
               )}
-              {!accountsOnly && <section className="quant-readout">
+              {!accountsOnly && analysisView==='研究依据' && <section className="quant-readout">
                 <header>
                   <h4>策略与因子</h4>
-                  <button className="quant-action" onClick={() => onCompare(active)}>{classic ? '沿用数据做对照' : spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
                 </header>
                 <p>{detail?.history.factorAuthor ? spec.rule.hypothesis : spec.origin}</p>
                 {spec.rule.kind === 'python' ? <>
