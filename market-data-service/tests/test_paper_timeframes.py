@@ -30,3 +30,19 @@ def test_completed_groups_missing_bars_daily_warmup_and_ex_date():
         if clock == "09:45":
             assert set(f) == {"return5m"}
     assert "return1d" not in f and "trend60d" not in f
+
+
+def test_completed_candles_exclude_partial_sessions_and_unknown_volume():
+    state = Timeframes(candles=True)
+    stamp = "2026-11-26T"
+    for i, t in enumerate(expected_times("15:00")):
+        row = SimpleNamespace(open=10+i, high=12+i, low=9+i, close=11+i,
+                              volume=100, amount=1000, estimated_volume=i == 1)
+        state.update(datetime.fromisoformat(stamp+t), row)
+        if t == "09:45":
+            assert state.candles["15m"] == dict(at=stamp+"09:45:00+08:00", open=10, high=14, low=9,
+                                                close=13, volume=None, amount=3000)
+        if t == "14:55":
+            assert "1d" not in state.candles and state.candles["60m"]["at"][11:16] == "14:00"
+    state.update(datetime.fromisoformat("2026-11-27T09:35"), row)
+    assert state.candles["1d"]["at"] == stamp+"15:00:00+08:00" and "15m" not in state.candles

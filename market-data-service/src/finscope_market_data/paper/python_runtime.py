@@ -18,6 +18,8 @@ ctx contains at (Shanghai ISO time), equity, cash, positions (code -> shares), s
 costs (commissionRate, minimumCommissionCny, sellTaxRate, slippageRate). Respect sellable before targeting exits;
 
 bars (available code -> chronological list of up to 49 dicts with open,high,low,close,amount,volume,at).
+bar["completedBars"] maps 5m/15m/60m/1d to the latest fully observed candle with at,open,high,low,close,volume,amount. Check at before use. Missing candles or unknown volumes are never filled.
+Call estimate_trade_cost(side, shares, price) for an estimated CNY commission, sell tax and slippage based on this decision price.
 Access bar["multiTimeframe"] for completed return5m, return15m, return60m, return1d and 20/60-session trend20d/trend60d. Missing features mean insufficient complete trading intervals. Daily values update at 15:00.
 Volume can be null for archived data and amount can be null for recent quotes. Be robust to short windows and missing symbols. Use deterministic
 logic and only ctx. Return a dict weights (available code -> absolute desired portfolio weight, 0 exits,
@@ -57,6 +59,17 @@ for line in sys.stdin:
             ctx['bars']={c:[dict(b) for b in rows] for c,rows in history.items()}
             signals={}
             report=ctx.pop('_factorReport',False)
+            if ctx.pop('_estimateCosts',False):
+                rates = ctx['costs'].copy()
+                def estimate_trade_cost(side, shares, price):
+                    if side not in ('BUY','SELL') or shares < 0 or price <= 0:
+                        raise ValueError('invalid trade estimate')
+                    gross = shares * price
+                    commission = max(rates['minimumCommissionCny'], gross * rates['commissionRate']) if shares else 0
+                    tax = gross * rates['sellTaxRate'] if side == 'SELL' else 0
+                    slip = gross * rates['slippageRate']
+                    return dict(commission=round(commission,2),sellTax=round(tax,2),slippage=round(slip,2),total=round(commission+tax+slip,2))
+                ns['estimate_trade_cost']=estimate_trade_cost
             result=ns['decide'](ctx)
             if report:
                 factor_ns={}
@@ -84,7 +97,7 @@ def image_id():
 
 
 class PythonStrategy:
-    def __init__(self, program, image, *, collect_factors=False, sdk_version=2):
+    def __init__(self, program, image, *, collect_factors=False, sdk_version=3):
         self.collect_factors = collect_factors
         self.factor_values = {}
         self.factor_names = None
@@ -93,6 +106,7 @@ class PythonStrategy:
         self.name = "finscope-strategy-" + uuid.uuid4().hex
         self.process = None
         self.last = {}
+        self.sdk_version = sdk_version
         self.features = {} if sdk_version >= 2 else None
 
     def __enter__(self):
@@ -191,16 +205,21 @@ class PythonStrategy:
         if self.features is None:
             return {}
         if hasattr(bar, "multiTimeframe"):
-            return {"multiTimeframe": bar.multiTimeframe}
+            result = {"multiTimeframe": bar.multiTimeframe}
+            if self.sdk_version >= 3:
+                result["completedBars"] = bar.completedBars
+            return result
         if code not in self.features:
-            self.features[code] = (Timeframes(), {})
+            self.features[code] = (Timeframes(candles=self.sdk_version >= 3), {})
         state, recent = self.features[code]
         at = bar.observed_at
         if at not in recent:
-            recent[at] = state.update(at, bar)
+            recent[at] = {"multiTimeframe": state.update(at, bar)}
+            if state.candles is not None:
+                recent[at]["completedBars"] = state.candles.copy()
             if len(recent) > 49:
                 del recent[next(iter(recent))]
-        return {"multiTimeframe": recent[at]}
+        return recent[at]
 
     def decide(self, histories, book, end, equity):
         bars = {
@@ -225,6 +244,7 @@ class PythonStrategy:
         self.send(
             dict(
                 _factorReport=self.collect_factors,
+                _estimateCosts=self.sdk_version >= 3,
                 at=end.isoformat(),
                 bars=bars,
                 **self.account_context(book, end),

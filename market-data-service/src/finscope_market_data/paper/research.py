@@ -38,7 +38,7 @@ class Program(BaseModel):
 
 class PythonRule(Program):
     kind: Literal["python"]
-    sdkVersion: Literal[1, 2] = 1
+    sdkVersion: Literal[1, 2, 3] = 1
     exDateAccounting: bool = False
     factorDiagnostics: bool = False
     image: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -211,7 +211,7 @@ def simulate(
     validation_start=None,
     expected_development=None,
     check_sellable=True,
-    sdk_version=2,
+    sdk_version=3,
 ):
     days = sorted({b.observed_at.date() for bars in panel.values() for b in bars})
     if len(days) < 3:
@@ -1112,7 +1112,7 @@ class ResearchJobs:
     def save_version(self, job, request, program, image, digest, summary):
         rule = dict(
             kind="python",
-            sdkVersion=2,
+            sdkVersion=3,
             exDateAccounting=True,
             factorDiagnostics=True,
             **program.model_dump(),
