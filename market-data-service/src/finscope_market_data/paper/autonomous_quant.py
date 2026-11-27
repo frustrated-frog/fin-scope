@@ -157,11 +157,17 @@ def allocation(panel, spec, history):
         metrics = performance.report(curve,spec["capital"],book["fees"],book.get("executionCosts"))
         legs.append(dict(method=runtime.method,net=metrics["netReturn"],drawdown=metrics["maxDrawdown"],fees=book["fees"],
                          fills=book["fills"],turnover=metrics["turnover"],samples=runtime.samples,
+                         returnDays=metrics["returnDays"], annualVol=(metrics["dailyVol"]*sqrt(252) if metrics["dailyVol"] is not None else None),
+                         sharpe=metrics["sharpe"],
                          curve=[dict(day=p["at"][:10],nav=p["equity"]/spec["capital"]) for p in curve]))
-    return dict(methodVersion=2,capital=spec["capital"],decisions=len(tape),skipped=runs[0][0].missing,window=recipe.riskWindow,legs=legs,
+    comparison = {}
+    for key, best in (("net",max), ("drawdown",min), ("annualVol",min), ("sharpe",max)):
+        comparable = [leg[key] for leg in legs if leg[key] is not None]
+        comparison[key] = [leg["method"] for leg in legs if leg[key] == best(comparable)] if len(comparable) == len(legs) else []
+    return dict(methodVersion=2,comparison=comparison,capital=spec["capital"],decisions=len(tape),skipped=runs[0][0].missing,window=recipe.riskWindow,legs=legs,
                 formula="σp² = wᵀΣw；风险贡献占比 RCᵢ = wᵢ(Σw)ᵢ / (wᵀΣw)",
                 design="冻结每个历史决策时点的选中名单。三组使用相同本金、日期、风险约束与费用，各自独立撮合。Σ 用共同日收益估计，非对角项收缩 10%。",
-                limitation="风险贡献对应决策时的目标仓位。整手、现金和 T+1 会使实际持仓偏离目标；缺少共同风险窗口时三组一起跳过。")
+                limitation="年化实现波动率使用相邻收盘日收益；夏普至少需要 60 个有效收益。风险贡献对应决策时的目标仓位。整手、现金和 T+1 会使实际持仓偏离目标；缺少共同风险窗口时三组一起跳过。")
 
 
 def correlation_study(panel, history):
