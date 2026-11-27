@@ -23,7 +23,7 @@ def leg(version, spec, history):
                 beforeFees=before_fees, beforeCosts=money(before_fees + slip) if before_fees is not None and slip is not None else None,
                 benchmark=money(last["benchmark"] - capital), fees=fees, slippage=slip,
                 commission=costs.get("commission"), tax=costs.get("stampTax"), fills=history.get("fills"),
-                frequency=(spec["rule"].get("recipe") or {}).get("rebalance"),
+                recipe=spec["rule"].get("recipe"), frequency=(spec["rule"].get("recipe") or {}).get("rebalance"),
                 first=curve[0]["at"], last=last["at"])
 
 

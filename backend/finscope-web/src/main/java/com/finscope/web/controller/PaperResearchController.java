@@ -7,6 +7,7 @@ import com.finscope.domain.quant.paper.LearningEntryInput;
 import com.finscope.domain.quant.paper.LearningVerdictInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
+import com.finscope.domain.quant.paper.ClassicGridInput;
 import com.finscope.service.quant.paper.PaperResearchService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -40,6 +41,17 @@ public class PaperResearchController {
     @GetMapping("/factors/{id:[a-f0-9]{64}}")
     public ApiResponse<JsonNode> factor(@PathVariable String id) {
         return ApiResponses.success(service.factor(id));
+    }
+
+    @GetMapping("/grids/{version}")
+    public ApiResponse<JsonNode> gridResults(@PathVariable long version) {
+        return ApiResponses.success(service.gridResults(version));
+    }
+
+    @PostMapping("/grids/{version}")
+    public ApiResponse<JsonNode> runGrid(@PathVariable long version, @RequestBody ClassicGridInput input,
+            @RequestHeader("Idempotency-Key") UUID requestId) {
+        return ApiResponses.success(service.runGrid(version, input, requestId));
     }
 
     @GetMapping("/attribution/{version}")

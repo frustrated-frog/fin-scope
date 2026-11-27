@@ -141,3 +141,20 @@ def test_weekly_health_tracks_whole_missing_days_pause_and_lunch(tmp_path):
     assert "10:05" not in health["missingTimes"]
     assert [d["date"] for d in health["days"]] == ["2026-11-27", "2026-11-24", "2026-11-23"]
     assert health["days"][1]["missed"] == 48
+
+
+def test_cached_comparison_uses_close_only_risk_without_changing_frozen_history(tmp_path):
+    import json
+    lab = PaperLab(tmp_path/"lab.db", lambda:None)
+    spec = Research(rule=RULE,pool="WATCHLIST",source="snapshot",capital=10000,codes=["600000"],origin="test")
+    curve = [dict(at="2026-11-23T15:00",equity=10000,benchmark=10000),
+             dict(at="2026-11-24T11:00",equity=9000,benchmark=10000)]
+    old = dict(curve=curve,fees=0,comparison=dict(version=1,performance=dict(maxDrawdown=.1)))
+    with lab.db() as db:
+        db.execute("INSERT INTO paper_version VALUES(1,'base',?,?,'now')",(spec.model_dump_json(),json.dumps(dict(curve=curve,fees=0))))
+        db.execute("INSERT INTO paper_version VALUES(2,'change',?,?,'now')",(spec.model_dump_json(),json.dumps(old)))
+    refreshed = lab.detail(2,"")["history"]["comparison"]["performance"]
+    assert refreshed["closeDays"] == 1 and refreshed["maxDrawdown"] == 0
+    assert refreshed["netReturn"] == pytest.approx(-.1)
+    with lab.db() as db:
+        assert json.loads(db.execute("SELECT history FROM paper_version WHERE id=2").fetchone()[0]) == old

@@ -15,6 +15,7 @@ import com.finscope.domain.quant.paper.LearningEntryInput;
 import com.finscope.domain.quant.paper.LearningVerdictInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
+import com.finscope.domain.quant.paper.ClassicGridInput;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.rpc.llm.LunaResponsesClient;
 import com.finscope.rpc.quant.PythonPaperClient;
@@ -115,6 +116,16 @@ public class PaperResearchService {
         return paper.saveReview(id, review);
     }
 
+    public JsonNode gridResults(long version) {
+        return paper.gridResults(version);
+    }
+
+    public JsonNode runGrid(long version, ClassicGridInput input, UUID requestId) {
+        ObjectNode body = json.valueToTree(input);
+        body.put("requestId", requestId.toString());
+        return paper.runGrid(version, body);
+    }
+
     public JsonNode attribution(long version) {
         JsonNode report = paper.attribution(version);
         Set<String> missing = new LinkedHashSet<>();
@@ -157,6 +168,7 @@ public class PaperResearchService {
                 + "仅在 paired 为真时解读对照。比较结果不能证明因果。用中文，不使用股票代码或输入字段名。"
                 + "返回 JSON，observation 解释发生了什么，theory 讲清换手、成本与持有期的机制，"
                 + "calculation 用给定金额与本金展示算式，limits 解释证据边界，hypothesis 提出只改一个条件的后续实验，"
+                + "有组件配置时，仅建议在当前冻结股票池和时间区间内改变一种可配置参数，为本次版本设计新的对照，避免重复已有参数组合。"
                 + "criterion 给出事前可检验的标准。假设和标准各不超过200字。各项一小段，不给个股买卖建议。";
         ObjectNode answer = lessonFields(prompt, evidence,
                 List.of("observation", "theory", "calculation", "limits", "hypothesis", "criterion"), 3600);

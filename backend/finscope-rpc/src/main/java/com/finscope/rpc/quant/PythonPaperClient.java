@@ -44,6 +44,14 @@ public class PythonPaperClient {
         return call("/factors/" + id, null);
     }
 
+    public JsonNode gridResults(long version) {
+        return call("/grids/" + version, null);
+    }
+
+    public JsonNode runGrid(long version, JsonNode input) {
+        return call("/grids/" + version, input);
+    }
+
     public JsonNode attribution(long version) {
         return call("/attribution/" + version, null);
     }

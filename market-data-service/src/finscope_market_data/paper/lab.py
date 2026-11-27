@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
 from . import classic_study, classic_universe, learning, performance
+from . import parameter_grid
 from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
@@ -299,6 +300,13 @@ class PaperLab:
             db.execute("BEGIN")
             spec = self.spec(db, version)
             history = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (version,)).fetchone()[0])
+            comparison = history.get("comparison")
+            if comparison and "closeDays" not in (comparison.get("performance") or {}):
+                base = db.execute("""SELECT json_extract(history,'$.curve'),json_extract(spec,'$.capital'),
+                    json_extract(history,'$.fees'),json_extract(history,'$.costs') FROM paper_version WHERE id=?""",
+                    (comparison["version"],)).fetchone()
+                comparison["performance"] = performance.report(json.loads(base[0]), base[1], base[2],
+                        json.loads(base[3]) if base[3] else None) if base and base[0] else None
             days = [r[0] for r in db.execute("SELECT DISTINCT substr(at,1,10) FROM paper_point WHERE id=? ORDER BY 1 DESC LIMIT 365", (version,))]
             selected = day or (days[0] if days else "")
             points = [json.loads(r[0]) for r in db.execute(
@@ -604,6 +612,17 @@ class PaperLab:
         router.get("/versions/pending-reviews")(self.pending_reviews)
 
         router.get("/versions/jobs")(self.jobs.list)
+
+        @router.get("/versions/grids/{version}")
+        def grid_results(version: int):
+            return parameter_grid.results(self, version)
+
+        @router.post("/versions/grids/{version}")
+        def run_grid(version: int, value: parameter_grid.GridRequest):
+            try:
+                return parameter_grid.enqueue(self, version, value)
+            except ValueError as exc:
+                raise HTTPException(422,str(exc)) from exc
 
         @router.get("/versions/factors")
         def factors():
