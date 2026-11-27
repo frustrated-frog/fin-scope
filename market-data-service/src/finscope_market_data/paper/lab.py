@@ -2,7 +2,7 @@
 import asyncio
 from bisect import bisect_right
 from contextlib import closing, contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import hashlib
 import json
 import logging
@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
-from . import classic_study, classic_universe, performance
+from . import classic_study, classic_universe, learning, performance
 from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
@@ -55,7 +55,8 @@ def dumps(value):
 
 
 class PaperLab:
-    def __init__(self, path, router, archive=None, history_provider=None, fallback_provider=None, *, name_lookup=None):
+    def __init__(self, path, router, archive=None, history_provider=None, fallback_provider=None, *, name_lookup=None, index_store=None):
+        self.index_store = index_store
         self.path = path
         self.router = router
         self.name_lookup = name_lookup
@@ -568,6 +569,32 @@ class PaperLab:
         @router.post("/versions")
         async def create(spec: Research, auto_start: bool = False):
             return await self.research(spec, auto_start)
+
+        @router.get("/versions/learning/{version}")
+        def learning_report(version: int, day: date | None = None):
+            now = stamp()
+            with self.db() as db:
+                learning.schema(db)
+                db.execute("BEGIN")
+                return learning.snapshot(self, db, version, day or now.date(), now)
+
+        @router.get("/versions/learning/{version}/entries/{entry}")
+        def learning_evidence(version: int, entry: int):
+            with self.db() as db:
+                learning.schema(db)
+                row = db.execute("SELECT evidence,result_evidence FROM paper_learning_entry WHERE version=? AND id=?",
+                                 (version,entry)).fetchone()
+                if not row:
+                    raise HTTPException(404,"学习记录不存在")
+                return dict(initial=json.loads(row[0]),result=json.loads(row[1]) if row[1] else None)
+
+        @router.post("/versions/learning/{version}/entries")
+        def register_learning(version: int, value: learning.Entry):
+            return learning.register(self, version, value, stamp())
+
+        @router.post("/versions/learning/{version}/entries/{entry}")
+        def conclude_learning(version: int, entry: int, value: learning.Verdict):
+            return learning.conclude(self, version, entry, value, stamp())
 
         router.get("/versions/pending-reviews")(self.pending_reviews)
 

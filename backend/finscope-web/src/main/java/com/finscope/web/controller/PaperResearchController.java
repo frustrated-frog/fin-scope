@@ -3,6 +3,8 @@ package com.finscope.web.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.common.enums.quant.PaperAccountState;
+import com.finscope.domain.quant.paper.LearningEntryInput;
+import com.finscope.domain.quant.paper.LearningVerdictInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.service.quant.paper.PaperResearchService;
@@ -38,6 +40,34 @@ public class PaperResearchController {
     @GetMapping("/factors/{id:[a-f0-9]{64}}")
     public ApiResponse<JsonNode> factor(@PathVariable String id) {
         return ApiResponses.success(service.factor(id));
+    }
+
+    @GetMapping("/learning/{version}")
+    public ApiResponse<JsonNode> learning(@PathVariable long version,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate day) {
+        return ApiResponses.success(service.learning(version, day));
+    }
+
+    @PostMapping("/learning/{version}/teach/{period}")
+    public ApiResponse<JsonNode> teach(@PathVariable long version, @PathVariable String period,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate day) {
+        return ApiResponses.success(service.teach(version, day, period));
+    }
+
+    @GetMapping("/learning/{version}/entries/{entry}")
+    public ApiResponse<JsonNode> learningEvidence(@PathVariable long version, @PathVariable long entry) {
+        return ApiResponses.success(service.learningEvidence(version, entry));
+    }
+
+    @PostMapping("/learning/{version}/entries")
+    public ApiResponse<JsonNode> registerLearning(@PathVariable long version, @RequestBody LearningEntryInput input) {
+        return ApiResponses.success(service.registerLearning(version, input));
+    }
+
+    @PostMapping("/learning/{version}/entries/{entry}")
+    public ApiResponse<JsonNode> concludeLearning(@PathVariable long version, @PathVariable long entry,
+            @RequestBody LearningVerdictInput input) {
+        return ApiResponses.success(service.concludeLearning(version, entry, input));
     }
 
     @GetMapping("/datasets")

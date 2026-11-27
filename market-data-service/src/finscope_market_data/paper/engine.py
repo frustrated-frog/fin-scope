@@ -158,7 +158,7 @@ def execute(book, order, bar, end):
             pos["cost"] = money(pos["cost"] - cost)
     book["fills"] += 1
     book["fees"] = money(book["fees"] + fee)
-    event = dict(**order, action="成交", price=price, quantity=quantity, fee=fee)
+    event = dict(**order, action="成交", price=price, quantity=quantity, fee=fee, executionOpen=bar.open)
     if "planAt" in order:
         event["stampTax"] = money(gross * SELL_TAX) if side == "SELL" else 0.
     return event

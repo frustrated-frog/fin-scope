@@ -44,6 +44,22 @@ public class PythonPaperClient {
         return call("/factors/" + id, null);
     }
 
+    public JsonNode learning(long version, LocalDate day) {
+        return call("/learning/" + version + (day == null ? "" : "?day=" + day), null);
+    }
+
+    public JsonNode learningEvidence(long version, long entry) {
+        return call("/learning/" + version + "/entries/" + entry, null);
+    }
+
+    public JsonNode registerLearning(long version, JsonNode input) {
+        return call("/learning/" + version + "/entries", input);
+    }
+
+    public JsonNode concludeLearning(long version, long entry, JsonNode input) {
+        return call("/learning/" + version + "/entries/" + entry, input);
+    }
+
     public JsonNode datasets() {
         return call("/datasets", null);
     }

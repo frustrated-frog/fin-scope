@@ -107,6 +107,29 @@ class PaperResearchServiceTest {
     }
 
     @Test
+    void teachesFromSelectedPeriodAndAccountWithoutRunningResearch() throws Exception {
+        var day = java.time.LocalDate.of(2026, 11, 27);
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.model()).thenReturn("test-luna");
+        var report = json.readTree("""
+                {"name":"选中策略","day":"2026-11-27","daily":{"returnDays":5},"quarterly":{"irrelevant":true},
+                 "accounts":[{"version":1,"rejected":18},{"version":2,"rejected":0}],"entries":[]}
+                """);
+        when(paper.learning(1, day)).thenReturn(report);
+        when(llm.completeText(anyString(), anyString(), eq(2000))).thenReturn("""
+                {"lesson":"18 笔未成交需要核对原因","hypothesis":"执行成本与订单大小有关","criterion":"同规则比较五个交易日"}
+                """);
+        var answer = service.teach(1, day, "daily");
+        var evidence = ArgumentCaptor.forClass(String.class);
+        verify(llm).completeText(anyString(), evidence.capture(), eq(2000));
+        JsonNode sent = json.readTree(evidence.getValue());
+        assertEquals(18, sent.path("execution").path("rejected").asInt());
+        assertFalse(sent.has("quarterly"));
+        assertEquals("test-luna", answer.path("model").asText());
+        verify(paper, never()).deploy(anyLong());
+    }
+
+    @Test
     void refusesEmptyPoolBeforeGenerating() {
         assertThrows(BusinessException.class, () -> service.generate(
                 new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null, true)));
