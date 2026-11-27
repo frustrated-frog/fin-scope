@@ -61,6 +61,12 @@ public class PaperResearchController {
         return ApiResponses.success(service.submitCoding(input, autoIterate, requestId));
     }
 
+    @PostMapping("/jobs/ridge")
+    public ApiResponse<JsonNode> submitRidge(@RequestBody PaperResearchInput input,
+            @RequestHeader(value = "Idempotency-Key", required = false) UUID requestId) {
+        return ApiResponses.success(service.submitRidge(input, requestId));
+    }
+
     @PostMapping("/jobs/{id}/retry")
     public ApiResponse<JsonNode> retry(@PathVariable long id) {
         return ApiResponses.success(service.retry(id));

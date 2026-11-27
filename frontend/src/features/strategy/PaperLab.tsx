@@ -96,6 +96,21 @@ interface Point extends Tick {
   missedBars?: number;
   stale?: string[];
 }
+interface TailModel {
+  features: string[];
+  coefficients: number[];
+  symbols: number;
+  samples: number;
+  dates: number;
+  firstDay: string;
+  lastLabel: string;
+}
+
+const factorLabels: Record<string, string> = {
+  return5m: '5 分钟收益', return15m: '15 分钟收益', return60m: '60 分钟收益',
+  return1d: '已收盘日收益', trend20d: '20 日趋势', trend60d: '60 日趋势',
+};
+
 interface Detail {
   executionHealth?: {date:string; due:number; executed:number; days:{date:string; missed:number; missingTimes:string[]}[]} | null;
   daySummary?: { at: string; pnl: number; fills: number; fees: number } | null;
@@ -106,7 +121,7 @@ interface Detail {
   days: string[];
   day: string;
   forwardEvidence?: { sessions: number; fills: number; status: string; reasons: string[]; maxDrawdown: number; feeRate: number; relativeReturn: number } | null;
-  history: { developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
+  history: { model?: TailModel; unverifiedSymbols?: number; incompleteActionTerms?: number; researchPoolSize?: number; controlFees?: number; controlFills?: number; developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
     days?: number; validationStart?: string; developmentReturn?: number; validationReturn?: number;
     validationBenchmark?: number; controlReturn?: number; estimatedVolumeBars?: number; coverage?: Record<string, number> };
 }
@@ -139,11 +154,13 @@ function Trace({
   capital,
   onDay,
   selected,
+  controlLabel = '原因子对照',
 }: {
   points: Tick[];
   capital: number;
   onDay?: (v: string) => void;
   selected?: string;
+  controlLabel?: string;
 }) {
   if (!points.length) {
     return <div className="paper-trace-pending">
@@ -170,7 +187,7 @@ function Trace({
       <div className="paper-chart-key">
         <span>策略净值</span>
         <span>股票池等权基准</span>
-        {points[0].control !== undefined && <span>原因子对照</span>}
+        {points[0].control !== undefined && <span>{controlLabel}</span>}
       </div>
       <svg
         viewBox="0 0 600 146"
@@ -496,14 +513,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setBusy(true);
     setError('');
     try {
-      const coding = engine === 'codex';
-      const body = JSON.stringify({ hypothesis, autoStart, capital: Number(capital), pool, parent: parent?.id,
+      const coding = engine !== 'luna';
+      const body = JSON.stringify(engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
         academyVersionId: seed?.academyVersionId, factorCode: seed?.factorCode });
-      const key = body + autoIterate;
+      const key = engine + body + autoIterate;
       if (coding && submission.current?.body !== key) {
         submission.current = {body: key, token: crypto.randomUUID()};
       }
-      const item = await api<{ id: number }>(coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
+      const item = await api<{ id: number }>(engine === 'ridge' ? endpoint + '/jobs/ridge' : coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
         method: 'POST', body, headers: coding ? { 'Idempotency-Key': submission.current!.token } : undefined,
       });
       catalog.refresh();
@@ -594,9 +611,10 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           <label>策略引擎
             <select value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => setEngine(e.target.value)}>
               <option value="codex">Codex · Python 策略</option><option value="luna">Luna · 因子规则</option>
+              {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">Ridge · 尾盘多因子对照</option>}
             </select>
           </label>
-          <label>
+          {engine !== 'ridge' && <label>
             研究方向（选填）
             <textarea
               maxLength={1200}
@@ -604,7 +622,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               onChange={(e) => setHypothesis(e.target.value)}
               placeholder="留空由 AI 提出假设。也可以写一句你想验证的想法。"
             />
-          </label>
+          </label>}
           <div className="paper-fields">
             <label>
               每个账户的初始本金（元）
@@ -622,10 +640,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
             <label>
               实验股票池
               <select
-                disabled={!!parent}
-                value={pool}
+                disabled={!!parent || engine === 'ridge'}
+                value={engine === 'ridge' ? 'COHORT' : pool}
                 onChange={(e) => setPool(e.target.value)}
               >
+                {(engine === 'ridge' || pool === 'COHORT') && <option value="COHORT">按首次入池时间冻结的研究名单</option>}
                 <option value="DISCOVERY">股票发现候选池</option>
                 <option value="WATCHLIST">我的自选股</option>
               </select>
@@ -634,6 +653,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
           <p className="research-method-note">
             {parent
               ? engine === 'codex' ? '沿用原版本的行情快照和本金。新旧策略在同一时间窗口独立执行。' : '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
+              : engine === 'ridge' ? '用有入池日期的研究样本训练，首批最多 24 只进入交易池。14:45 选股，次日开盘后卖出。Ridge 和因子等权对照各用一份本金。'
               : engine === 'codex' ? 'Codex 编写因子、仓位和调仓逻辑，在隔离环境试跑。按交易日留出最后一段行情验证。' : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
           </p>
           <label className="paper-start-option">
@@ -645,7 +665,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
             满五个模拟交易日后，结合成交和风险决定是否研究对照策略
           </label>}
           <button className="quant-action" disabled={busy}>
-            {engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
+            {engine === 'ridge' ? busy ? '正在提交…' : '训练 Ridge 并对照回测' : engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
           </button>
         </form>
       )}
@@ -716,6 +736,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     <Trace
                       points={detail?.daily ?? []}
                       capital={spec.capital}
+                      controlLabel={detail?.history.model ? '因子等权对照' : undefined}
                       selected={detail?.day}
                       onDay={setDay}
                     />
@@ -728,7 +749,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 )}
                 {accountsOnly && control && (
                   <p>
-                    同期原因子账户 #{spec.parent} · 净值 ¥
+                    {spec.parent ? '同期原因子账户 #' + spec.parent : '同期因子等权账户'} · 净值 ¥
                     {currency(control.equity)} · 因子版本收益差{' '}
                     {pct((equity - control.equity) / spec.capital)} ·
                     两个账户同时启动
@@ -776,13 +797,13 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     </small>
                   </header>
                   {spec.rule.kind === 'python' && <div className="paper-validation">
-                    <div><small>开发段收益</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
+                    <div><small>{detail.history.model ? '训练期内回放收益' : '开发段收益'}</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
                     <div><small>留出段收益</small><b>{pct(detail.history.validationReturn ?? 0)}</b></div>
                     <div><small>留出段等权基准</small><b>{pct(detail.history.validationBenchmark ?? 0)}</b></div>
-                    {detail.history.controlReturn !== undefined && <div><small>父版本同期收益</small><b>{pct(detail.history.controlReturn)}</b></div>}
+                    {detail.history.controlReturn !== undefined && <div><small>{detail.history.model ? '因子等权对照' : '父版本同期收益'}</small><b>{pct(detail.history.controlReturn)}</b></div>}
                   </div>}
                   <p>
-                    固定当前股票池回放，含事后选样影响。{spec.rule.kind === 'python' ? '留出段收益' : '区间收益'}{' '}
+                    {detail.history.model ? '交易池按入池顺序预先固定。' : '固定当前股票池回放，含事后选样影响。'}{spec.rule.kind === 'python' ? '留出段收益' : '区间收益'}{' '}
                     {pct(
                       (detail.history.curve[detail.history.curve.length - 1]
                         ?.equity ?? spec.capital) /
@@ -791,6 +812,18 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                     )}
                     。
                   </p>
+                  {detail.history.model && <details className="paper-model-study" open>
+                    <summary>Ridge 模型与训练样本</summary>
+                    <p>{detail.history.model.firstDay} 至 {detail.history.model.lastLabel} · {detail.history.model.dates} 个信号日 · {detail.history.model.samples} 个有效股日样本</p>
+                    <p>登记 {detail.history.researchPoolSize} 只，{detail.history.model.symbols} 只有合格训练样本。开发段拟合后冻结权重，每个交易日在训练中占相同权重。</p>
+                    <dl>{detail.history.model.features.map((feature, i) => <div key={feature}>
+                      <dt>{factorLabels[feature] ?? feature}</dt><dd>{(detail.history.model!.coefficients[i] * 100).toFixed(3)}%</dd>
+                    </div>)}</dl>
+                    <p>系数表示因子上升一个训练标准差时，预测隔夜收益的变化。留出段对照成交 {detail.history.controlFills} 笔，费用 ¥ {currency(detail.history.controlFees ?? 0)}。</p>
+                    {!!(detail.history.unverifiedSymbols || detail.history.incompleteActionTerms) && <p>
+                      留出段有 {detail.history.unverifiedSymbols} 只股票缺少完整除权核验，{detail.history.incompleteActionTerms} 次除权只有日期，相关权益可能影响净值。
+                    </p>}
+                  </details>}
                   {detail.history.developmentTrials && <><h5>开发段候选与因子评价</h5><PaperResearchEvidence trials={detail.history.developmentTrials}/></>}
                   {spec.rule.kind === 'python' && <details><summary>行情快照与复验 · {detail.history.days} 个交易日</summary>
                     <p>{detail.history.firstDay} 至 {detail.history.lastDay}，从 {detail.history.validationStart} 起独立记账。图中展示留出段净值。
@@ -814,7 +847,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       T+1，一字线跳过。{spec.rule.kind === 'python' && spec.rule.exDateAccounting ? '已核验的现金分红计入应收，送股计入持仓。来源仅提供除权日，到账及上市日未知的权益保持锁定。配股按不认购处理。' : '此版本账本未计分红送转。'}
                     </p>
                   </details>
-                  <Trace points={detail.history.curve} capital={spec.capital} />
+                  <Trace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
                 </section>
               )}
               {accountsOnly && detail?.forwardEvidence && <section className="quant-readout paper-glass"><header><h4>前向研究观察</h4><small>{detail.forwardEvidence.status}</small></header>

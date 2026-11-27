@@ -66,6 +66,19 @@ class PaperResearchServiceTest {
     }
 
     @Test
+    void submitsDatedCohortExperimentWithExplicitCapital() {
+        var token = java.util.UUID.randomUUID();
+        service.submitRidge(new PaperResearchInput(null, null, BigDecimal.TEN, null, null, null, false), token);
+        ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
+        verify(paper).submitJob(payload.capture());
+        assertEquals("RIDGE", payload.getValue().path("researchMode").asText());
+        assertEquals(token.toString(), payload.getValue().path("requestId").asText());
+        assertEquals(10, payload.getValue().path("capital").asInt());
+        assertFalse(payload.getValue().path("autoStart").asBoolean());
+        verifyNoInteractions(llm, watchlist);
+    }
+
+    @Test
     void refusesEmptyPoolBeforeGenerating() {
         assertThrows(BusinessException.class, () -> service.generate(
                 new PaperResearchInput("研究动量", PaperUniverse.WATCHLIST, BigDecimal.TEN, null, null, null, true)));

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from types import SimpleNamespace
 
 from finscope_market_data.forecast.trading_calendar import next_session

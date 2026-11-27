@@ -281,3 +281,16 @@
 .paper-execution-health { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 16px; margin:12px 0; color:var(--muted); font-size:13px; }
 .paper-execution-health strong { color:var(--research-accent); }
 .paper-lab .paper-execution-health details { margin:0; }
+
+.paper-model-study dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: .75rem;
+  margin-block: .9rem;
+}
+.paper-model-study dl > div {
+  padding-inline-start: .75rem;
+  border-inline-start: 2px solid var(--accent, #37bdb6);
+}
+.paper-model-study dt { font-size: .78rem; color: var(--muted); }
+.paper-model-study dd { margin: .25rem 0 0; font-variant-numeric: tabular-nums; font-weight: 650; }

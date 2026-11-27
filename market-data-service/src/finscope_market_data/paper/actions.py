@@ -105,3 +105,26 @@ def apply_entitlements(book, code, events):
         if shares:
             # The feed has no listing date. Include the entitlement in NAV; never sell it early.
             position["lots"].append(["9999-12-31", shares])
+
+
+async def verified_dates(archive, code, start, end, now, *, online=False):
+    """Reuse the overnight verifier's dated coverage; ex-dates alone do not give entitlement amounts."""
+    from datetime import date
+    from finscope_market_data.overnight.action_verification import ActionVerificationStore
+    from finscope_market_data.providers.baostock_actions import BaostockActionProvider
+
+    if archive is None or not hasattr(archive, "connect"):
+        return None
+    symbol = code + (".SH" if code.startswith("6") else ".SZ")
+    record = await asyncio.to_thread(lambda: ActionVerificationStore(archive).latest(symbol, now.replace(tzinfo=None)))
+    if not (record and record.get("status") == "COVERED" and record["fromDate"] <= start and end <= record["throughDate"]):
+        if not online:
+            return None
+        try:
+            record = await asyncio.to_thread(BaostockActionProvider().fetch, symbol,
+                                             date.fromisoformat(start), date.fromisoformat(end))
+        except (ValueError, OSError, ProviderError):
+            return None
+    return [dict(ex_date=d, event_types=["UNKNOWN"], currency="CNY", dividend_per_share=0.,
+                 per_share_bonus=0., allotment_ratio=0., termsKnown=False)
+            for d in record["exDates"] if start <= d <= end]

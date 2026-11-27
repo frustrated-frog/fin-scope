@@ -8,7 +8,6 @@ from datetime import timedelta
 from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
 from finscope_market_data.overnight.engine import expected_times
 
-from .actions import read_actions
 
 SLOTS = {int(t[:2]) * 60 + int(t[3:]): i for i, t in enumerate(expected_times("15:00"))}
 FEATURES = ("return5m", "return15m", "return60m", "return1d", "trend20d", "trend60d")
@@ -94,7 +93,7 @@ class ForwardFeatures:
                 rows[b.observed_at.replace(tzinfo=None)] = b
         if not rows:
             return state, prior
-        events = await read_actions(self.lab.router(), self.lab.limit, code, min(rows).date(), end.date())
+        events = await self.lab.action_events(code, min(rows).date(), end.date())
         if events is None:
             raise ValueError("等待核验多周期历史窗口")
         boundary = max((event["ex_date"] for event in events), default="")

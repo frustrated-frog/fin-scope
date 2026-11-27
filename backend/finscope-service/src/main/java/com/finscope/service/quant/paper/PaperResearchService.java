@@ -116,6 +116,18 @@ public class PaperResearchService {
         return create(input, true, autoIterate, requestId);
     }
 
+    public JsonNode submitRidge(PaperResearchInput input, UUID requestId) {
+        validateCapital(input.capital());
+        ObjectNode request = json.createObjectNode();
+        request.put("researchMode", "RIDGE");
+        request.put("capital", input.capital());
+        request.put("autoStart", input.autoStart());
+        if (requestId != null) {
+            request.put("requestId", requestId.toString());
+        }
+        return paper.submitJob(request);
+    }
+
     public JsonNode jobs() {
         return paper.jobs();
     }
@@ -224,10 +236,17 @@ public class PaperResearchService {
         }
     }
 
+    private void validateCapital(BigDecimal capital) {
+        if (capital == null || capital.signum() <= 0 || capital.scale() > 2
+                || capital.compareTo(new BigDecimal("10000000000")) > 0) {
+            throw invalid("请填写有效本金，最多两位小数");
+        }
+    }
+
     private void freezePool(PaperResearchInput input, ObjectNode spec) {
-        if (input.pool() == null || input.capital() == null || input.capital().signum() <= 0
-                || input.capital().scale() > 2 || input.capital().compareTo(new BigDecimal("10000000000")) > 0) {
-            throw invalid("请选择股票池并填写有效本金，最多两位小数");
+        validateCapital(input.capital());
+        if (input.pool() == null) {
+            throw invalid("请选择实验股票池");
         }
         Set<String> codes = poolCodes(input.pool(), spec);
         if (codes.isEmpty()) {

@@ -88,3 +88,19 @@ test('queues a Codex strategy without a handwritten hypothesis and returns to it
     body: {hypothesis: '', capital: 25000, pool: 'DISCOVERY', autoStart: true}}]);
   expect(browse).toHaveBeenCalledOnce();
 });
+
+test('starts a dated Ridge comparison with the specified capital and deployment choice', async () => {
+  const fetcher = vi.fn(async () => apiResponse({ jobId: 43 }));
+  vi.stubGlobal('fetch', fetcher);
+  const user = userEvent.setup();
+  render(<PaperLab seed={{ hypothesis: '' }} catalog={{rows: [], loading: false, error: '', refresh: vi.fn()}}
+    onBrowse={vi.fn()} onExperiment={vi.fn()} onAccount={vi.fn()} onCompare={vi.fn()}/>);
+  await user.selectOptions(screen.getByLabelText('策略引擎'), 'ridge');
+  expect(screen.getByLabelText('实验股票池')).toBeDisabled();
+  await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '10000');
+  await user.click(screen.getByLabelText('回测完成后自动启动模拟账户'));
+  await user.click(screen.getByRole('button', { name: '训练 Ridge 并对照回测' }));
+  expect(fetcher).toHaveBeenCalledWith('/api/quant/paper/versions/jobs/ridge', expect.objectContaining({
+    method: 'POST', body: JSON.stringify({ autoStart: false, capital: 10000 }),
+  }));
+});

@@ -13,9 +13,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from finscope_market_data.models import DataCapability, MinutePriceBar, StockSymbol
+from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
-from .actions import read_actions
+from .actions import read_actions, verified_dates
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
 from finscope_market_data.forecast.trading_calendar import next_session
@@ -35,7 +36,7 @@ class Review(BaseModel):
 
 class Research(BaseModel):
     rule: Rule | PythonRule
-    pool: Literal["DISCOVERY", "WATCHLIST"]
+    pool: Literal["DISCOVERY", "WATCHLIST", "COHORT"]
     source: str = Field(max_length=500)
     capital: float = Field(gt=0, le=1e10, allow_inf_nan=False)
     codes: list[str] = Field(min_length=1, max_length=24)
@@ -163,9 +164,13 @@ class PaperLab:
 
     def open_account(self, db, version, spec):
         book = new_book(spec.capital)
-        if spec.parent:
+        baseline = self.spec(db, spec.parent).rule.model_dump() if spec.parent else None
+        if spec.pool == "COHORT" and not baseline:
+            row = db.execute("SELECT json_extract(history,'$.baselineRule') FROM paper_version WHERE id=?", (version,)).fetchone()
+            baseline = json.loads(row[0]) if row and row[0] else None
+        if baseline:
             book["control"] = new_book(spec.capital)
-            book["controlRule"] = self.spec(db, spec.parent).rule.model_dump()
+            book["controlRule"] = baseline
         db.execute("INSERT OR IGNORE INTO paper_account(id,started,book,status) VALUES(?,?,?,?)",
                    (version, stamp().isoformat(), dumps(book), "等待盘中行情"))
 
@@ -337,6 +342,17 @@ class PaperLab:
                 await self.update_account(row, data, now)
         await asyncio.gather(*(update(row) for row in rows))
 
+    async def action_events(self, code, start, end):
+        start, end = str(start), str(end)
+        dates = await verified_dates(self.jobs.archive, code, start, end, stamp())
+        if dates == []:
+            return dates
+        events = await read_actions(self.router(), self.limit, code, start, end)
+        if events is not None or dates is not None:
+            return events if events is not None else dates
+        async with self.limit:
+            return await verified_dates(self.jobs.archive, code, start, end, stamp(), online=True)
+
     async def forward_actions(self, histories, book, started, end):
         today = end.date().isoformat()
         if self.action_day != today:
@@ -355,7 +371,7 @@ class PaperLab:
                 key = (code, start, today)
                 if key not in self.action_queries:
                     self.action_queries[key] = asyncio.create_task(
-                        read_actions(self.router(), self.limit, code, start, today)
+                        self.action_events(code, start, today)
                     )
                 events = await self.action_queries[key]
                 if events is None:
@@ -364,6 +380,10 @@ class PaperLab:
                 for event in sorted(events, key=lambda item: item["ex_date"]):
                     boundary = max(boundary, event["ex_date"])
                     if observed < event["ex_date"] <= today:
+                        held = any(code in account.get("positions", {}) for account in (book, book.get("control", {})))
+                        if held and event.get("termsKnown") is False:
+                            self.action_queries.pop(key, None)
+                            raise ValueError("等待核验持仓除权权益")
                         due.append(event)
                 windows[code] = {"from": start, "through": today, "exDate": boundary}
             window = [bar for bar in bars if bar.observed_at.date().isoformat() >= boundary]
@@ -387,11 +407,12 @@ class PaperLab:
                            ("行情缺失或延迟，等待同步", row["id"], row["revision"]))
             return
         end = end.astimezone(SHANGHAI)
-        multi = isinstance(spec.rule, PythonRule) and "multiTimeframe" in spec.rule.code
+        book = json.loads(row["book"])
+        multi = isinstance(spec.rule, PythonRule) and ("multiTimeframe" in spec.rule.code
+                or "multiTimeframe" in book.get("controlRule", {}).get("code", ""))
         history = {c: bars[-(320 if multi else 49):] for c, bars in closed.items() if bars and bars[-1].observed_at == end}
         if len(history) < len(panel) and seen - end < timedelta(seconds=45):
             return
-        book = json.loads(row["book"])
         last = max(book["last"] or row["started"], book.get("resumedAt", ""))
         if end.isoformat() <= last:
             return
@@ -499,7 +520,7 @@ class PaperLab:
             return [self.jobs.trial_view(t) for t in self.jobs.trials(job)]
 
         @router.post("/versions/jobs")
-        def queue(value: JobRequest):
+        def queue(value: RidgeRequest | JobRequest):
             try:
                 return self.jobs.enqueue(value)
             except ValueError as exc:

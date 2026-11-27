@@ -22,8 +22,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
-from . import factor_library
-from .actions import annotate, read_actions
+from . import factor_library, tail_experiment
+from .actions import annotate
 from .analysis import coverage, evaluate, frames, observe_close
 from .engine import ENGINE, LEGACY_ENGINE, SHANGHAI, advance, new_book
 from .python_runtime import PythonStrategy, SDK, image_id
@@ -45,7 +45,7 @@ class PythonRule(Program):
 
 
 class JobRequest(BaseModel):
-    pool: Literal["DISCOVERY", "WATCHLIST"]
+    pool: Literal["DISCOVERY", "WATCHLIST", "COHORT"]
     source: str = Field(max_length=500)
     capital: float = Field(ge=0.01, le=1e10, allow_inf_nan=False)
     codes: list[Annotated[str, Field(pattern=r"^(00|30|60|68)[0-9]{4}$")]] = Field(
@@ -148,11 +148,11 @@ def invoke(output_type, message, context=None):
                 "-c",
                 'mcp_servers.quant.default_tools_approval_mode="approve"',
                 "-c",
-                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","list_return_targets","search_factors","read_factor"]',
+                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","list_return_targets","search_factors","read_factor","train_tail_ridge"]',
                 "-c",
                 "mcp_servers.quant.tool_timeout_sec=525",
             ]
-            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. Use list_return_targets and evaluate_factor(code, targets) to test the entry and exit horizon relevant to your hypothesis. You may run_development_backtest on the full development segment. Fix errors before returning."
+            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. Use list_return_targets and evaluate_factor(code, targets) to test the entry and exit horizon relevant to your hypothesis. For multi-factor overnight experiments train_tail_ridge fits a regularized linear model on matured development labels and returns portable Python source. You may run_development_backtest on the full development segment. Fix errors before returning."
         result = subprocess.run(
             [
                 executable,
@@ -283,6 +283,8 @@ def simulate(
         )
         if other:
             metrics["controlReturn"] = baseline["equity"] / capital - 1
+            if check_sellable:
+                metrics.update(controlFees=baseline["fees"], controlFills=baseline["fills"])
     return dict(
         curve=curve,
         fills=book["fills"],
@@ -330,6 +332,9 @@ class ResearchJobs:
             return {"jobId": cursor.lastrowid}
 
     def enqueue(self, value):
+        if isinstance(value, tail_experiment.RidgeRequest):
+            request = tail_experiment.freeze_request(self.archive, value, datetime.now(SHANGHAI))
+            return self.submit(request, "ridge:" + str(value.requestId) if value.requestId else None)
         request = value.model_dump(mode="json")
         request["codes"] = list(dict.fromkeys(request["codes"]))
         if value.parent:
@@ -375,7 +380,7 @@ class ResearchJobs:
             spec.rule,
             spec.rule.image,
             spec.capital,
-            parent,
+            saved.get("baselineRule") or parent,
             validation_start=saved.get("validationStart"),
             check_sellable=saved.get("engine","").endswith("-python-v2"),
             legacy=saved.get("engine") == LEGACY_ENGINE + "-python-v1",
@@ -610,12 +615,12 @@ class ResearchJobs:
             raise ValueError("无效行情快照")
         return self.root / (digest + ".json.gz")
 
-    async def snapshot(self, codes, job=None):
-        cutoff = datetime.now(SHANGHAI)
+    async def snapshot(self, codes, job=None, *, first_day=None, cutoff=None):
+        cutoff = cutoff or datetime.now(SHANGHAI)
         self.lab.datasets.register(codes)
         recent = await asyncio.gather(
             *(self.lab.bars(c) for c in codes), return_exceptions=True
-        )
+        ) if first_day is None else [None] * len(codes)
 
         def collect():
             panel = {}
@@ -625,6 +630,8 @@ class ResearchJobs:
                 archived = self.lab.datasets.bars(code, cutoff.replace(tzinfo=None))
                 records = {}
                 for b in archived:
+                    if first_day and b.ended_at.date() < first_day:
+                        continue
                     at = b.ended_at.replace(tzinfo=SHANGHAI)
                     records[at] = [
                         at.isoformat(),
@@ -645,18 +652,16 @@ class ResearchJobs:
             for c, rows in panel.items()
             if len({r[0][:10] for r in rows}) < 3 or not any(not r[7] for r in rows)
         ]
-        if cold:
+        if cold and first_day is None:
             await self.lab.datasets.ensure(cold, cutoff, wait=True)
             panel = await asyncio.to_thread(collect)
         for code, rows in panel.items():
-            if not rows:
+            if not rows and first_day is None:
                 raise ValueError(f"{code} 没有可用于回测的行情，请待补数后重试")
-        router = self.lab.router()
-
         async def attach(code, rows):
-            events = await read_actions(
-                router, self.lab.limit, code, rows[0][0][:10], rows[-1][0][:10]
-            )
+            if not rows:
+                return
+            events = await self.lab.action_events(code, rows[0][0][:10], rows[-1][0][:10])
             annotate(rows, events)
 
         await asyncio.gather(*(attach(c, rows) for c, rows in panel.items()))
@@ -955,6 +960,9 @@ class ResearchJobs:
             trials = self.trials(job)
 
     async def process(self, job, request):
+        if request.get("researchMode") == "RIDGE":
+            await tail_experiment.run(self, job, request)
+            return
         if request.get("replay"):
             await self.verify(job, request["replay"])
             return
@@ -1096,6 +1104,9 @@ class ResearchJobs:
         summary["estimatedVolumeBars"] = sum(
             b.estimated_volume for rows in panel.values() for b in rows
         )
+        self.save_version(job, request, program, image, digest, summary)
+
+    def save_version(self, job, request, program, image, digest, summary):
         rule = dict(
             kind="python",
             exDateAccounting=True,

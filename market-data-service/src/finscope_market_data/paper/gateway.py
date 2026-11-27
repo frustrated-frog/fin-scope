@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from mcp.server.fastmcp import FastMCP
 
+from . import tail_model
 from .factor_library import bind
 from .analysis import coverage, evaluate
 from .return_targets import selected_targets
@@ -123,6 +124,15 @@ def development_tools(config):
             + "\ndef decide(ctx):\n    return {'weights':{},'scores':{},'state':{}}",
             targets,
         )["factors"]
+
+    @tools.tool()
+    def train_tail_ridge(features: list[str] | None = None, alpha: float = 20.) -> dict:
+        """Fit a frozen Ridge model on completed development-only overnight labels. Select 1-4 of return5m, return15m, return60m, return1d, trend20d, trend60d."""
+        audit("训练开发段尾盘 Ridge 模型")
+        observations = [r for code, bars in panel.items() for r in tail_model.samples(code, bars)]
+        model = tail_model.train(observations, "9999-12-31",
+                                 tail_model.DEFAULT_FEATURES if features is None else features, alpha)
+        return dict(model=model, code=tail_model.source(model), equalWeightCode=tail_model.source(model, equal=True))
 
     return tools
 
