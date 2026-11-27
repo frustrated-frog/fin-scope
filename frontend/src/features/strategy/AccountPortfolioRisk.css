@@ -1,0 +1,78 @@
+.arp {
+  --arp-ink: #e3eef3;
+  --arp-dim: #a1b4c3;
+  --arp-cyan: #7bd8d1;
+  --arp-violet: #c1aaff;
+  --arp-edge: #65849542;
+  position: relative;
+  min-width: 0;
+  margin-block: 1.25rem;
+  padding: clamp(16px, 1.5vw, 25px);
+  background: linear-gradient(128deg, #142d3bf0, #142131eb 55%, #1c2036e6);
+  border: 1px solid var(--arp-edge);
+  border-radius: 14px;
+  color: var(--arp-ink);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.arp h5, .arp h6 { margin: 0; color: var(--arp-ink); }
+.arp h5 { font-size: 1.18rem; letter-spacing: .025em; }
+.arp h6 { font-size: .92rem; }
+.arp .arp-head, .arp .arp-line, .arp .arp-balances { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.arp .arp-head small, .arp .arp-line small, .arp .arp-table small, .arp .arp-summary small,
+.arp .arp-industry-list small, .arp .arp-shocks small, .arp .arp-concentration small { color: var(--arp-dim); font-size: .75rem; }
+.arp-head small { display: block; margin-top: 3px; }
+.arp-controls { display: flex; align-items: center; gap: 10px; }
+.arp-controls label { display: grid; gap: 3px; font-size: .71rem; color: var(--arp-dim); }
+.arp .arp-controls select { width: auto; padding: 5px 7px; border: 1px solid #577381; border-radius: 6px; background: #172937; color: var(--arp-ink); font: inherit; font-size: .79rem; }
+.arp-tabs { display: flex; gap: 18px; margin: 13px 0 10px; border-bottom: 1px solid var(--arp-edge); }
+.arp .arp-tabs button { border: 0; border-radius: 0; background: transparent; padding: 8px 0; color: var(--arp-dim); font: inherit; font-size: .84rem; cursor: pointer; }
+.arp .arp-tabs button[aria-pressed=true] { color: var(--arp-cyan); box-shadow: inset 0 -2px var(--arp-cyan); font-weight: 650; }
+.arp button:hover { color: var(--arp-ink); }
+.arp :focus-visible { outline: 2px solid var(--arp-cyan); outline-offset: 2px; }
+.arp-concentration { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 12px; margin-block: 15px 16px; border-left: 2px solid var(--arp-cyan); padding-left: 12px; }
+.arp-concentration > span, .arp-balances > span, .arp-industry-list b > span { color: var(--arp-dim); font-size: .78rem; }
+.arp-concentration strong { color: var(--arp-ink); font-size: 1.11rem; }
+.arp-concentration b { font-size: 1.55rem; line-height: 1.1; color: var(--arp-cyan); }
+.arp-scroll { overflow-x: auto; }
+.arp .arp-table { width: 100%; border-collapse: collapse; text-align: right; white-space: nowrap; background: transparent; font-size: .84rem; }
+.arp .arp-table tr { background: transparent; }
+.arp .arp-table th, .arp .arp-table td { border: 0; border-bottom: 1px solid var(--arp-edge); padding: 9px 7px; text-align: right; }
+.arp .arp-table th:first-child { padding-left: 0; text-align: left; }
+.arp .arp-table thead th { color: var(--arp-dim); font-weight: 500; font-size: .73rem; }
+.arp .arp-table tbody th { color: var(--arp-ink); }
+.arp .arp-table small { display: block; line-height: 1.35; margin-top: 3px; font-weight: 400; }
+.arp-meter { display: grid; justify-items: end; gap: 3px; }
+.arp-meter b { color: var(--arp-cyan); }
+.arp-meter[data-risk=true] b { color: var(--arp-violet); }
+.arp-meter > span { width: min(100%, 65px); min-width: 33px; height: 3px; display: flex; background: #758fa132; border-radius: 2px; overflow: hidden; }
+.arp-meter i { display: block; height: 100%; background: var(--arp-cyan); }
+.arp-meter[data-risk=true] i { background: var(--arp-violet); }
+.arp-meter[data-negative=true] i { background: repeating-linear-gradient(125deg,var(--arp-violet) 0 2px,transparent 2px 4px); }
+.arp .arp-note, .arp-decomposition p, .arp-drawdown p, .arp > p { margin: 12px 0; line-height: 1.65; font-size: .8rem; color: var(--arp-dim); }
+.arp .arp-notice { border-inline-start: 2px solid #e2b981; padding-inline-start: 10px; color: #ecd2a9; }
+.arp-industries, .arp-drawdown, .arp-decomposition { margin-top: 15px; }
+.arp-industry-list { display: grid; gap: 4px; margin-top: 8px; }
+.arp-industry-list > div { display: grid; grid-template-columns: minmax(6em, 1fr) .6fr 1fr 1fr; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 5px; background: #7186a012; font-size: .83rem; }
+.arp-industry-list b { text-align: right; }
+.arp .arp-balances { justify-content: flex-start; flex-wrap: wrap; margin-top: 12px; gap: 6px 18px; }
+.arp-balances b { color: var(--arp-ink); }
+.arp-summary { display: grid; grid-auto-columns: minmax(0,1fr); grid-auto-flow: column; gap: 14px; margin-block: 18px; }
+.arp-summary > div { display: grid; align-content: start; gap: 5px; padding-inline-start: 9px; border-inline-start: 2px solid var(--arp-edge); }
+.arp-summary span, .arp-decomposition .arp-line, .arp-pair > span { font-size: .8rem; color: var(--arp-dim); }
+.arp-summary strong { color: var(--arp-cyan); font-size: clamp(1.03rem,1.45vw,1.5rem); line-height: 1.2; }
+.arp-split { margin-block: 10px 6px; height: 8px; border-radius: 2px; background: #776994; overflow: hidden; }
+.arp-split i { display: block; background: var(--arp-cyan); height: 100%; }
+.arp-pair { display: flex; align-items: baseline; gap: 12px; padding-block: 12px; border-block: 1px solid var(--arp-edge); }
+.arp-pair strong { margin-left: auto; color: var(--arp-violet); }
+.arp-shocks > div { display: grid; grid-template-columns: 1.2fr 1fr 1fr .65fr; gap: 6px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--arp-edge); font-size: .83rem; }
+.arp-shocks strong, .arp-shocks b { text-align: right; }
+.arp-shocks strong { color: #85daba; }
+.arp-shocks strong[data-gain=true] { color: #ffa79d; }
+.arp > footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding-top: 10px; margin-top: 13px; border-top: 1px solid var(--arp-edge); color: var(--arp-dim); font-size: .73rem; }
+.arp > footer span:first-child { color: var(--arp-cyan); }
+.arp [role=alert] button { background: transparent; color: var(--arp-cyan); border: 1px solid var(--arp-edge); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) {
+  .arp-meter i, .arp-split i { transform-origin: left; animation: arp-reveal .35s ease-out both; }
+  @keyframes arp-reveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+}

@@ -88,7 +88,7 @@ export function PortfolioOverview({book, performance, daily, capital, name}: {
   const peak = daily.filter(point=>point.at.slice(11,16)==='15:00').reduce((high,p) => Math.max(high,p.equity),Math.max(capital,book.equity));
   const risk = [
     {label:'最大单股仓位',value:stocks[0]?.value ?? 0},
-    {label:'组合年化波动率',value:performance?.dailyVol != null ? performance.dailyVol*Math.sqrt(252) : null},
+    {label:'账户日收益年化波动率',value:performance?.dailyVol != null ? performance.dailyVol*Math.sqrt(252) : null},
     {label:'相对历史日末高点回撤',value:1-book.equity/peak}
   ];
   return <div className="qa-pair qa-portfolio"><section><h5>当前投资组合</h5>

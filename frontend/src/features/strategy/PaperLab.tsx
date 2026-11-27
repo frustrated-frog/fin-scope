@@ -1,3 +1,4 @@
+import { AccountPortfolioRisk } from './AccountPortfolioRisk';
 import { BacktestOverview, PortfolioOverview } from './QuantAnalytics';
 import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
@@ -797,6 +798,9 @@ export function PaperLab({ seed, initialId, initialDay, initialAnalysis = '总�
                 </div>}
                 {accountsOnly && book && detail && <PortfolioOverview book={book} capital={spec.capital} daily={detail.daily}
                   performance={detail.forwardPerformance} name={stockName}/>}
+                {accountsOnly && book && <AccountPortfolioRisk key={active.id} version={active.id}
+                  day={day || detail?.day || book.last?.slice(0,10) || ''} days={detail?.days ?? []}
+                  tick={detail?.daySummary?.at} onDay={setDay} name={stockName}/>}
                 {accountsOnly && detail?.daySummary?.attribution && <ForwardPnl value={detail.daySummary.attribution} name={stockName}/>}
                 {accountsOnly && detail && <section className="qh-events"><h5>最近投资决策 <small>{detail.day}</small></h5>
                   {detail.points.filter(point=>point.events?.length).slice(-3).reverse().map(point=>
