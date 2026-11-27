@@ -124,6 +124,15 @@ public class PythonPaperClient {
             }
             return result;
         } catch (ProviderContractException error) {
+            if (suffix.startsWith("/learning/") && "HTTP_422".equals(error.getErrorType())) {
+                String hint = payload == null ? "请选择策略创建日至今天之间的观察日期"
+                        : payload.has("outcome") ? "结论已锁定或验证依据不符。请选择登记后的新增模拟记录或由本策略衍生的对照实验"
+                        : "请检查观察日期、研究假设与验证标准；已登记的标准不可覆盖";
+                throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID, hint, error);
+            }
+            if (suffix.startsWith("/learning/") && "HTTP_404".equals(error.getErrorType())) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "策略版本或学习记录不存在", error);
+            }
             if ("HTTP_422".equals(error.getErrorType())) {
                 throw new BusinessException(ErrorCode.REQUEST_PARAMETER_INVALID,
                         "回测未能执行，请检查规则阈值、因子窗口与股票池的五分钟行情覆盖", error);
