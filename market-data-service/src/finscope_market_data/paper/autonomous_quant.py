@@ -7,7 +7,7 @@ from statistics import correlation, mean
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from finscope_market_data.forecast.trading_calendar import consecutive_observed_sessions
+from finscope_market_data.financial_statistics import session_return
 from . import classic_study, classic_universe, performance
 from .analysis import frames
 from .classic_recipe import Recipe
@@ -188,8 +188,10 @@ def correlation_study(panel, history):
             if bar.observed_at.strftime("%H:%M")!="15:00" or not first<=day<=last or len(bar.dailyWindow)<2:
                 continue
             a,b = bar.dailyWindow[-2:]
-            if (b["at"][:10]==day and consecutive_observed_sessions(date.fromisoformat(a["at"][:10]),date.fromisoformat(day))):
-                series[day] = b["close"]/a["close"]-1
+            if b["at"][:10] == day:
+                value = session_return(date.fromisoformat(a["at"][:10]), date.fromisoformat(day), a["close"], b["close"])
+                if value is not None:
+                    series[day] = value
         returns[c] = series
     dates = sorted(set.intersection(*(set(returns[c]) for c in stocks+proxy)))
     proxy_returns = {d:mean(returns[c][d] for c in proxy) for d in dates}

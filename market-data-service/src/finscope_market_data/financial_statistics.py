@@ -33,6 +33,14 @@ class StatisticsQuery(BaseModel):
         return self
 
 
+def session_return(prior, day, before, after):
+    if not all(isfinite(price) and price > 0 for price in (before, after)):
+        return None
+    if not consecutive_observed_sessions(prior, day):
+        return None
+    return after / before - 1
+
+
 def daily_sample(bars, start, end):
     # Do not bridge a suspension, missing price, duplicate date or adjustment change.
     observed = {}
@@ -43,15 +51,17 @@ def daily_sample(bars, start, end):
     dates = sorted(observed)
     series, adjustments = {}, set()
     for prior, day in zip(dates, dates[1:]):
-        if day < start or not consecutive_observed_sessions(prior, day):
+        if day < start:
             continue
         left, right = observed[prior], observed[day]
-        if not all(b and b.is_complete and isfinite(b.close) and b.close > 0 for b in (left, right)):
+        if not all(b and b.is_complete for b in (left, right)):
             continue
         if left.adjustment != right.adjustment:
             continue
-        series[day] = (prior, right.close / left.close - 1)
-        adjustments.add(right.adjustment)
+        value = session_return(prior, day, left.close, right.close)
+        if value is not None:
+            series[day] = (prior, value)
+            adjustments.add(right.adjustment)
     return series, sorted(adjustments)
 
 
@@ -134,7 +144,7 @@ def pair_analysis(left, right, window):
         weights = np.array([w,1-w])
         return dict(weight=float(w), annualReturn=float((w*a.mean()+(1-w)*b.mean())*TRADING_YEAR),
                     annualVol=sqrt(max(0.,float(weights@cov@weights))*TRADING_YEAR))
-    result["frontier"] = dict(minimum=portfolio(low), equal=portfolio(.5),
+    result["frontier"] = dict(minimum=portfolio(low), allocations=[portfolio(i/100) for i in range(101)],
                               points=[portfolio(w) for w in np.linspace(low,high,21 if low!=high else 1)])
     return result
 

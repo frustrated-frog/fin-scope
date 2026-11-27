@@ -52,7 +52,7 @@ def test_regression_uses_common_excess_returns_and_frontier_is_efficient():
     frontier=pair["frontier"]
     assert frontier["minimum"]["weight"]==pytest.approx(.5)
     assert frontier["minimum"]["annualVol"]<1e-7
-    assert frontier["points"][-1]["annualReturn"]>=frontier["equal"]["annualReturn"]
+    assert frontier["points"][-1]["annualReturn"]>=frontier["allocations"][50]["annualReturn"]
     assert pair["rolling"][3]["value"] is None and pair["rolling"][4]["value"]==pytest.approx(-1)
     assert stats.regression(sample(base),sample(np.zeros(6)),0)["beta"] is None
 
