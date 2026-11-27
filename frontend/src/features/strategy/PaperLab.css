@@ -107,7 +107,12 @@
 .paper-cash-ledger > div { position: relative; padding: 16px 12px; }
 .paper-cash-ledger > div + div::before { content: ''; position: absolute; inset: 18px auto 18px 0; width: 1px; background: var(--hairline); }
 .paper-cash-ledger dt { margin-bottom: 6px; color: var(--muted); font-size: 12px; }
-.paper-cash-ledger dd { margin: 0; color: var(--cash); font: 600 clamp(17px, 3cqi, 30px)/1.2 var(--digits); letter-spacing: -.055em; overflow-wrap: anywhere; }
+.paper-cash-ledger dd { margin: 0; color: var(--cash); font: 600 clamp(17px, 3cqi, 30px)/1.2 var(--digits); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.paper-currency-mark {
+  margin-inline-end: .34em;
+  font-size: .7em;
+  font-weight: 500;
+}
 .paper-cash-ledger [data-tone="positive"] { color: var(--gain); }
 .paper-cash-ledger [data-tone="negative"] { color: var(--loss); }
 .paper-cash-ledger [data-tone="neutral"] { color: var(--muted); }
@@ -209,6 +214,42 @@
   tab-size: 4;
 }
 .paper-validation, .paper-account-actions { display: flex; gap: .75rem 1.5rem; flex-wrap: wrap; margin-block: .8rem; }
+.paper-account-actions { gap: 8px; }
+.paper-account-actions button {
+  --action-accent: var(--research-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--action-accent) 45%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--action-accent) 9%, transparent);
+  color: color-mix(in srgb, var(--action-accent) 45%, var(--ink));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.paper-account-actions [data-action="stop"] { --action-accent: var(--quant-coral); }
+.paper-account-actions [data-action="archive"] { --action-accent: var(--muted); }
+.paper-account-actions button::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+}
+.paper-account-actions [data-action="pause"]::before { border-inline: 3px solid currentColor; }
+.paper-account-actions [data-action="resume"]::before { background: currentColor; clip-path: polygon(15% 0, 100% 50%, 15% 100%); }
+.paper-account-actions [data-action="stop"]::before { background: currentColor; border-radius: 2px; }
+.paper-account-actions [data-action="archive"]::before { border: 1px solid currentColor; border-top-width: 3px; border-radius: 1px; }
+.paper-account-actions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--action-accent) 19%, transparent);
+  border-color: var(--action-accent);
+}
+.paper-account-actions button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.paper-account-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .paper-validation div { display: grid; gap: .35rem; }
 .paper-validation b { color: var(--quant-cyan); font-variant-numeric: tabular-nums; }
 .paper-job { display: flex; align-items: baseline; flex-wrap: wrap; gap: .6rem; padding-block: .6rem; border-top: 1px solid #68aab333; }

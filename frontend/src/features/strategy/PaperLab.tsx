@@ -238,6 +238,10 @@ function valueTone(value: number) {
   return value < 0 ? 'negative' : 'neutral';
 }
 
+function LedgerAmount({ value }: { value: number }) {
+  return <><span className="paper-currency-mark">¥</span>{currency(value).replace(/^-/, '−')}</>;
+}
+
 function Holdings({ book, capital, stockName }: {
   book: Book;
   capital: number;
@@ -248,10 +252,10 @@ function Holdings({ book, capital, stockName }: {
   return <section className="quant-readout paper-glass paper-holdings">
     <header><h4>持仓与现金</h4><small>{book.fills} 笔成交 · 累计费用 ¥{currency(book.fees)}</small></header>
     <dl className="paper-cash-ledger">
-      <div><dt>可用现金</dt><dd key={book.cash}>¥{currency(book.cash)}</dd></div>
-      {!!book.dividendReceivable && <div><dt>应收股息</dt><dd>¥{currency(book.dividendReceivable)}</dd></div>}
-      <div><dt>已实现盈亏</dt><dd key={book.realized} data-tone={valueTone(book.realized)}>¥{currency(book.realized)}</dd></div>
-      <div><dt>未实现盈亏</dt><dd key={unrealized} data-tone={valueTone(unrealized)}>¥{currency(unrealized)}</dd></div>
+      <div><dt>可用现金</dt><dd key={book.cash}><LedgerAmount value={book.cash} /></dd></div>
+      {!!book.dividendReceivable && <div><dt>应收股息</dt><dd><LedgerAmount value={book.dividendReceivable} /></dd></div>}
+      <div><dt>已实现盈亏</dt><dd key={book.realized} data-tone={valueTone(book.realized)}><LedgerAmount value={book.realized} /></dd></div>
+      <div><dt>未实现盈亏</dt><dd key={unrealized} data-tone={valueTone(unrealized)}><LedgerAmount value={unrealized} /></dd></div>
     </dl>
     {positions.length > 0 ? <table className="paper-position-table" aria-label="当前持仓">
       <thead><tr><th>股票</th><th>持股数</th><th>现价</th><th>持仓成本</th></tr></thead>
@@ -685,11 +689,11 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 </header>
                 {accountsOnly && active.started && <div className="paper-account-actions">
                   {(!active.lifecycle || active.lifecycle === 'RUNNING') &&
-                    <button disabled={busy} onClick={() => operate('state/PAUSED')}>暂停模拟</button>}
-                  {active.lifecycle === 'PAUSED' && <button disabled={busy} onClick={() => operate('state/RUNNING')}>恢复模拟</button>}
+                    <button type="button" data-action="pause" disabled={busy} onClick={() => operate('state/PAUSED')}>暂停模拟</button>}
+                  {active.lifecycle === 'PAUSED' && <button type="button" data-action="resume" disabled={busy} onClick={() => operate('state/RUNNING')}>恢复模拟</button>}
                   {(!active.lifecycle || ['RUNNING','PAUSED'].includes(active.lifecycle)) &&
-                    <button disabled={busy} onClick={() => operate('state/STOPPED')}>停止账户</button>}
-                  {active.lifecycle === 'STOPPED' && <button disabled={busy} onClick={() => operate('state/ARCHIVED')}>归档账户</button>}
+                    <button type="button" data-action="stop" disabled={busy} onClick={() => operate('state/STOPPED')}>停止账户</button>}
+                  {active.lifecycle === 'STOPPED' && <button type="button" data-action="archive" disabled={busy} onClick={() => operate('state/ARCHIVED')}>归档账户</button>}
                 </div>}
                 {!accountsOnly && <p>{spec.rule.hypothesis}</p>}
                 {accountsOnly && book && <div className="quant-metrics paper-metrics">
