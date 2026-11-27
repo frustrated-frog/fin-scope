@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
+import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
 import './PaperLab.css';
 
 export interface PaperSeed {
+  classic?: Family;
   hypothesis: string;
   factorCode?: string;
   academyVersionId?: number;
@@ -24,6 +26,7 @@ interface BasicRule {
 }
 interface PythonRule {
   kind: 'python';
+  recipe?: ClassicRecipe;
   exDateAccounting?: boolean;
   name: string;
   hypothesis: string;
@@ -88,6 +91,7 @@ interface Decision {
   signalReason?: string;
 }
 interface Point extends Tick {
+  selection?: Selection;
   cash?: number;
   holdings?: Record<string, number>;
   events: Decision[];
@@ -127,7 +131,7 @@ interface Detail {
   days: string[];
   day: string;
   forwardEvidence?: { sessions: number; fills: number; status: string; reasons: string[]; maxDrawdown: number; feeRate: number; relativeReturn: number } | null;
-  history: { model?: TailModel; factorAuthor?: string; members?: {code: string; joined: string}[];
+  history: ClassicRecord & { model?: TailModel; factorAuthor?: string; members?: {code: string; joined: string}[];
     researchCoverage?: Record<string, {days: number; bars: number; completeDays: number; measuredVolumeBars: number}>; unverifiedSymbols?: number; incompleteActionTerms?: number; researchPoolSize?: number; controlFees?: number; controlFills?: number; developmentTrials?: Trial[]; validationMode?: string; engine?: string; symbolCoverage?: Record<string,SymbolCoverage>; curve: Tick[]; fills: number; fees: number; firstDay?: string; lastDay?: string;
     days?: number; validationStart?: string; developmentReturn?: number; validationReturn?: number;
     validationBenchmark?: number; controlReturn?: number; estimatedVolumeBars?: number; coverage?: Record<string, number> };
@@ -371,6 +375,7 @@ function Decisions({
               {!!p.controlEvents?.length && <details><summary>{detail.history.model ? '因子等权对照' : '原策略对照'} · {p.controlEvents.length} 条记录</summary>
                 <DecisionList events={p.controlEvents} stockName={stockName}/>
               </details>}
+              {p.selection && <ClassicSelection value={p.selection} name={stockName}/>}
               <p className="paper-point-reason">{p.reason}</p>
               {p.holdings && <div className="paper-point-book">
                 <strong>现金 ¥{currency(p.cash ?? 0)}</strong>
@@ -487,16 +492,19 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
   const [hypothesis, setHypothesis] = useState(comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : seed?.hypothesis ?? '');
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
-  const [autoStart, setAutoStart] = useState(true);
+  const originalRecipe = comparison?.spec.rule.kind === 'python' ? comparison.spec.rule.recipe : undefined;
+  const [recipe, setRecipe] = useState<ClassicRecipe>(originalRecipe ?? {...defaultRecipe, family:seed?.classic ?? defaultRecipe.family});
+  const [autoStart, setAutoStart] = useState(!seed?.classic && !originalRecipe);
   const submission = useRef<{ body: string; token: string }>();
   const parent = comparison;
-  const [engine, setEngine] = useState(comparison && comparison.spec.rule.kind !== 'python' ? 'luna' : 'codex');
+  const [engine, setEngine] = useState(originalRecipe || seed?.classic ? 'classic' : comparison && comparison.spec.rule.kind !== 'python' ? 'luna' : 'codex');
   const [autoIterate, setAutoIterate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const active = versions.find((v) => v.id === id);
   const spec = active?.spec;
+  const classic = spec?.rule.kind === 'python' ? spec.rule.recipe : undefined;
   const book = active?.book;
   useEffect(() => {
     let alive = true;
@@ -531,13 +539,13 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
     setError('');
     try {
       const coding = engine !== 'luna';
-      const body = JSON.stringify(engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
+      const body = JSON.stringify(engine === 'classic' ? {recipe, reference:parent?.id, autoStart, capital:Number(capital)} : engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
         academyVersionId: seed?.academyVersionId, factorCode: seed?.factorCode });
       const key = engine + body + autoIterate;
       if (coding && submission.current?.body !== key) {
         submission.current = {body: key, token: crypto.randomUUID()};
       }
-      const item = await api<{ id: number }>(engine === 'ridge' ? endpoint + '/jobs/ridge' : coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
+      const item = await api<{ id: number }>(engine === 'classic' ? endpoint + '/jobs/classic' : engine === 'ridge' ? endpoint + '/jobs/ridge' : coding ? endpoint + '/jobs?autoIterate=' + (autoStart && autoIterate) : endpoint, {
         method: 'POST', body, headers: coding ? { 'Idempotency-Key': submission.current!.token } : undefined,
       });
       catalog.refresh();
@@ -626,12 +634,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
             </button>
           </header>
           <label>策略引擎
-            <select value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => setEngine(e.target.value)}>
+            <select value={engine} disabled={!!parent || busy || seed?.factorCode?.startsWith('paper:')} onChange={e => {setEngine(e.target.value); if (e.target.value === 'classic') {setAutoStart(false);} }}>
               <option value="codex">Codex · Python 策略</option><option value="luna">Luna · 因子规则</option>
+              {(originalRecipe || (!parent && !seed?.academyVersionId && !seed?.factorCode)) && <option value="classic">经典策略 · 组件实验</option>}
               {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">Ridge · 尾盘多因子对照</option>}
             </select>
           </label>
-          {engine !== 'ridge' && <label>
+          {engine === 'classic' && <ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>}
+          {engine !== 'ridge' && engine !== 'classic' && <label>
             研究方向（选填）
             <textarea
               maxLength={1200}
@@ -654,7 +664,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 onChange={(e) => setCapital(e.target.value)}
               />
             </label>
-            <label>
+            {engine !== 'classic' && <label>
               实验股票池
               <select
                 disabled={!!parent || engine === 'ridge'}
@@ -665,14 +675,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 <option value="DISCOVERY">股票发现候选池</option>
                 <option value="WATCHLIST">我的自选股</option>
               </select>
-            </label>
+            </label>}
           </div>
-          <p className="research-method-note">
+          {engine !== 'classic' && <p className="research-method-note">
             {parent
               ? engine === 'codex' ? '沿用原版本的行情快照和本金。新旧策略在同一时间窗口独立执行。' : '沿用原版本的本金、股票名单、仓位与买卖阈值，只改变因子公式。'
               : engine === 'ridge' ? 'Codex 用开发期数据提出因子，Ridge 学习权重。两组在同一股票池于 14:45 选股，次日开盘后卖出，各用一份本金。'
               : engine === 'codex' ? 'Codex 编写因子、仓位和调仓逻辑，在隔离环境试跑。按交易日留出最后一段行情验证。' : '创建时固定股票池，最多取前 24 只沪深 A 股，再用最近可用的五分钟行情回测。'}
-          </p>
+          </p>}
           <label className="paper-start-option">
             <input type="checkbox" checked={autoStart} disabled={busy} onChange={e => setAutoStart(e.target.checked)}/>
             回测完成后自动启动模拟账户
@@ -682,7 +692,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
             满五个模拟交易日后，结合成交和风险决定是否研究对照策略
           </label>}
           <button className="quant-action" disabled={busy}>
-            {engine === 'ridge' ? busy ? '正在提交…' : '训练 Ridge 并对照回测' : engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
+            {engine === 'classic' ? busy ? '正在提交…' : (autoStart ? '回测并启动模拟' : '运行经典策略回测') : engine === 'ridge' ? busy ? '正在提交…' : '训练 Ridge 并对照回测' : engine === 'codex' ? busy ? '正在提交…' : '提交 Codex 研究' : busy ? '正在生成规则并回测…' : autoStart ? '回测并启动模拟' : 'AI 编写规则并回测'}
           </button>
         </form>
       )}
@@ -776,7 +786,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
               {!accountsOnly && <section className="quant-readout">
                 <header>
                   <h4>策略与因子</h4>
-                  <button className="quant-action" onClick={() => onCompare(active)}>{spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
+                  <button className="quant-action" onClick={() => onCompare(active)}>{classic ? '沿用数据做对照' : spec.rule.kind === 'python' ? '衍生对照策略' : '新建因子对照'}</button>
                 </header>
                 <p>{detail?.history.factorAuthor ? spec.rule.hypothesis : spec.origin}</p>
                 {spec.rule.kind === 'python' ? <>
@@ -799,7 +809,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 </>}
                 <details>
                   <summary>
-                    {spec.source} · {spec.codes.length} 只
+                    {spec.source} · {classic ? '冻结时 ' : ''}{spec.codes.length} 只
                   </summary>
                   <p>{spec.codes.map(stockName).join(' · ')}</p>
                 </details>
@@ -813,13 +823,14 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                       {currency(detail.history.fees)}
                     </small>
                   </header>
-                  {spec.rule.kind === 'python' && <div className="paper-validation">
+                  {classic && <ClassicEvidence history={detail.history} recipe={classic} name={stockName}/>}
+                  {!classic && spec.rule.kind === 'python' && <div className="paper-validation">
                     <div><small>{detail.history.model ? '训练期内回放收益' : '开发段收益'}</small><b>{pct(detail.history.developmentReturn ?? 0)}</b></div>
                     <div><small>留出段收益</small><b>{pct(detail.history.validationReturn ?? 0)}</b></div>
                     <div><small>留出段等权基准</small><b>{pct(detail.history.validationBenchmark ?? 0)}</b></div>
                     {detail.history.controlReturn !== undefined && <div><small>{detail.history.model ? '因子等权对照' : '父版本同期收益'}</small><b>{pct(detail.history.controlReturn)}</b></div>}
                   </div>}
-                  <p>
+                  {!classic && <p>
                     {detail.history.model ? '交易池按入池顺序预先固定。' : '固定当前股票池回放，含事后选样影响。'}{spec.rule.kind === 'python' ? '留出段收益' : '区间收益'}{' '}
                     {pct(
                       (detail.history.curve[detail.history.curve.length - 1]
@@ -828,7 +839,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                         1,
                     )}
                     。
-                  </p>
+                  </p>}
                   {detail.history.model && <details className="paper-model-study" open>
                     <summary>{detail.history.factorAuthor ? 'Codex 因子与 Ridge 权重' : 'Ridge 模型与训练样本'}</summary>
                     <p>{detail.history.model.firstDay} 至 {detail.history.model.lastLabel} · {detail.history.model.dates} 个信号日 · {detail.history.model.samples} 个有效股日样本</p>
@@ -858,7 +869,7 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                   </details>}
                   {detail.history.developmentTrials && <><h5>开发段候选与因子评价</h5><PaperResearchEvidence trials={detail.history.developmentTrials}/></>}
                   {spec.rule.kind === 'python' && <details><summary>行情快照与复验 · {detail.history.days} 个交易日</summary>
-                    <p>{detail.history.firstDay} 至 {detail.history.lastDay}，从 {detail.history.validationStart} 起独立记账。图中展示留出段净值。
+                    <p>{detail.history.firstDay} 至 {detail.history.lastDay}。{classic ? '按各时点已经发布的名单回放，图中展示整个区间净值。' : `从 ${detail.history.validationStart} 起独立记账。图中展示留出段净值。`}
                       {detail.history.engine?.startsWith('cn-paper-5m-v1') ? '旧版撮合使用估算成交量。' : '缺少真实成交量的行情仅用于估值和计算因子。'}
                       {detail.history.validationMode === 'SHARED_WITH_PARENT' && '手动对照复用父策略的历史窗口。'}
                       {detail.history.validationMode === 'NEW_AFTER_FORWARD' && '留出行情采自触发本次研究的复盘之后。'}

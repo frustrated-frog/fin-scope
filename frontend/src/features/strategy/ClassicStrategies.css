@@ -1,0 +1,26 @@
+.classic-library h4 {margin: 0 0 1rem}
+.classic-operators {margin-top:1rem;font-size:.88rem}
+.classic-operators summary {cursor:pointer;color:#a1d5e1}
+.classic-operators dl {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:1rem}
+.classic-operators dt {color:#8edacc;font-variant-numeric:tabular-nums}
+.classic-operators dd {margin:.35rem 0 0;color:var(--muted,#aebed1);line-height:1.6}
+.classic-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:.75rem}
+.classic-cards button {--accent:#71dcc6;text-align:left;display:grid;gap:.6rem;align-content:start;position:relative;padding:1.05rem;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent 72%);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;color:inherit;cursor:pointer;transition:transform .16s,border-color .16s}
+.classic-cards button[data-family="REVERSION"] {--accent:#eab391}
+.classic-cards button[data-family="MOMENTUM"] {--accent:#84c7ef}
+.classic-cards button[data-family="MULTI"] {--accent:#b9a5e9}
+.classic-cards button:hover {transform:translateY(-2px);border-color:var(--accent)}
+.classic-cards strong {font-size:1.06rem}
+.classic-cards code,.classic-formula code {color:var(--accent,#76ddcc);font-variant-numeric:tabular-nums}
+.classic-cards span,.classic-editor p,.classic-formula span {font-size:.88rem;color:var(--muted,#aebed1);line-height:1.65}
+.classic-cards b {font-size:.8rem;color:var(--accent)}
+.classic-editor {display:grid;gap:1rem;min-width:0}
+.classic-editor fieldset {margin:0;padding:.8rem 0 0;min-width:0;border:0;border-top:1px solid #6595a340}
+.classic-editor legend {padding-right:.65rem;color:#a1d5e1;font-size:.82rem}
+.classic-fields {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr));gap:.7rem 1rem}
+.classic-formula {border-left:2px solid #58bfa6;display:flex;gap:1rem;align-items:center;flex-wrap:wrap;padding:.5rem .8rem;background:linear-gradient(90deg,#49bca313,transparent)}
+.classic-targets {display:flex;flex-wrap:wrap;gap:.5rem}
+.classic-targets span {background:#57bdad12;border:1px solid #57bdad40;border-radius:7px;padding:.35rem .65rem}
+.classic-targets b,.classic-report time {color:#83d9ca;font-variant-numeric:tabular-nums}
+.classic-library button:focus-visible,.classic-report summary:focus-visible {outline:2px solid #72ddd3;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.classic-cards button {transition:none}.classic-cards button:hover {transform:none}}

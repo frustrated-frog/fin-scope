@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.finscope.common.api.ApiResponse;
 import com.finscope.common.enums.quant.PaperAccountState;
 import com.finscope.domain.quant.paper.PaperResearchInput;
+import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.service.quant.paper.PaperResearchService;
 import com.finscope.web.response.ApiResponses;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -59,6 +60,12 @@ public class PaperResearchController {
             @RequestParam(defaultValue = "false") boolean autoIterate,
             @RequestHeader(value = "Idempotency-Key", required = false) UUID requestId) {
         return ApiResponses.success(service.submitCoding(input, autoIterate, requestId));
+    }
+
+    @PostMapping("/jobs/classic")
+    public ApiResponse<JsonNode> submitClassic(@RequestBody ClassicPaperResearchInput input,
+            @RequestHeader(value = "Idempotency-Key", required = false) UUID requestId) {
+        return ApiResponses.success(service.submitClassic(input, requestId));
     }
 
     @PostMapping("/jobs/ridge")

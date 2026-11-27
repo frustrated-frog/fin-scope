@@ -6,6 +6,7 @@ import com.finscope.common.enums.quant.PaperUniverse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.instrument.WatchlistRepository;
 import com.finscope.domain.instrument.WatchlistItem;
+import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
 import com.finscope.rpc.llm.LunaResponsesClient;
 import com.finscope.rpc.quant.PythonPaperClient;
@@ -75,6 +76,27 @@ class PaperResearchServiceTest {
         assertEquals(token.toString(), payload.getValue().path("requestId").asText());
         assertEquals(10, payload.getValue().path("capital").asInt());
         assertFalse(payload.getValue().path("autoStart").asBoolean());
+        verifyNoInteractions(llm, watchlist);
+    }
+
+    @Test
+    void submitsClassicComparisonUsingExecutionEngineDefaultsForOmittedComponents() {
+        var token = java.util.UUID.randomUUID();
+        var recipe = new ClassicPaperResearchInput.Components("MOMENTUM", null, null, 7, null,
+                null, null, "EQUAL", null, null, null);
+        var input = new ClassicPaperResearchInput(BigDecimal.valueOf(10000), false, 4L, recipe);
+        service.submitClassic(input, token);
+        ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
+        verify(paper).submitJob(payload.capture());
+        JsonNode job = payload.getValue();
+        assertEquals(token.toString(), job.path("requestId").asText());
+        assertEquals("CLASSIC", job.path("researchMode").asText());
+        assertEquals(4L, job.path("reference").asLong());
+        assertEquals(10000, job.path("capital").asInt());
+        assertFalse(job.path("autoStart").asBoolean());
+        assertEquals("MOMENTUM", job.path("recipe").path("family").asText());
+        assertEquals(7, job.path("recipe").path("window").asInt());
+        assertFalse(job.path("recipe").has("period"));
         verifyNoInteractions(llm, watchlist);
     }
 

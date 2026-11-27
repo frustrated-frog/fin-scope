@@ -34,6 +34,7 @@ class ClassicRequest(BaseModel):
     researchMode: Literal["CLASSIC"]
     recipe: Recipe
     capital: float = Field(ge=.01, le=1e10, allow_inf_nan=False)
+    reference: int | None = Field(default=None, gt=0)
     autoStart: bool = False
     requestId: UUID | None = None
 

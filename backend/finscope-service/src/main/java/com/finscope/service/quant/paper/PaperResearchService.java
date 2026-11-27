@@ -12,6 +12,7 @@ import com.finscope.dao.quant.QuantStrategyRepository;
 import com.finscope.dao.quant.PaperStockNameRepository;
 import com.finscope.domain.quant.discovery.StockDiscoveryRun;
 import com.finscope.domain.quant.paper.PaperResearchInput;
+import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.strategy.QuantStrategyVersion;
 import com.finscope.rpc.llm.LunaResponsesClient;
 import com.finscope.rpc.quant.PythonPaperClient;
@@ -118,6 +119,25 @@ public class PaperResearchService {
 
     public JsonNode submitCoding(PaperResearchInput input, boolean autoIterate, UUID requestId) {
         return create(input, true, autoIterate, requestId);
+    }
+
+    public JsonNode submitClassic(ClassicPaperResearchInput input, UUID requestId) {
+        validateCapital(input.capital());
+        if (input.recipe() == null) {
+            throw invalid("请选择经典策略和组合规则");
+        }
+        ObjectNode request = json.valueToTree(input);
+        var components = request.with("recipe").fields();
+        while (components.hasNext()) {
+            if (components.next().getValue().isNull()) {
+                components.remove();
+            }
+        }
+        request.put("researchMode", "CLASSIC");
+        if (requestId != null) {
+            request.put("requestId", requestId.toString());
+        }
+        return paper.submitJob(request);
     }
 
     public JsonNode submitRidge(PaperResearchInput input, UUID requestId) {

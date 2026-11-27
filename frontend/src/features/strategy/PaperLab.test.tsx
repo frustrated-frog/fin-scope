@@ -104,3 +104,27 @@ test('starts a dated Ridge comparison with the specified capital and deployment 
     method: 'POST', body: JSON.stringify({ autoStart: false, capital: 10000 }),
   }));
 });
+
+test('submits the library selection with explicit liquidity units and a separate deployment choice', async () => {
+  const requests: Array<{url:string; body:unknown}> = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    requests.push({url:String(url), body:JSON.parse(options.body)});
+    return apiResponse({jobId:44});
+  }));
+  const browse = vi.fn();
+  const user = userEvent.setup();
+  render(<PaperLab seed={{hypothesis:'', classic:'REVERSION'}} catalog={{rows:[], loading:false, error:'', refresh:vi.fn()}}
+    onBrowse={browse} onCompare={vi.fn()} onExperiment={vi.fn()} onAccount={vi.fn()}/>);
+  expect(screen.getByLabelText('策略类型')).toHaveValue('REVERSION');
+  expect(screen.getByLabelText('回测完成后自动启动模拟账户')).not.toBeChecked();
+  await user.type(screen.getByLabelText('每个账户的初始本金（元）'), '10000');
+  const turnover = screen.getByLabelText(/最低平均成交额估算/);
+  await user.clear(turnover);
+  await user.type(turnover, '25');
+  await user.selectOptions(screen.getByLabelText('权重分配'), 'INVERSE_VOL');
+  await user.click(screen.getByRole('button', {name:'运行经典策略回测'}));
+  expect(requests).toEqual([{url:'/api/quant/paper/versions/jobs/classic', body:expect.objectContaining({
+    capital:10000, autoStart:false, recipe:expect.objectContaining({family:'REVERSION', allocation:'INVERSE_VOL', minTurnover:250000}),
+  })}]);
+  expect(browse).toHaveBeenCalledOnce();
+});

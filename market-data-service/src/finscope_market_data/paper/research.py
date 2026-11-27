@@ -152,11 +152,11 @@ def invoke(output_type, message, context=None):
                 "-c",
                 'mcp_servers.quant.default_tools_approval_mode="approve"',
                 "-c",
-                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","list_return_targets","search_factors","read_factor","train_tail_ridge"]',
+                'mcp_servers.quant.enabled_tools=["describe_dataset","query_bars","experiment_memory","run_development_backtest","evaluate_factor","list_return_targets","search_factors","read_factor","train_tail_ridge","compute_features","classic_strategy_source"]',
                 "-c",
                 "mcp_servers.quant.tool_timeout_sec=525",
             ]
-            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. Use list_return_targets and evaluate_factor(code, targets) to test the entry and exit horizon relevant to your hypothesis. For multi-factor overnight experiments train_tail_ridge fits a regularized linear model on matured development labels and returns portable Python source. You may run_development_backtest on the full development segment. Fix errors before returning."
+            message += "\nTo reuse a factor, search_factors/read_factor, then call library_factor('asset id', bars) inside factors(bars) using the literal hash. Use quant MCP to inspect describe_dataset and query_bars. Use list_return_targets and evaluate_factor(code, targets) to test the entry and exit horizon relevant to your hypothesis. Use compute_features to inspect shared indicators at a dated instant and classic_strategy_source to build from reusable classic strategies. For multi-factor overnight experiments train_tail_ridge fits a regularized linear model on matured development labels and returns portable Python source. You may run_development_backtest on the full development segment. Fix errors before returning."
         result = subprocess.run(
             [
                 executable,

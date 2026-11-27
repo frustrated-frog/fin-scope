@@ -9,7 +9,9 @@ from types import SimpleNamespace
 
 from mcp.server.fastmcp import FastMCP
 
-from . import tail_model
+from . import classic_components, tail_model
+from .classic_recipe import Recipe, program
+from .timeframes import Timeframes
 from .factor_library import bind
 from .analysis import coverage, evaluate
 from .return_targets import selected_targets
@@ -124,6 +126,44 @@ def development_tools(config):
             + "\ndef decide(ctx):\n    return {'weights':{},'scores':{},'state':{}}",
             targets,
         )["factors"]
+
+    @tools.tool()
+    def classic_strategy_source(family: str, window: int = 6, allocation: str = "EQUAL",
+                                rebalance: str = "DAILY", period: str = "15m") -> dict:
+        """Get reusable operators and executable classic strategy source for 5m/15m development backtests.
+        Families TREND/MOMENTUM/REVERSION/MULTI; allocations EQUAL/INVERSE_VOL/SCORE."""
+        if period not in ("5m", "15m"):
+            raise ValueError("标准 Python 研究窗口支持 5m/15m，日线历史窗口在经典策略运行时提供")
+        recipe = Recipe(family=family, window=window, allocation=allocation, rebalance=rebalance, period=period)
+        audit("读取经典策略组件")
+        return program(recipe).model_dump()
+
+    @tools.tool()
+    def compute_features(at: str, period: str = "15m", window: int = 6) -> dict:
+        """Compute SMA, EMA, ROC, volatility, SMA spread, reversal z-score, RSI, ATR, liquidity and
+        cross-sectional momentum rank for the exact completed development timestamp supplied."""
+        recipe = Recipe(family="MULTI", period=period, window=window)
+        end = datetime.fromisoformat(at)
+        if end.tzinfo is None:
+            raise ValueError("时点须含时区，例如 +08:00")
+        result = {}
+        for code, bars in panel.items():
+            state = Timeframes(candles=True, daily_window=True)
+            recent = []
+            for bar in bars:
+                if bar.observed_at > end:
+                    break
+                state.update(bar.observed_at, bar)
+                recent.append(dict(at=bar.observed_at.isoformat(), completedBars=state.candles.copy(),
+                                   dailyWindow=state.daily_window))
+                if len(recent) > 49:
+                    recent.pop(0)
+                if bar.observed_at == end:
+                    value = classic_components.indicators(recent, recipe.model_dump())
+                    if value:
+                        result[code] = value
+        audit("计算指定开发时点的经典金融指标")
+        return dict(values=result, momentumRank=classic_components.percentiles({c: v["momentum"] for c, v in result.items()}))
 
     @tools.tool()
     def train_tail_ridge(features: list[str] | None = None, alpha: float = 20.) -> dict:

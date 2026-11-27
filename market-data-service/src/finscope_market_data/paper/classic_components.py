@@ -57,6 +57,26 @@ def observations(rows, period):
     return window
 
 
+def ema(values, window):
+    weight = 2 / (window + 1)
+    result = values[0]
+    for value in values[1:]:
+        result += weight * (value - result)
+    return result
+
+
+def average_true_range(bars):
+    ranges = [max(b['high'] - b['low'], abs(b['high'] - a['close']), abs(b['low'] - a['close']))
+              for a, b in zip(bars, bars[1:])]
+    return mean(ranges)
+
+
+def window_rsi(closes):
+    changes = [b - a for a, b in zip(closes, closes[1:])]
+    movement = sum(abs(v) for v in changes)
+    return 100 * sum(max(0., v) for v in changes) / movement if movement else 50.
+
+
 def indicators(rows, recipe):
     n = recipe['window']
     bars = observations(rows, recipe['period'])[-(n+1):]
@@ -71,7 +91,9 @@ def indicators(rows, recipe):
     liquidity = mean([b['close'] * b['volume'] for b in bars[-n:]])
     return dict(momentum=rate_of_change(closes), volatility=deviation(returns),
                 trend=mean(closes[-max(2, n//3):]) / mean(closes[-n:]) - 1,
-                reversal=-standard_score(closes[-n:]), liquidity=liquidity)
+                reversal=-standard_score(closes[-n:]), liquidity=liquidity,
+                sma=mean(closes[-n:]), ema=ema(closes, n), atr=average_true_range(bars),
+                rsi=window_rsi(closes))
 
 
 def selection(rows, recipe, base):

@@ -3,6 +3,7 @@ import { api } from '../../shared/api/client';
 import type { StockDiscoveryMarketContext } from '../../shared/types/marketContext';
 import { FactorAssets, DatasetArchive } from './PaperArchive';
 import { PaperCodingJobs } from './PaperCodingJobs';
+import { ClassicLibrary } from './ClassicStrategies';
 import { lifecycleLabel, PaperLab, PaperLibrary, usePaperCatalog, type PaperVersion, type PaperSeed } from './PaperLab';
 import { ResearchHeader } from './ResearchHeader';
 import { FactorGuide } from './FactorGuide';
@@ -264,6 +265,7 @@ export function QuantWorkspace({ addToast, setMessage, entryIntent, onEntryInten
 
     {pane === 'forecast' && <SingleStockForecastPanel addToast={addToast} setMessage={setMessage} initialCode={forecastCode} />}
 
+    {pane === 'catalog' && <ClassicLibrary onChoose={classic => openPaper({hypothesis:'',classic})}/>}
     {pane === 'catalog' && <PaperLibrary catalog={paperCatalog} onOpen={showPaperVersion} />}
     {pane === 'catalog' && <StrategyCatalogPanel factorCodes={researchFactors.map(f => f.identity.code)}
       onFactor={code => { setSelectedFactorCode(code); setPane('factors'); }} onPaper={openPaper} datasets={datasets} addToast={addToast} />}

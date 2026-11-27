@@ -12,6 +12,16 @@ from .python_runtime import PythonStrategy, image_id
 
 
 def freeze(lab, value, now):
+    if value.reference:
+        with lab.db() as db:
+            row = db.execute("SELECT request FROM paper_job WHERE version=? AND json_extract(request,'$.researchMode')='CLASSIC' ORDER BY id LIMIT 1",
+                             (value.reference,)).fetchone()
+        if not row:
+            raise ValueError("原经典实验不存在")
+        original = json.loads(row[0])
+        if original["recipe"]["base"] != value.recipe.base or original["capital"] != value.capital:
+            raise ValueError("同数据对照须使用相同的股票池来源与初始本金")
+        return {**original, **value.model_dump(mode="json"), "origin": FAMILIES[value.recipe.family][0]}
     date = previous_session(now.date() + timedelta(days=int(now.time() >= time(15, 10))))
     if not date:
         raise ValueError("交易日历缺少最近收盘日")
@@ -98,5 +108,10 @@ async def run(jobs, job, request):
                        (json.dumps(snapshots), job))
     jobs.update(job, "BACKTEST", "按历史名单逐次选股、计算目标仓位并撮合")
     result = await asyncio.to_thread(simulate, jobs, snapshots, request["timeline"], frozen, image, request["capital"])
+    if request.get("reference"):
+        with jobs.lab.db() as db:
+            original = json.loads(db.execute("SELECT history FROM paper_version WHERE id=?", (request["reference"],)).fetchone()[0])
+        result["comparison"] = dict(version=request["reference"], netReturn=original["validationReturn"],
+                                    fills=original["fills"], fees=original["fees"])
     result.update(classicSnapshots=snapshots, universeTimeline=request["timeline"], validationMode="CLASSIC")
     jobs.save_version(job, request, frozen, image, snapshots[0], result)
