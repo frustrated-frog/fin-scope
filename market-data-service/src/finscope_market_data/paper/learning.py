@@ -160,6 +160,22 @@ def reconciliation(points):
                 reasons=[dict(reason=k,count=v) for k,v in reasons.most_common(5)])
 
 
+def archived_fills(db, version, day, daily_points):
+    archive=db.execute("""SELECT json_type(history,'$.trades') AS ledger,
+        EXISTS(SELECT 1 FROM json_each(history,'$.curve') c WHERE substr(c.value->>'at',1,10)=?) AS covered
+        FROM paper_version WHERE id=?""",(str(day),version)).fetchone()
+    if not archive["ledger"] or not archive["covered"]:
+        return None
+    fills=[json.loads(r[0]) for r in db.execute("""SELECT event.value FROM paper_version,
+        json_each(history,'$.trades') event WHERE paper_version.id=? AND substr(event.value->>'at',1,10)=?
+        AND event.value->>'action'='成交'""",(version,str(day)))]
+    actual=[{**e,"at":p["at"]} for p in daily_points for e in p.get("events",[]) if e["action"]=="成交"]
+    def key(e):
+        return (e["at"],e["code"],e["side"],e["quantity"])
+    matches=sum((Counter(map(key,fills)) & Counter(map(key,actual))).values()) if daily_points else None
+    return dict(fills=len(fills),fees=round(sum(e["fee"] for e in fills),2),matched=matches)
+
+
 def rows_for_day(db, version, day):
     return [json.loads(r[0]) for r in db.execute(
         "SELECT point FROM paper_point WHERE id=? AND at>=? AND at<? ORDER BY at",
@@ -241,7 +257,7 @@ def snapshot(lab, db, version, day, now):
     status=Counter(e["verdict"]["outcome"] for e in resolved)
     return dict(version=version,name=row["name"],day=str(day),accounts=checks,
         daily=dict(at=latest["at"] if latest else None,sharpe=risk["sharpe"],returnDays=risk["returnDays"],
-                   preopen=prior,feeBudget=recipe.get("maxFeeBps") or None,
+                   preopen=prior,archivedFills=archived_fills(db,version,day,current),feeBudget=recipe.get("maxFeeBps") or None,
                    drawdown=drawdown,limit=recipe.get("drawdownStop") or None,
                    comparison=period_stats(points,day,day,index)),
         weekly=dict(current=scan_week(db,version,points,monday,day,index,row["capital"]),

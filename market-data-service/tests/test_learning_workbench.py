@@ -65,3 +65,17 @@ def test_forward_folds_select_before_each_unseen_block():
     assert first["selected"]==4 and first["testReturn"]<0 and first["trainTo"]<first["testFrom"]
     assert second["selected"]==5 and second["testFrom"]>first["testTo"]
     assert learning.evaluate_folds({4:curves[4]},4)["folds"]==[]
+
+
+def test_archived_session_distinguishes_no_ledger_and_observed_zero(tmp_path):
+    lab=PaperLab(tmp_path/"paper.db",lambda:None)
+    day=date(2026,11,26)
+    at=str(day)+"T15:00:00+08:00"
+    fill=dict(at=at,action="成交",code="000001",side="BUY",quantity=100,fee=5)
+    with lab.db() as db:
+        db.execute("INSERT INTO paper_version VALUES(1,'v','{}',?,?)",
+                   (json.dumps(dict(curve=[dict(at=at,equity=100)],trades=[fill])),at))
+        assert learning.archived_fills(db,1,day,[])==dict(fills=1,fees=5,matched=None)
+        assert learning.archived_fills(db,1,day,[dict(at=at,events=[fill])])["matched"]==1
+        assert learning.archived_fills(db,1,day,[dict(at=at,events=[])])["matched"]==0
+        assert learning.archived_fills(db,1,day+timedelta(days=1),[]) is None
