@@ -32,7 +32,7 @@ test('opens the actual evidence, teaches a losing example, and links to the sour
       motivation: '识别成本',
     },
     report: {
-      finding: '当日净损失五元',
+      finding: '当日净损失五元，夏普为 null',
       background: '成本与换手',
       theory: '频繁交易会积累费用',
       mathematics: '净损失等于费用',
@@ -81,6 +81,7 @@ test('opens the actual evidence, teaches a losing example, and links to the sour
   const report = await screen.findByRole('article');
   expect(await within(report).findByText('扣费后盈亏（元）')).toBeInTheDocument();
   expect(within(report).getByText('假设未获支持')).toBeInTheDocument();
+  expect(within(report).getByText('当日净损失五元，夏普为 暂无估计值')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '值得学习的研究' })).toBeInTheDocument();
   await user.click(within(report).getByRole('button', { name: '金融课堂' }));
   expect(within(report).getByText(evidence.metrics.formula)).toBeInTheDocument();

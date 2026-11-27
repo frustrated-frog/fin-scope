@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { StudyEvidence, type Evidence, type Material } from './StudyEvidence';
+import { StudyEvidence, methodName, type Evidence, type Material } from './StudyEvidence';
 import './AutonomousStudies.css';
 
 const url = '/api/quant/research-center';
@@ -77,6 +77,11 @@ const date = (utc: number) =>
   }).format(utc * 1000);
 const errorText = (e: unknown) => (e instanceof Error ? e.message : '请求未完成，请重试');
 
+const terms: Record<string, string> = {...tools, ...methodName, null: '暂无估计值'};
+function studyText(text?: string) {
+  return text?.replace(/\b(?:ALLOCATION|CORRELATION|EXECUTION|EQUAL|INVERSE_VOL|RISK_PARITY|null)\b/g, term => terms[term]);
+}
+
 function ReportBody({
   s,
   onSource,
@@ -122,13 +127,13 @@ function ReportBody({
           {p.material.first} — {p.material.last}
         </span>
       </div>
-      <h3>{p.title}</h3>
-      <p className="qs-finding">{r?.finding ?? p.hypothesis}</p>
+      <h3>{studyText(p.title)}</h3>
+      <p className="qs-finding">{studyText(r?.finding ?? p.hypothesis)}</p>
       {r && (
         <div className="qs-verdict">
           <strong>{outcomes[r.outcome]}</strong>
           <span>
-            {r.value} · {r.reason}
+            {r.value} · {studyText(r.reason)}
           </span>
         </div>
       )}
@@ -144,15 +149,15 @@ function ReportBody({
       {tab === '实验设计' && (
         <div className="qs-prose">
           <h4>为什么研究这个问题</h4>
-          <p>{p.motivation}</p>
+          <p>{studyText(p.motivation)}</p>
           <h4>事前假设与判断标准</h4>
-          <p>{p.hypothesis}</p>
-          <p>{p.criterion}</p>
+          <p>{studyText(p.hypothesis)}</p>
+          <p>{studyText(p.criterion)}</p>
           {e && (
             <>
               <h4>数据与方法</h4>
               <p>{e.metrics.design}</p>
-              <p>{r?.method}</p>
+              <p>{studyText(r?.method)}</p>
               <p>{e.metrics.limitation}</p>
               <small>
                 {p.material.title} · {p.material.observations} 个来源观测 · 材料指纹{' '}
@@ -170,17 +175,17 @@ function ReportBody({
       {tab === '金融课堂' &&
         (r ? (
           <div className="qs-prose">
-            <h4>{p.concept}</h4>
-            <p>{r.background}</p>
-            <p>{r.theory}</p>
+            <h4>{studyText(p.concept)}</h4>
+            <p>{studyText(r.background)}</p>
+            <p>{studyText(r.theory)}</p>
             <div className="qs-formula">{e?.metrics.formula}</div>
-            <p>{r.mathematics}</p>
+            <p>{studyText(r.mathematics)}</p>
             <h4>这次实验说明了什么</h4>
-            <p>{r.interpretation}</p>
+            <p>{studyText(r.interpretation)}</p>
             <h4>结论的适用范围</h4>
-            <p>{r.limits}</p>
+            <p>{studyText(r.limits)}</p>
             <h4>下一道研究问题</h4>
-            <p>{r.nextQuestion}</p>
+            <p>{studyText(r.nextQuestion)}</p>
             {r.merits && (
               <details className="qs-disclosure">
                 <summary>研究价值评议</summary>
@@ -220,7 +225,7 @@ function ReportBody({
             <button disabled={!question.trim() || asking}>
               {asking ? '正在读取本次研究…' : '请 AI 讲解'}
             </button>
-            {answer && <p className="qs-answer">{answer}</p>}
+            {answer && <p className="qs-answer">{studyText(answer)}</p>}
             {error && <p role="alert">{error}</p>}
           </form>
         ) : (
@@ -379,7 +384,7 @@ export function AutonomousStudies({
                   <i data-active={active(s)} />
                   <span>
                     {states[s.state]}
-                    <strong>{s.plan?.title || '发现下一个研究问题'}</strong>
+                    <strong>{studyText(s.plan?.title) || '发现下一个研究问题'}</strong>
                   </span>
                 </button>
                 <small>
@@ -404,8 +409,8 @@ export function AutonomousStudies({
                   <small>
                     {study.report?.value} · {tools[study.plan!.material.tool]}
                   </small>
-                  <strong>{study.plan?.title}</strong>
-                  <span>{study.report?.reason}</span>
+                  <strong>{studyText(study.plan?.title)}</strong>
+                  <span>{studyText(study.report?.reason)}</span>
                 </button>
               ))}
             </section>
@@ -413,8 +418,8 @@ export function AutonomousStudies({
           {current?.plan && (
             <section className="qs-note">
               <small>本次研究的金融知识</small>
-              <h4>{current.plan.concept}</h4>
-              <p>{current.plan.motivation}</p>
+              <h4>{studyText(current.plan.concept)}</h4>
+              <p>{studyText(current.plan.motivation)}</p>
             </section>
           )}
         </aside>
@@ -443,8 +448,8 @@ export function AutonomousStudies({
           >
             <small>{tools[s.plan!.material.tool]}</small>
             <span>
-              <strong>{s.plan?.title}</strong>
-              <span>{s.report?.reason}</span>
+              <strong>{studyText(s.plan?.title)}</strong>
+              <span>{studyText(s.report?.reason)}</span>
             </span>
             <em>{s.report?.value}</em>
             <time>{date(s.created)}</time>
