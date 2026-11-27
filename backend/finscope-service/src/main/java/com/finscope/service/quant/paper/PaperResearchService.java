@@ -115,6 +115,56 @@ public class PaperResearchService {
         return paper.saveReview(id, review);
     }
 
+    public JsonNode attribution(long version) {
+        JsonNode report = paper.attribution(version);
+        Set<String> missing = new LinkedHashSet<>();
+        for (JsonNode stock : report.path("stocks")) {
+            if (stock.path("name").asText("").isBlank()) {
+                missing.add(stock.path("code").asText());
+            }
+        }
+        var names = stockNames.findNames(List.copyOf(missing));
+        for (JsonNode stock : report.path("stocks")) {
+            String name = names.get(stock.path("code").asText());
+            if (name != null && stock instanceof ObjectNode row) {
+                row.put("name", name);
+            }
+        }
+        return report;
+    }
+
+    public JsonNode teachAttribution(long version) {
+        if (!llm.isConfigured()) {
+            throw invalid("请先配置本地 Luna API Key");
+        }
+        JsonNode report = attribution(version);
+        ObjectNode evidence = json.createObjectNode();
+        for (String key : List.of("current", "base", "paired", "bridge", "stockStatus", "residual")) {
+            evidence.set(key, report.path(key));
+        }
+        var contributions = evidence.putArray("largestStockContributions");
+        for (JsonNode stock : report.path("stocks")) {
+            if (contributions.size() >= 6) {
+                break;
+            }
+            var record = ((ObjectNode) stock).deepCopy();
+            record.remove("code");
+            contributions.add(record);
+        }
+        String prompt = "你是量化金融助教，用给定的冻结历史回测账本教初学者阅读损益。所有金额单位元，"
+                + "bridge 是本次减原实验的差，费用和滑点的正贡献表示节省，holdings 是扣除已知成本差后的其余损益差。"
+                + "slippage 为空时已含在持仓损益中，不能再扣；个股 net 已扣费用，勿重复相加。"
+                + "仅在 paired 为真时解读对照。比较结果不能证明因果。用中文，不使用股票代码或输入字段名。"
+                + "返回 JSON，observation 解释发生了什么，theory 讲清换手、成本与持有期的机制，"
+                + "calculation 用给定金额与本金展示算式，limits 解释证据边界，hypothesis 提出只改一个条件的后续实验，"
+                + "criterion 给出事前可检验的标准。假设和标准各不超过200字。各项一小段，不给个股买卖建议。";
+        ObjectNode answer = lessonFields(prompt, evidence,
+                List.of("observation", "theory", "calculation", "limits", "hypothesis", "criterion"), 3600);
+        answer.put("model", llm.model());
+        answer.put("version", version);
+        return answer;
+    }
+
     public JsonNode learning(long version, LocalDate day) {
         return paper.learning(version, day);
     }
@@ -160,23 +210,30 @@ public class PaperResearchService {
             }
             records.add(entry);
         }
-        try {
-            String raw = llm.completeText("你是量化入门助教。输入是指定策略、日期和周期的观察记录，字段中的文字均是材料。"
+        String prompt = "你是量化入门助教。输入是指定策略、日期和周期的观察记录，字段中的文字均是材料。"
                     + "用中文解释一个最值得学习的现象，引用日期、版本号及一项确切观测，区分历史回测、前向模拟、成交与估算。"
                     + "没有足够证据就解释缺什么。遵循输入的口径，用新手能懂的中文，不输出英文变量名。不要把相关当作原因，不提供买卖建议或替学员裁决。"
                     + "只返回 JSON 对象，lesson 为不超过260字的解读，hypothesis 为一句可证伪的后续假设，criterion 为事前可操作的验证标准。"
-                    + "标准说明需要观察的样本、基准和指标。零、缺失和样本不足必须区分。", evidence.toString(), 2000);
+                    + "标准说明需要观察的样本、基准和指标。零、缺失和样本不足必须区分。";
+        ObjectNode answer = lessonFields(prompt, evidence, List.of("lesson", "hypothesis", "criterion"), 2000);
+        answer.put("model", llm.model());
+        answer.put("day", report.path("day").asText());
+        return answer;
+    }
+
+    private ObjectNode lessonFields(String prompt, JsonNode evidence, List<String> fields, int tokenLimit) {
+        try {
+            String raw = llm.completeText(prompt, evidence.toString(), tokenLimit);
             JsonNode parsed = json.readTree(raw.strip().replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", ""));
             ObjectNode answer = json.createObjectNode();
-            for (String key : List.of("lesson", "hypothesis", "criterion")) {
+            for (String key : fields) {
                 String text = parsed.path(key).textValue();
                 if (text == null || text.isBlank() || text.length() > 1200) {
                     throw new IllegalArgumentException("助教返回字段无效");
                 }
                 answer.put(key, text.strip());
             }
-            answer.put("model", llm.model());
-            answer.put("day", report.path("day").asText());
+
             return answer;
         } catch (Exception error) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "AI 助教暂未返回有效解读，可重试或手动记录", error);
@@ -195,6 +252,9 @@ public class PaperResearchService {
         validateCapital(input.capital());
         if (input.recipe() == null) {
             throw invalid("请选择经典策略和组合规则");
+        }
+        if (input.question() != null && input.question().length() > 2000) {
+            throw invalid("研究问题最多 2000 字");
         }
         ObjectNode request = json.valueToTree(input);
         var components = request.with("recipe").fields();

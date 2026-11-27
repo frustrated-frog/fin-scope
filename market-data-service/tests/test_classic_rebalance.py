@@ -87,7 +87,8 @@ def test_freeze_validates_custom_interval_and_keeps_comparison_cutoffs(tmp_path,
     job=lab.jobs.submit(frozen)["jobId"]
     with lab.db() as db:
         db.execute("UPDATE paper_job SET version=7 WHERE id=?",(job,))
-    compared=classic_study.freeze(lab,ClassicRequest(**kwargs,reference=7),at)
+    compared=classic_study.freeze(lab,ClassicRequest(**kwargs,reference=7,question="验证费用变化"),at)
+    assert compared["origin"] == "验证费用变化"
     assert compared["classicSnapshots"] == frozen["classicSnapshots"] and compared["start"] == frozen["start"]
     with pytest.raises(ValueError,match="原实验区间"):
         classic_study.freeze(lab,ClassicRequest(**kwargs,reference=7,startDate=date(2026,10,2),endDate=date(2026,11,20)),at)

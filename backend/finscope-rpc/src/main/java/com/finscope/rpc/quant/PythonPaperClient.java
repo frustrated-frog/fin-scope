@@ -44,6 +44,10 @@ public class PythonPaperClient {
         return call("/factors/" + id, null);
     }
 
+    public JsonNode attribution(long version) {
+        return call("/attribution/" + version, null);
+    }
+
     public JsonNode learning(long version, LocalDate day) {
         return call("/learning/" + version + (day == null ? "" : "?day=" + day), null);
     }

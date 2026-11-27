@@ -13,6 +13,7 @@ from .python_runtime import PythonStrategy, image_id
 
 
 def freeze(lab, value, now):
+    origin = (value.question or "").strip() or FAMILIES[value.recipe.family][0]
     if value.reference:
         with lab.db() as db:
             row = db.execute("SELECT request FROM paper_job WHERE version=? AND json_extract(request,'$.researchMode')='CLASSIC' ORDER BY id LIMIT 1",
@@ -24,7 +25,7 @@ def freeze(lab, value, now):
             raise ValueError("同数据对照须使用相同的股票池来源与初始本金")
         if value.startDate and (str(value.startDate) != original["start"][:10] or str(value.endDate) != original["cutoff"][:10]):
             raise ValueError("同数据对照须沿用原实验区间")
-        return {**original, **value.model_dump(mode="json"), "executionVersion": 2, "origin": FAMILIES[value.recipe.family][0]}
+        return {**original, **value.model_dump(mode="json"), "executionVersion": 2, "origin": origin}
     date = previous_session(now.date() + timedelta(days=int(now.time() >= time(15, 10))))
     if not date:
         raise ValueError("交易日历缺少最近收盘日")
@@ -37,7 +38,7 @@ def freeze(lab, value, now):
         raise ValueError("所选股票池缺少带首次可用时间的历史名单")
     sources = {"COHORT": "登记研究池", "DISCOVERY": "股票发现历史候选池", "GEM": "登记研究池 · 创业板",
                "SH_MAIN": "登记研究池 · 沪市主板"}
-    return dict(**value.model_dump(mode="json"), origin=FAMILIES[value.recipe.family][0],
+    return dict(**value.model_dump(mode="json"), origin=origin,
                 pool="COHORT", source=sources[value.recipe.base], codes=next(r["codes"] for r in reversed(timeline) if r["codes"]),
                 timeline=timeline, start=start.isoformat(), cutoff=cutoff.isoformat(), executionVersion=2)
 

@@ -134,12 +134,22 @@ def execute(book, order, bar, end):
     fee = money(max(MIN_COMMISSION, gross * COMMISSION_RATE) + (gross * SELL_TAX if side == "SELL" else 0))
     if order.get("maxFeeBps") and fee * 10000 > gross * order["maxFeeBps"]:
         return {**order, "action": "未成交", "reason": "本笔佣金与印花税超过费率上限"}
+    settle_fill(book, code, side, end.date().isoformat(), quantity, gross, fee)
+    event = dict(**order, action="成交", price=price, quantity=quantity, fee=fee, executionOpen=bar.open)
+    if "planAt" in order:
+        event["stampTax"] = money(gross * SELL_TAX) if side == "SELL" else 0.
+    return event
+
+
+def settle_fill(book, code, side, day, quantity, gross, fee):
+    """Book an already sized fill, including lot eligibility and the original rounding rules."""
     if side == "BUY":
         book["cash"] = money(book["cash"] - gross - fee)
         position = book["positions"].setdefault(code, dict(lots=[], cost=0))
-        position["lots"].append([end.date().isoformat(), quantity])
+        position["lots"].append([day, quantity])
         position["cost"] = money(position["cost"] + gross + fee)
     else:
+        pos = book["positions"][code]
         total = sum(q for _, q in pos["lots"])
         cost = money(pos["cost"] * quantity / total)
         book["cash"] = money(book["cash"] + gross - fee)
@@ -149,7 +159,7 @@ def execute(book, order, bar, end):
         else:
             remaining = quantity
             for entry in pos["lots"]:
-                if entry[0] >= end.date().isoformat():
+                if entry[0] >= day:
                     continue
                 sold = min(remaining, entry[1])
                 entry[1] -= sold
@@ -158,10 +168,6 @@ def execute(book, order, bar, end):
             pos["cost"] = money(pos["cost"] - cost)
     book["fills"] += 1
     book["fees"] = money(book["fees"] + fee)
-    event = dict(**order, action="成交", price=price, quantity=quantity, fee=fee, executionOpen=bar.open)
-    if "planAt" in order:
-        event["stampTax"] = money(gross * SELL_TAX) if side == "SELL" else 0.
-    return event
 
 
 def advance(book, rule, histories, end, available, capital, *, universe=None, decide=None, legacy=False, decision_clock=None, check_sellable=True):

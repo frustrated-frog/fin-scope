@@ -52,6 +52,7 @@ class ClassicRequest(BaseModel):
     researchMode: Literal["CLASSIC"]
     recipe: Recipe
     capital: float = Field(ge=.01, le=1e10, allow_inf_nan=False)
+    question: str | None = Field(default=None, max_length=2000)
     reference: int | None = Field(default=None, gt=0)
     startDate: date | None = None
     endDate: date | None = None

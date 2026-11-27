@@ -42,6 +42,16 @@ public class PaperResearchController {
         return ApiResponses.success(service.factor(id));
     }
 
+    @GetMapping("/attribution/{version}")
+    public ApiResponse<JsonNode> attribution(@PathVariable long version) {
+        return ApiResponses.success(service.attribution(version));
+    }
+
+    @PostMapping("/attribution/{version}/teach")
+    public ApiResponse<JsonNode> teachAttribution(@PathVariable long version) {
+        return ApiResponses.success(service.teachAttribution(version));
+    }
+
     @GetMapping("/learning/{version}")
     public ApiResponse<JsonNode> learning(@PathVariable long version,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate day) {

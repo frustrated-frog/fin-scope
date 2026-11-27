@@ -18,6 +18,7 @@ from .classic_recipe import ClassicRequest
 from .tail_experiment import RidgeRequest
 from .timeframes import ForwardFeatures
 from .datasets import ResearchDatasets
+from . import attribution
 from .actions import read_actions, verified_dates
 from .engine import ENGINE, INTERVAL, SHANGHAI, Rule, advance, money, new_book, valid_bar
 
@@ -185,9 +186,9 @@ class PaperLab:
 
     def catalog(self):
         with self.db() as db:
-            rows = db.execute("""SELECT v.id,v.spec,v.created,a.started,a.status,a.lifecycle,a.book FROM paper_version v
+            rows = db.execute("""SELECT v.id,v.spec,v.created,json_extract(v.history,'$.comparison.version') AS comparison_id,a.started,a.status,a.lifecycle,a.book FROM paper_version v
                 LEFT JOIN paper_account a ON v.id=a.id ORDER BY v.id DESC LIMIT 200""").fetchall()
-        return [dict(id=r["id"], spec=json.loads(r["spec"]), created=r["created"], started=r["started"],
+        return [dict(id=r["id"], spec=json.loads(r["spec"]), comparisonId=r["comparison_id"], created=r["created"], started=r["started"],
                      status=r["status"], lifecycle=r["lifecycle"], book=json.loads(r["book"]) if r["book"] else None) for r in rows]
 
     def transition(self, version, state):
@@ -569,6 +570,10 @@ class PaperLab:
         @router.post("/versions")
         async def create(spec: Research, auto_start: bool = False):
             return await self.research(spec, auto_start)
+
+        @router.get("/versions/attribution/{version}")
+        def attribution_report(version: int):
+            return attribution.report(self, version)
 
         @router.get("/versions/learning/{version}")
         def learning_report(version: int, day: date | None = None):

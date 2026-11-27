@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finscope.common.enums.quant.PaperUniverse;
 import com.finscope.common.exception.BusinessException;
 import com.finscope.dao.instrument.WatchlistRepository;
+import com.finscope.dao.quant.PaperStockNameRepository;
 import com.finscope.domain.instrument.WatchlistItem;
 import com.finscope.domain.quant.paper.ClassicPaperResearchInput;
 import com.finscope.domain.quant.paper.PaperResearchInput;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.*;
 class PaperResearchServiceTest {
     @Mock private WatchlistRepository watchlist;
     @Mock private PythonPaperClient paper;
+    @Mock private PaperStockNameRepository stockNames;
     @Mock private LunaResponsesClient llm;
     @Spy private ObjectMapper json = new ObjectMapper();
     @InjectMocks private PaperResearchService service;
@@ -85,13 +87,14 @@ class PaperResearchServiceTest {
         var recipe = new ClassicPaperResearchInput.Components("MOMENTUM", null, null, 7, null,
                 null, null, "RISK_PARITY", null, null, null, BigDecimal.valueOf(30), 10,
                 new BigDecimal("0.15"), new BigDecimal("0.08"), null);
-        var input = new ClassicPaperResearchInput(BigDecimal.valueOf(10000), false, 4L, recipe, "2026-09-01", "2026-11-26");
+        var input = new ClassicPaperResearchInput(BigDecimal.valueOf(10000), false, 4L, recipe, "2026-09-01", "2026-11-26", "检验调仓频率");
         service.submitClassic(input, token);
         ArgumentCaptor<JsonNode> payload = ArgumentCaptor.forClass(JsonNode.class);
         verify(paper).submitJob(payload.capture());
         JsonNode job = payload.getValue();
         assertEquals(token.toString(), job.path("requestId").asText());
         assertEquals("CLASSIC", job.path("researchMode").asText());
+        assertEquals("检验调仓频率", job.path("question").asText());
         assertEquals("2026-09-01", job.path("startDate").asText());
         assertEquals("2026-11-26", job.path("endDate").asText());
         assertEquals(30, job.path("recipe").path("maxFeeBps").asInt());
@@ -127,6 +130,33 @@ class PaperResearchServiceTest {
         assertFalse(sent.has("quarterly"));
         assertEquals("test-luna", answer.path("model").asText());
         verify(paper, never()).deploy(anyLong());
+    }
+
+    @Test
+    void teachesAttributionFromTheSelectedFrozenLedgerAndResolvesNames() throws Exception {
+        JsonNode report = json.readTree("""
+                {"current":{"id":9},"base":{"id":8},"paired":true,"bridge":{"net":290.53},
+                 "stocks":[{"code":"600001","name":null,"gap":170}],"days":[{"privateDetail":true}]}
+                """);
+        when(paper.attribution(9)).thenReturn(report);
+        when(stockNames.findNames(List.of("600001"))).thenReturn(java.util.Map.of("600001", "样本股票"));
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.model()).thenReturn("test-luna");
+        when(llm.completeText(anyString(), anyString(), eq(3600))).thenReturn("""
+                {"observation":"周频费用较少","theory":"换手产生交易费用","calculation":"按本金换算",
+                 "limits":"只有一个区间","hypothesis":"检验双周调仓","criterion":"使用相同费用与本金"}
+                """);
+        var answer = service.teachAttribution(9);
+        var evidence = ArgumentCaptor.forClass(String.class);
+        verify(llm).completeText(anyString(), evidence.capture(), eq(3600));
+        JsonNode sent = json.readTree(evidence.getValue());
+        assertEquals(290.53, sent.path("bridge").path("net").asDouble());
+        assertEquals("样本股票", sent.path("largestStockContributions").get(0).path("name").asText());
+        assertFalse(sent.has("days"));
+        assertFalse(evidence.getValue().contains("600001"));
+        assertEquals("test-luna", answer.path("model").asText());
+        assertEquals(9, answer.path("version").asInt());
+        verify(paper, never()).submitJob(any());
     }
 
     @Test
