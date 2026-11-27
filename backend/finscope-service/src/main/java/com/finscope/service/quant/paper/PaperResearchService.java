@@ -57,7 +57,8 @@ public class PaperResearchService {
         for (JsonNode member : detail.path("history").path("members")) {
             codes.add(member.path("code").asText());
         }
-        detail.set("stockNames", json.valueToTree(stockNames.findNames(List.copyOf(codes))));
+        ObjectNode names = detail.with("stockNames");
+        stockNames.findNames(List.copyOf(codes)).forEach(names::put);
         return detail;
     }
 

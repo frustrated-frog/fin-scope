@@ -360,7 +360,7 @@ function Decisions({
               <b>
                 {p.events.length
                   ? p.events.map((e) => e.action + ' · ' + stockName(e.code)).join(' / ')
-                  : '继续观察'}
+                  : p.controlEvents?.length ? '对照账户有交易记录' : '继续观察'}
               </b>
               <span>¥{currency(p.equity)}</span>
             </summary>
@@ -882,6 +882,9 @@ export function PaperLab({ seed, initialId, comparison, catalog, accountsOnly = 
                 <p>已观察 {detail.forwardEvidence.sessions} 个交易日 · {detail.forwardEvidence.fills} 笔成交 · 最大回撤 {pct(detail.forwardEvidence.maxDrawdown)} · 费用占本金 {pct(detail.forwardEvidence.feeRate)} · 相对基准 {pct(detail.forwardEvidence.relativeReturn)}</p>
                 {detail.forwardEvidence.reasons.length > 0 && <p>{detail.forwardEvidence.reasons.join(' · ')}</p>}</section>}
               {accountsOnly && book && <Holdings book={book} capital={spec.capital} stockName={stockName}/>}
+              {accountsOnly && control && <details className="quant-readout paper-glass"><summary>
+                {detail?.history.model ? '因子等权对照' : '原策略对照'}持仓 · {control.fills} 笔成交
+              </summary><Holdings book={control} capital={spec.capital} stockName={stockName}/></details>}
               {accountsOnly && detail && (
                 <section className="quant-readout">
                   <header>

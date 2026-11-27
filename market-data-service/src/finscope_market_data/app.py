@@ -168,7 +168,8 @@ def create_app(
     history_backfill = OvernightHistoryBackfill(automation, BaostockMinuteHistoryProvider(),
         SnapshotStore(config.data_dir / "market-data-snapshots.db"))
 
-    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store, history_backfill.provider, overnight.provider)
+    paper = PaperLab(config.data_dir / "paper-trading.db", lambda: application.state.router, overnight.store,
+                     history_backfill.provider, overnight.provider, name_lookup=tencent_market.cached_names)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):

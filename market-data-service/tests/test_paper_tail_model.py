@@ -55,6 +55,33 @@ def test_incomplete_next_open_and_unknown_corporate_actions_exclude_label():
     assert first not in {r["signalDate"] for r in tail_model.samples(code, bars)}
 
 
+def test_dated_snapshot_warms_daily_trends_without_exposing_pre_membership_bars(tmp_path):
+    import gzip
+    import hashlib
+    import json
+    from finscope_market_data.paper.research import ResearchJobs
+
+    day = datetime(2026, 5, 6).date()
+    rows = []
+    for session in range(63):
+        for clock in expected_times("15:00"):
+            at = datetime.fromisoformat(f"{day}T{clock}").replace(tzinfo=SHANGHAI)
+            price = 10 + session
+            rows.append([at.isoformat(), price, price, price, price, 100, price * 100, False, True, []])
+        day = next_session(day)
+    start = rows[-4][0]
+    jobs = ResearchJobs(SimpleNamespace(path=tmp_path / "paper.db"), None)
+    jobs.root.mkdir()
+    raw = json.dumps({"eligibleFrom": start, "bars": {"600000": rows}}).encode()
+    digest = hashlib.sha256(raw).hexdigest()
+    jobs.snapshot_path(digest).write_bytes(gzip.compress(raw))
+    eligible = jobs.read_panel(digest)["600000"]
+    assert [b.observed_at.isoformat() for b in eligible] == [row[0] for row in rows[-4:]]
+    assert eligible[0].completedBars["1d"]["at"] == rows[-49][0]
+    assert eligible[0].multiTimeframe["trend60d"] == pytest.approx(71 / 11 - 1)
+    assert eligible[-1].completedBars["1d"]["at"] == rows[-1][0]
+
+
 @pytest.mark.asyncio
 async def test_frozen_pair_deploys_and_fills_together_in_forward_engine(tmp_path, monkeypatch):
     from datetime import timedelta

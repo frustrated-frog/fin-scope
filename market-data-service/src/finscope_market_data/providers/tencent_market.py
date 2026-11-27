@@ -34,6 +34,20 @@ class TencentMarketSnapshotService:
         return httpx.Client(trust_env=False,timeout=httpx.Timeout(8,connect=4),transport=self.transport,
             headers={'Referer':'https://gu.qq.com/','User-Agent':'Mozilla/5.0 FinScope-Market-Data/0.1'})
 
+    def cached_names(self, codes):
+        """Look up display labels without fetching new market data during a paper-account read."""
+        try:
+            if self.directory_cache.stat().st_size > 2 * 1024 * 1024:
+                return {}
+            entries = json.loads(self.directory_cache.read_bytes())['stockList']
+        except (OSError, ValueError, TypeError, KeyError):
+            return {}
+        if not isinstance(entries, list):
+            return {}
+        return {row['code']: row['zwjc'].strip() for row in entries
+                if isinstance(row, dict) and row.get('category') == 'A股' and row.get('code') in codes
+                and isinstance(row.get('zwjc'), str) and row['zwjc'].strip()}
+
     def _symbols(self,client):
         cached = None
         if self.directory_cache.exists() and self.directory_cache.stat().st_size <= 2*1024*1024:
