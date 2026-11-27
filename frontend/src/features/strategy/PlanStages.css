@@ -1,0 +1,20 @@
+.plan-stages {
+  min-width:0; margin:12px 0; padding:16px 18px; border:1px solid #73acbb40; border-radius:11px;
+  color:#d8e7ee; background:linear-gradient(112deg,#1b3646a8,#16283bb3); font-variant-numeric:tabular-nums;
+}
+.plan-stages header,.plan-stages dd,.plan-stages dl>div {display:flex;align-items:center;gap:12px}
+.plan-stages header {justify-content:space-between;flex-wrap:wrap}
+.plan-stages h5 {margin:0;font-size:.98rem;color:#e2f1f5}
+.plan-stages small,.plan-stages dt {color:#acc3ce;font-size:.77rem}
+.plan-stages select {max-width:100%;border:1px solid #92c6d54a;border-radius:6px;color:#d4edf4;background:#172e40;padding:6px 10px}
+.plan-stages dl {display:grid;gap:8px;margin:14px 0 8px}
+.plan-stages dt {flex:0 0 5.3em}
+.plan-stages dd {margin:0;flex:1;min-width:0}
+.plan-stages dd b {min-width:5em;text-align:right;font:600 .8rem ui-monospace,monospace}
+.plan-scale {position:relative;flex:1;height:7px;border-radius:2px;background:#0e1d2b}
+.plan-scale i {display:block;height:100%;border-radius:inherit;background:#83b9d7;transition:width .23s ease-out}
+.plan-stages dl>div:nth-child(2) i {background:#b4a1d4}
+.plan-stages dl>div:nth-child(3) i {background:#6dd2be}
+.plan-stages p {margin:8px 0 0;color:#c2d1d9;font-size:.8rem}
+.plan-stages p:empty {display:none}
+@media(prefers-reduced-motion:reduce){.plan-scale i{transition:none}}

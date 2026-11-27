@@ -502,7 +502,7 @@ export function LearningEvidence({
           <dd>选择一份论文或行业报告，将出处、想验证的变化及保留或暂停策略的理由记入台账。</dd>
         </div>
       </dl>
-      <h5>滚动前推 · 时间序列交叉验证</h5>
+      <h5>已有回测版本的滚动选择</h5>
       {q.validation.folds.length ? (
         <>
           <p>

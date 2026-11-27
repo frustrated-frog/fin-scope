@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import { PaperResearchEvidence, type SymbolCoverage, type Trial } from './PaperResearchEvidence';
 import { ClassicEditor, ClassicEvidence, ClassicSelection, defaultRecipe, type ClassicRecipe, type ClassicRecord, type Family, type Selection } from './ClassicStrategies';
+import { ReturnAttribution } from './ReturnAttribution';
 import { PerformanceReport, PlanReport, type ExecutionCosts, type RebalancePlan, type Performance } from './ExecutionReport';
 import './PaperLab.css';
 
@@ -67,6 +68,7 @@ interface Book {
   last?: string;
 }
 export interface PaperVersion {
+  comparisonId?: number | null;
   created?: string;
   id: number;
   spec: Spec;
@@ -498,7 +500,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
   accountsOnly?: boolean;
   onAccount: (id: number) => void;
   onExperiment: (id: number) => void;
-  onCompare: (base: PaperVersion) => void;
+  onCompare: (base: PaperVersion, question?: string) => void;
   onBrowse: () => void;
 }) {
   const versions = accountsOnly ? catalog.rows.filter(v => v.started && (v.lifecycle !== 'ARCHIVED' || v.id === initialId)) : catalog.rows;
@@ -508,7 +510,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
   const [analysisView, setAnalysisView] = useState('总览');
   const [day, setDay] = useState(initialDay ?? '');
   const editing = !accountsOnly && !initialId && Boolean(seed || comparison);
-  const [hypothesis, setHypothesis] = useState(seed?.hypothesis || (comparison ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : ''));
+  const [hypothesis, setHypothesis] = useState(seed?.hypothesis || (comparison && !(comparison.spec.rule.kind === 'python' && comparison.spec.rule.recipe) ? '保持交易规则，检验加入波动率能否改善原因子的选股效果。' : ''));
   const [capital, setCapital] = useState(comparison ? String(comparison.spec.capital) : '');
   const [pool, setPool] = useState(comparison?.spec.pool ?? 'DISCOVERY');
   const originalRecipe = comparison?.spec.rule.kind === 'python' ? comparison.spec.rule.recipe : undefined;
@@ -561,7 +563,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
     setError('');
     try {
       const coding = engine !== 'luna';
-      const body = JSON.stringify(engine === 'classic' ? {recipe, reference:parent?.id, autoStart, capital:Number(capital),
+      const body = JSON.stringify(engine === 'classic' ? {recipe, question:hypothesis.trim() || undefined, reference:parent?.id, autoStart, capital:Number(capital),
         startDate:startDate || undefined, endDate:endDate || undefined} : engine === 'ridge' ? { autoStart, capital: Number(capital) } : { hypothesis, autoStart, capital: Number(capital), pool: parent ? undefined : pool, parent: parent?.id,
         academyVersionId: seed?.academyVersionId, factorCode: seed?.factorCode });
       const key = engine + body + autoIterate;
@@ -663,7 +665,8 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
               {!parent && !seed?.academyVersionId && !seed?.factorCode && <option value="ridge">对照因子权重 · Ridge 与等权</option>}
             </select>
           </label>
-          {engine === 'classic' && parent && seed?.hypothesis && <p>已登记的研究问题 · {seed.hypothesis}</p>}
+          {engine === 'classic' && <label>本次研究问题（选填）<textarea rows={2} maxLength={2000} value={hypothesis}
+            onChange={event=>setHypothesis(event.target.value)} placeholder="记录这次想验证的问题和判断标准"/></label>}
           {engine === 'classic' && <><ClassicEditor recipe={recipe} onChange={setRecipe} fixedBase={!!parent}/>
             {parent ? <p>沿用原实验的股票名单、区间和行情快照。</p> : <fieldset className="classic-date-range"><legend>回测区间</legend>
               <div className="classic-fields"><label>回测开始日<input type="date" value={startDate} max={endDate || undefined} required={!!endDate} onChange={e=>setStartDate(e.target.value)}/></label>
@@ -773,6 +776,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
                   {active.lifecycle === 'STOPPED' && <button type="button" data-action="archive" disabled={busy} onClick={() => operate('state/ARCHIVED')}>归档账户</button>}
                 </div>}
                 {!accountsOnly && <p>{spec.rule.hypothesis}</p>}
+                {classic && spec.origin && spec.origin!==spec.rule.name && <p>本次研究问题 · {spec.origin}</p>}
                 {accountsOnly && book && <div className="quant-metrics paper-metrics">
                   <div><span>账户总资产（元）</span><strong>{currency(equity)}</strong></div>
                   <div><span>累计收益</span><strong>{pct(equity / spec.capital - 1)}</strong></div>
@@ -829,18 +833,19 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
                     </small>
                   </header>
                   <nav className="qh-tabs" aria-label="回测分析维度">
-                    {['总览', ...(detail.history.comparison ? ['同数据对照'] : []), ...(classic ? ['组合与交易'] : []), '研究依据'].map(view=>
+                    {['总览', '收益归因', ...(detail.history.comparison ? ['同数据对照'] : []), ...(classic ? ['组合与交易'] : []), '研究依据'].map(view=>
                       <button key={view} aria-pressed={view===analysisView} onClick={()=>setAnalysisView(view)}>{view}</button>)}
                   </nav>
                   {analysisView==='总览' && <BacktestOverview history={detail.history} capital={spec.capital}>
                   <PaperTrace points={detail.history.curve} capital={spec.capital} controlLabel={detail.history.model ? '因子等权对照' : undefined} />
                   </BacktestOverview>}
+                  {analysisView==='收益归因' && <ReturnAttribution key={active.id} version={active} onCompare={onCompare}/>}
                   {analysisView==='同数据对照' && detail.history.comparison && <section className="qh-comparison">
                     <h5>同一份冻结行情 · 实验 #{detail.history.comparison.version} 与 #{active.id}</h5>
                     <table><thead><tr><th>指标</th><th>原实验 #{detail.history.comparison.version}</th><th>本次实验 #{active.id}</th></tr></thead>
                       <tbody>{[
                         ['扣费收益',pct(detail.history.comparison.netReturn),detail.history.validationReturn!=null ? pct(detail.history.validationReturn) : '—'],
-                        ['日末最大回撤',detail.history.comparison.performance ? pct(-detail.history.comparison.performance.maxDrawdown) : '—', detail.history.performance ? pct(-detail.history.performance.maxDrawdown) : '—'],
+                        ['日末最大回撤',detail.history.comparison.performance?.maxDrawdown!=null ? pct(-detail.history.comparison.performance.maxDrawdown) : '—', detail.history.performance?.maxDrawdown!=null ? pct(-detail.history.performance.maxDrawdown) : '—'],
                         ['实际成交',detail.history.comparison.fills+' 笔',detail.history.fills+' 笔'],
                         ['累计费用','¥ '+currency(detail.history.comparison.fees),'¥ '+currency(detail.history.fees)]
                       ].map(([label,base,current])=><tr key={label}><th>{label}</th><td>{base}</td><td>{current}</td></tr>)}</tbody></table>
@@ -953,7 +958,7 @@ export function PaperLab({ seed, initialId, initialDay, comparison, catalog, acc
                 <p>已观察 {detail.forwardEvidence.sessions} 个交易日 · {detail.forwardEvidence.fills} 笔成交 · 最大回撤 {pct(detail.forwardEvidence.maxDrawdown)} · 费用占本金 {pct(detail.forwardEvidence.feeRate)} · 相对基准 {pct(detail.forwardEvidence.relativeReturn)}</p>
                 {detail.forwardEvidence.reasons.length > 0 && <p>{detail.forwardEvidence.reasons.join(' · ')}</p>}</section>}
               {accountsOnly && book && <><Holdings book={book} capital={spec.capital} stockName={stockName}/>
-                {book.rebalancePlan && <PlanReport plan={book.rebalancePlan} name={stockName}/>}
+                {book.rebalancePlan && <PlanReport visual plan={book.rebalancePlan} name={stockName}/>}
                 {detail?.forwardPerformance && <PerformanceReport value={detail.forwardPerformance} costs={book.executionCosts}/>}</>}
               {accountsOnly && control && <details className="quant-readout paper-glass"><summary>
                 {detail?.history.model ? '因子等权对照' : '原策略对照'}持仓 · {control.fills} 笔成交

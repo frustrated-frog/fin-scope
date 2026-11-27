@@ -35,7 +35,9 @@ export function BacktestOverview({history, capital, children}: {
   const p = history.performance;
   const closes = new Map<string,Observation>();
   for (const point of history.curve) {
-    closes.set(point.at.slice(0,10), point);
+    if (point.at.slice(11,16) === '15:00') {
+      closes.set(point.at.slice(0,10), point);
+    }
   }
   let peak = capital;
   const drawdowns = Array.from(closes.values(), point => {
@@ -47,7 +49,7 @@ export function BacktestOverview({history, capital, children}: {
   }));
   const metrics = [
     ['累计扣费收益', p ? pct(p.netReturn) : history.validationReturn != null ? pct(history.validationReturn) : '—'],
-    ['日末最大回撤', p ? pct(-p.maxDrawdown) : '—'],
+    ['日末最大回撤', p?.maxDrawdown!=null ? pct(-p.maxDrawdown) : '—'],
     ['年化夏普', p?.sharpe?.toFixed(2) ?? '—'],
     ['超额收益', p ? (p.excess*100).toFixed(2)+' 个百分点' : '—'],
     ['年化波动率', p?.dailyVol != null ? pct(p.dailyVol*Math.sqrt(252)) : '—'],
@@ -83,7 +85,7 @@ export function PortfolioOverview({book, performance, daily, capital, name}: {
     end += 100*s.value;
     return s.color+' '+start+'% '+end+'%';
   });
-  const peak = daily.reduce((high,p) => Math.max(high,p.equity),Math.max(capital,book.equity));
+  const peak = daily.filter(point=>point.at.slice(11,16)==='15:00').reduce((high,p) => Math.max(high,p.equity),Math.max(capital,book.equity));
   const risk = [
     {label:'最大单股仓位',value:stocks[0]?.value ?? 0},
     {label:'组合年化波动率',value:performance?.dailyVol != null ? performance.dailyVol*Math.sqrt(252) : null},

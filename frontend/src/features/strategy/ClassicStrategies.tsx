@@ -120,7 +120,7 @@ export function ClassicEvidence({history:h,recipe:r,name}: {history: ClassicReco
     {h.coverageError && <p>{h.coverageError}</p>}
     <details open><summary>历史调仓与逐笔交易</summary><label>查看日期 <select value={day??''} onChange={e=>select(e.target.value)}>{days.map(d=><option key={d}>{d}</option>)}</select></label>
       {decision && <ClassicSelection value={decision} name={name}/>}
-      {plans.map(plan=><PlanReport key={plan.at} plan={plan} name={name}/>)}
+      {plans.map(plan=><PlanReport visual key={plan.at} plan={plan} name={name}/>)}
       {trades.map((e,i)=><p key={i}><time>{e.at.slice(11,16)}</time> · {e.side==='BUY'?'买入':'卖出'} {name(e.code)} · {e.action} · {e.quantity ? e.quantity+' 股 × ¥ '+e.price+'，费用 ¥ '+e.fee : e.reason}</p>)}
       {!trades.length && <p>此日没有委托或成交。</p>}
     </details>
